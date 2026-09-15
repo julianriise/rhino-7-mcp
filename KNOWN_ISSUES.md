@@ -14,6 +14,19 @@ has actually run.
   in 7.38. If a 7.38-only API ever sneaks in, bump the package pin, not the
   target framework.
 
+## Mac plugin load (this bit us)
+
+- Dragging a raw `.rhp` onto the **viewport** is wrong on Rhino 7 Mac. Rhino
+  asks Open / Import because it thinks the file is a document. Commands such as
+  `mcpstart` never appear.
+- Correct location is a **package folder**:
+  `~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/`
+  containing the `rhinomcp.rhp` assembly plus its dlls. Quit and reopen Rhino
+  after copying. Optional: drag `plugin/bin/Debug/rhinomcp.macrhi` onto the
+  **Dock icon**, not the viewport.
+- The Windows-style `.../7.0/Plug-ins/rhinomcp/` path does not get scanned on
+  Mac. `plugin/install.sh` now writes `MacPlugIns`.
+
 ## Runtime, not yet proven on this machine
 
 - Plugin load in Rhino 7 Mac, `mcpstart` / `mcpstop`, TCP 1999.

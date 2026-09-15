@@ -40,8 +40,10 @@
 
   <PropertyGroup>
     <CopyToRhinoPluginDir Condition="'$(CopyToRhinoPluginDir)' == ''">false</CopyToRhinoPluginDir>
-    <RhinoVersion Condition="'$(RhinoVersion)' == ''">7.0</RhinoVersion>
-    <RhinoPluginDir Condition="'$(RhinoPluginDir)' == ''">$(HOME)/Library/Application Support/McNeel/Rhinoceros/$(RhinoVersion)/Plug-ins/rhinomcp/</RhinoPluginDir>
+    <!-- Rhino 7 Mac scans MacPlugIns for *.rhp *packages* (folders), not the
+         Windows-style 7.0/Plug-ins path. The destination is the package folder;
+         the assembly rhinomcp.rhp lives inside it. -->
+    <RhinoPluginDir Condition="'$(RhinoPluginDir)' == ''">$(HOME)/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/</RhinoPluginDir>
   </PropertyGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent"

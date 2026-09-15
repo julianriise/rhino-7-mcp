@@ -1,31 +1,30 @@
 #!/bin/bash
-# Build the rhinomcp plugin and install it into the Mac user-level Rhino 7
-# plug-ins directory.
+# Build the rhinomcp plugin and install it as a Rhino-for-Mac plugin *package*.
 #
-# Per the McNeel guide
-# (https://developer.rhino3d.com/guides/rhinocommon/your-first-plugin-mac/),
-# Rhino for Mac loads user plug-ins from
-# ~/Library/Application Support/McNeel/Rhinoceros/<ver>/Plug-ins/. The first
-# time you install, drag the .rhp onto a running Rhino window so Rhino
-# registers the path. Afterwards every rebuild just refreshes the files in
-# place and Rhino picks up the new build on next launch.
+# Rhino 7 on macOS does not load a raw .rhp dropped on the viewport (that
+# Open/Import dialog is Rhino treating it as a document). It scans:
+#
+#   ~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/
+#
+# for folders named *.rhp (Finder packages) and loads the assembly of the
+# same name inside. See:
+# https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/
 #
 # Usage:
-#   ./install.sh                          # Debug build, Rhino 7.0 user dir
+#   ./install.sh                          # Debug build
 #   CONFIG=Release ./install.sh           # Release build
-#   RHINO_VERSION=7.0 ./install.sh        # target a specific Rhino version dir
-#   RHINO_PLUGIN_DIR=/path ./install.sh   # override the install location
+#   RHINO_PLUGIN_DIR=/path ./install.sh   # override the package folder
 #
-# This is the Mac Rhino 7 / net48 path. Do not use the Package Manager
-# `rhinomcp` yak; that package is the Rhino 8 line.
+# Do not use the Package Manager `rhinomcp` yak; that package is Rhino 8.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SLN="$SCRIPT_DIR/rhinomcp.sln"
 CONFIG="${CONFIG:-Debug}"
-RHINO_VERSION="${RHINO_VERSION:-7.0}"
-RHINO_PLUGIN_DIR="${RHINO_PLUGIN_DIR:-$HOME/Library/Application Support/McNeel/Rhinoceros/$RHINO_VERSION/Plug-ins/rhinomcp}"
+MACPLUGINS="${MACPLUGINS:-$HOME/Library/Application Support/McNeel/Rhinoceros/MacPlugIns}"
+RHINO_PLUGIN_DIR="${RHINO_PLUGIN_DIR:-$MACPLUGINS/rhinomcp.rhp}"
 
 if [[ "$(uname)" != "Darwin" ]]; then
   echo "error: this script targets macOS. On Windows, use the csproj directly." >&2
@@ -49,8 +48,8 @@ if ! command -v dotnet >/dev/null 2>&1; then
 fi
 
 if pgrep -qi "Rhinoceros|Rhino 7"; then
-  echo "warning: Rhino appears to be running. Its loaded dlls are locked, so the"
-  echo "         install step may fail mid-copy. Quit Rhino if rsync errors below."
+  echo "warning: Rhino 7 is running. The files can still be copied, but you"
+  echo "         must Quit and reopen Rhino before mcpstart will exist."
   echo
 fi
 
@@ -63,29 +62,34 @@ if [[ ! -f "$BUILD_OUT/rhinomcp.rhp" ]]; then
   exit 1
 fi
 
-echo "==> installing to $RHINO_PLUGIN_DIR"
+echo "==> installing Mac plugin package to $RHINO_PLUGIN_DIR"
 mkdir -p "$RHINO_PLUGIN_DIR"
 # rsync --delete so stale dlls from a previous build / NuGet upgrade don't
 # linger and shadow the freshly-built ones at load time.
 rsync -a --delete "$BUILD_OUT/" "$RHINO_PLUGIN_DIR/"
 
+MACRHI="$SCRIPT_DIR/bin/$CONFIG/rhinomcp.macrhi"
+echo "==> writing $MACRHI (drag this onto the Rhino 7 Dock icon if you prefer)"
+rm -f "$MACRHI"
+(
+  cd "$(dirname "$RHINO_PLUGIN_DIR")"
+  ditto -c -k --keepParent "$(basename "$RHINO_PLUGIN_DIR")" "$MACRHI"
+)
+
 echo
-echo "done. Plugin staged at:"
+echo "done. Mac plugin package:"
 echo "  $RHINO_PLUGIN_DIR/rhinomcp.rhp"
+echo "macrhi (optional, Dock-drop):"
+echo "  $MACRHI"
 echo
-if [[ -z "${RHINOMCP_REGISTERED:-}" ]]; then
-  cat <<EOF
-First-time install only:
-  1. Launch Rhino 7.
-  2. Drag the .rhp file (above) onto an open Rhino viewport.
-  3. Accept the load dialog. Rhino now remembers the path and will pick up
-     every subsequent rebuild on its next launch.
+cat <<EOF
+Next:
+  1. Quit Rhino 7 completely (Cmd+Q), then open it again.
+  2. Type mcpstart. You want: RhinoMCP server started on 127.0.0.1:1999
 
-  After step 3, set RHINOMCP_REGISTERED=1 in your shell to silence this note:
-    export RHINOMCP_REGISTERED=1
+Do not drag the raw .rhp onto the viewport. That Open/Import dialog means
+Rhino thought it was a model file, not a plugin.
 
-Once registered, run 'mcpstart' in the Rhino command line to start the TCP
-listener on 127.0.0.1:1999, then point your MCP client at the Python server
-from this repo (not the PyPI rhinomcp package). See INSTALL.md.
+If mcpstart is still unknown after a restart, open Rhinoceros > Settings >
+Plug-ins and look for rhinomcp, or check the command history for a load error.
 EOF
-fi

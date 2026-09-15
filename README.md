@@ -101,9 +101,10 @@ Do not use Package Manager. Build the net48 `.rhp` from this repo and load it in
 ./plugin/install.sh
 ```
 
-Then drag
-`~/Library/Application Support/McNeel/Rhinoceros/7.0/Plug-ins/rhinomcp/rhinomcp.rhp`
-onto a Rhino 7 viewport once so Rhino registers it. Full steps: [INSTALL.md](INSTALL.md).
+That writes a Mac plugin package under
+`~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/`.
+Quit and reopen Rhino 7. Do not drag the raw `.rhp` onto the viewport. Full
+steps: [INSTALL.md](INSTALL.md).
 
 ### 2. Connect your AI client
 

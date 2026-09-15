@@ -12,7 +12,7 @@ Grok Build --MCP stdio--> Python server (server/)
 
 ## What this machine already has
 
-Checked on this checkout:
+Checked on this checkout (build machine):
 
 | Thing | Status |
 |---|---|
@@ -43,32 +43,33 @@ export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$PATH"
 ./plugin/install.sh
 ```
 
-That builds `plugin/bin/Debug/net48/rhinomcp.rhp` and copies it plus its
-dependent dlls to:
+That builds `plugin/bin/Debug/net48/rhinomcp.rhp` and copies the whole output
+into a **Mac plugin package**:
 
 ```
-~/Library/Application Support/McNeel/Rhinoceros/7.0/Plug-ins/rhinomcp/
+~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/
+  rhinomcp.rhp          # the assembly (a renamed DLL)
+  Newtonsoft.Json.dll
+  ...
 ```
 
-Equivalent one-liner without the script:
+Rhino 7 on Mac scans `MacPlugIns` for folders named `*.rhp` and loads the
+assembly of the same name inside. That is not the Windows path
+`.../7.0/Plug-ins/`, and it is not a raw `.rhp` dropped on the viewport.
 
-```bash
-dotnet build plugin/rhinomcp.csproj -p:CopyToRhinoPluginDir=true -p:RhinoVersion=7.0
-```
+The script also writes `plugin/bin/Debug/rhinomcp.macrhi` if you would rather
+drag an installer onto the Rhino 7 **Dock icon**.
 
-## 2. Register the plugin in Rhino 7 (first time only)
+## 2. Load it in Rhino 7
 
-Rhino for Mac does not auto-load a new `.rhp` just because it sits in that
-folder. Register it once:
+1. **Quit Rhino 7** (Cmd+Q), then open it again. Mac plugins are picked up at
+   launch from `MacPlugIns`.
+2. Optional fallback: drag `plugin/bin/Debug/rhinomcp.macrhi` onto the Rhino 7
+   icon in the Dock, click OK, then quit and restart.
 
-1. Quit Rhino 7 if it is open.
-2. Open Rhino 7.
-3. Drag `~/Library/Application Support/McNeel/Rhinoceros/7.0/Plug-ins/rhinomcp/rhinomcp.rhp`
-   onto the viewport.
-4. Accept the load dialog.
-
-Later rebuilds overwrite the same files. Restart Rhino to pick them up. You do
-not need to drag again.
+Do **not** drag the raw `rhinomcp.rhp` onto the viewport. That Open / Import
+dialog means Rhino thought it was a model file. The plugin never loaded, so
+`mcpstart` stays unknown.
 
 ## 3. Start the TCP bridge
 
@@ -81,9 +82,9 @@ mcpstart
 You should see `RhinoMCP server started on 127.0.0.1:1999`. `mcpstop` ends it.
 Run `mcpstart` once per Rhino session.
 
-If `mcpstart` is unknown, the `.rhp` did not load. Check `Tools → Options →
-Plug-ins` (or drag the file again) and look at the Rhino command history for a
-load error.
+If `mcpstart` is still unknown after a restart, open **Rhinoceros → Settings →
+Plug-ins** and look for `rhinomcp`, and read the command history for a load
+error.
 
 ## 4. Point Grok Build at the local Python server
 

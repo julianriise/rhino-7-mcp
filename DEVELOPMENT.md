@@ -41,10 +41,10 @@ export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$PATH"
 dotnet build plugin/rhinomcp.csproj
 # output: plugin/bin/Debug/net48/rhinomcp.rhp
 
-# install into the Rhino 7 plug-ins dir (macOS) in one step:
+# install as a MacPlugIns *.rhp package (macOS) in one step:
 ./plugin/install.sh
 # or:
-dotnet build plugin/rhinomcp.csproj -p:CopyToRhinoPluginDir=true -p:RhinoVersion=7.0
+dotnet build plugin/rhinomcp.csproj -p:CopyToRhinoPluginDir=true
 ```
 
 A user-local .NET 8 SDK at `~/.dotnet` is enough. The Homebrew `dotnet-sdk` cask needs sudo;
@@ -55,8 +55,10 @@ build has no Roslyn source generator, so the SDK version doesn't matter.)
 
 ## Run
 
-1. In Rhino 7, register the built `.rhp` (drag-drop the first time), then run `mcpstart` — the
-   plugin opens a TCP server on `127.0.0.1:1999`.
+1. `./plugin/install.sh` writes a Mac plugin package under
+   `~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/`.
+   Quit and reopen Rhino 7, then run `mcpstart`. The plugin opens a TCP server
+   on `127.0.0.1:1999`. Do not drag the raw `.rhp` onto the viewport.
 2. Point Grok Build at the **local** `server/` from this checkout (`.grok/config.toml`), not
    `uvx rhinomcp` from PyPI. Dangerous tools are off for the MVP.
 3. With `mcpstart` running, `python3 scripts/mvp_smoke.py` hits the plugin without Grok.
