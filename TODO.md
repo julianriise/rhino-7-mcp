@@ -8,9 +8,13 @@ _Status as of 2026-06-17. `main` is the working line._
 
 ## Done
 
-- [x] Retarget plugin to **net48 / Rhino 7** (csproj → RhinoCommon & Grasshopper 7.33; framework
-      refs for Drawing/WinForms; `Compat/IsExternalInit.cs` + `Compat/StringCompat.cs` shims;
-      Serializer R8-only API swaps). Builds clean to `plugin/bin/Debug/net48/rhinomcp.rhp`.
+- [x] Retarget plugin to **net48 / Rhino 7** (csproj → RhinoCommon & Grasshopper 7.34, because
+      7.33.23306.15001 is unpublished on NuGet; framework refs for Drawing/WinForms;
+      `Compat/IsExternalInit.cs` + `Compat/StringCompat.cs` shims; Serializer R8-only API swaps).
+      Builds clean to `plugin/bin/Debug/net48/rhinomcp.rhp`.
+- [x] Mac install path, Grok Build MCP config, live smoke script, KNOWN_ISSUES.md. Plugin staged
+      to `~/Library/Application Support/McNeel/Rhinoceros/7.0/Plug-ins/rhinomcp/`. Still needs a
+      first-time drag of the `.rhp` onto Rhino 7, then `mcpstart`.
 - [x] Confirmed already-merged-upstream in the fork point (no action): TCP framing (#31/#32),
       PRs #28 (capture_viewport), #29 (jsonschema referencing), #30 (validate_response).
 - [x] Cherry-picked `blazingphoenix7:fix/delete-object-null-name`.

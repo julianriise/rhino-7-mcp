@@ -1,0 +1,26 @@
+# Project MCP config for Grok Build.
+# Launch this checkout's Python server, not the PyPI rhinomcp package.
+# Viewport screenshots exceed Grok's default 20 KB MCP output cap.
+
+[mcp]
+max_output_bytes = 2000000
+
+[mcp_servers.rhino]
+command = "uv"
+args = [
+    "run",
+    "--directory",
+    "/Users/jr/Documents/hobby/rhino-7-mcp/server",
+    "rhinomcp",
+]
+enabled = true
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.rhino.env]
+RHINO_MCP_HOST = "127.0.0.1"
+RHINO_MCP_PORT = "1999"
+RHINO_MCP_ENABLE_RUN_COMMAND = "0"
+RHINO_MCP_ENABLE_RHINOSCRIPT = "0"
+RHINO_MCP_ENABLE_CSHARP = "0"
+RHINO_MCP_TIMEOUT = "30"

@@ -12,3 +12,12 @@ grasshopper_mcp_server/
 AGENTS.md
 CLAUDE.md
 GRASSHOPPER_MCP_IMPLEMENTATION_PLAN.md
+plugin/bin/
+plugin/obj/
+server/.venv/
+server/.pytest_cache/
+server/.ruff_cache/
+server/htmlcov/
+server/coverage.xml
+scripts/smoke_output/
+*.user

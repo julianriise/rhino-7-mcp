@@ -21,9 +21,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
-    <PackageReference Include="Grasshopper" Version="7.33.23306.15001" />
+    <!-- 7.33.23306.15001 is not on NuGet (only 7.33 RCs). 7.34 is the oldest
+         published 7.x stable after that; still net48 / Rhino 7, not the R8 line. -->
+    <PackageReference Include="Grasshopper" Version="7.34.23267.11001" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="RhinoCommon" Version="7.33.23306.15001" ExcludeAssets="runtime" />
+    <PackageReference Include="RhinoCommon" Version="7.34.23267.11001" ExcludeAssets="runtime" />
     <!-- Lets the net48 plugin build on a machine without a full .NET Framework
          developer pack (e.g. macOS) — provides the net48 reference assemblies. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />

@@ -18,7 +18,8 @@ net48; the Python server is unchanged and version-agnostic.
 The retarget is on **`main`** (this fork's working line; `main` tracks our work, not a pristine
 mirror of upstream — see "Syncing upstream" below). Changes vs the upstream fork point:
 
-- `plugin/rhinomcp.csproj` — net8.0 → **net48**; RhinoCommon & Grasshopper 8.17 → **7.33**;
+- `plugin/rhinomcp.csproj` — net8.0 → **net48**; RhinoCommon & Grasshopper 8.17 → **7.34**
+  (7.33.23306.15001 is not published on NuGet; 7.34 is the oldest stable 7.x after that);
   dropped the net8-only `System.Drawing.Common` + `Microsoft.WindowsDesktop.App.Ref` NuGets in
   favour of framework references; added `Microsoft.NETFramework.ReferenceAssemblies` (lets net48
   build on a machine without a full .NET Framework dev pack, e.g. macOS); `LangVersion` 11.
@@ -36,12 +37,18 @@ Any recent .NET SDK works (the `Microsoft.NETFramework.ReferenceAssemblies` pack
 net48 reference assemblies, so no Visual Studio / .NET Framework dev pack is required):
 
 ```bash
+export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$PATH"
 dotnet build plugin/rhinomcp.csproj
 # output: plugin/bin/Debug/net48/rhinomcp.rhp
 
 # install into the Rhino 7 plug-ins dir (macOS) in one step:
+./plugin/install.sh
+# or:
 dotnet build plugin/rhinomcp.csproj -p:CopyToRhinoPluginDir=true -p:RhinoVersion=7.0
 ```
+
+A user-local .NET 8 SDK at `~/.dotnet` is enough. The Homebrew `dotnet-sdk` cask needs sudo;
+the Microsoft `dotnet-install.sh` script does not. See [INSTALL.md](INSTALL.md).
 
 (If your only SDK is an old Homebrew `dotnet@8`, that's fine here — unlike the Rhino 8 repo, this
 build has no Roslyn source generator, so the SDK version doesn't matter.)
@@ -50,8 +57,9 @@ build has no Roslyn source generator, so the SDK version doesn't matter.)
 
 1. In Rhino 7, register the built `.rhp` (drag-drop the first time), then run `mcpstart` — the
    plugin opens a TCP server on `127.0.0.1:1999`.
-2. Start the Python MCP server (unchanged from upstream) and point your MCP client at it, e.g.
-   `uvx rhinomcp`, or run the local `server/` per the repo README.
+2. Point Grok Build at the **local** `server/` from this checkout (`.grok/config.toml`), not
+   `uvx rhinomcp` from PyPI. Dangerous tools are off for the MVP.
+3. With `mcpstart` running, `python3 scripts/mvp_smoke.py` hits the plugin without Grok.
 
 ## Syncing upstream
 

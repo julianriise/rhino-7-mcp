@@ -10,15 +10,18 @@ RhinoMCP connects Rhino to AI agents through the [Model Context Protocol](https:
 so assistants like Claude and Cursor can model geometry, read your document, and build
 Grasshopper definitions for you, just by chatting.
 
-[![PyPI](https://img.shields.io/pypi/v/rhinomcp?logo=pypi&logoColor=white&label=PyPI&color=3775A9)](https://pypi.org/project/rhinomcp/)
-[![Rhino 8](https://img.shields.io/badge/Rhino-8-178600?logo=rhinoceros&logoColor=white)](https://www.rhino3d.com/)
+[![Rhino 7](https://img.shields.io/badge/Rhino-7-178600?logo=rhinoceros&logoColor=white)](https://www.rhino3d.com/)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-000000)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[Quick start](#quick-start) · [What it can do](#what-it-can-do) · [Usage](#usage) · [Examples](#example-prompts) · [Tool reference](#tool-reference)
+[Install (macOS R7)](INSTALL.md) · [Quick start](#quick-start) · [What it can do](#what-it-can-do) · [Usage](#usage) · [Examples](#example-prompts) · [Tool reference](#tool-reference)
 
 **English** · [简体中文](README.zh-CN.md)
+
+> This is a **Rhino 7 / net48** fork of [jingcheng-chen/rhinomcp](https://github.com/jingcheng-chen/rhinomcp), via [ktkt40208/rhinomcp-r7](https://github.com/ktkt40208/rhinomcp-r7).
+> Do **not** install the Package Manager `rhinomcp` yak. That is the Rhino 8 line.
+> Mac install, Grok Build config, and smoke: **[INSTALL.md](INSTALL.md)**. Runtime notes: **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)**.
 
 </div>
 
@@ -33,7 +36,8 @@ Grasshopper definitions for you, just by chatting.
 - When you need more control, it can run native Rhino commands, RhinoScript-Python, or RhinoCommon C#.
 
 > [!NOTE]
-> RhinoMCP targets **Rhino 8** on Windows and macOS.
+> This fork targets **Rhino 7** on macOS (Apple Silicon via Rhino 7 / Rosetta is fine).
+> The upstream project targets Rhino 8.
 
 ## Demos
 
@@ -91,46 +95,36 @@ Three steps: install the Rhino plugin, connect your AI client, then start the br
 
 ### 1. Install the Rhino plugin
 
-In Rhino, open **Tools → Package Manager**, search for **`rhinomcp`**, and click **Install**. Restart Rhino.
+Do not use Package Manager. Build the net48 `.rhp` from this repo and load it in Rhino 7:
+
+```bash
+./plugin/install.sh
+```
+
+Then drag
+`~/Library/Application Support/McNeel/Rhinoceros/7.0/Plug-ins/rhinomcp/rhinomcp.rhp`
+onto a Rhino 7 viewport once so Rhino registers it. Full steps: [INSTALL.md](INSTALL.md).
 
 ### 2. Connect your AI client
 
-#### Option A: ask your AI assistant to install it (recommended)
+Use the **local server from this repo**, not `uvx rhinomcp` from PyPI. PyPI tracks
+upstream Rhino 8.
 
-If you use an agentic assistant (Codex, Claude Code, Cursor, Cline, and the like), paste this prompt:
-
-```
-Please install https://github.com/jingcheng-chen/rhinomcp as a local MCP server named `rhino`.
-```
-
-#### Option B: Install the mcp server or manually edit the config yourself
-
-**Codex**, in one command:
-
-```bash
-codex mcp add rhino --env RHINO_MCP_HOST=127.0.0.1 -- uvx rhinomcp
-```
-
-**Claude Code**, in one command:
-
-```bash
-claude mcp add rhino -- uvx rhinomcp
-```
-
-**ChatGPT:** use Codex for the local setup above. ChatGPT apps/MCP connectors currently connect
-to remote MCP servers, not local stdio commands like `uvx rhinomcp`. If you want to build a
-ChatGPT app around RhinoMCP, use ChatGPT developer mode with a remote or tunneled MCP endpoint.
-
-You can also manually edit the config yourself:
+Grok Build already has a project config at `.grok/config.toml`. Restart Grok in
+this directory, or open `/mcps` and press `r`. Other clients:
 
 ```json
 {
   "mcpServers": {
     "rhino": {
-      "command": "uvx",
-      "args": ["rhinomcp"],
+      "command": "uv",
+      "args": ["run", "--directory", "/ABS/PATH/rhino-7-mcp/server", "rhinomcp"],
       "env": {
-        "RHINO_MCP_HOST": "127.0.0.1"
+        "RHINO_MCP_HOST": "127.0.0.1",
+        "RHINO_MCP_PORT": "1999",
+        "RHINO_MCP_ENABLE_RUN_COMMAND": "0",
+        "RHINO_MCP_ENABLE_RHINOSCRIPT": "0",
+        "RHINO_MCP_ENABLE_CSHARP": "0"
       }
     }
   }
@@ -138,10 +132,9 @@ You can also manually edit the config yourself:
 ```
 
 > [!IMPORTANT]
-> The launcher `uvx` comes from [**uv**](https://docs.astral.sh/uv/). If you don't have it yet:
-> macOS `brew install uv` · Windows `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+> `uv` comes from [**uv**](https://docs.astral.sh/uv/). macOS: `brew install uv`.
 >
-> Run **only one** RhinoMCP server at a time (Codex, Claude, Cursor, etc. — not several at once).
+> Run **only one** RhinoMCP client at a time. Two clients on port 1999 will fight.
 
 <details>
 <summary>Auto-restart the server with your AI client (optional)</summary>
@@ -155,7 +148,7 @@ To clean up a stale `rhinomcp` process each time your client launches:
   "mcpServers": {
     "rhino": {
       "command": "sh",
-      "args": ["-c", "killall rhinomcp 2>/dev/null; uvx rhinomcp"]
+      "args": ["-c", "killall rhinomcp 2>/dev/null; /ABS/PATH/rhino-7-mcp/scripts/run-mcp.sh"]
     }
   }
 }
@@ -168,7 +161,7 @@ To clean up a stale `rhinomcp` process each time your client launches:
   "mcpServers": {
     "rhino": {
       "command": "cmd",
-      "args": ["/c", "taskkill /F /IM rhinomcp.exe 2>nul & uvx rhinomcp"]
+      "args": ["/c", "taskkill /F /IM rhinomcp.exe 2>nul & uv run --directory C:\\ABS\\PATH\\rhino-7-mcp\\server rhinomcp"]
     }
   }
 }
@@ -196,7 +189,7 @@ pattern with cylinders that have different heights."_
 ## Example prompts
 
 > Create 6×6×6 boxes on a 10-unit grid from the origin, sizes ramping from 1 to 5,
-> with a blue-to-red gradient color based on size. Use RhinoScript Python.
+> with a blue-to-red gradient color based on size.
 
 > Make a Rhinoceros animal out of cubic blocks in cartoon colors. Then change its head to red,
 > and rotate the selected object 90° around the Z axis.
@@ -312,8 +305,8 @@ dotnet restore plugin/rhinomcp.sln
 dotnet build plugin/rhinomcp.sln --configuration Release
 ```
 
-To publish the plugin: build in Release, copy `manifest.yml` into `bin/Release`, then run
-`yak build` and `yak push rhinomcp_xxxx.yak`.
+This fork does not publish the Package Manager yak (that is the Rhino 8 line).
+Ship the `.rhp` from `plugin/bin/Debug/net48/` via [INSTALL.md](INSTALL.md).
 
 </details>
 
