@@ -93,9 +93,9 @@ schema tests = 12 passed.
 
 ## Still to verify / do on the R7 line
 
-- **Runtime on real Rhino 7** (the only thing needing a Rhino): plugin loads, `mcpstart`, GH1 tools
-  actually drive Grasshopper 7, and `execute_rhinocommon_csharp_code` (Roslyn scripting) behaves on
-  .NET Framework 4.8.
+- **Runtime on real Rhino 7:** plugin loads, `mcpstart`, MVP smoke OK (2026-09-15). Still open:
+  GH1 tools actually driving Grasshopper 7, and `execute_rhinocommon_csharp_code` (Roslyn) on
+  .NET Framework 4.8 / Mono.
 - **Optional features available from `blazingphoenix7`** (not yet pulled — opinionated additions):
   `feat/perception-stage1-change-delta`, `stage2-health` (geometry-health in mutate responses),
   `stage3-spatial` (`measure_objects` clash/gap), `stage4-capabilities` (`describe_capabilities`).

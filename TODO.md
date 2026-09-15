@@ -4,7 +4,7 @@ Continuation checklist for another session / PC. **Setup, build, and upstream-sy
 [`DEVELOPMENT.md`](./DEVELOPMENT.md).** Companion repo: `ktkt40208/RhinoMCP` (the Rhino 8 line).
 Strategy background lives in the "RhinoMCP fork" note in Notion (not in-repo).
 
-_Status as of 2026-06-17. `main` is the working line._
+_Status as of 2026-09-15. `main` is the working line._
 
 ## Done
 
@@ -35,8 +35,9 @@ uv run --python 3.12 --with pytest --with jsonschema --with referencing pytest c
 
 ## Pending — needs a real Rhino 7 (cannot be done headless)
 
-- [ ] Load `rhinomcp.rhp` in Rhino 7, run `mcpstart`, start the Python server, smoke-test a few tools.
-- [ ] Confirm the Grasshopper (GH1) tools actually drive Grasshopper 7 (compiled vs 7.33, runtime unverified).
+- [x] Load `rhinomcp.rhp` in Rhino 7, run `mcpstart`, smoke-test MVP tools
+      (`scripts/mvp_smoke.py` = OK, 2026-09-15).
+- [ ] Confirm the Grasshopper (GH1) tools actually drive Grasshopper 7 (compiled vs 7.34, runtime unverified).
 - [ ] Confirm `execute_rhinocommon_csharp_code` (Roslyn `Microsoft.CodeAnalysis.CSharp.Scripting`) runs on .NET Framework 4.8.
 
 ## Pending — optional features from `blazingphoenix7` (decide, then cherry-pick + verify)

@@ -1,8 +1,9 @@
 # Known issues (Rhino 7 macOS)
 
-Runtime notes for this fork. Headless build/tests are green. Anything that
-needs a live Rhino 7 session is listed as unverified until `mcpstart` + smoke
-has actually run.
+Runtime notes for this fork. Headless build/tests are green. Live Rhino 7
+smoke on this Mac (2026-09-15): `mcpstart` on 127.0.0.1:1999, then
+`python3 scripts/mvp_smoke.py` returned **smoke OK**. Viewport capture:
+`docs/assets/mvp_smoke_box.png`.
 
 ## Build
 
@@ -27,19 +28,28 @@ has actually run.
 - The Windows-style `.../7.0/Plug-ins/rhinomcp/` path does not get scanned on
   Mac. `plugin/install.sh` now writes `MacPlugIns`.
 
-## Runtime, not yet proven on this machine
+## Runtime, proven 2026-09-15 (Rhino 7.38 Mac / Rosetta)
 
-- Plugin load in Rhino 7 Mac, `mcpstart` / `mcpstop`, TCP 1999.
-- MVP tools: `get_document_summary`, `create_layer`, `create_object`,
-  `get_object_info`, `analyze_objects`, `capture_viewport`, `undo`.
-- `capture_viewport` depends on Rhino's bundled libgdiplus for PNG encoding.
-  The C# side already returns a clear error if that fails.
-- Grasshopper 1 tools are compiled against GH 7.34 and have not been driven
-  on this install. Out of scope for the MVP smoke.
-- `execute_rhinocommon_csharp_code` uses Roslyn `Microsoft.CodeAnalysis.CSharp.Scripting`
-  4.8 on .NET Framework 4.8 / Rhino's Mono. Disabled for the MVP
-  (`RHINO_MCP_ENABLE_CSHARP=0`). If the plugin ever fails to load, Roslyn
-  is the first assembly to suspect.
+Smoke against the live plugin (`scripts/mvp_smoke.py`):
+
+| Step | Result |
+|---|---|
+| `get_document_summary` | units=Millimeters, layers=6, objects=0 |
+| `create_layer` A-WALL | GUID returned |
+| `create_object` BOX 4000×6000×3000 mm | EXTRUSION, bbox `[[0,0,0],[4000,6000,3000]]` |
+| `get_object_info` | same GUID + bbox |
+| `analyze_objects` | count=1 |
+| `capture_viewport` | Perspective 800×600 PNG |
+| `undo` | Undid 1 operation (the box) |
+
+`capture_viewport` PNG encoding works on this Mac (Rhino's libgdiplus). The
+BOX lands as an Extrusion, not a Brep. Fine for the MVP.
+
+Still unverified, out of MVP scope:
+
+- Grasshopper 1 tools (compiled against GH 7.34, not driven on this install)
+- `execute_rhinocommon_csharp_code` (Roslyn 4.8 on Mono). Disabled for MVP
+  via `RHINO_MCP_ENABLE_CSHARP=0`.
 
 ## Do not do
 
