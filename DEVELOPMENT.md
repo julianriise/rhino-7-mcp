@@ -29,7 +29,8 @@ mirror of upstream — see "Syncing upstream" below). Changes vs the upstream fo
 - `plugin/Serializers/Serializer.cs` — replaced the Rhino-8-only `Curve.ControlPolygon()` and
   `PolylineCurve.ToArray()` with R7-compatible NURBS/sampling and `Point(i)` loops.
 
-Builds clean to `plugin/bin/Debug/net48/rhinomcp.rhp`. **Not yet runtime-tested in Rhino 7.**
+Builds clean to `plugin/bin/Debug/net48/rhinomcp.rhp`. Live smoke on Rhino 7.38
+Mac (2026-09-15) passed. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Build (macOS or Windows)
 
