@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_layer_material_result.json",
+  "title": "SetLayerMaterialResult",
+  "description": "Layer material assignment result",
+  "type": "object",
+  "properties": {
+    "layer": { "type": "string" },
+    "material_name": { "type": "string" },
+    "material_id": { "type": "string" },
+    "objects_updated": { "type": "integer" },
+    "message": { "type": "string" }
+  },
+  "required": ["layer", "material_name", "objects_updated"]
+}

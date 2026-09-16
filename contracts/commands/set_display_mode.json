@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_display_mode.json",
+  "title": "SetDisplayMode Command",
+  "description": "Set the active viewport display mode. Rendered shows layer materials; Arctic is a clay/white look.",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["Rendered", "Arctic", "Shaded", "Wireframe"],
+      "description": "Viewport display mode. Rendered shows plaster/concrete/wood; Arctic is clay."
+    }
+  },
+  "required": ["mode"],
+  "additionalProperties": false
+}

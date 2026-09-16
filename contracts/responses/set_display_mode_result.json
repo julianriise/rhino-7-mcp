@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_display_mode_result.json",
+  "title": "SetDisplayModeResult",
+  "description": "Active viewport display mode after change",
+  "type": "object",
+  "properties": {
+    "mode": { "type": "string" },
+    "viewport": { "type": "string" },
+    "message": { "type": "string" }
+  },
+  "required": ["mode"]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "walls_from_layer_result.json",
+  "title": "WallsFromLayerResult",
+  "description": "New wall solids created from a plan layer",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "GUIDs of new wall solids"
+    },
+    "count": { "type": "integer" },
+    "source_curves": { "type": "integer" },
+    "joined": { "type": "integer" },
+    "closed": { "type": "integer" },
+    "skipped": { "type": "integer" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "message": { "type": "string" },
+    "material_name": { "type": "string" },
+    "objects_updated": { "type": "integer" }
+  },
+  "required": ["ids", "count", "message"]
+}
