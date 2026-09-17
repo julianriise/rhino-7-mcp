@@ -23,7 +23,9 @@ def openings_from_layer(
     Door: opening 0 → 2100 (height 2100). Width from the gap polyline;
     door swing blocks/arcs are ignored when gap polylines exist.
     Window: sill 900, head 2100 (height 1200). Uses window-layer curves
-    or block-instance bounding boxes. No door or window objects are created.
+    or block-instance bounding boxes. Creates selectable opening_marker
+    boxes on A-OPEN (named door-NN / window-NN). Door/window blocks are
+    not created.
 
     Parameters:
     - layer: Source layer, typically "door" or "window" (case-insensitive)
@@ -36,7 +38,7 @@ def openings_from_layer(
     - min_depth: Minimum cutter depth through the wall (default 250)
 
     Returns:
-    Dictionary with cut_count, failed_count, failures, wall_ids, message.
+    Dictionary with cut_count, failed_count, failures, wall_ids, marker_ids, message.
     """
     try:
         if not layer:
@@ -61,7 +63,7 @@ def openings_from_layer(
             params["limit"] = limit
 
         result = rhino.send_command("openings_from_layer", params)
-        return {
+        out = {
             "success": True,
             "cut_count": result.get("cut_count", 0),
             "failed_count": result.get("failed_count", 0),
@@ -72,6 +74,9 @@ def openings_from_layer(
             "head": result.get("head"),
             "message": result.get("message", "Openings cut"),
         }
+        if "marker_ids" in result:
+            out["marker_ids"] = result.get("marker_ids") or []
+        return out
     except Exception as e:
         logger.error(f"Error in openings_from_layer: {str(e)}")
         return {"success": False, "message": str(e)}

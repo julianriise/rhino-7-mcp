@@ -48,6 +48,7 @@
             "walls_from_layer",
             "floor_from_layer",
             "openings_from_layer",
+            "clear_generated",
             "set_layer_material",
             "set_display_mode",
             "run_command",

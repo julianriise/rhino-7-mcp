@@ -2002,6 +2002,7 @@ class TestPackageApi:
             "walls_from_layer",
             "floor_from_layer",
             "openings_from_layer",
+            "clear_generated",
             "set_layer_material",
             "set_display_mode",
             "undo",
@@ -2279,9 +2280,10 @@ class TestOpeningsFromLayerTool:
             "failures": [],
             "wall_ids": ["wall-1"],
             "opening_count": 14,
+            "marker_ids": ["marker-1", "marker-2"],
             "sill": 0,
             "head": 2100,
-            "message": "Cut 14 opening(s) from layer 'door' (0 failure(s)).",
+            "message": "Cut 14 opening(s) from layer 'door' (0 failure(s), 2 marker(s)).",
         }
         mock_get_conn.return_value = mock_conn
 
@@ -2299,6 +2301,7 @@ class TestOpeningsFromLayerTool:
         assert result["success"] is True
         assert result["cut_count"] == 14
         assert result["failed_count"] == 0
+        assert result["marker_ids"] == ["marker-1", "marker-2"]
 
     @patch("rhinomcp.tools.openings_from_layer.get_rhino_connection")
     def test_window_limit_and_ids(self, mock_get_conn):
@@ -2332,4 +2335,78 @@ class TestOpeningsFromLayerTool:
         assert params["wall_ids"] == ["w1"]
         assert params["limit"] == 5
         assert result["failed_count"] == 1
+
+
+class TestClearGeneratedTool:
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_defaults_omit_kinds(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["a", "b"],
+            "count": 2,
+            "dry_run": False,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_generated(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "clear_generated",
+            {
+                "dry_run": False,
+                "include_untagged_prefixes": False,
+            },
+        )
+        assert result["success"] is True
+        assert result["deleted"] == ["a", "b"]
+        assert result["count"] == 2
+        assert result["dry_run"] is False
+
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_dry_run_forwarded(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["x"],
+            "count": 1,
+            "dry_run": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_generated(ctx=None, dry_run=True)
+
+        params = mock_conn.send_command.call_args[0][1]
+        assert mock_conn.send_command.call_args[0][0] == "clear_generated"
+        assert params["dry_run"] is True
+        assert result["dry_run"] is True
+        assert result["deleted"] == ["x"]
+        assert result["count"] == 1
+
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_kinds_and_untagged(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": [],
+            "count": 0,
+            "dry_run": False,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        clear_generated(
+            ctx=None,
+            kinds=["wall", "floor"],
+            level="0",
+            include_untagged_prefixes=True,
+            name_prefixes=["wall-"],
+        )
+        params = mock_conn.send_command.call_args[0][1]
+        assert params["kinds"] == ["wall", "floor"]
+        assert params["level"] == "0"
+        assert params["include_untagged_prefixes"] is True
+        assert params["name_prefixes"] == ["wall-"]
 

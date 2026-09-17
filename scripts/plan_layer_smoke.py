@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live plan-layer smoke: walls_from_layer + openings_from_layer.
+"""Live plan-layer smoke: clear → floor → walls → openings → tags → clear.
 
 Requires Rhino 7 with mcpstart and the demo DXF/.3dm open (mm).
 Does not go through the Python MCP server — talks framed TCP like mvp_smoke.py.
@@ -69,6 +69,19 @@ def bbox_height(bbox) -> float:
     return float(bbox[1][2]) - float(bbox[0][2])
 
 
+def attrs_of(info: dict) -> dict:
+    raw = info.get("attributes") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def object_gone(sock: socket.socket, oid: str) -> bool:
+    try:
+        send_command(sock, "get_object_info", {"id": oid})
+        return False
+    except SmokeError:
+        return True
+
+
 def main() -> int:
     print(f"connecting to {HOST}:{PORT} timeout={TIMEOUT}s ...")
     try:
@@ -101,16 +114,33 @@ def main() -> int:
             print("FAIL: no objects on layer 'wall'")
             return 1
 
-        existing_walls = send_command(sock, "get_objects", {
-            "layer_filter": "A-WALL",
-            "include_geometry": False,
-            "limit": 200,
+        print("==> clear_generated (include_untagged_prefixes for pre-tag leftovers)")
+        cleared = send_command(sock, "clear_generated", {
+            "include_untagged_prefixes": True,
         })
-        existing_ids = [o.get("id") for o in (existing_walls.get("objects") or []) if o.get("id")]
-        if existing_ids:
-            print(f"==> clearing {len(existing_ids)} existing A-WALL solid(s)")
-            for eid in existing_ids:
-                send_command(sock, "delete_object", {"id": eid})
+        print(f"    deleted={cleared.get('count')} dry_run={cleared.get('dry_run')}")
+
+        print("==> floor_from_layer")
+        floor = send_command(sock, "floor_from_layer", {
+            "layer": "wall",
+            "thickness": 400,
+            "target_layer": "A-FLOR",
+            "name_prefix": "floor-",
+        })
+        print(f"    {floor.get('message')} count={floor.get('count')}")
+        floor_ids = floor.get("ids") or []
+        if not floor_ids:
+            print("FAIL: no floor slabs created")
+            return 1
+
+        floor_info = send_command(sock, "get_object_info", {"id": floor_ids[0]})
+        floor_attrs = attrs_of(floor_info)
+        print(f"    {floor_info.get('name')} forsk:kind={floor_attrs.get('forsk:kind')} "
+              f"generated={floor_attrs.get('forsk:generated')}")
+        if floor_attrs.get("forsk:kind") != "floor":
+            failures.append(f"floor forsk:kind={floor_attrs.get('forsk:kind')}")
+        if floor_attrs.get("forsk:generated") != "1":
+            failures.append(f"floor forsk:generated={floor_attrs.get('forsk:generated')}")
 
         print("==> walls_from_layer")
         walls = send_command(sock, "walls_from_layer", {
@@ -126,6 +156,7 @@ def main() -> int:
         if not ids:
             print("FAIL: no wall solids created")
             return 1
+        wall_count_first = len(ids)
 
         heights = []
         for wid in ids:
@@ -139,13 +170,22 @@ def main() -> int:
             if abs(h - 3000) > 5:
                 failures.append(f"{info.get('name')} height {h} != 3000")
 
+        wall_info = send_command(sock, "get_object_info", {"id": ids[0]})
+        wall_attrs = attrs_of(wall_info)
+        print(f"    wall tags forsk:kind={wall_attrs.get('forsk:kind')} "
+              f"generated={wall_attrs.get('forsk:generated')}")
+        if wall_attrs.get("forsk:kind") != "wall":
+            failures.append(f"wall forsk:kind={wall_attrs.get('forsk:kind')}")
+        if wall_attrs.get("forsk:generated") != "1":
+            failures.append(f"wall forsk:generated={wall_attrs.get('forsk:generated')}")
+
         print("==> default wall material (By Layer plaster)")
-        wall_attrs = send_command(sock, "get_object_attributes", {"id": ids[0]})
-        print(f"    {wall_attrs.get('name')} material_source={wall_attrs.get('material_source')} "
-              f"material_index={wall_attrs.get('material_index')}")
-        if wall_attrs.get("material_source") != "MaterialFromLayer":
+        wall_attrs_mat = send_command(sock, "get_object_attributes", {"id": ids[0]})
+        print(f"    {wall_attrs_mat.get('name')} material_source={wall_attrs_mat.get('material_source')} "
+              f"material_index={wall_attrs_mat.get('material_index')}")
+        if wall_attrs_mat.get("material_source") != "MaterialFromLayer":
             failures.append(
-                f"wall material_source={wall_attrs.get('material_source')} expected MaterialFromLayer"
+                f"wall material_source={wall_attrs_mat.get('material_source')} expected MaterialFromLayer"
             )
         if walls.get("material_name") and walls.get("material_name") != "M-PLASTER":
             failures.append(f"wall material_name={walls.get('material_name')} expected M-PLASTER")
@@ -170,7 +210,8 @@ def main() -> int:
         print("==> openings_from_layer door")
         doors = send_command(sock, "openings_from_layer", {"layer": "door"})
         print(f"    {doors.get('message')} cut={doors.get('cut_count')} "
-              f"fail={doors.get('failed_count')} openings={doors.get('opening_count')}")
+              f"fail={doors.get('failed_count')} openings={doors.get('opening_count')} "
+              f"markers={len(doors.get('marker_ids') or [])}")
         if doors.get("failures"):
             for f in doors["failures"][:8]:
                 print(f"    door fail: {f}")
@@ -180,17 +221,43 @@ def main() -> int:
         print("==> openings_from_layer window")
         windows = send_command(sock, "openings_from_layer", {"layer": "window"})
         print(f"    {windows.get('message')} cut={windows.get('cut_count')} "
-              f"fail={windows.get('failed_count')} openings={windows.get('opening_count')}")
+              f"fail={windows.get('failed_count')} openings={windows.get('opening_count')} "
+              f"markers={len(windows.get('marker_ids') or [])}")
         if windows.get("failures"):
             for f in windows["failures"][:8]:
                 print(f"    window fail: {f}")
         if (windows.get("cut_count") or 0) < 1:
             failures.append("no window openings cut")
 
+        marker_ids = list(doors.get("marker_ids") or []) + list(windows.get("marker_ids") or [])
+        if not marker_ids:
+            open_objs = send_command(sock, "get_objects", {
+                "layer_filter": "A-OPEN",
+                "include_geometry": False,
+                "limit": 50,
+            })
+            marker_ids = [o.get("id") for o in (open_objs.get("objects") or []) if o.get("id")]
+        if not marker_ids:
+            failures.append("no opening markers on A-OPEN")
+        else:
+            marker_info = send_command(sock, "get_object_info", {"id": marker_ids[0]})
+            marker_attrs = attrs_of(marker_info)
+            print(f"    marker {marker_info.get('name')} kind={marker_attrs.get('forsk:kind')} "
+                  f"host={marker_attrs.get('forsk:host')} "
+                  f"opening_kind={marker_attrs.get('forsk:opening_kind')}")
+            if marker_attrs.get("forsk:kind") != "opening_marker":
+                failures.append(f"marker forsk:kind={marker_attrs.get('forsk:kind')}")
+            host = marker_attrs.get("forsk:host") or ""
+            if len(host) < 32:
+                failures.append(f"marker forsk:host missing/short: {host!r}")
+            okind = (marker_attrs.get("forsk:opening_kind") or "").lower()
+            if okind not in ("door", "window"):
+                failures.append(f"marker forsk:opening_kind={marker_attrs.get('forsk:opening_kind')}")
+
         after = send_command(sock, "get_document_summary", {})
         furniture_after = layer_count(after, "furniture")
         wall_curves_after = layer_count(after, "wall")
-        print(f"==> after  objects={after.get('object_count')} "
+        print(f"==> after create  objects={after.get('object_count')} "
               f"by_layer={after.get('objects_by_layer')}")
         if furniture_after != furniture_before:
             failures.append(f"furniture changed {furniture_before} -> {furniture_after}")
@@ -201,7 +268,7 @@ def main() -> int:
         before_info = send_command(sock, "get_object_info", {"id": wall_id})
         before_minx = before_info["bounding_box"][0][0]
         print(f"==> move {before_info.get('name')} +300 X")
-        moved = send_command(sock, "modify_object", {
+        send_command(sock, "modify_object", {
             "id": wall_id,
             "translation": [300, 0, 0],
         })
@@ -230,11 +297,55 @@ def main() -> int:
         else:
             print(f"    capture keys={list(cap.keys())}")
 
+        print("==> clear_generated defaults")
+        cleared2 = send_command(sock, "clear_generated", {})
+        print(f"    deleted={cleared2.get('count')}")
+        for oid, label in [
+            (ids[0], "wall"),
+            (floor_ids[0], "floor"),
+            (marker_ids[0] if marker_ids else None, "marker"),
+        ]:
+            if not oid:
+                continue
+            if object_gone(sock, oid):
+                print(f"    {label} {oid} gone")
+            else:
+                failures.append(f"{label} {oid} still present after clear_generated")
+
+        after_clear = send_command(sock, "get_document_summary", {})
+        wall_curves_final = layer_count(after_clear, "wall")
+        print(f"==> after clear  by_layer={after_clear.get('objects_by_layer')}")
+        if wall_curves_final != wall_curves:
+            failures.append(
+                f"source wall curves changed after clear {wall_curves} -> {wall_curves_final}"
+            )
+        if layer_count(after_clear, "A-WALL") > 0:
+            failures.append(f"A-WALL still has {layer_count(after_clear, 'A-WALL')} object(s)")
+        if layer_count(after_clear, "A-FLOR") > 0:
+            failures.append(f"A-FLOR still has {layer_count(after_clear, 'A-FLOR')} object(s)")
+        if layer_count(after_clear, "A-OPEN") > 0:
+            failures.append(f"A-OPEN still has {layer_count(after_clear, 'A-OPEN')} object(s)")
+
+        print("==> optional second walls_from_layer count check")
+        walls2 = send_command(sock, "walls_from_layer", {
+            "layer": "wall",
+            "height": 3000,
+            "target_layer": "A-WALL",
+            "name_prefix": "wall-",
+        })
+        wall_count_second = walls2.get("count") or 0
+        print(f"    second walls count={wall_count_second} (first={wall_count_first})")
+        if wall_count_second != wall_count_first:
+            failures.append(
+                f"second walls count {wall_count_second} != first {wall_count_first}"
+            )
+        send_command(sock, "clear_generated", {})
+
         print()
-        print(f"walls={len(ids)} door_cuts={doors.get('cut_count')} "
+        print(f"walls={wall_count_first} floor={len(floor_ids)} "
+              f"door_cuts={doors.get('cut_count')} "
               f"window_cuts={windows.get('cut_count')} "
-              f"door_fail={doors.get('failed_count')} "
-              f"window_fail={windows.get('failed_count')}")
+              f"markers={len(marker_ids)}")
         if failures:
             print("FAIL")
             for f in failures:

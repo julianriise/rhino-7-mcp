@@ -64,6 +64,12 @@ public partial class RhinoMCPFunctions
                     LayerIndex = targetLayer.Index,
                     MaterialSource = ObjectMaterialSource.MaterialFromLayer
                 };
+                StampForskTags(attr, new ForskStamp
+                {
+                    Kind = "floor",
+                    Level = "0",
+                    SourceLayer = profiles.SourceLayer.Name
+                });
                 var id = doc.Objects.AddBrep(brep, attr);
                 if (id != Guid.Empty)
                 {

@@ -242,6 +242,14 @@ def test_new_commands():
         ("commands/openings_from_layer.json", {"layer": "door"}),
         ("commands/openings_from_layer.json", {"layer": "window", "sill": 900, "head": 2100, "limit": 5}),
         ("commands/openings_from_layer.json", {"layer": "door", "wall_ids": [GUID]}),
+        ("commands/clear_generated.json", {}),
+        ("commands/clear_generated.json", {"dry_run": True}),
+        ("commands/clear_generated.json", {
+            "kinds": ["wall", "floor"],
+            "level": "0",
+            "include_untagged_prefixes": True,
+            "name_prefixes": ["wall-", "floor-"],
+        }),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "wood", "ensure_objects_from_layer": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-FLOR", "preset": "white"}),
@@ -523,6 +531,18 @@ def test_responses():
     if not validate("responses/analyze_objects_result.json", analyze_result):
         all_passed = False
 
+    print("  clear_generated_result:")
+    clear_result = {
+        "deleted": ["12345678-1234-1234-1234-123456789012"],
+        "count": 1,
+        "dry_run": False,
+    }
+    if not validate("responses/clear_generated_result.json", clear_result):
+        all_passed = False
+    clear_dry = {"deleted": [], "count": 0, "dry_run": True}
+    if not validate("responses/clear_generated_result.json", clear_dry):
+        all_passed = False
+
     return all_passed
 
 
@@ -628,6 +648,8 @@ def test_invalid_examples():
         ("commands/set_display_mode.json", {}, "set_display_mode missing mode"),
         ("commands/set_display_mode.json", {"mode": "Ghosted"}, "set_display_mode unsupported mode"),
         ("commands/walls_from_layer.json", {"apply_default_materials": "yes"}, "walls_from_layer apply_default_materials not boolean"),
+        ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
+        ("commands/clear_generated.json", {"bogus": 1}, "clear_generated unknown field"),
     ]
 
     all_rejected = True
@@ -773,6 +795,7 @@ def test_protocol_envelope():
         "loft", "extrude_curve", "sweep1", "offset_curve", "pipe",
         "project_curve", "intersect_curves", "split_curve",
         "walls_from_layer", "floor_from_layer", "openings_from_layer",
+        "clear_generated",
         "set_layer_material", "set_display_mode",
         "run_command", "get_commands",
         "gh_create_document",

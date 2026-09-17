@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "openings_from_layer_result.json",
   "title": "OpeningsFromLayerResult",
-  "description": "Door/window openings cut from wall solids",
+  "description": "Door/window openings cut from wall solids, plus opening_marker ids on A-OPEN",
   "type": "object",
   "properties": {
     "cut_count": { "type": "integer" },
@@ -23,6 +23,11 @@
       "items": { "type": "string" }
     },
     "opening_count": { "type": "integer" },
+    "marker_ids": {
+      "type": "array",
+      "description": "GUIDs of opening_marker boxes created on A-OPEN.",
+      "items": { "type": "string" }
+    },
     "sill": { "type": "number" },
     "head": { "type": "number" },
     "message": { "type": "string" }

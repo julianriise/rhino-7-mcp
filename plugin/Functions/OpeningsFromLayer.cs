@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -9,8 +10,8 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Cut door/window openings through wall solids. No door or window objects
-/// are created. Source DXF geometry is never modified.
+/// Cut door/window openings through wall solids and create selectable
+/// opening_marker boxes on A-OPEN. Source DXF geometry is never modified.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -57,9 +58,10 @@ public partial class RhinoMCPFunctions
                 ["failures"] = new JArray(),
                 ["wall_ids"] = new JArray(),
                 ["opening_count"] = 0,
+                ["marker_ids"] = new JArray(),
                 ["sill"] = sill,
                 ["head"] = head,
-                ["message"] = $"Layer '{layerName}' is roof/ceiling/slab — ignored in 2D to 3D."
+                ["message"] = $"Layer '{layerName}' is roof/ceiling/slab - ignored in 2D to 3D."
             };
         }
 
@@ -78,6 +80,7 @@ public partial class RhinoMCPFunctions
                 ["failures"] = new JArray(),
                 ["wall_ids"] = new JArray(),
                 ["opening_count"] = 0,
+                ["marker_ids"] = new JArray(),
                 ["message"] = $"No wall solids on '{targetLayerName}' to cut."
             };
         }
@@ -86,7 +89,13 @@ public partial class RhinoMCPFunctions
         if (limit.HasValue && limit.Value > 0 && footprints.Count > limit.Value)
             footprints = footprints.Take(limit.Value).ToList();
 
+        var openingKind = ResolveOpeningKind(layerKey);
+        var markerPrefix = openingKind == "window" ? "window-" : "door-";
+        var markerIndex = NextNameIndex(doc, markerPrefix);
+        var openLayer = EnsureLayer(doc, "A-OPEN", Color.FromArgb(120, 160, 200));
+
         var failures = new JArray();
+        var markerIds = new JArray();
         var cutCount = 0;
 
         foreach (var foot in footprints)
@@ -108,6 +117,7 @@ public partial class RhinoMCPFunctions
                 var cutterBox = cutter.GetBoundingBox(true);
                 cutterBox.Inflate(tol);
                 var hit = false;
+                var hostId = Guid.Empty;
                 var splitPieces = new List<WallSolid>();
 
                 for (var i = 0; i < walls.Count; i++)
@@ -141,6 +151,15 @@ public partial class RhinoMCPFunctions
                     var valid = results.Where(b => b != null && b.IsValid).ToList();
                     if (valid.Count == 0) continue;
 
+                    if (valid.Count == 1 && TryReplaceWallBrep(doc, wall, valid[0]))
+                    {
+                        walls[i] = wall;
+                        if (hostId == Guid.Empty) hostId = wall.Id;
+                        hit = true;
+                        continue;
+                    }
+
+                    var oldId = wall.Id;
                     if (!doc.Objects.Delete(wall.Id, true))
                     {
                         failures.Add(new JObject
@@ -172,14 +191,41 @@ public partial class RhinoMCPFunctions
                     }
 
                     if (first != null)
+                    {
+                        RetargetOpeningMarkers(doc, oldId, first.Id);
                         walls[i] = first;
+                        if (hostId == Guid.Empty) hostId = first.Id;
+                    }
+
                     hit = true;
                 }
 
                 if (splitPieces.Count > 0)
                     walls.AddRange(splitPieces);
 
-                if (hit) cutCount++;
+                if (hit)
+                {
+                    cutCount++;
+                    if (hostId != Guid.Empty)
+                    {
+                        var markerId = AddOpeningMarker(
+                            doc,
+                            openLayer,
+                            foot,
+                            hostId,
+                            openingKind,
+                            markerPrefix,
+                            markerIndex,
+                            sill,
+                            head,
+                            sourceLayer.Name);
+                        if (markerId != Guid.Empty)
+                        {
+                            markerIds.Add(markerId.ToString());
+                            markerIndex++;
+                        }
+                    }
+                }
                 else
                 {
                     failures.Add(new JObject
@@ -209,9 +255,11 @@ public partial class RhinoMCPFunctions
             ["failures"] = failures,
             ["wall_ids"] = wallIds,
             ["opening_count"] = footprints.Count,
+            ["marker_ids"] = markerIds,
             ["sill"] = sill,
             ["head"] = head,
-            ["message"] = $"Cut {cutCount} opening(s) from layer '{sourceLayer.Name}' ({failures.Count} failure(s))."
+            ["message"] = $"Cut {cutCount} opening(s) from layer '{sourceLayer.Name}' " +
+                          $"({failures.Count} failure(s), {markerIds.Count} marker(s))."
         };
     }
 
@@ -227,6 +275,154 @@ public partial class RhinoMCPFunctions
         public string SourceId;
         public BoundingBox Bbox;
         public Curve Curve;
+    }
+
+    private static string ResolveOpeningKind(string layerKey)
+    {
+        if (layerKey.Equals("window", StringComparison.OrdinalIgnoreCase))
+            return "window";
+        if (layerKey.Equals("door", StringComparison.OrdinalIgnoreCase))
+            return "door";
+        return layerKey.ToLowerInvariant();
+    }
+
+    private static bool TryReplaceWallBrep(RhinoDoc doc, WallSolid wall, Brep brep)
+    {
+        try
+        {
+            if (!doc.Objects.Replace(wall.Id, brep))
+                return false;
+            wall.Brep = brep.DuplicateBrep() ?? brep;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void RetargetOpeningMarkers(RhinoDoc doc, Guid oldHost, Guid newHost)
+    {
+        if (oldHost == Guid.Empty || newHost == Guid.Empty || oldHost == newHost)
+            return;
+        var oldStr = oldHost.ToString();
+        var newStr = newHost.ToString();
+        foreach (var obj in doc.Objects)
+        {
+            if (obj == null) continue;
+            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.Ordinal))
+                continue;
+            if (obj.Attributes.GetUserString("forsk:host") != oldStr)
+                continue;
+            obj.Attributes.SetUserString("forsk:host", newStr);
+            obj.CommitChanges();
+        }
+    }
+
+    private Guid AddOpeningMarker(
+        RhinoDoc doc,
+        Layer openLayer,
+        OpeningFootprint foot,
+        Guid hostId,
+        string openingKind,
+        string namePrefix,
+        int index,
+        double sill,
+        double head,
+        string sourceLayerName)
+    {
+        var width = LongerXySide(foot.Bbox);
+        var markerBrep = BuildOpeningMarkerBox(foot, sill, head, 50.0);
+        if (markerBrep == null || !markerBrep.IsValid)
+            return Guid.Empty;
+
+        var attr = new ObjectAttributes
+        {
+            Name = $"{namePrefix}{index:D2}",
+            LayerIndex = openLayer.Index,
+            MaterialSource = ObjectMaterialSource.MaterialFromLayer
+        };
+        StampForskTags(attr, new ForskStamp
+        {
+            Kind = "opening_marker",
+            Level = "0",
+            Host = hostId.ToString(),
+            OpeningKind = openingKind,
+            Sill = sill,
+            Head = head,
+            Width = width,
+            SourceLayer = sourceLayerName
+        });
+        return doc.Objects.AddBrep(markerBrep, attr);
+    }
+
+    private static double LongerXySide(BoundingBox bbox)
+    {
+        if (!bbox.IsValid) return 0;
+        var dx = bbox.Max.X - bbox.Min.X;
+        var dy = bbox.Max.Y - bbox.Min.Y;
+        return Math.Max(dx, dy);
+    }
+
+    private static Brep BuildOpeningMarkerBox(
+        OpeningFootprint foot,
+        double sill,
+        double head,
+        double minSelectDepth)
+    {
+        var bbox = foot.Bbox;
+        if (!bbox.IsValid) return null;
+
+        var minX = bbox.Min.X;
+        var maxX = bbox.Max.X;
+        var minY = bbox.Min.Y;
+        var maxY = bbox.Max.Y;
+        var dx = maxX - minX;
+        var dy = maxY - minY;
+        var cx = 0.5 * (minX + maxX);
+        var cy = 0.5 * (minY + maxY);
+
+        if (dx >= dy)
+        {
+            if (dy < minSelectDepth)
+            {
+                minY = cy - minSelectDepth * 0.5;
+                maxY = cy + minSelectDepth * 0.5;
+            }
+        }
+        else
+        {
+            if (dx < minSelectDepth)
+            {
+                minX = cx - minSelectDepth * 0.5;
+                maxX = cx + minSelectDepth * 0.5;
+            }
+        }
+
+        if (maxX - minX < 1e-9 || maxY - minY < 1e-9 || head - sill < 1e-9)
+            return null;
+
+        var box = new Box(
+            Plane.WorldXY,
+            new Interval(minX, maxX),
+            new Interval(minY, maxY),
+            new Interval(sill, head));
+        return Brep.CreateFromBox(box);
+    }
+
+    private static int NextNameIndex(RhinoDoc doc, string prefix)
+    {
+        var max = 0;
+        foreach (var obj in doc.Objects)
+        {
+            var name = obj?.Name;
+            if (string.IsNullOrEmpty(name)) continue;
+            if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            var suffix = name.Substring(prefix.Length);
+            if (int.TryParse(suffix, out var n) && n > max)
+                max = n;
+        }
+        return max + 1;
     }
 
     private List<WallSolid> CollectWallSolids(RhinoDoc doc, string targetLayerName, List<string> wallIdTokens)
