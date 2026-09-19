@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_opening.json",
+  "title": "DeleteOpening Command",
+  "description": "Close one facade opening on its host wall and delete the A-OPEN marker. Id omitted uses the current selection (exactly one opening_marker).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Opening marker GUID. Omit to use the current selection."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move_opening.json",
+  "title": "MoveOpening Command",
+  "description": "Slide an opening along its host facade segment. Provide delta_mm or absolute t, not both. Id omitted uses the current selection (exactly one opening_marker).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Opening marker GUID. Omit to use the current selection."
+    },
+    "delta_mm": {
+      "type": "number",
+      "description": "Signed distance along the segment tangent in mm. Exclusive with t."
+    },
+    "t": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Absolute placement along the segment, 0–1. Exclusive with delta_mm."
+    }
+  },
+  "additionalProperties": false
+}

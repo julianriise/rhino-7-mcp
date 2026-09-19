@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_layer_material.json",
+  "title": "SetLayerMaterial Command",
+  "description": "Assign a RenderMaterial to a layer and set objects on that layer to MaterialFromLayer (By Layer). Creates the material from a preset, reuses material_name, or builds a matte material from diffuse_rgb + name. Creates the layer if missing.",
+  "type": "object",
+  "properties": {
+    "layer_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Target layer (e.g. A-WALL, A-FLOR). Case-insensitive. Created if missing."
+    },
+    "preset": {
+      "type": "string",
+      "enum": ["plaster", "concrete", "clay", "wood", "white"],
+      "description": "Matte architectural preset. plaster=M-PLASTER, concrete=M-CONCRETE, clay=M-CLAY, wood=M-WOOD, white=M-WHITE."
+    },
+    "material_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Existing RenderMaterial name to reuse. Fails if missing — pass preset or diffuse_rgb + name to create."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name for a new matte material when using diffuse_rgb."
+    },
+    "diffuse_rgb": {
+      "$ref": "../common/definitions.json#/$defs/color",
+      "description": "Diffuse RGB 0–255 for a custom matte material. Requires name."
+    },
+    "ensure_objects_from_layer": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, all objects on the layer get MaterialSource = MaterialFromLayer. Default true."
+    }
+  },
+  "required": ["layer_name"],
+  "additionalProperties": false,
+  "anyOf": [
+    { "required": ["preset"] },
+    { "required": ["material_name"] },
+    { "required": ["diffuse_rgb", "name"] }
+  ]
+}

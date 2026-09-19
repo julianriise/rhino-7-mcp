@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_generated.json",
+  "title": "ClearGenerated Command",
+  "description": "Delete Forsk-generated solids and opening markers by forsk:* tags. Optional untagged name-prefix fallback for pre-tag leftovers.",
+  "type": "object",
+  "properties": {
+    "kinds": {
+      "type": "array",
+      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker.",
+      "items": { "type": "string" },
+      "default": ["wall", "floor", "roof", "opening", "opening_marker"]
+    },
+    "level": {
+      "type": "string",
+      "description": "Optional forsk:level filter. Omit to match all levels."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, return matching ids without deleting."
+    },
+    "include_untagged_prefixes": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, also delete untagged objects whose names start with name_prefixes."
+    },
+    "name_prefixes": {
+      "type": "array",
+      "description": "Name prefixes used only when include_untagged_prefixes is true. Default wall-, floor-, roof-, door-, window-.",
+      "items": { "type": "string" },
+      "default": ["wall-", "floor-", "roof-", "door-", "window-"]
+    }
+  },
+  "additionalProperties": false
+}

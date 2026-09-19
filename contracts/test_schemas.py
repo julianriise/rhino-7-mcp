@@ -232,6 +232,41 @@ def test_new_commands():
         ("commands/offset_curve.json", {"curve_id": GUID, "distance": 1.5}),
         ("commands/pipe.json", {"curve_id": GUID, "radius": 0.5}),
         ("commands/sweep1.json", {"rail_id": GUID, "profile_ids": [GUID]}),
+        ("commands/walls_from_layer.json", {}),
+        ("commands/walls_from_layer.json", {"layer": "wall", "height": 3000, "target_layer": "A-WALL", "name_prefix": "wall-"}),
+        ("commands/walls_from_layer.json", {"layer": "wall", "apply_default_materials": True}),
+        ("commands/walls_from_layer.json", {"layer": "wall", "apply_default_materials": False}),
+        ("commands/floor_from_layer.json", {}),
+        ("commands/floor_from_layer.json", {"layer": "wall", "thickness": 400, "target_layer": "A-FLOR", "name_prefix": "floor-"}),
+        ("commands/floor_from_layer.json", {"layer": "wall", "apply_default_materials": True}),
+        ("commands/roof_flat_from_walls.json", {}),
+        ("commands/roof_flat_from_walls.json", {"layer": "wall", "thickness": 200, "overhang": 0, "target_layer": "A-ROOF", "name_prefix": "roof-"}),
+        ("commands/roof_flat_from_walls.json", {"thickness": 200, "overhang": 200, "elevation": 3000}),
+        ("commands/openings_from_layer.json", {"layer": "door"}),
+        ("commands/openings_from_layer.json", {"layer": "window", "sill": 900, "head": 2100, "limit": 5}),
+        ("commands/openings_from_layer.json", {"layer": "door", "wall_ids": [GUID]}),
+        ("commands/delete_opening.json", {}),
+        ("commands/delete_opening.json", {"id": GUID}),
+        ("commands/add_opening.json", {"opening_kind": "door"}),
+        ("commands/add_opening.json", {"opening_kind": "window", "host_id": GUID, "width": 1200, "sill": 900, "head": 2100, "t": 0.5}),
+        ("commands/add_opening.json", {"opening_kind": "door", "distance_mm": 1000}),
+        ("commands/move_opening.json", {"delta_mm": 500}),
+        ("commands/move_opening.json", {"id": GUID, "t": 0.3}),
+        ("commands/clear_generated.json", {}),
+        ("commands/clear_generated.json", {"dry_run": True}),
+        ("commands/clear_generated.json", {
+            "kinds": ["wall", "floor"],
+            "level": "0",
+            "include_untagged_prefixes": True,
+            "name_prefixes": ["wall-", "floor-"],
+        }),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "wood", "ensure_objects_from_layer": True}),
+        ("commands/set_layer_material.json", {"layer_name": "A-FLOR", "preset": "white"}),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "material_name": "M-PLASTER"}),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "name": "M-CUSTOM", "diffuse_rgb": [200, 180, 160]}),
+        ("commands/set_display_mode.json", {"mode": "Rendered"}),
+        ("commands/set_display_mode.json", {"mode": "Arctic"}),
         ("commands/get_object_attributes.json", {"id": GUID}),
         ("commands/update_object_attributes.json", {"id": GUID, "user_strings": {"PartNo": "A-100", "Count": 3}}),
         ("commands/update_object_attributes.json", {"name": "Box1", "layer": "Default", "visible": True}),
@@ -506,6 +541,18 @@ def test_responses():
     if not validate("responses/analyze_objects_result.json", analyze_result):
         all_passed = False
 
+    print("  clear_generated_result:")
+    clear_result = {
+        "deleted": ["12345678-1234-1234-1234-123456789012"],
+        "count": 1,
+        "dry_run": False,
+    }
+    if not validate("responses/clear_generated_result.json", clear_result):
+        all_passed = False
+    clear_dry = {"deleted": [], "count": 0, "dry_run": True}
+    if not validate("responses/clear_generated_result.json", clear_dry):
+        all_passed = False
+
     return all_passed
 
 
@@ -603,6 +650,25 @@ def test_invalid_examples():
         ("commands/gh_get_parameter_value.json", {"nickname": "Radius", "output_index": -1}, "gh_get_parameter_value negative output"),
         ("commands/gh_update_component.json", {"instance_id": "12345678-1234-1234-1234-123456789012"}, "gh_update_component no updates"),
         ("commands/gh_clear_canvas.json", {"confirm": True}, "gh_clear_canvas unknown field"),
+        ("commands/set_layer_material.json", {}, "set_layer_material missing layer_name"),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL"}, "set_layer_material no material selector"),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "oak"}, "set_layer_material oak not a schema preset"),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "diffuse_rgb": [200, 180, 160]}, "set_layer_material diffuse without name"),
+        ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster", "bogus": 1}, "set_layer_material unknown field"),
+        ("commands/set_display_mode.json", {}, "set_display_mode missing mode"),
+        ("commands/set_display_mode.json", {"mode": "Ghosted"}, "set_display_mode unsupported mode"),
+        ("commands/walls_from_layer.json", {"apply_default_materials": "yes"}, "walls_from_layer apply_default_materials not boolean"),
+        ("commands/roof_flat_from_walls.json", {"thickness": 0}, "roof_flat_from_walls thickness 0"),
+        ("commands/roof_flat_from_walls.json", {"overhang": -1}, "roof_flat_from_walls overhang negative"),
+        ("commands/roof_flat_from_walls.json", {"bogus": 1}, "roof_flat_from_walls unknown field"),
+        ("commands/delete_opening.json", {"bogus": 1}, "delete_opening unknown field"),
+        ("commands/add_opening.json", {}, "add_opening missing opening_kind"),
+        ("commands/add_opening.json", {"opening_kind": "portal"}, "add_opening invalid opening_kind"),
+        ("commands/add_opening.json", {"opening_kind": "door", "width": 0}, "add_opening width 0"),
+        ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
+        ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
+        ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
+        ("commands/clear_generated.json", {"bogus": 1}, "clear_generated unknown field"),
     ]
 
     all_rejected = True
@@ -747,6 +813,10 @@ def test_protocol_envelope():
         "boolean_union", "boolean_difference", "boolean_intersection",
         "loft", "extrude_curve", "sweep1", "offset_curve", "pipe",
         "project_curve", "intersect_curves", "split_curve",
+        "walls_from_layer", "floor_from_layer", "roof_flat_from_walls", "openings_from_layer",
+        "delete_opening", "add_opening", "move_opening",
+        "clear_generated",
+        "set_layer_material", "set_display_mode",
         "run_command", "get_commands",
         "gh_create_document",
         "gh_get_document_info", "gh_search_components",

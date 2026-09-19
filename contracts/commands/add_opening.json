@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_opening.json",
+  "title": "AddOpening Command",
+  "description": "Cut a door or window opening into a vertical Forsk wall and add an A-OPEN marker. Host omitted uses the current selection (exactly one wall).",
+  "type": "object",
+  "properties": {
+    "opening_kind": {
+      "type": "string",
+      "enum": ["door", "window"],
+      "description": "Opening kind. Required."
+    },
+    "host_id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Host wall GUID. Omit to use the current selection."
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Opening width in mm. Default 900 door / 1200 window."
+    },
+    "sill": {
+      "type": "number",
+      "description": "Opening bottom Z. Default 0 door / 900 window."
+    },
+    "head": {
+      "type": "number",
+      "description": "Opening top Z. Default 2100."
+    },
+    "t": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Placement along the chosen facade segment, 0–1. Exclusive with distance_mm. Default 0.5."
+    },
+    "distance_mm": {
+      "type": "number",
+      "description": "Distance in mm from segment start. Exclusive with t."
+    }
+  },
+  "required": ["opening_kind"],
+  "additionalProperties": false
+}

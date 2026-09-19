@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openings_from_layer.json",
+  "title": "OpeningsFromLayer Command",
+  "description": "Cut door or window openings from wall solids using plan-layer geometry. Ignores door swing blocks when gap polylines exist. Creates selectable opening_marker boxes on A-OPEN. Door/window blocks are not created.",
+  "type": "object",
+  "properties": {
+    "layer": {
+      "type": "string",
+      "description": "Source layer name (door or window, case-insensitive)."
+    },
+    "sill": {
+      "type": "number",
+      "description": "Opening bottom Z. Default 0 for door, 900 for window."
+    },
+    "head": {
+      "type": "number",
+      "description": "Opening top Z. Default 2100."
+    },
+    "target_layer": {
+      "type": "string",
+      "default": "A-WALL",
+      "description": "Layer holding wall solids to cut. Default A-WALL."
+    },
+    "wall_ids": {
+      "type": "array",
+      "description": "Optional wall solid GUIDs. If omitted, all solids on target_layer are used.",
+      "items": { "$ref": "../common/definitions.json#/$defs/guid" }
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional cap on openings processed (hero-only / stability mode)."
+    },
+    "pad": {
+      "type": "number",
+      "minimum": 0,
+      "default": 50,
+      "description": "XY pad added to the opening width so the cutter clears the wall. Default 50."
+    },
+    "min_depth": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 250,
+      "description": "Minimum cutter depth through the wall (wall thickness + pad). Default 250."
+    }
+  },
+  "required": ["layer"],
+  "additionalProperties": false
+}

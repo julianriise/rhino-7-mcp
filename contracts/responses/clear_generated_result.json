@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_generated_result.json",
+  "title": "ClearGeneratedResult",
+  "description": "Ids matched (and deleted unless dry_run) by clear_generated",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "count": { "type": "integer" },
+    "dry_run": { "type": "boolean" }
+  },
+  "required": ["deleted", "count", "dry_run"],
+  "additionalProperties": false
+}

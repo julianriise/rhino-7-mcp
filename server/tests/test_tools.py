@@ -1999,6 +1999,16 @@ class TestPackageApi:
             "boolean_intersection",
             "loft",
             "pipe",
+            "walls_from_layer",
+            "floor_from_layer",
+            "roof_flat_from_walls",
+            "openings_from_layer",
+            "delete_opening",
+            "add_opening",
+            "move_opening",
+            "clear_generated",
+            "set_layer_material",
+            "set_display_mode",
             "undo",
             "redo",
             "analyze_objects",
@@ -2028,3 +2038,625 @@ class TestPackageApi:
         # The discovery loop skips names starting with "_"; verify nothing internal leaked.
         leaked = [n for n in dir(rhinomcp) if n in {"_TOOLS_DIR", "_info", "_mod", "_attr", "_value"}]
         assert not leaked, f"loop locals leaked into package namespace: {leaked}"
+
+
+class TestWallsFromLayerTool:
+    @patch("rhinomcp.tools.walls_from_layer.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.walls_from_layer import walls_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["aaa-111"],
+            "count": 1,
+            "source_curves": 16,
+            "joined": 16,
+            "closed": 16,
+            "skipped": 0,
+            "warnings": [],
+            "message": "Created 1 wall solid(s) on A-WALL from layer 'wall'.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = walls_from_layer(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "walls_from_layer",
+            {
+                "layer": "wall",
+                "height": 3000.0,
+                "target_layer": "A-WALL",
+                "name_prefix": "wall-",
+                "apply_default_materials": True,
+            },
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["ids"] == ["aaa-111"]
+
+    @patch("rhinomcp.tools.walls_from_layer.get_rhino_connection")
+    def test_rejects_non_positive_height(self, mock_get_conn):
+        from rhinomcp.tools.walls_from_layer import walls_from_layer
+
+        result = walls_from_layer(ctx=None, height=0)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.walls_from_layer.get_rhino_connection")
+    def test_can_skip_default_materials(self, mock_get_conn):
+        from rhinomcp.tools.walls_from_layer import walls_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["aaa-111"],
+            "count": 1,
+            "warnings": [],
+            "message": "Created 1 wall solid(s) on A-WALL from layer 'wall'.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        walls_from_layer(ctx=None, apply_default_materials=False)
+        assert mock_conn.send_command.call_args[0][1]["apply_default_materials"] is False
+
+
+class TestFloorFromLayerTool:
+    @patch("rhinomcp.tools.floor_from_layer.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.floor_from_layer import floor_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["floor-1"],
+            "count": 1,
+            "thickness": 400,
+            "warnings": [],
+            "message": "Created 1 floor slab(s) on A-FLOR, thickness 400, top at plan Z.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = floor_from_layer(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "floor_from_layer",
+            {
+                "layer": "wall",
+                "thickness": 400.0,
+                "target_layer": "A-FLOR",
+                "name_prefix": "floor-",
+                "apply_default_materials": True,
+            },
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["thickness"] == 400
+
+    @patch("rhinomcp.tools.floor_from_layer.get_rhino_connection")
+    def test_rejects_non_positive_thickness(self, mock_get_conn):
+        from rhinomcp.tools.floor_from_layer import floor_from_layer
+
+        result = floor_from_layer(ctx=None, thickness=0)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.floor_from_layer.get_rhino_connection")
+    def test_can_skip_default_materials(self, mock_get_conn):
+        from rhinomcp.tools.floor_from_layer import floor_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["floor-1"],
+            "count": 1,
+            "thickness": 400,
+            "warnings": [],
+            "message": "Created 1 floor slab(s) on A-FLOR, thickness 400, top at plan Z.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        floor_from_layer(ctx=None, apply_default_materials=False)
+        assert mock_conn.send_command.call_args[0][1]["apply_default_materials"] is False
+
+
+class TestRoofFlatFromWallsTool:
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["roof-1"],
+            "count": 1,
+            "kind": "roof",
+            "roof_type": "flat",
+            "thickness": 200,
+            "overhang": 0,
+            "bbox": [[0, 0, 2800], [10000, 8000, 3000]],
+            "warnings": [],
+            "message": "Created 1 roof slab(s) on A-ROOF, thickness 200, overhang 0, top at Z=3000.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = roof_flat_from_walls(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "roof_flat_from_walls",
+            {
+                "layer": "wall",
+                "thickness": 200.0,
+                "overhang": 0.0,
+                "target_layer": "A-ROOF",
+                "name_prefix": "roof-",
+            },
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["kind"] == "roof"
+        assert result["roof_type"] == "flat"
+        assert result["thickness"] == 200
+        assert result["overhang"] == 0
+        assert result["bbox"] == [[0, 0, 2800], [10000, 8000, 3000]]
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_rejects_non_positive_thickness(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        result = roof_flat_from_walls(ctx=None, thickness=0)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_rejects_negative_overhang(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        result = roof_flat_from_walls(ctx=None, overhang=-1)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_optional_overhang_forwarded(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["roof-1"],
+            "count": 1,
+            "kind": "roof",
+            "roof_type": "flat",
+            "thickness": 200,
+            "overhang": 200,
+            "warnings": [],
+            "message": "Created 1 roof slab(s) on A-ROOF.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        roof_flat_from_walls(ctx=None, overhang=200.0)
+        assert mock_conn.send_command.call_args[0][1]["overhang"] == 200.0
+
+
+class TestSetLayerMaterialTool:
+    @patch("rhinomcp.tools.set_layer_material.get_rhino_connection")
+    def test_preset_wood_on_walls_alias(self, mock_get_conn):
+        from rhinomcp.tools.set_layer_material import set_layer_material
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "layer": "A-WALL",
+            "material_name": "M-WOOD",
+            "material_id": "aaa-111",
+            "objects_updated": 4,
+            "message": "Assigned M-WOOD to layer A-WALL (By Layer, 4 object(s)).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_layer_material(ctx=None, layer_name="walls", preset="oak")
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_layer_material",
+            {
+                "layer_name": "A-WALL",
+                "ensure_objects_from_layer": True,
+                "preset": "wood",
+            },
+        )
+        assert result["success"] is True
+        assert result["material_name"] == "M-WOOD"
+        assert result["objects_updated"] == 4
+
+    @patch("rhinomcp.tools.set_layer_material.get_rhino_connection")
+    def test_floor_white(self, mock_get_conn):
+        from rhinomcp.tools.set_layer_material import set_layer_material
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "layer": "A-FLOR",
+            "material_name": "M-WHITE",
+            "objects_updated": 1,
+            "message": "Assigned M-WHITE to layer A-FLOR (By Layer, 1 object(s)).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_layer_material(ctx=None, layer_name="floor", preset="white")
+        assert result["success"] is True
+        call_args = mock_conn.send_command.call_args
+        assert call_args[0][1]["layer_name"] == "A-FLOR"
+        assert call_args[0][1]["preset"] == "white"
+
+    @patch("rhinomcp.tools.set_layer_material.get_rhino_connection")
+    def test_rejects_unknown_preset(self, mock_get_conn):
+        from rhinomcp.tools.set_layer_material import set_layer_material
+
+        result = set_layer_material(ctx=None, layer_name="A-WALL", preset="glass")
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_layer_material.get_rhino_connection")
+    def test_rejects_missing_selector(self, mock_get_conn):
+        from rhinomcp.tools.set_layer_material import set_layer_material
+
+        result = set_layer_material(ctx=None, layer_name="A-WALL")
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_layer_material.get_rhino_connection")
+    def test_custom_diffuse(self, mock_get_conn):
+        from rhinomcp.tools.set_layer_material import set_layer_material
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "layer": "A-WALL",
+            "material_name": "M-CUSTOM",
+            "objects_updated": 2,
+            "message": "Assigned M-CUSTOM to layer A-WALL (By Layer, 2 object(s)).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_layer_material(
+            ctx=None, layer_name="A-WALL", name="M-CUSTOM", diffuse_rgb=[200, 180, 160]
+        )
+        assert result["success"] is True
+        call_args = mock_conn.send_command.call_args
+        assert call_args[0][1]["name"] == "M-CUSTOM"
+        assert call_args[0][1]["diffuse_rgb"] == [200, 180, 160]
+        assert "preset" not in call_args[0][1]
+
+
+class TestSetDisplayModeTool:
+    @patch("rhinomcp.tools.set_display_mode.get_rhino_connection")
+    def test_rendered(self, mock_get_conn):
+        from rhinomcp.tools.set_display_mode import set_display_mode
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "mode": "Rendered",
+            "viewport": "Perspective",
+            "message": "Set viewport 'Perspective' to Rendered.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_display_mode(ctx=None, mode="rendered")
+        mock_conn.send_command.assert_called_once_with(
+            "set_display_mode", {"mode": "Rendered"}
+        )
+        assert result["success"] is True
+        assert result["mode"] == "Rendered"
+
+    @patch("rhinomcp.tools.set_display_mode.get_rhino_connection")
+    def test_rejects_unknown_mode(self, mock_get_conn):
+        from rhinomcp.tools.set_display_mode import set_display_mode
+
+        result = set_display_mode(ctx=None, mode="Ghosted")
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestOpeningsFromLayerTool:
+    @patch("rhinomcp.tools.openings_from_layer.get_rhino_connection")
+    def test_door_defaults(self, mock_get_conn):
+        from rhinomcp.tools.openings_from_layer import openings_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "cut_count": 14,
+            "failed_count": 0,
+            "failures": [],
+            "wall_ids": ["wall-1"],
+            "opening_count": 14,
+            "marker_ids": ["marker-1", "marker-2"],
+            "sill": 0,
+            "head": 2100,
+            "message": "Cut 14 opening(s) from layer 'door' (0 failure(s), 2 marker(s)).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = openings_from_layer(ctx=None, layer="door")
+
+        mock_conn.send_command.assert_called_once_with(
+            "openings_from_layer",
+            {
+                "layer": "door",
+                "target_layer": "A-WALL",
+                "pad": 50.0,
+                "min_depth": 250.0,
+            },
+        )
+        assert result["success"] is True
+        assert result["cut_count"] == 14
+        assert result["failed_count"] == 0
+        assert result["marker_ids"] == ["marker-1", "marker-2"]
+
+    @patch("rhinomcp.tools.openings_from_layer.get_rhino_connection")
+    def test_window_limit_and_ids(self, mock_get_conn):
+        from rhinomcp.tools.openings_from_layer import openings_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "cut_count": 3,
+            "failed_count": 1,
+            "failures": [{"source_id": "x", "reason": "no hit"}],
+            "wall_ids": ["w1"],
+            "message": "Cut 3 opening(s)",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = openings_from_layer(
+            ctx=None,
+            layer="window",
+            sill=900,
+            head=2100,
+            wall_ids=["w1"],
+            limit=5,
+        )
+
+        call_args = mock_conn.send_command.call_args
+        assert call_args[0][0] == "openings_from_layer"
+        params = call_args[0][1]
+        assert params["layer"] == "window"
+        assert params["sill"] == 900
+        assert params["head"] == 2100
+        assert params["wall_ids"] == ["w1"]
+        assert params["limit"] == 5
+        assert result["failed_count"] == 1
+
+
+class TestDeleteOpeningTool:
+    @patch("rhinomcp.tools.delete_opening.get_rhino_connection")
+    def test_no_id_sends_empty(self, mock_get_conn):
+        from rhinomcp.tools.delete_opening import delete_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted_marker_id": "m1",
+            "host_id": "h1",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = delete_opening(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with("delete_opening", {})
+        assert result["success"] is True
+        assert result["deleted_marker_id"] == "m1"
+        assert result["host_id"] == "h1"
+        assert result["ok"] is True
+
+    @patch("rhinomcp.tools.delete_opening.get_rhino_connection")
+    def test_forwards_id(self, mock_get_conn):
+        from rhinomcp.tools.delete_opening import delete_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted_marker_id": "m1",
+            "host_id": "h1",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        result = delete_opening(ctx=None, id=guid)
+
+        mock_conn.send_command.assert_called_once_with(
+            "delete_opening", {"id": guid}
+        )
+        assert result["success"] is True
+
+
+class TestAddOpeningTool:
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_door_kind_only(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_kind": "door",
+            "width": 900,
+            "sill": 0,
+            "head": 2100,
+            "t": 0.5,
+            "ok": True,
+            "message": "Added door opening on wall.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = add_opening(ctx=None, opening_kind="door")
+
+        mock_conn.send_command.assert_called_once_with(
+            "add_opening", {"opening_kind": "door"}
+        )
+        assert result["success"] is True
+        assert result["opening_kind"] == "door"
+        assert result["t"] == 0.5
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_window_with_t_omits_distance(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_kind": "window",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        add_opening(ctx=None, opening_kind="window", t=0.5)
+
+        mock_conn.send_command.assert_called_once_with(
+            "add_opening", {"opening_kind": "window", "t": 0.5}
+        )
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_rejects_t_and_distance(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        result = add_opening(
+            ctx=None, opening_kind="door", t=0.2, distance_mm=100
+        )
+        assert result["success"] is False
+        assert "not both" in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_rejects_bad_kind(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        result = add_opening(ctx=None, opening_kind="portal")
+        assert result["success"] is False
+        assert "door or window" in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestMoveOpeningTool:
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_delta_mm(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "t": 0.42,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = move_opening(ctx=None, delta_mm=500)
+
+        mock_conn.send_command.assert_called_once_with(
+            "move_opening", {"delta_mm": 500}
+        )
+        assert result["success"] is True
+        assert result["t"] == 0.42
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_absolute_t(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "t": 0.3,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        move_opening(ctx=None, t=0.3)
+
+        mock_conn.send_command.assert_called_once_with(
+            "move_opening", {"t": 0.3}
+        )
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_rejects_both(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        result = move_opening(ctx=None, delta_mm=500, t=0.3)
+        assert result["success"] is False
+        assert "not both" in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_rejects_neither(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        result = move_opening(ctx=None)
+        assert result["success"] is False
+        assert "Specify delta_mm or t." in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestClearGeneratedTool:
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_defaults_omit_kinds(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["a", "b"],
+            "count": 2,
+            "dry_run": False,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_generated(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "clear_generated",
+            {
+                "dry_run": False,
+                "include_untagged_prefixes": False,
+            },
+        )
+        assert result["success"] is True
+        assert result["deleted"] == ["a", "b"]
+        assert result["count"] == 2
+        assert result["dry_run"] is False
+
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_dry_run_forwarded(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["x"],
+            "count": 1,
+            "dry_run": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_generated(ctx=None, dry_run=True)
+
+        params = mock_conn.send_command.call_args[0][1]
+        assert mock_conn.send_command.call_args[0][0] == "clear_generated"
+        assert params["dry_run"] is True
+        assert result["dry_run"] is True
+        assert result["deleted"] == ["x"]
+        assert result["count"] == 1
+
+    @patch("rhinomcp.tools.clear_generated.get_rhino_connection")
+    def test_kinds_and_untagged(self, mock_get_conn):
+        from rhinomcp.tools.clear_generated import clear_generated
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": [],
+            "count": 0,
+            "dry_run": False,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        clear_generated(
+            ctx=None,
+            kinds=["wall", "floor"],
+            level="0",
+            include_untagged_prefixes=True,
+            name_prefixes=["wall-"],
+        )
+        params = mock_conn.send_command.call_args[0][1]
+        assert params["kinds"] == ["wall", "floor"]
+        assert params["level"] == "0"
+        assert params["include_untagged_prefixes"] is True
+        assert params["name_prefixes"] == ["wall-"]
+

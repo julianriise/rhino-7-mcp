@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "walls_from_layer.json",
+  "title": "WallsFromLayer Command",
+  "description": "Extrude closed curves on a plan layer to wall solids. Nested room outlines become wall bands (outer minus inner). Does not create a roof, ceiling, or floor slab. Source curves are left untouched.",
+  "type": "object",
+  "properties": {
+    "layer": {
+      "type": "string",
+      "default": "wall",
+      "description": "Source layer name (case-insensitive). Default wall."
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 3000,
+      "description": "Extrusion height in document units (mm). Default 3000."
+    },
+    "target_layer": {
+      "type": "string",
+      "default": "A-WALL",
+      "description": "Layer for new solids. Created if missing. Default A-WALL."
+    },
+    "name_prefix": {
+      "type": "string",
+      "default": "wall-",
+      "description": "Name prefix for new solids (wall-01, wall-02, …)."
+    },
+    "join_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Join tolerance for open segments. Default is max(10× model tolerance, 1)."
+    },
+    "apply_default_materials": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, assign plaster (M-PLASTER) to the target layer and set objects By Layer. Default true."
+    }
+  },
+  "additionalProperties": false
+}

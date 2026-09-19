@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openings_from_layer_result.json",
+  "title": "OpeningsFromLayerResult",
+  "description": "Door/window openings cut from wall solids, plus opening_marker ids on A-OPEN",
+  "type": "object",
+  "properties": {
+    "cut_count": { "type": "integer" },
+    "failed_count": { "type": "integer" },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string" },
+          "wall_id": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "wall_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "opening_count": { "type": "integer" },
+    "marker_ids": {
+      "type": "array",
+      "description": "GUIDs of opening_marker boxes created on A-OPEN.",
+      "items": { "type": "string" }
+    },
+    "sill": { "type": "number" },
+    "head": { "type": "number" },
+    "message": { "type": "string" }
+  },
+  "required": ["cut_count", "failed_count", "message"]
+}
