@@ -32,12 +32,40 @@ public partial class RhinoMCPFunctions
              candidate.FullPath.Equals(name, StringComparison.OrdinalIgnoreCase)));
     }
 
+    /// <summary>
+    /// A-OPEN (markers) and A-ROOF stay off by default so clay shows walls/floor with holes only.
+    /// </summary>
+    private static bool LayerHiddenByDefault(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        return name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("A-ROOF", StringComparison.OrdinalIgnoreCase);
+    }
+
     private Layer EnsureLayer(RhinoDoc doc, string name, Color color)
     {
         var existing = FindLayerCaseInsensitive(doc, name);
-        if (existing != null) return existing;
-        var layer = new Layer { Name = name, Color = color };
+        if (existing != null)
+        {
+            ApplyDefaultLayerVisibility(doc, existing, name);
+            return existing;
+        }
+
+        var layer = new Layer
+        {
+            Name = name,
+            Color = color,
+            IsVisible = !LayerHiddenByDefault(name)
+        };
         var index = doc.Layers.Add(layer);
         return doc.Layers.FindIndex(index);
+    }
+
+    private static void ApplyDefaultLayerVisibility(RhinoDoc doc, Layer layer, string name)
+    {
+        if (!LayerHiddenByDefault(name)) return;
+        if (!layer.IsVisible) return;
+        layer.IsVisible = false;
+        doc.Layers.Modify(layer, layer.Index, true);
     }
 }
