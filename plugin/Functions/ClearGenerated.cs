@@ -13,7 +13,7 @@ public partial class RhinoMCPFunctions
     {
         var doc = RhinoDoc.ActiveDoc;
         var kinds = parameters["kinds"]?.ToObject<List<string>>()
-            ?? new List<string> { "wall", "floor", "opening", "opening_marker" };
+            ?? new List<string> { "wall", "floor", "roof", "opening", "opening_marker" };
         var kindSet = new HashSet<string>(
             kinds.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()),
             StringComparer.OrdinalIgnoreCase);
@@ -21,7 +21,7 @@ public partial class RhinoMCPFunctions
         var dryRun = parameters["dry_run"]?.ToObject<bool?>() ?? false;
         var includeUntagged = parameters["include_untagged_prefixes"]?.ToObject<bool?>() ?? false;
         var prefixes = parameters["name_prefixes"]?.ToObject<List<string>>()
-            ?? new List<string> { "wall-", "floor-", "door-", "window-" };
+            ?? new List<string> { "wall-", "floor-", "roof-", "door-", "window-" };
 
         var matched = new List<Guid>();
         foreach (var obj in doc.Objects)

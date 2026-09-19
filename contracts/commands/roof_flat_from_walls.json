@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "roof_flat_from_walls.json",
+  "title": "RoofFlatFromWalls Command",
+  "description": "Create a flat roof slab from the outermost closed outline on the wall source layer (same footprint path as floor_from_layer). Requires Forsk walls. Slab top at wall bbox Max.Z (or elevation); thickness extrudes downward. Default thickness 200, overhang 0.",
+  "type": "object",
+  "properties": {
+    "layer": {
+      "type": "string",
+      "default": "wall",
+      "description": "Fallback source layer for the outline when walls lack forsk:source_layer. Default wall. Usually taken from the first wall's forsk:source_layer."
+    },
+    "thickness": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 200,
+      "description": "Slab thickness in document units (mm). Default 200. Extrudes downward from the slab top."
+    },
+    "overhang": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0,
+      "description": "Constant WorldXY offset of the outline in document units. Default 0. Largest-area closed offset wins; unoffset footprint kept if offset fails."
+    },
+    "elevation": {
+      "type": "number",
+      "description": "Optional absolute Z for the slab top. Default is max wall bbox Max.Z."
+    },
+    "target_layer": {
+      "type": "string",
+      "default": "A-ROOF",
+      "description": "Layer for new roof slabs. Created if missing. Default A-ROOF."
+    },
+    "name_prefix": {
+      "type": "string",
+      "default": "roof-",
+      "description": "Name prefix for new slabs (roof-01, roof-02, …)."
+    },
+    "join_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Join tolerance for open segments. Default is max(10× model tolerance, 1)."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live plan-layer smoke: clear → floor → walls → openings → tags → clear.
+"""Live plan-layer smoke: clear → floor → walls → roof → openings → tags → clear.
 
 Requires Rhino 7 with mcpstart and the demo DXF/.3dm open (mm).
 Does not go through the Python MCP server — talks framed TCP like mvp_smoke.py.
@@ -207,6 +207,41 @@ def main() -> int:
         if plaster.get("material_name") != "M-PLASTER":
             failures.append(f"plaster restore material={plaster.get('material_name')}")
 
+        print("==> roof_flat_from_walls")
+        roof = send_command(sock, "roof_flat_from_walls", {})
+        print(f"    {roof.get('message')} count={roof.get('count')} "
+              f"bbox={roof.get('bbox')} warnings={roof.get('warnings')}")
+        roof_ids = roof.get("ids") or []
+        if (roof.get("count") or 0) < 1 or not roof_ids:
+            failures.append("roof_flat_from_walls count < 1")
+            roof_ids = []
+        else:
+            roof_info = send_command(sock, "get_object_info", {"id": roof_ids[0]})
+            roof_attrs = attrs_of(roof_info)
+            print(f"    {roof_info.get('name')} layer={roof_info.get('layer')} "
+                  f"forsk:kind={roof_attrs.get('forsk:kind')} "
+                  f"generated={roof_attrs.get('forsk:generated')} "
+                  f"roof_type={roof_attrs.get('forsk:roof_type')} "
+                  f"bbox={roof_info.get('bounding_box')}")
+            if roof_info.get("layer") != "A-ROOF":
+                failures.append(f"roof layer={roof_info.get('layer')} expected A-ROOF")
+            if roof_attrs.get("forsk:kind") != "roof":
+                failures.append(f"roof forsk:kind={roof_attrs.get('forsk:kind')}")
+            if roof_attrs.get("forsk:generated") != "1":
+                failures.append(f"roof forsk:generated={roof_attrs.get('forsk:generated')}")
+            if roof_attrs.get("forsk:roof_type") != "flat":
+                failures.append(f"roof forsk:roof_type={roof_attrs.get('forsk:roof_type')}")
+            roof_bbox = roof_info.get("bounding_box") or roof.get("bbox")
+            if roof_bbox and len(roof_bbox) == 2:
+                top_z = float(roof_bbox[1][2])
+                height = bbox_height(roof_bbox)
+                if abs(top_z - 3000) > 5:
+                    failures.append(f"roof top Z={top_z} expected ~3000")
+                if abs(height - 200) > 5:
+                    failures.append(f"roof height={height} expected ~200")
+            else:
+                failures.append("roof bbox missing")
+
         print("==> openings_from_layer door")
         doors = send_command(sock, "openings_from_layer", {"layer": "door"})
         print(f"    {doors.get('message')} cut={doors.get('cut_count')} "
@@ -303,6 +338,7 @@ def main() -> int:
         for oid, label in [
             (ids[0], "wall"),
             (floor_ids[0], "floor"),
+            (roof_ids[0] if roof_ids else None, "roof"),
             (marker_ids[0] if marker_ids else None, "marker"),
         ]:
             if not oid:
@@ -323,6 +359,8 @@ def main() -> int:
             failures.append(f"A-WALL still has {layer_count(after_clear, 'A-WALL')} object(s)")
         if layer_count(after_clear, "A-FLOR") > 0:
             failures.append(f"A-FLOR still has {layer_count(after_clear, 'A-FLOR')} object(s)")
+        if layer_count(after_clear, "A-ROOF") > 0:
+            failures.append(f"A-ROOF still has {layer_count(after_clear, 'A-ROOF')} object(s)")
         if layer_count(after_clear, "A-OPEN") > 0:
             failures.append(f"A-OPEN still has {layer_count(after_clear, 'A-OPEN')} object(s)")
 
@@ -343,6 +381,7 @@ def main() -> int:
 
         print()
         print(f"walls={wall_count_first} floor={len(floor_ids)} "
+              f"roof={len(roof_ids)} "
               f"door_cuts={doors.get('cut_count')} "
               f"window_cuts={windows.get('cut_count')} "
               f"markers={len(marker_ids)}")

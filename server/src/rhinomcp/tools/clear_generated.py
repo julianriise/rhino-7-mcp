@@ -17,19 +17,19 @@ def clear_generated(
     name_prefixes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Delete Forsk-generated walls, floors, and opening markers.
+    Delete Forsk-generated walls, floors, roofs, and opening markers.
 
     Matches objects with forsk:generated=1 and forsk:kind in kinds.
     Optional level filter. With include_untagged_prefixes, also deletes
-    untagged objects named wall-/floor-/door-/window- (pre-tag leftovers).
+    untagged objects named wall-/floor-/roof-/door-/window- (pre-tag leftovers).
     Never deletes source DXF curves. Prefer tagged clear for rebuilds.
 
     Parameters:
-    - kinds: forsk:kind values (default wall, floor, opening, opening_marker)
+    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker)
     - level: optional forsk:level filter
     - dry_run: list matching ids without deleting (default false)
     - include_untagged_prefixes: also match name prefixes on untagged objects
-    - name_prefixes: prefixes for untagged fallback (default wall-, floor-, door-, window-)
+    - name_prefixes: prefixes for untagged fallback (default wall-, floor-, roof-, door-, window-)
 
     Returns:
     Dictionary with success, deleted (ids), count, dry_run, message.

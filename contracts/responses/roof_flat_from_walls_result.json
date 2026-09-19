@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "roof_flat_from_walls_result.json",
+  "title": "RoofFlatFromWallsResult",
+  "description": "Flat roof slabs created above Forsk walls",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "count": { "type": "integer" },
+    "kind": { "type": "string" },
+    "roof_type": { "type": "string" },
+    "source_curves": { "type": "integer" },
+    "joined": { "type": "integer" },
+    "closed": { "type": "integer" },
+    "skipped": { "type": "integer" },
+    "thickness": { "type": "number" },
+    "overhang": { "type": "number" },
+    "bbox": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": { "type": "number" }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "message": { "type": "string" }
+  },
+  "required": ["ids", "count", "message"]
+}

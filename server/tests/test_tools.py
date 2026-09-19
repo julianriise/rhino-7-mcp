@@ -2001,6 +2001,7 @@ class TestPackageApi:
             "pipe",
             "walls_from_layer",
             "floor_from_layer",
+            "roof_flat_from_walls",
             "openings_from_layer",
             "clear_generated",
             "set_layer_material",
@@ -2150,6 +2151,82 @@ class TestFloorFromLayerTool:
 
         floor_from_layer(ctx=None, apply_default_materials=False)
         assert mock_conn.send_command.call_args[0][1]["apply_default_materials"] is False
+
+
+class TestRoofFlatFromWallsTool:
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["roof-1"],
+            "count": 1,
+            "kind": "roof",
+            "roof_type": "flat",
+            "thickness": 200,
+            "overhang": 0,
+            "bbox": [[0, 0, 2800], [10000, 8000, 3000]],
+            "warnings": [],
+            "message": "Created 1 roof slab(s) on A-ROOF, thickness 200, overhang 0, top at Z=3000.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = roof_flat_from_walls(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "roof_flat_from_walls",
+            {
+                "layer": "wall",
+                "thickness": 200.0,
+                "overhang": 0.0,
+                "target_layer": "A-ROOF",
+                "name_prefix": "roof-",
+            },
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["kind"] == "roof"
+        assert result["roof_type"] == "flat"
+        assert result["thickness"] == 200
+        assert result["overhang"] == 0
+        assert result["bbox"] == [[0, 0, 2800], [10000, 8000, 3000]]
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_rejects_non_positive_thickness(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        result = roof_flat_from_walls(ctx=None, thickness=0)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_rejects_negative_overhang(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        result = roof_flat_from_walls(ctx=None, overhang=-1)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.roof_flat_from_walls.get_rhino_connection")
+    def test_optional_overhang_forwarded(self, mock_get_conn):
+        from rhinomcp.tools.roof_flat_from_walls import roof_flat_from_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["roof-1"],
+            "count": 1,
+            "kind": "roof",
+            "roof_type": "flat",
+            "thickness": 200,
+            "overhang": 200,
+            "warnings": [],
+            "message": "Created 1 roof slab(s) on A-ROOF.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        roof_flat_from_walls(ctx=None, overhang=200.0)
+        assert mock_conn.send_command.call_args[0][1]["overhang"] == 200.0
 
 
 class TestSetLayerMaterialTool:

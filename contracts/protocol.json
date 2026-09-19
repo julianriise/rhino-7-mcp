@@ -47,6 +47,7 @@
             "split_curve",
             "walls_from_layer",
             "floor_from_layer",
+            "roof_flat_from_walls",
             "openings_from_layer",
             "clear_generated",
             "set_layer_material",

@@ -278,6 +278,8 @@ public partial class RhinoMCPFunctions
             return Color.FromArgb(150, 145, 138);
         if (layerName.Equals("A-WALL", StringComparison.OrdinalIgnoreCase))
             return Color.FromArgb(180, 180, 180);
+        if (layerName.Equals("A-ROOF", StringComparison.OrdinalIgnoreCase))
+            return Color.FromArgb(70, 72, 76);
         return Color.FromArgb(180, 180, 180);
     }
 
