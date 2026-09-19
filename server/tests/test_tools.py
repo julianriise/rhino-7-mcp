@@ -2003,6 +2003,9 @@ class TestPackageApi:
             "floor_from_layer",
             "roof_flat_from_walls",
             "openings_from_layer",
+            "delete_opening",
+            "add_opening",
+            "move_opening",
             "clear_generated",
             "set_layer_material",
             "set_display_mode",
@@ -2412,6 +2415,176 @@ class TestOpeningsFromLayerTool:
         assert params["wall_ids"] == ["w1"]
         assert params["limit"] == 5
         assert result["failed_count"] == 1
+
+
+class TestDeleteOpeningTool:
+    @patch("rhinomcp.tools.delete_opening.get_rhino_connection")
+    def test_no_id_sends_empty(self, mock_get_conn):
+        from rhinomcp.tools.delete_opening import delete_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted_marker_id": "m1",
+            "host_id": "h1",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = delete_opening(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with("delete_opening", {})
+        assert result["success"] is True
+        assert result["deleted_marker_id"] == "m1"
+        assert result["host_id"] == "h1"
+        assert result["ok"] is True
+
+    @patch("rhinomcp.tools.delete_opening.get_rhino_connection")
+    def test_forwards_id(self, mock_get_conn):
+        from rhinomcp.tools.delete_opening import delete_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted_marker_id": "m1",
+            "host_id": "h1",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        result = delete_opening(ctx=None, id=guid)
+
+        mock_conn.send_command.assert_called_once_with(
+            "delete_opening", {"id": guid}
+        )
+        assert result["success"] is True
+
+
+class TestAddOpeningTool:
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_door_kind_only(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_kind": "door",
+            "width": 900,
+            "sill": 0,
+            "head": 2100,
+            "t": 0.5,
+            "ok": True,
+            "message": "Added door opening on wall.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = add_opening(ctx=None, opening_kind="door")
+
+        mock_conn.send_command.assert_called_once_with(
+            "add_opening", {"opening_kind": "door"}
+        )
+        assert result["success"] is True
+        assert result["opening_kind"] == "door"
+        assert result["t"] == 0.5
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_window_with_t_omits_distance(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_kind": "window",
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        add_opening(ctx=None, opening_kind="window", t=0.5)
+
+        mock_conn.send_command.assert_called_once_with(
+            "add_opening", {"opening_kind": "window", "t": 0.5}
+        )
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_rejects_t_and_distance(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        result = add_opening(
+            ctx=None, opening_kind="door", t=0.2, distance_mm=100
+        )
+        assert result["success"] is False
+        assert "not both" in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_rejects_bad_kind(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        result = add_opening(ctx=None, opening_kind="portal")
+        assert result["success"] is False
+        assert "door or window" in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestMoveOpeningTool:
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_delta_mm(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "t": 0.42,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = move_opening(ctx=None, delta_mm=500)
+
+        mock_conn.send_command.assert_called_once_with(
+            "move_opening", {"delta_mm": 500}
+        )
+        assert result["success"] is True
+        assert result["t"] == 0.42
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_absolute_t(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "t": 0.3,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        move_opening(ctx=None, t=0.3)
+
+        mock_conn.send_command.assert_called_once_with(
+            "move_opening", {"t": 0.3}
+        )
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_rejects_both(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        result = move_opening(ctx=None, delta_mm=500, t=0.3)
+        assert result["success"] is False
+        assert "not both" in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.move_opening.get_rhino_connection")
+    def test_rejects_neither(self, mock_get_conn):
+        from rhinomcp.tools.move_opening import move_opening
+
+        result = move_opening(ctx=None)
+        assert result["success"] is False
+        assert "Specify delta_mm or t." in result["message"]
+        mock_get_conn.assert_not_called()
 
 
 class TestClearGeneratedTool:

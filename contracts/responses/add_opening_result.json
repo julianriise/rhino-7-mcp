@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_opening_result.json",
+  "title": "AddOpeningResult",
+  "description": "New opening cut and A-OPEN marker created",
+  "type": "object",
+  "properties": {
+    "marker_id": { "type": "string" },
+    "host_id": { "type": "string" },
+    "opening_kind": { "type": "string" },
+    "width": { "type": "number" },
+    "sill": { "type": "number" },
+    "head": { "type": "number" },
+    "t": { "type": "number" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["marker_id", "host_id", "opening_kind", "ok"]
+}

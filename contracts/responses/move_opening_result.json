@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move_opening_result.json",
+  "title": "MoveOpeningResult",
+  "description": "Opening slid along host facade; marker GUID preserved",
+  "type": "object",
+  "properties": {
+    "marker_id": { "type": "string" },
+    "host_id": { "type": "string" },
+    "t": { "type": "number" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["marker_id", "host_id", "t", "ok"]
+}

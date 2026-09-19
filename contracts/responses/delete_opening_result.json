@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_opening_result.json",
+  "title": "DeleteOpeningResult",
+  "description": "Opening closed on host wall and marker deleted",
+  "type": "object",
+  "properties": {
+    "deleted_marker_id": { "type": "string" },
+    "host_id": { "type": "string" },
+    "ok": { "type": "boolean" }
+  },
+  "required": ["deleted_marker_id", "host_id", "ok"]
+}
