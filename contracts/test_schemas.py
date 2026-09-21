@@ -245,6 +245,11 @@ def test_new_commands():
         ("commands/rooms_from_layer.json", {}),
         ("commands/rooms_from_layer.json", {"layer": "A-ROOM", "target_layer": "A-ROOM", "name_prefix": "room-"}),
         ("commands/rooms_from_layer.json", {"layer": "room", "join_tolerance": 1.0}),
+        ("commands/mark_as_existing.json", {}),
+        ("commands/mark_as_existing.json", {
+            "ids": ["12345678-1234-1234-1234-123456789012"],
+            "target_layer": "X-EXIST",
+        }),
         ("commands/openings_from_layer.json", {"layer": "door"}),
         ("commands/openings_from_layer.json", {"layer": "window", "sill": 900, "head": 2100, "limit": 5}),
         ("commands/openings_from_layer.json", {"layer": "door", "wall_ids": [GUID]}),
@@ -544,6 +549,17 @@ def test_responses():
     if not validate("responses/analyze_objects_result.json", analyze_result):
         all_passed = False
 
+    print("  mark_as_existing_result:")
+    mark_result = {
+        "ids": ["12345678-1234-1234-1234-123456789012"],
+        "forsk_ids": ["x01"],
+        "count": 1,
+        "target_layer": "X-EXIST",
+        "message": "Marked 1 object(s) as existing on X-EXIST.",
+    }
+    if not validate("responses/mark_as_existing_result.json", mark_result):
+        all_passed = False
+
     print("  clear_generated_result:")
     clear_result = {
         "deleted": ["12345678-1234-1234-1234-123456789012"],
@@ -666,6 +682,8 @@ def test_invalid_examples():
         ("commands/roof_flat_from_walls.json", {"bogus": 1}, "roof_flat_from_walls unknown field"),
         ("commands/rooms_from_layer.json", {"join_tolerance": 0}, "rooms_from_layer join_tolerance 0"),
         ("commands/rooms_from_layer.json", {"bogus": 1}, "rooms_from_layer unknown field"),
+        ("commands/mark_as_existing.json", {"ids": ["not-a-guid"]}, "mark_as_existing bad guid"),
+        ("commands/mark_as_existing.json", {"bogus": 1}, "mark_as_existing unknown field"),
         ("commands/delete_opening.json", {"bogus": 1}, "delete_opening unknown field"),
         ("commands/add_opening.json", {}, "add_opening missing opening_kind"),
         ("commands/add_opening.json", {"opening_kind": "portal"}, "add_opening invalid opening_kind"),
@@ -820,6 +838,7 @@ def test_protocol_envelope():
         "project_curve", "intersect_curves", "split_curve",
         "walls_from_layer", "floor_from_layer", "roof_flat_from_walls", "openings_from_layer",
         "rooms_from_layer",
+        "mark_as_existing",
         "delete_opening", "add_opening", "move_opening",
         "clear_generated",
         "set_layer_material", "set_display_mode",

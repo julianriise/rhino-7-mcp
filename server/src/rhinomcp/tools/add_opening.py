@@ -21,7 +21,8 @@ def add_opening(
     Cut a door or window into a vertical Forsk wall and add an A-OPEN marker.
 
     Defaults match plan bake: door 900×0–2100, window 1200×900–2100, t=0.5
-    on the longest facade segment.
+    on the longest facade segment. Refuses a host with forsk:kind=existing
+    or on layer X-EXIST: existing underlay is not a Forsk host wall.
 
     Parameters:
     - opening_kind: "door" or "window"

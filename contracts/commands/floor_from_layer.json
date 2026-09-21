@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "floor_from_layer.json",
   "title": "FloorFromLayer Command",
-  "description": "Create a floor slab from the outermost closed curve on a plan layer. Extrudes downward so the slab top aligns with the 2D plan Z. Default thickness 400. Does not create a roof or ceiling.",
+  "description": "Create a floor slab from the outermost closed curve on a plan layer. Extrudes downward so the slab top aligns with the 2D plan Z. Default thickness 400. Does not create a roof or ceiling. Layer X-EXIST returns count 0: existing underlay is not a bake source.",
   "type": "object",
   "properties": {
     "layer": {

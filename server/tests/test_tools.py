@@ -2004,6 +2004,7 @@ class TestPackageApi:
             "roof_flat_from_walls",
             "openings_from_layer",
             "rooms_from_layer",
+            "mark_as_existing",
             "delete_opening",
             "add_opening",
             "move_opening",
@@ -2776,4 +2777,121 @@ class TestClearGeneratedTool:
         assert params["level"] == "0"
         assert params["include_untagged_prefixes"] is True
         assert params["name_prefixes"] == ["wall-"]
+
+
+class TestMarkAsExistingTool:
+    @patch("rhinomcp.tools.mark_as_existing.get_rhino_connection")
+    def test_selection_defaults_to_x_exist(self, mock_get_conn):
+        from rhinomcp.tools.mark_as_existing import mark_as_existing
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["aaa-111"],
+            "forsk_ids": ["x01"],
+            "count": 1,
+            "target_layer": "X-EXIST",
+            "message": "Marked 1 object(s) as existing on X-EXIST.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = mark_as_existing(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "mark_as_existing",
+            {"target_layer": "X-EXIST"},
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["ids"] == ["aaa-111"]
+        assert result["forsk_ids"] == ["x01"]
+        assert result["target_layer"] == "X-EXIST"
+
+    @patch("rhinomcp.tools.mark_as_existing.get_rhino_connection")
+    def test_forwards_ids(self, mock_get_conn):
+        from rhinomcp.tools.mark_as_existing import mark_as_existing
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": [guid],
+            "forsk_ids": ["x01"],
+            "count": 1,
+            "target_layer": "X-EXIST",
+            "message": "Marked 1 object(s) as existing on X-EXIST.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = mark_as_existing(ctx=None, ids=[guid])
+        assert result["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["ids"] == [guid]
+
+    @patch("rhinomcp.tools.mark_as_existing.get_rhino_connection")
+    def test_refuses_non_list_ids(self, mock_get_conn):
+        from rhinomcp.tools.mark_as_existing import mark_as_existing
+
+        result = mark_as_existing(ctx=None, ids="not-a-list")
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.mark_as_existing.get_rhino_connection")
+    def test_plugin_refuse_is_failure(self, mock_get_conn):
+        from rhinomcp.tools.mark_as_existing import mark_as_existing
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.side_effect = RuntimeError(
+            "Nothing is selected. Select the existing building, then mark it again."
+        )
+        mock_get_conn.return_value = mock_conn
+
+        result = mark_as_existing(ctx=None)
+        assert result["success"] is False
+        assert "Nothing is selected" in result["message"]
+
+
+class TestExistingUnderlayGuards:
+    """Lock the C# protection rules. Live Rhino is not required."""
+
+    def _text(self, *parts):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        return (root.joinpath(*parts)).read_text()
+
+    def test_stamp_existing_never_sets_generated(self):
+        tags = self._text("plugin", "Functions", "ForskTags.cs")
+        assert "private static void StampExisting" in tags
+        assert 'SetUserString("forsk:generated", null)' in tags
+        assert 'SetUserString("forsk:kind", "existing")' in tags
+        assert "X-EXIST is existing underlay, not a bake source." in tags
+        assert "Existing underlay is not a Forsk host wall." in tags
+        # Generated solids still go through StampForskTags.
+        assert 'SetUserString("forsk:generated", "1")' in tags
+
+        mark = self._text("plugin", "Functions", "MarkAsExisting.cs")
+        assert "StampExisting" in mark
+        assert "StampForskTags" not in mark
+
+    def test_clear_generated_skips_existing_underlay(self):
+        clear = self._text("plugin", "Functions", "ClearGenerated.cs")
+        assert "IsExistingUnderlay" in clear
+        schema = self._text("contracts", "commands", "clear_generated.json")
+        assert "X-EXIST" in schema
+        assert "forsk:kind=existing" in schema
+
+    def test_bake_tools_refuse_x_exist_source(self):
+        for name in (
+            "WallsFromLayer.cs",
+            "FloorFromLayer.cs",
+            "RoomsFromLayer.cs",
+        ):
+            src = self._text("plugin", "Functions", name)
+            assert "IsExistingLayerName" in src
+            assert "ExistingBakeRefusal" in src
+        openings = self._text("plugin", "Functions", "OpeningsFromLayer.cs")
+        assert "IsExistingLayerName" in openings
+        assert "ExistingOpeningsRefusal" in openings
+
+    def test_opening_edits_refuse_existing_host(self):
+        facade = self._text("plugin", "Functions", "FacadeOpenings.cs")
+        assert facade.count("RefuseExistingUnderlay") >= 3
 

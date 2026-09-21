@@ -44,6 +44,9 @@ public partial class RhinoMCPFunctions
         if (head <= sill)
             throw new ArgumentException("head must be greater than sill");
 
+        if (IsExistingLayerName(layerName))
+            return ExistingOpeningsRefusal(sill, head);
+
         if (IsRoofOrCeilingLayerName(layerName))
         {
             return new JObject

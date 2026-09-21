@@ -25,7 +25,8 @@ def openings_from_layer(
     Window: sill 900, head 2100 (height 1200). Uses window-layer curves
     or block-instance bounding boxes. Creates selectable opening_marker
     boxes on A-OPEN (named door-NN / window-NN). Door/window blocks are
-    not created.
+    not created. Layer X-EXIST returns count 0: existing underlay is not
+    a bake source.
 
     Parameters:
     - layer: Source layer, typically "door" or "window" (case-insensitive)
@@ -74,6 +75,8 @@ def openings_from_layer(
             "head": result.get("head"),
             "message": result.get("message", "Openings cut"),
         }
+        if "count" in result:
+            out["count"] = result["count"]
         if "marker_ids" in result:
             out["marker_ids"] = result.get("marker_ids") or []
         return out

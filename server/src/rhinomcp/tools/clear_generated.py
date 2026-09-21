@@ -22,7 +22,9 @@ def clear_generated(
     Matches objects with forsk:generated=1 and forsk:kind in kinds.
     Optional level filter. With include_untagged_prefixes, also deletes
     untagged objects named wall-/floor-/roof-/door-/window-/room- (pre-tag leftovers).
-    Never deletes source DXF curves. Prefer tagged clear for rebuilds.
+    Skips layer X-EXIST and forsk:kind=existing even if forsk:generated is 1,
+    including the untagged name-prefix fallback. Never deletes source DXF curves.
+    Prefer tagged clear for rebuilds.
 
     Parameters:
     - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room)

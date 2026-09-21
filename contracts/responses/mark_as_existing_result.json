@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mark_as_existing_result.json",
+  "title": "MarkAsExistingResult",
+  "description": "Objects marked as existing underlay. forsk:kind=existing and forsk:generated is absent.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "GUIDs that were marked"
+    },
+    "forsk_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "forsk:id values parallel to ids (x01, x02, …)"
+    },
+    "count": { "type": "integer" },
+    "target_layer": { "type": "string" },
+    "message": { "type": "string" }
+  },
+  "required": ["ids", "count", "message"]
+}

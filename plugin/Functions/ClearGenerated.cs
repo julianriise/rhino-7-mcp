@@ -27,6 +27,8 @@ public partial class RhinoMCPFunctions
         foreach (var obj in doc.Objects)
         {
             if (obj == null) continue;
+            // X-EXIST / forsk:kind=existing stays even if generated=1 or a name prefix matches.
+            if (IsExistingUnderlay(doc, obj)) continue;
 
             if (IsForskGenerated(obj))
             {

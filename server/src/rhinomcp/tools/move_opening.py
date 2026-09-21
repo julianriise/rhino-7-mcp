@@ -17,6 +17,7 @@ def move_opening(
     Slide an opening along the same host facade segment.
 
     Provide delta_mm or absolute t, not both. Marker GUID is preserved.
+    Refuses a marker or host with forsk:kind=existing or on layer X-EXIST.
 
     Parameters:
     - id: Optional opening marker GUID. Omit to use the current selection

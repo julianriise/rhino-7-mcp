@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.DocObjects;
 
@@ -108,5 +109,87 @@ public partial class RhinoMCPFunctions
         if (Math.Abs(mm - rounded) < 1e-9)
             return ((long)rounded).ToString(CultureInfo.InvariantCulture);
         return mm.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private const string ExistingLayerName = "X-EXIST";
+    private const string ExistingNotBakeSourceMessage =
+        "X-EXIST is existing underlay, not a bake source.";
+    private const string ExistingNotHostMessage =
+        "Existing underlay is not a Forsk host wall.";
+
+    /// <summary>
+    /// Existing underlay: kind=existing, level 0, no forsk:generated.
+    /// Does not go through StampForskTags (that always sets generated=1).
+    /// </summary>
+    private static void StampExisting(ObjectAttributes attr, string stableId)
+    {
+        if (attr == null) return;
+        attr.SetUserString("forsk:kind", "existing");
+        attr.SetUserString("forsk:level", "0");
+        attr.SetUserString("forsk:generated", null);
+        if (!string.IsNullOrEmpty(stableId))
+            attr.SetUserString("forsk:id", stableId);
+    }
+
+    private static bool IsExistingLayerName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return name.Trim().Equals(ExistingLayerName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOnExistingLayer(RhinoDoc doc, RhinoObject obj)
+    {
+        if (doc == null || obj?.Attributes == null) return false;
+        var layer = doc.Layers[obj.Attributes.LayerIndex];
+        if (layer == null || layer.IsDeleted) return false;
+        return layer.Name.Equals(ExistingLayerName, StringComparison.OrdinalIgnoreCase) ||
+               layer.FullPath.Equals(ExistingLayerName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExistingUnderlay(RhinoDoc doc, RhinoObject obj)
+    {
+        if (obj == null) return false;
+        if (string.Equals(GetForskKind(obj), "existing", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return IsOnExistingLayer(doc, obj);
+    }
+
+    private static void RefuseExistingUnderlay(RhinoDoc doc, RhinoObject obj)
+    {
+        if (IsExistingUnderlay(doc, obj))
+            throw new InvalidOperationException(ExistingNotHostMessage);
+    }
+
+    private static JObject ExistingBakeRefusal()
+    {
+        return new JObject
+        {
+            ["ids"] = new JArray(),
+            ["forsk_ids"] = new JArray(),
+            ["count"] = 0,
+            ["source_curves"] = 0,
+            ["joined"] = 0,
+            ["closed"] = 0,
+            ["skipped"] = 0,
+            ["warnings"] = new JArray(),
+            ["message"] = ExistingNotBakeSourceMessage
+        };
+    }
+
+    private static JObject ExistingOpeningsRefusal(double sill, double head)
+    {
+        return new JObject
+        {
+            ["cut_count"] = 0,
+            ["failed_count"] = 0,
+            ["failures"] = new JArray(),
+            ["wall_ids"] = new JArray(),
+            ["opening_count"] = 0,
+            ["marker_ids"] = new JArray(),
+            ["count"] = 0,
+            ["sill"] = sill,
+            ["head"] = head,
+            ["message"] = ExistingNotBakeSourceMessage
+        };
     }
 }

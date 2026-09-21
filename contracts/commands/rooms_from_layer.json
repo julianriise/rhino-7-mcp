@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "rooms_from_layer.json",
   "title": "RoomsFromLayer Command",
-  "description": "Create planar room markers from closed curves on A-ROOM (layer room is an alias when the other name is missing). Source curves stay. Empty or missing layer returns count 0. Does not detect rooms from walls.",
+  "description": "Create planar room markers from closed curves on A-ROOM (layer room is an alias when the other name is missing). Source curves stay. Empty or missing layer returns count 0. Does not detect rooms from walls. Layer X-EXIST returns count 0: existing underlay is not a bake source.",
   "type": "object",
   "properties": {
     "layer": {

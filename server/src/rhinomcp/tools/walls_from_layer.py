@@ -23,6 +23,7 @@ def walls_from_layer(
     inner). Disjoint closed curves extrude as-is. Source curves stay on
     their original layer. Does not create a roof, ceiling, or floor slab;
     rooms stay open at the top. Roof/ceiling/slab/floor layers are ignored.
+    Layer X-EXIST returns count 0: existing underlay is not a bake source.
 
     New solids use MaterialFromLayer. With apply_default_materials (default
     true), the target layer gets plaster (M-PLASTER). Override later with

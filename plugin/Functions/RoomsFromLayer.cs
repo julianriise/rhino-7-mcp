@@ -25,6 +25,9 @@ public partial class RhinoMCPFunctions
         if (string.IsNullOrEmpty(namePrefix)) namePrefix = "room-";
         var joinTolerance = parameters["join_tolerance"]?.ToObject<double?>() ?? 0;
 
+        if (IsExistingLayerName(layerName))
+            return ExistingBakeRefusal();
+
         var sourceLayer = ResolveRoomSourceLayer(doc, layerName);
         if (sourceLayer == null)
         {

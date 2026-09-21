@@ -21,6 +21,7 @@ def rooms_from_layer(
     room-01… with forsk:kind=room, forsk:id r01…, and forsk:area in mm².
     Source curves stay. Markers are tagged forsk:generated=1 so
     clear_generated removes them. A missing or empty layer returns count 0.
+    Layer X-EXIST returns count 0: existing underlay is not a bake source.
 
     Does not detect rooms from walls and does not extrude to wall height.
 

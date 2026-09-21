@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mark_as_existing.json",
+  "title": "MarkAsExisting Command",
+  "description": "Move objects onto X-EXIST and stamp forsk:kind=existing with forsk:level=0 and forsk:id x01…. Removes forsk:generated so clear_generated will not delete them. Ids omitted uses the current selection. Empty selection with no ids is refused.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "$ref": "../common/definitions.json#/$defs/guidArray",
+      "description": "Object GUIDs to mark. Omit or pass an empty list to use the current selection."
+    },
+    "target_layer": {
+      "type": "string",
+      "default": "X-EXIST",
+      "description": "Layer to move objects onto. Created if missing. Default X-EXIST, color RGB 140,140,140."
+    }
+  },
+  "additionalProperties": false
+}

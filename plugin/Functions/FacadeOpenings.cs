@@ -78,6 +78,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
         var markerObj = ResolveFacadeTarget(parameters, "id", expectMarker: true);
+        RefuseExistingUnderlay(doc, markerObj);
         var rec = ReadOpeningRecord(markerObj);
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
         if (!TryFillOpening(doc, host, rec, tol))
@@ -144,6 +145,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
         var markerObj = ResolveFacadeTarget(parameters, "id", expectMarker: true);
+        RefuseExistingUnderlay(doc, markerObj);
         var rec = ReadOpeningRecord(markerObj);
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
         ParseMove(parameters, out var deltaMm, out var tAbs);
@@ -375,6 +377,7 @@ public partial class RhinoMCPFunctions
         var obj = doc.Objects.Find(id);
         if (obj == null)
             throw new InvalidOperationException("Opening host wall is missing.");
+        RefuseExistingUnderlay(doc, obj);
         if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Not a Forsk wall.");
         var brep = GetBrepFromObject(obj);

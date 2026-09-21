@@ -50,6 +50,7 @@
             "roof_flat_from_walls",
             "openings_from_layer",
             "rooms_from_layer",
+            "mark_as_existing",
             "delete_opening",
             "add_opening",
             "move_opening",

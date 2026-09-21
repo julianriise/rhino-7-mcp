@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "openings_from_layer.json",
   "title": "OpeningsFromLayer Command",
-  "description": "Cut door or window openings from wall solids using plan-layer geometry. Ignores door swing blocks when gap polylines exist. Creates selectable opening_marker boxes on A-OPEN stamped with forsk:sill, forsk:head, forsk:width. Door/window blocks are not created.",
+  "description": "Cut door or window openings from wall solids using plan-layer geometry. Ignores door swing blocks when gap polylines exist. Creates selectable opening_marker boxes on A-OPEN stamped with forsk:sill, forsk:head, forsk:width. Door/window blocks are not created. Layer X-EXIST returns count 0: existing underlay is not a bake source.",
   "type": "object",
   "properties": {
     "layer": {

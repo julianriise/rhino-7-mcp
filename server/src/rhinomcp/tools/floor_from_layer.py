@@ -21,7 +21,8 @@ def floor_from_layer(
     Extrudes downward by `thickness` so the top of the slab sits on the 2D
     plan Z (the drawing does not move). Default thickness 400. Uses the wall
     outline as the footprint. Does not create a roof or ceiling. CAD layers
-    named floor/roof/ceiling/slab are not used as source.
+    named floor/roof/ceiling/slab are not used as source. Layer X-EXIST
+    returns count 0: existing underlay is not a bake source.
 
     New slabs use MaterialFromLayer. With apply_default_materials (default
     true), the target layer gets concrete (M-CONCRETE). Override later with

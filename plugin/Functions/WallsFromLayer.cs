@@ -32,6 +32,9 @@ public partial class RhinoMCPFunctions
         if (height <= 0)
             throw new ArgumentException("height must be positive");
 
+        if (IsExistingLayerName(layerName))
+            return ExistingBakeRefusal();
+
         if (IsRoofOrCeilingLayerName(layerName))
         {
             return new JObject

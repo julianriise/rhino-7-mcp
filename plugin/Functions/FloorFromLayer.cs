@@ -32,6 +32,9 @@ public partial class RhinoMCPFunctions
         if (thickness <= 0)
             throw new ArgumentException("thickness must be positive");
 
+        if (IsExistingLayerName(layerName))
+            return ExistingBakeRefusal();
+
         var profiles = CollectClosedPlanCurves(doc, layerName, joinTolerance);
         if (profiles.SourceCount == 0)
             return profiles.EmptyResult($"No curves on layer '{profiles.SourceLayer.Name}'.");

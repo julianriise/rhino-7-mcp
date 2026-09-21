@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "walls_from_layer.json",
   "title": "WallsFromLayer Command",
-  "description": "Extrude closed curves on a plan layer to wall solids. Nested room outlines become wall bands (outer minus inner). Does not create a roof, ceiling, or floor slab. Source curves are left untouched.",
+  "description": "Extrude closed curves on a plan layer to wall solids. Nested room outlines become wall bands (outer minus inner). Does not create a roof, ceiling, or floor slab. Source curves are left untouched. Layer X-EXIST returns count 0: existing underlay is not a bake source.",
   "type": "object",
   "properties": {
     "layer": {
