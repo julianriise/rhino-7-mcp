@@ -19,6 +19,9 @@ def clear_generated(
     """
     Delete Forsk-generated walls, floors, roofs, rooms, and opening markers.
 
+    Does not delete forsk:kind=drawing unless kinds explicitly includes drawing.
+    Sheet curves stay across a 3D rebuild. Use clear_drawings for sheets.
+
     Matches objects with forsk:generated=1 and forsk:kind in kinds.
     Optional level filter. With include_untagged_prefixes, also deletes
     untagged objects named wall-/floor-/roof-/door-/window-/room- (pre-tag leftovers).
@@ -27,7 +30,8 @@ def clear_generated(
     Prefer tagged clear for rebuilds.
 
     Parameters:
-    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room)
+    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room).
+      Omit drawing. Pass drawing only when sheets should be deleted.
     - level: optional forsk:level filter
     - dry_run: list matching ids without deleting (default false)
     - include_untagged_prefixes: also match name prefixes on untagged objects

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sheet_pack_result.json",
+  "title": "SheetPackResult",
+  "description": "Per-view make2d_view results plus a total curve count.",
+  "type": "object",
+  "properties": {
+    "views": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "count": { "type": "integer" },
+    "message": { "type": "string" }
+  },
+  "required": ["views", "count", "message"]
+}

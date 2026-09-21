@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sheet_pack.json",
+  "title": "SheetPack Command",
+  "description": "Run make2d_view for each requested view. Default is plan plus north, east, south, and west elevations. Curves land on S-* layers with forsk:kind=drawing.",
+  "type": "object",
+  "properties": {
+    "views": {
+      "type": "array",
+      "description": "Views to draw, in order. Default plan, north, east, south, west.",
+      "items": {
+        "type": "string",
+        "enum": ["plan", "north", "east", "south", "west"]
+      },
+      "default": ["plan", "north", "east", "south", "west"]
+    },
+    "include_existing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Passed through to each make2d_view."
+    },
+    "replace": {
+      "type": "boolean",
+      "default": true,
+      "description": "Passed through to each make2d_view."
+    }
+  },
+  "additionalProperties": false
+}

@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "clear_generated.json",
   "title": "ClearGenerated Command",
-  "description": "Delete Forsk-generated solids and opening markers by forsk:* tags. Optional untagged name-prefix fallback for pre-tag leftovers. Skips layer X-EXIST and forsk:kind=existing even if forsk:generated=1, including when include_untagged_prefixes is true.",
+  "description": "Delete Forsk-generated solids and opening markers by forsk:* tags. Optional untagged name-prefix fallback for pre-tag leftovers. Skips layer X-EXIST and forsk:kind=existing even if forsk:generated=1, including when include_untagged_prefixes is true. Default kinds omit drawing, so sheet curves stay unless kinds explicitly includes drawing.",
   "type": "object",
   "properties": {
     "kinds": {
       "type": "array",
-      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker, room.",
+      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker, room. drawing is not in the default; pass it explicitly to delete sheets.",
       "items": { "type": "string" },
       "default": ["wall", "floor", "roof", "opening", "opening_marker", "room"]
     },

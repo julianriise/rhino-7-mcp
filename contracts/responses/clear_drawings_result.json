@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_drawings_result.json",
+  "title": "ClearDrawingsResult",
+  "description": "Ids matched (and deleted unless dry_run) by clear_drawings. Only forsk:kind=drawing.",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "count": { "type": "integer" },
+    "dry_run": { "type": "boolean" }
+  },
+  "required": ["deleted", "count", "dry_run"],
+  "additionalProperties": false
+}

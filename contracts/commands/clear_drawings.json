@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_drawings.json",
+  "title": "ClearDrawings Command",
+  "description": "Delete objects with forsk:kind=drawing. Optional views filter matches forsk:view. Does not delete walls, floors, roofs, openings, rooms, or X-EXIST.",
+  "type": "object",
+  "properties": {
+    "views": {
+      "type": "array",
+      "description": "If set, only these forsk:view values. Omit to delete every drawing.",
+      "items": {
+        "type": "string",
+        "enum": ["plan", "north", "east", "south", "west"]
+      }
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, return matching ids without deleting."
+    }
+  },
+  "additionalProperties": false
+}

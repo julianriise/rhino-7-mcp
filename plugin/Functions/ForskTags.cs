@@ -35,6 +35,7 @@ public partial class RhinoMCPFunctions
         public double? Height;
         public double? Area;
         public string SourceLayer;
+        public string View;
     }
 
     private static void StampForskTags(ObjectAttributes attr, ForskStamp stamp)
@@ -66,6 +67,8 @@ public partial class RhinoMCPFunctions
             attr.SetUserString("forsk:area", FormatMm(stamp.Area.Value));
         if (!string.IsNullOrEmpty(stamp.SourceLayer))
             attr.SetUserString("forsk:source_layer", stamp.SourceLayer);
+        if (!string.IsNullOrEmpty(stamp.View))
+            attr.SetUserString("forsk:view", stamp.View);
     }
 
     /// <summary>Bake-order id: w01 matches wall-01, r01 matches room-01.</summary>

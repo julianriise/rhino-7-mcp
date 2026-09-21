@@ -12,6 +12,8 @@ public partial class RhinoMCPFunctions
     public JObject ClearGenerated(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
+        // Default excludes drawing so a 3D rebuild leaves S-* sheets.
+        // An explicit kinds list that contains "drawing" still deletes them.
         var kinds = parameters["kinds"]?.ToObject<List<string>>()
             ?? new List<string> { "wall", "floor", "roof", "opening", "opening_marker", "room" };
         var kindSet = new HashSet<string>(

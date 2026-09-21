@@ -268,6 +268,22 @@ def test_new_commands():
             "include_untagged_prefixes": True,
             "name_prefixes": ["wall-", "floor-"],
         }),
+        ("commands/clear_generated.json", {"kinds": ["drawing"]}),
+        ("commands/make2d_view.json", {"view": "plan"}),
+        ("commands/make2d_view.json", {
+            "view": "south",
+            "ids": [GUID],
+            "include_existing": False,
+            "replace": False,
+        }),
+        ("commands/sheet_pack.json", {}),
+        ("commands/sheet_pack.json", {
+            "views": ["plan", "north"],
+            "include_existing": True,
+            "replace": True,
+        }),
+        ("commands/clear_drawings.json", {}),
+        ("commands/clear_drawings.json", {"views": ["plan", "west"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "wood", "ensure_objects_from_layer": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-FLOR", "preset": "white"}),
@@ -572,6 +588,45 @@ def test_responses():
     if not validate("responses/clear_generated_result.json", clear_dry):
         all_passed = False
 
+    print("  make2d_view_result:")
+    guid = "12345678-1234-1234-1234-123456789012"
+    make2d_result = {
+        "count": 2,
+        "ids": [guid, guid],
+        "layer": "S-PLAN",
+        "view": "plan",
+        "message": "Drew 2 curve(s) on S-PLAN (plan).",
+    }
+    if not validate("responses/make2d_view_result.json", make2d_result):
+        all_passed = False
+    make2d_empty = {
+        "count": 0,
+        "ids": [],
+        "layer": "S-PLAN",
+        "view": "plan",
+        "message": "Nothing to draw. Bake walls, floor, or roof first.",
+    }
+    if not validate("responses/make2d_view_result.json", make2d_empty):
+        all_passed = False
+
+    print("  sheet_pack_result:")
+    pack_result = {
+        "views": [make2d_empty],
+        "count": 0,
+        "message": "Drew 0 curve(s) across 5 view(s).",
+    }
+    if not validate("responses/sheet_pack_result.json", pack_result):
+        all_passed = False
+
+    print("  clear_drawings_result:")
+    clear_drawings = {
+        "deleted": [guid],
+        "count": 1,
+        "dry_run": False,
+    }
+    if not validate("responses/clear_drawings_result.json", clear_drawings):
+        all_passed = False
+
     return all_passed
 
 
@@ -692,6 +747,15 @@ def test_invalid_examples():
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
         ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
         ("commands/clear_generated.json", {"bogus": 1}, "clear_generated unknown field"),
+        ("commands/make2d_view.json", {}, "make2d_view missing view"),
+        ("commands/make2d_view.json", {"view": "section"}, "make2d_view unknown view"),
+        ("commands/make2d_view.json", {"view": "plan", "ids": ["not-a-guid"]}, "make2d_view bad guid"),
+        ("commands/make2d_view.json", {"view": "plan", "bogus": 1}, "make2d_view unknown field"),
+        ("commands/sheet_pack.json", {"views": ["section"]}, "sheet_pack unknown view"),
+        ("commands/sheet_pack.json", {"bogus": 1}, "sheet_pack unknown field"),
+        ("commands/clear_drawings.json", {"views": ["section"]}, "clear_drawings unknown view"),
+        ("commands/clear_drawings.json", {"dry_run": "yes"}, "clear_drawings dry_run not bool"),
+        ("commands/clear_drawings.json", {"bogus": 1}, "clear_drawings unknown field"),
     ]
 
     all_rejected = True
@@ -841,6 +905,7 @@ def test_protocol_envelope():
         "mark_as_existing",
         "delete_opening", "add_opening", "move_opening",
         "clear_generated",
+        "make2d_view", "sheet_pack", "clear_drawings",
         "set_layer_material", "set_display_mode",
         "run_command", "get_commands",
         "gh_create_document",

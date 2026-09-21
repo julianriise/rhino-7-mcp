@@ -2895,3 +2895,260 @@ class TestExistingUnderlayGuards:
         facade = self._text("plugin", "Functions", "FacadeOpenings.cs")
         assert facade.count("RefuseExistingUnderlay") >= 3
 
+
+class TestMake2dViewTool:
+    @patch("rhinomcp.tools.make2d_view.get_rhino_connection")
+    def test_plan_forwards_defaults(self, mock_get_conn):
+        from rhinomcp.tools.make2d_view import make2d_view
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "count": 3,
+            "ids": ["a", "b", "c"],
+            "layer": "S-PLAN",
+            "view": "plan",
+            "message": "Drew 3 curve(s) on S-PLAN (plan).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = make2d_view(ctx=None, view="plan")
+
+        mock_conn.send_command.assert_called_once_with(
+            "make2d_view",
+            {"view": "plan", "include_existing": True, "replace": True},
+        )
+        assert result["success"] is True
+        assert result["count"] == 3
+        assert result["layer"] == "S-PLAN"
+        assert result["view"] == "plan"
+        assert result["ids"] == ["a", "b", "c"]
+
+    @patch("rhinomcp.tools.make2d_view.get_rhino_connection")
+    def test_empty_source_is_count_zero(self, mock_get_conn):
+        from rhinomcp.tools.make2d_view import make2d_view
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "count": 0,
+            "ids": [],
+            "layer": "S-ELEV-S",
+            "view": "south",
+            "message": "Nothing to draw. Bake walls, floor, or roof first.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = make2d_view(ctx=None, view="south", include_existing=False, replace=False)
+
+        params = mock_conn.send_command.call_args[0][1]
+        assert params["view"] == "south"
+        assert params["include_existing"] is False
+        assert params["replace"] is False
+        assert "ids" not in params
+        assert result["success"] is True
+        assert result["count"] == 0
+        assert "Nothing to draw" in result["message"]
+
+    @patch("rhinomcp.tools.make2d_view.get_rhino_connection")
+    def test_forwards_ids(self, mock_get_conn):
+        from rhinomcp.tools.make2d_view import make2d_view
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "count": 1,
+            "ids": ["curve"],
+            "layer": "S-ELEV-N",
+            "view": "north",
+            "message": "Drew 1 curve(s) on S-ELEV-N (north).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = make2d_view(ctx=None, view="north", ids=[guid])
+        assert result["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["ids"] == [guid]
+
+    @patch("rhinomcp.tools.make2d_view.get_rhino_connection")
+    def test_rejects_unknown_view(self, mock_get_conn):
+        from rhinomcp.tools.make2d_view import make2d_view
+
+        result = make2d_view(ctx=None, view="section")
+        assert result["success"] is False
+        assert "Unknown view" in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestSheetPackTool:
+    @patch("rhinomcp.tools.sheet_pack.get_rhino_connection")
+    def test_default_omits_views(self, mock_get_conn):
+        from rhinomcp.tools.sheet_pack import sheet_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "views": [],
+            "count": 0,
+            "message": "Drew 0 curve(s) across 5 view(s).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = sheet_pack(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "sheet_pack",
+            {"include_existing": True, "replace": True},
+        )
+        assert result["success"] is True
+        assert result["count"] == 0
+        assert "views" not in mock_conn.send_command.call_args[0][1]
+
+    @patch("rhinomcp.tools.sheet_pack.get_rhino_connection")
+    def test_forwards_views(self, mock_get_conn):
+        from rhinomcp.tools.sheet_pack import sheet_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "views": [{"view": "plan", "count": 1}],
+            "count": 1,
+            "message": "Drew 1 curve(s) across 1 view(s).",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = sheet_pack(ctx=None, views=["plan"])
+        assert result["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["views"] == ["plan"]
+
+    @patch("rhinomcp.tools.sheet_pack.get_rhino_connection")
+    def test_rejects_unknown_view(self, mock_get_conn):
+        from rhinomcp.tools.sheet_pack import sheet_pack
+
+        result = sheet_pack(ctx=None, views=["plan", "section"])
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestClearDrawingsTool:
+    @patch("rhinomcp.tools.clear_drawings.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.clear_drawings import clear_drawings
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["d1"],
+            "count": 1,
+            "dry_run": False,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_drawings(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "clear_drawings",
+            {"dry_run": False},
+        )
+        assert result["success"] is True
+        assert result["deleted"] == ["d1"]
+        assert result["count"] == 1
+        assert "drawing" in result["message"]
+
+    @patch("rhinomcp.tools.clear_drawings.get_rhino_connection")
+    def test_dry_run_and_views(self, mock_get_conn):
+        from rhinomcp.tools.clear_drawings import clear_drawings
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": [],
+            "count": 0,
+            "dry_run": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_drawings(ctx=None, views=["east"], dry_run=True)
+        params = mock_conn.send_command.call_args[0][1]
+        assert params == {"dry_run": True, "views": ["east"]}
+        assert result["dry_run"] is True
+        assert result["message"].startswith("Would delete")
+
+    @patch("rhinomcp.tools.clear_drawings.get_rhino_connection")
+    def test_rejects_unknown_view(self, mock_get_conn):
+        from rhinomcp.tools.clear_drawings import clear_drawings
+
+        result = clear_drawings(ctx=None, views=["section"])
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestSheetGuards:
+    """Lock Make2D engine choice and the clear_generated exclusion. No live Rhino."""
+
+    def _text(self, *parts):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        return (root.joinpath(*parts)).read_text()
+
+    def test_make2d_uses_hidden_line_drawing(self):
+        src = self._text("plugin", "Functions", "Make2dView.cs")
+        assert "HiddenLineDrawing" in src
+        assert "IncludeHiddenCurves = false" in src
+        assert "Flatten = true" in src
+        assert "Nothing to draw. Bake walls, floor, or roof first." in src
+        assert 'Kind = "drawing"' in src
+        assert 'SetUserString("forsk:view"' in self._text("plugin", "Functions", "ForskTags.cs")
+        assert "capture_viewport" not in src
+        assert "RunScript" not in src
+        for layer in ("S-PLAN", "S-ELEV-N", "S-ELEV-E", "S-ELEV-S", "S-ELEV-W"):
+            assert layer in src
+
+    def test_offsets_match_product_sheets_json(self):
+        import json
+        from pathlib import Path
+
+        src = self._text("plugin", "Functions", "Make2dView.cs")
+        sibling = Path(__file__).resolve().parents[2].parent / "forsk" / "templates" / "sheets.json"
+        if sibling.is_file():
+            spec = json.loads(sibling.read_text())
+            for view, row in spec["views"].items():
+                offset = row["offset"]
+                literal = f"{int(offset[0])}, {int(offset[1])}, {int(offset[2])}"
+                assert literal in src
+                assert row["layer"] in src
+                assert view in src
+        else:
+            for token in (
+                "S-PLAN",
+                "0, -15000, 0",
+                "15000, -15000, 0",
+                "30000, -15000, 0",
+                "45000, -15000, 0",
+            ):
+                assert token in src
+
+    def test_replace_deletes_same_view_before_bake(self):
+        src = self._text("plugin", "Functions", "Make2dView.cs")
+        assert "DeleteViewDrawings" in src
+        assert 'GetUserString("forsk:view")' in src
+        # replace runs only after a successful hidden-line compute
+        assert src.index("HiddenLineDrawing.Compute") < src.index("DeleteViewDrawings")
+
+    def test_clear_generated_default_skips_drawings(self):
+        import json
+        import re
+
+        clear = self._text("plugin", "Functions", "ClearGenerated.cs")
+        match = re.search(r"new List<string>\s*\{([^}]+)\}", clear)
+        assert match, "default kinds initializer missing"
+        assert "drawing" not in match.group(1)
+        schema = json.loads(self._text("contracts", "commands", "clear_generated.json"))
+        assert "drawing" not in schema["properties"]["kinds"]["default"]
+        # Explicit kinds still go through the allow-list; drawing is not hard-skipped.
+        assert 'kind == "drawing"' not in clear
+        drawings = self._text("plugin", "Functions", "Make2dView.cs")
+        assert 'GetForskKind(obj), "drawing"' in drawings
+
+    def test_clear_drawings_matches_kind_drawing_only(self):
+        src = self._text("plugin", "Functions", "Make2dView.cs")
+        start = src.index('[McpCommand("clear_drawings")]')
+        body = src[start:src.index("private static JObject SheetViewResult")]
+        assert '"drawing"' in body
+        assert "wall" not in body
+        assert "X-EXIST" not in body
+

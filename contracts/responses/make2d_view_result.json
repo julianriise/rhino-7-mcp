@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "make2d_view_result.json",
+  "title": "Make2dViewResult",
+  "description": "Visible Make2D curves baked for one view. count 0 when there is nothing to draw.",
+  "type": "object",
+  "properties": {
+    "count": { "type": "integer" },
+    "ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "layer": { "type": "string" },
+    "view": { "type": "string" },
+    "message": { "type": "string" }
+  },
+  "required": ["count", "ids", "layer", "view", "message"]
+}

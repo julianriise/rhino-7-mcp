@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "make2d_view.json",
+  "title": "Make2dView Command",
+  "description": "Bake one Make2D view as visible HiddenLineDrawing curves on an S-* layer. Stamps forsk:kind=drawing, forsk:generated=1, forsk:view, forsk:level=0, and forsk:id d01…. Ids omitted gathers generated wall, floor, roof, and opening solids, plus existing underlay when include_existing is true. Skips opening markers, room markers, and previous drawings. Empty sources return count 0. replace deletes the previous pack for that view before bake.",
+  "type": "object",
+  "properties": {
+    "view": {
+      "type": "string",
+      "enum": ["plan", "north", "east", "south", "west"],
+      "description": "Parallel view. plan looks -Z, north -Y, south +Y, east -X, west +X."
+    },
+    "ids": {
+      "$ref": "../common/definitions.json#/$defs/guidArray",
+      "description": "Explicit source GUIDs. Omit to gather Forsk clay (and existing underlay when include_existing is true)."
+    },
+    "include_existing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include X-EXIST / forsk:kind=existing in the silhouette when ids is omitted."
+    },
+    "replace": {
+      "type": "boolean",
+      "default": true,
+      "description": "Delete existing forsk:kind=drawing curves for this view (or on its S-* layer) before baking."
+    }
+  },
+  "required": ["view"],
+  "additionalProperties": false
+}
