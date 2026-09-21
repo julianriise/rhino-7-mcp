@@ -14,8 +14,9 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Paper Layouts of the clay. Details use a parallel camera (same look
-/// directions as Make2D). PDF is Rhino.FileIO.FilePdf with
-/// ViewCaptureSettings(RhinoPageView, dpi) and RasterMode false.
+/// directions as Make2D) in Wireframe, so a floor slab does not fill the sheet.
+/// PDF is Rhino.FileIO.FilePdf with ViewCaptureSettings(RhinoPageView, dpi),
+/// RasterMode false, and black-and-white output.
 /// AddPageView width and height are millimetres (A3 landscape 420 x 297).
 /// Detail corners and the title block are converted into the document page units.
 /// Does not bake model-space drawing curves and does not require S-* layers.
@@ -178,7 +179,7 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException(LayoutDetailFailedMessage);
 
             page.SetPageAsActive();
-            var detail = AddClayDetail(doc, page, spec, bbox, scale, includeExisting);
+            var detail = AddClayDetail(doc, page, spec, bbox, scale, includeExisting, out var scaleLocked);
             if (detail == null)
             {
                 page.Close();
@@ -186,7 +187,9 @@ public partial class RhinoMCPFunctions
             }
 
             var stableId = FormatStableId("l", pages.Count + 1);
-            var scaleLabel = scale > 0 ? "1:" + scale.ToString(CultureInfo.InvariantCulture) : "fit";
+            var scaleLabel = scaleLocked
+                ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
+                : "fit";
             var ids = AddTitleBlock(doc, page, spec, stableId, scaleLabel);
             pages.Add(new JObject
             {
@@ -248,6 +251,7 @@ public partial class RhinoMCPFunctions
                 var settings = new ViewCaptureSettings(page, PdfDpi)
                 {
                     RasterMode = false,
+                    OutputColor = ViewCaptureSettings.ColorMode.BlackAndWhite,
                     DrawGrid = false,
                     DrawAxis = false,
                     DrawMargins = false,
@@ -463,8 +467,10 @@ public partial class RhinoMCPFunctions
         LayoutViewSpec spec,
         BoundingBox bbox,
         int scale,
-        bool includeExisting)
+        bool includeExisting,
+        out bool scaleLocked)
     {
+        scaleLocked = false;
         var left = MmToPage(doc, LayoutMarginMm);
         var bottom = MmToPage(doc, LayoutMarginMm + TitleHeightMm + TitleGapMm);
         var right = MmToPage(doc, A3WidthMm - LayoutMarginMm);
@@ -491,19 +497,21 @@ public partial class RhinoMCPFunctions
         framed.Inflate(pad);
         vp.ZoomBoundingBox(framed);
 
-        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.TechId)
-                   ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        // Wireframe: Technical filled the floor slab solid black on the plan PDF.
+        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         if (mode != null)
             vp.DisplayMode = mode;
+        // Store the camera first. A later viewport commit puts zoom-extents back.
+        detail.CommitViewportChanges();
 
         var geom = detail.DetailGeometry;
         if (geom != null && scale > 0)
         {
-            geom.SetScale(scale, UnitSystem.Millimeters, 1.0, UnitSystem.Millimeters);
-            geom.IsProjectionLocked = true;
+            scaleLocked = geom.SetScale(scale, UnitSystem.Millimeters, 1.0, UnitSystem.Millimeters);
+            if (scaleLocked)
+                geom.IsProjectionLocked = true;
         }
 
-        detail.CommitViewportChanges();
         detail.CommitChanges();
         SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting);
         return detail;
@@ -591,7 +599,9 @@ public partial class RhinoMCPFunctions
             Space = ActiveSpace.PageSpace,
             ViewportId = pageViewportId,
             ColorSource = ObjectColorSource.ColorFromObject,
-            ObjectColor = Color.Black
+            ObjectColor = Color.Black,
+            PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
+            PlotColor = Color.Black
         };
         StampForskTags(attr, new ForskStamp
         {

@@ -3319,7 +3319,10 @@ class TestPrintGuards:
         assert "RasterMode = false" in src
         assert "pdf.Write" in src
         assert "ActiveSpace.PageSpace" in src
-        assert "DisplayModeDescription.TechId" in src
+        assert "DisplayModeDescription.WireframeId" in src
+        assert "TechId" not in src
+        assert "BlackAndWhite" in src
+        assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src
