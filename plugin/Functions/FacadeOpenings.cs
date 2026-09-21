@@ -259,15 +259,15 @@ public partial class RhinoMCPFunctions
         double head;
         if (kind == OpeningKind.Door)
         {
-            width = parameters?["width"]?.ToObject<double?>() ?? 900.0;
-            sill = parameters?["sill"]?.ToObject<double?>() ?? 0.0;
-            head = parameters?["head"]?.ToObject<double?>() ?? 2100.0;
+            width = parameters?["width"]?.ToObject<double?>() ?? ForskDefaults.DoorWidth;
+            sill = parameters?["sill"]?.ToObject<double?>() ?? ForskDefaults.DoorSill;
+            head = parameters?["head"]?.ToObject<double?>() ?? ForskDefaults.DoorHead;
         }
         else
         {
-            width = parameters?["width"]?.ToObject<double?>() ?? 1200.0;
-            sill = parameters?["sill"]?.ToObject<double?>() ?? 900.0;
-            head = parameters?["head"]?.ToObject<double?>() ?? 2100.0;
+            width = parameters?["width"]?.ToObject<double?>() ?? ForskDefaults.WindowWidth;
+            sill = parameters?["sill"]?.ToObject<double?>() ?? ForskDefaults.WindowSill;
+            head = parameters?["head"]?.ToObject<double?>() ?? ForskDefaults.WindowHead;
         }
 
         if (width <= 0)

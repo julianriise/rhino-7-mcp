@@ -21,7 +21,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var layerName = parameters["layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(layerName)) layerName = "wall";
-        var thickness = parameters["thickness"]?.ToObject<double>() ?? 200.0;
+        var thickness = parameters["thickness"]?.ToObject<double>() ?? ForskDefaults.RoofThickness;
         var overhang = parameters["overhang"]?.ToObject<double>() ?? 0.0;
         var elevation = parameters["elevation"]?.ToObject<double?>();
         var targetLayerName = parameters["target_layer"]?.ToString();

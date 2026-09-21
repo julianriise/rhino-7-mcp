@@ -173,11 +173,14 @@ def main() -> int:
         wall_info = send_command(sock, "get_object_info", {"id": ids[0]})
         wall_attrs = attrs_of(wall_info)
         print(f"    wall tags forsk:kind={wall_attrs.get('forsk:kind')} "
-              f"generated={wall_attrs.get('forsk:generated')}")
+              f"generated={wall_attrs.get('forsk:generated')} "
+              f"height={wall_attrs.get('forsk:height')}")
         if wall_attrs.get("forsk:kind") != "wall":
             failures.append(f"wall forsk:kind={wall_attrs.get('forsk:kind')}")
         if wall_attrs.get("forsk:generated") != "1":
             failures.append(f"wall forsk:generated={wall_attrs.get('forsk:generated')}")
+        if wall_attrs.get("forsk:height") != "3000":
+            failures.append(f"wall forsk:height={wall_attrs.get('forsk:height')} expected 3000")
 
         print("==> default wall material (By Layer plaster)")
         wall_attrs_mat = send_command(sock, "get_object_attributes", {"id": ids[0]})
@@ -279,7 +282,10 @@ def main() -> int:
             marker_attrs = attrs_of(marker_info)
             print(f"    marker {marker_info.get('name')} kind={marker_attrs.get('forsk:kind')} "
                   f"host={marker_attrs.get('forsk:host')} "
-                  f"opening_kind={marker_attrs.get('forsk:opening_kind')}")
+                  f"opening_kind={marker_attrs.get('forsk:opening_kind')} "
+                  f"sill={marker_attrs.get('forsk:sill')} "
+                  f"head={marker_attrs.get('forsk:head')} "
+                  f"width={marker_attrs.get('forsk:width')}")
             if marker_attrs.get("forsk:kind") != "opening_marker":
                 failures.append(f"marker forsk:kind={marker_attrs.get('forsk:kind')}")
             host = marker_attrs.get("forsk:host") or ""
@@ -288,6 +294,9 @@ def main() -> int:
             okind = (marker_attrs.get("forsk:opening_kind") or "").lower()
             if okind not in ("door", "window"):
                 failures.append(f"marker forsk:opening_kind={marker_attrs.get('forsk:opening_kind')}")
+            for key in ("forsk:sill", "forsk:head", "forsk:width"):
+                if not marker_attrs.get(key):
+                    failures.append(f"marker {key} missing")
 
         after = send_command(sock, "get_document_summary", {})
         furniture_after = layer_count(after, "furniture")

@@ -6,6 +6,19 @@ namespace RhinoMCPPlugin.Functions;
 
 public partial class RhinoMCPFunctions
 {
+    private static class ForskDefaults
+    {
+        public const double WallHeight = 3000.0;
+        public const double FloorThickness = 400.0;
+        public const double RoofThickness = 200.0;
+        public const double DoorSill = 0.0;
+        public const double DoorHead = 2100.0;
+        public const double DoorWidth = 900.0;
+        public const double WindowSill = 900.0;
+        public const double WindowHead = 2100.0;
+        public const double WindowWidth = 1200.0;
+    }
+
     private sealed class ForskStamp
     {
         public string Kind;
@@ -15,6 +28,7 @@ public partial class RhinoMCPFunctions
         public double? Sill;
         public double? Head;
         public double? Width;
+        public double? Height;
         public string SourceLayer;
     }
 
@@ -37,6 +51,8 @@ public partial class RhinoMCPFunctions
             attr.SetUserString("forsk:head", FormatMm(stamp.Head.Value));
         if (stamp.Width.HasValue)
             attr.SetUserString("forsk:width", FormatMm(stamp.Width.Value));
+        if (stamp.Height.HasValue)
+            attr.SetUserString("forsk:height", FormatMm(stamp.Height.Value));
         if (!string.IsNullOrEmpty(stamp.SourceLayer))
             attr.SetUserString("forsk:source_layer", stamp.SourceLayer);
     }

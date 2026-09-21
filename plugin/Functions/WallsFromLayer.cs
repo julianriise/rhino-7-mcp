@@ -21,7 +21,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var layerName = parameters["layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(layerName)) layerName = "wall";
-        var height = parameters["height"]?.ToObject<double>() ?? 3000.0;
+        var height = parameters["height"]?.ToObject<double>() ?? ForskDefaults.WallHeight;
         var targetLayerName = parameters["target_layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(targetLayerName)) targetLayerName = "A-WALL";
         var namePrefix = parameters["name_prefix"]?.ToString();
@@ -85,6 +85,7 @@ public partial class RhinoMCPFunctions
                     {
                         Kind = "wall",
                         Level = "0",
+                        Height = height,
                         SourceLayer = profiles.SourceLayer.Name
                     });
                     var id = doc.Objects.AddBrep(brep, attr);

@@ -14,7 +14,7 @@
       "type": "number",
       "exclusiveMinimum": 0,
       "default": 3000,
-      "description": "Extrusion height in document units (mm). Default 3000."
+      "description": "Extrusion height in document units (mm). Default 3000. Stamped on each wall as forsk:height."
     },
     "target_layer": {
       "type": "string",
