@@ -21,7 +21,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var layerName = parameters["layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(layerName)) layerName = "wall";
-        var thickness = parameters["thickness"]?.ToObject<double>() ?? 400.0;
+        var thickness = parameters["thickness"]?.ToObject<double>() ?? ForskDefaults.FloorThickness;
         var targetLayerName = parameters["target_layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(targetLayerName)) targetLayerName = "A-FLOR";
         var namePrefix = parameters["name_prefix"]?.ToString();

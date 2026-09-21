@@ -30,7 +30,8 @@ def walls_from_layer(
 
     Parameters:
     - layer: Source layer name, case-insensitive (default "wall")
-    - height: Extrusion height in document units, default 3000
+    - height: Extrusion height in document units, default 3000.
+      Stamped on each wall as forsk:height.
     - target_layer: Layer for new solids, created if missing (default "A-WALL")
     - name_prefix: Name prefix, default "wall-" → wall-01, wall-02, …
     - join_tolerance: Optional join tolerance for open segments

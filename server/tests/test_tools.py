@@ -2075,6 +2075,23 @@ class TestWallsFromLayerTool:
         assert result["ids"] == ["aaa-111"]
 
     @patch("rhinomcp.tools.walls_from_layer.get_rhino_connection")
+    def test_passes_stated_height(self, mock_get_conn):
+        from rhinomcp.tools.walls_from_layer import walls_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["aaa-111"],
+            "count": 1,
+            "warnings": [],
+            "message": "Created 1 wall solid(s) on A-WALL from layer 'wall'.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = walls_from_layer(ctx=None, height=2700)
+        assert result["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["height"] == 2700
+
+    @patch("rhinomcp.tools.walls_from_layer.get_rhino_connection")
     def test_rejects_non_positive_height(self, mock_get_conn):
         from rhinomcp.tools.walls_from_layer import walls_from_layer
 
@@ -2486,6 +2503,35 @@ class TestAddOpeningTool:
         assert result["success"] is True
         assert result["opening_kind"] == "door"
         assert result["t"] == 0.5
+
+    @patch("rhinomcp.tools.add_opening.get_rhino_connection")
+    def test_passes_stated_sill_head_width(self, mock_get_conn):
+        from rhinomcp.tools.add_opening import add_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_kind": "window",
+            "width": 1200,
+            "sill": 1000,
+            "head": 2200,
+            "t": 0.5,
+            "ok": True,
+            "message": "Added window opening on wall.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = add_opening(
+            ctx=None, opening_kind="window", sill=1000, head=2200, width=1200
+        )
+        assert result["success"] is True
+        assert mock_conn.send_command.call_args[0][1] == {
+            "opening_kind": "window",
+            "sill": 1000,
+            "head": 2200,
+            "width": 1200,
+        }
 
     @patch("rhinomcp.tools.add_opening.get_rhino_connection")
     def test_window_with_t_omits_distance(self, mock_get_conn):

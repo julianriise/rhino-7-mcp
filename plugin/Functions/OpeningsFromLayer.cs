@@ -31,17 +31,12 @@ public partial class RhinoMCPFunctions
         var wallIdTokens = parameters["wall_ids"]?.ToObject<List<string>>();
 
         var layerKey = layerName.Trim();
-        double defaultSill = 0;
-        double defaultHead = 2100;
+        double defaultSill = ForskDefaults.DoorSill;
+        double defaultHead = ForskDefaults.DoorHead;
         if (layerKey.Equals("window", StringComparison.OrdinalIgnoreCase))
         {
-            defaultSill = 900;
-            defaultHead = 2100;
-        }
-        else if (layerKey.Equals("door", StringComparison.OrdinalIgnoreCase))
-        {
-            defaultSill = 0;
-            defaultHead = 2100;
+            defaultSill = ForskDefaults.WindowSill;
+            defaultHead = ForskDefaults.WindowHead;
         }
 
         var sill = parameters["sill"]?.ToObject<double?>() ?? defaultSill;
