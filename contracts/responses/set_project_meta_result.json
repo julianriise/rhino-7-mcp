@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_project_meta_result.json",
+  "title": "SetProjectMetaResult",
+  "description": "Stored project meta. Empty strings mean unset. date and scale_label fall back to today and 1:100 when unset.",
+  "type": "object",
+  "properties": {
+    "project": { "type": "string" },
+    "client": { "type": "string" },
+    "address": { "type": "string" },
+    "date": { "type": "string" },
+    "scale_label": { "type": "string" }
+  },
+  "required": ["project", "client", "address", "date", "scale_label"],
+  "additionalProperties": false
+}

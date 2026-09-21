@@ -3152,3 +3152,204 @@ class TestSheetGuards:
         assert "wall" not in body
         assert "X-EXIST" not in body
 
+
+class TestSetProjectMetaTool:
+    @patch("rhinomcp.tools.set_project_meta.get_rhino_connection")
+    def test_forwards_only_given_fields(self, mock_get_conn):
+        from rhinomcp.tools.set_project_meta import set_project_meta
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "project": "Villa X",
+            "client": "",
+            "address": "",
+            "date": "2026-09-21",
+            "scale_label": "1:100",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_project_meta(ctx=None, project="Villa X")
+        assert result["success"] is True
+        assert result["project"] == "Villa X"
+        mock_conn.send_command.assert_called_once_with(
+            "set_project_meta",
+            {"project": "Villa X"},
+        )
+
+    @patch("rhinomcp.tools.set_project_meta.get_rhino_connection")
+    def test_rejects_non_string(self, mock_get_conn):
+        from rhinomcp.tools.set_project_meta import set_project_meta
+
+        result = set_project_meta(ctx=None, project=12)
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestLayoutPackTool:
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_default_omits_views(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "pages": [],
+            "count": 0,
+            "scale": 100,
+            "message": "Nothing to lay out. Bake walls first.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = layout_pack(ctx=None)
+        assert result["success"] is True
+        assert result["message"].startswith("Nothing to lay out")
+        params = mock_conn.send_command.call_args[0][1]
+        assert params["paper"] == "A3"
+        assert params["scale"] == 100
+        assert "views" not in params
+
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_rejects_unknown_view_and_paper(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        assert layout_pack(ctx=None, views=["section"])["success"] is False
+        assert layout_pack(ctx=None, paper="A1")["success"] is False
+        assert layout_pack(ctx=None, scale=0)["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestExportPdfTool:
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_requires_absolute_pdf_path(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        missing = export_pdf(ctx=None, path="")
+        assert missing["success"] is False
+        assert missing["message"] == "export_pdf requires a file path."
+        relative = export_pdf(ctx=None, path="out.pdf")
+        assert relative["success"] is False
+        assert "absolute" in relative["message"]
+        text = export_pdf(ctx=None, path="/tmp/sheet.txt")
+        assert text["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_forwards_path(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "/tmp/forsk-plan.pdf",
+            "count": 1,
+            "pages": ["Forsk — Plan"],
+            "message": "Wrote 1 page(s) to /tmp/forsk-plan.pdf.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf", layout="plan")
+        assert result["success"] is True
+        assert result["count"] == 1
+        mock_conn.send_command.assert_called_once_with(
+            "export_pdf",
+            {"path": "/tmp/forsk-plan.pdf", "layout": "plan"},
+        )
+
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_no_layouts_is_not_success(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "",
+            "count": 0,
+            "pages": [],
+            "message": "No layouts to print. Call layout_pack first.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
+        assert result["success"] is False
+
+
+class TestClearLayoutsTool:
+    @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
+    def test_dry_run_and_views(self, mock_get_conn):
+        from rhinomcp.tools.clear_layouts import clear_layouts
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "deleted": ["Forsk — East"],
+            "object_ids": [],
+            "count": 1,
+            "dry_run": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = clear_layouts(ctx=None, views=["east"], dry_run=True)
+        assert result["success"] is True
+        assert result["message"].startswith("Would delete")
+        assert mock_conn.send_command.call_args[0][1] == {
+            "dry_run": True,
+            "views": ["east"],
+        }
+
+    @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
+    def test_rejects_unknown_view(self, mock_get_conn):
+        from rhinomcp.tools.clear_layouts import clear_layouts
+
+        result = clear_layouts(ctx=None, views=["section"])
+        assert result["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestPrintGuards:
+    """Lock Layout/PDF engine choice. No live Rhino. No panel dialog."""
+
+    def _text(self, *parts):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        return (root.joinpath(*parts)).read_text()
+
+    def test_layout_uses_page_view_and_filepdf(self):
+        src = self._text("plugin", "Functions", "LayoutPack.cs")
+        assert "AddPageView" in src
+        assert "AddDetailView" in src
+        assert "FilePdf.Create" in src
+        assert "new ViewCaptureSettings" in src
+        assert "RasterMode = false" in src
+        assert "pdf.Write" in src
+        assert "ActiveSpace.PageSpace" in src
+        assert "DisplayModeDescription.TechId" in src
+        assert "Nothing to lay out. Bake walls first." in src
+        assert 'Kind = "layout"' in src
+        assert "Forsk — Plan" in src
+        assert "HiddenLineDrawing" not in src
+        assert "SaveFileDialog" not in src
+        assert "RunScript" not in src
+        assert "sheet_pack" not in src
+
+    def test_clear_generated_default_skips_layout_objects(self):
+        import json
+        import re
+
+        clear = self._text("plugin", "Functions", "ClearGenerated.cs")
+        match = re.search(r"new List<string>\s*\{([^}]+)\}", clear)
+        assert match, "default kinds initializer missing"
+        assert "layout" not in match.group(1)
+        assert "drawing" not in match.group(1)
+        schema = json.loads(self._text("contracts", "commands", "clear_generated.json"))
+        assert "layout" not in schema["properties"]["kinds"]["default"]
+        assert "AddPageView" not in clear
+        assert "page.Close" not in clear
+
+    def test_clear_layouts_matches_forsk_pages_only(self):
+        src = self._text("plugin", "Functions", "LayoutPack.cs")
+        assert '[McpCommand("clear_layouts")]' in src
+        remover = src[src.index(
+            "private JObject RemoveLayoutPages(RhinoDoc doc, HashSet<string> viewSet"
+        ):]
+        assert "IsForskLayoutPage" in remover
+        assert '"layout"' in remover
+        assert '"wall"' not in remover
+        assert '"drawing"' not in remover
+

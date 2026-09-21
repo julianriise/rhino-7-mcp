@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_pdf.json",
+  "title": "ExportPdf Command",
+  "description": "Write a vector PDF of Forsk Layout pages to an absolute .pdf path. No save dialog.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute path ending in .pdf."
+    },
+    "layout": {
+      "type": "string",
+      "description": "Optional page name (Forsk — Plan) or view token. Omit to export every Forsk layout."
+    }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}

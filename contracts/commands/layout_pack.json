@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "layout_pack.json",
+  "title": "LayoutPack Command",
+  "description": "Create A3 landscape Layout pages. Each page has one parallel Detail of the clay and a title block at the bottom-right. Does not use Make2D curves.",
+  "type": "object",
+  "properties": {
+    "paper": {
+      "type": "string",
+      "enum": ["A3"],
+      "default": "A3"
+    },
+    "views": {
+      "type": "array",
+      "description": "Views to lay out, in order. Default plan, north, east, south, west.",
+      "items": {
+        "type": "string",
+        "enum": ["plan", "north", "east", "south", "west"]
+      },
+      "default": ["plan", "north", "east", "south", "west"]
+    },
+    "scale": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 100,
+      "description": "Requested detail scale denominator. 100 means 1:100. Bumped if the clay does not fit the detail."
+    },
+    "replace": {
+      "type": "boolean",
+      "default": true,
+      "description": "Delete existing Forsk Layout pages for those views before creating them."
+    },
+    "include_existing": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include X-EXIST in the detail."
+    }
+  },
+  "additionalProperties": false
+}

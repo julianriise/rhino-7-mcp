@@ -284,6 +284,26 @@ def test_new_commands():
         }),
         ("commands/clear_drawings.json", {}),
         ("commands/clear_drawings.json", {"views": ["plan", "west"], "dry_run": True}),
+        ("commands/set_project_meta.json", {}),
+        ("commands/set_project_meta.json", {
+            "project": "Villa X",
+            "client": "Y",
+            "address": "Oslo",
+            "date": "2026-09-21",
+            "scale_label": "1:100",
+        }),
+        ("commands/layout_pack.json", {}),
+        ("commands/layout_pack.json", {
+            "paper": "A3",
+            "views": ["plan", "north"],
+            "scale": 100,
+            "replace": True,
+            "include_existing": False,
+        }),
+        ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf"}),
+        ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "layout": "plan"}),
+        ("commands/clear_layouts.json", {}),
+        ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "wood", "ensure_objects_from_layer": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-FLOR", "preset": "white"}),
@@ -627,6 +647,69 @@ def test_responses():
     if not validate("responses/clear_drawings_result.json", clear_drawings):
         all_passed = False
 
+    print("  set_project_meta_result:")
+    meta_result = {
+        "project": "Villa X",
+        "client": "",
+        "address": "Oslo",
+        "date": "2026-09-21",
+        "scale_label": "1:100",
+    }
+    if not validate("responses/set_project_meta_result.json", meta_result):
+        all_passed = False
+
+    print("  layout_pack_result:")
+    layout_result = {
+        "pages": [{
+            "view": "plan",
+            "page": "Forsk — Plan",
+            "scale": 100,
+            "detail_count": 1,
+            "ids": [guid],
+        }],
+        "count": 1,
+        "scale": 100,
+        "message": "Laid out 1 page(s) on A3 at 1:100.",
+    }
+    if not validate("responses/layout_pack_result.json", layout_result):
+        all_passed = False
+    layout_empty = {
+        "pages": [],
+        "count": 0,
+        "scale": 100,
+        "message": "Nothing to lay out. Bake walls first.",
+    }
+    if not validate("responses/layout_pack_result.json", layout_empty):
+        all_passed = False
+
+    print("  export_pdf_result:")
+    pdf_result = {
+        "path": "/tmp/forsk-plan.pdf",
+        "count": 1,
+        "pages": ["Forsk — Plan"],
+        "message": "Wrote 1 page(s) to /tmp/forsk-plan.pdf.",
+    }
+    if not validate("responses/export_pdf_result.json", pdf_result):
+        all_passed = False
+    pdf_refuse = {
+        "path": "",
+        "count": 0,
+        "pages": [],
+        "message": "export_pdf requires a file path.",
+    }
+    if not validate("responses/export_pdf_result.json", pdf_refuse):
+        all_passed = False
+
+    print("  clear_layouts_result:")
+    clear_layouts = {
+        "deleted": ["Forsk — Plan"],
+        "object_ids": [guid],
+        "count": 1,
+        "dry_run": False,
+    }
+    if not validate("responses/clear_layouts_result.json", clear_layouts):
+        all_passed = False
+
     return all_passed
 
 
@@ -756,6 +839,18 @@ def test_invalid_examples():
         ("commands/clear_drawings.json", {"views": ["section"]}, "clear_drawings unknown view"),
         ("commands/clear_drawings.json", {"dry_run": "yes"}, "clear_drawings dry_run not bool"),
         ("commands/clear_drawings.json", {"bogus": 1}, "clear_drawings unknown field"),
+        ("commands/set_project_meta.json", {"bogus": 1}, "set_project_meta unknown field"),
+        ("commands/set_project_meta.json", {"project": 1}, "set_project_meta project not string"),
+        ("commands/layout_pack.json", {"views": ["section"]}, "layout_pack unknown view"),
+        ("commands/layout_pack.json", {"paper": "A1"}, "layout_pack paper not A3"),
+        ("commands/layout_pack.json", {"scale": 0}, "layout_pack scale 0"),
+        ("commands/layout_pack.json", {"bogus": 1}, "layout_pack unknown field"),
+        ("commands/export_pdf.json", {}, "export_pdf missing path"),
+        ("commands/export_pdf.json", {"path": ""}, "export_pdf empty path"),
+        ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),
+        ("commands/clear_layouts.json", {"views": ["section"]}, "clear_layouts unknown view"),
+        ("commands/clear_layouts.json", {"dry_run": "yes"}, "clear_layouts dry_run not bool"),
+        ("commands/clear_layouts.json", {"bogus": 1}, "clear_layouts unknown field"),
     ]
 
     all_rejected = True
@@ -906,6 +1001,7 @@ def test_protocol_envelope():
         "delete_opening", "add_opening", "move_opening",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
+        "set_project_meta", "layout_pack", "export_pdf", "clear_layouts",
         "set_layer_material", "set_display_mode",
         "run_command", "get_commands",
         "gh_create_document",

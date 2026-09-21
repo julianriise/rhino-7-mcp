@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_project_meta.json",
+  "title": "SetProjectMeta Command",
+  "description": "Store project, client, address, date, and scale label on the document for the layout title block. Omitted keys stay as they are. An empty string clears that key.",
+  "type": "object",
+  "properties": {
+    "project": { "type": "string", "description": "Project / job name." },
+    "client": { "type": "string" },
+    "address": { "type": "string", "description": "Site or address." },
+    "date": { "type": "string", "description": "Override date string. Default display is today ISO when unset." },
+    "scale_label": { "type": "string", "default": "1:100", "description": "Stored scale text. The detail scale on a layout still comes from layout_pack." }
+  },
+  "additionalProperties": false
+}

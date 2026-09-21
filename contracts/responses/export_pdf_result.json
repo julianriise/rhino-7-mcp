@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_pdf_result.json",
+  "title": "ExportPdfResult",
+  "description": "Vector PDF written by FilePdf, or a refuse message when path or layouts are missing.",
+  "type": "object",
+  "properties": {
+    "path": { "type": "string" },
+    "count": { "type": "integer" },
+    "pages": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "message": { "type": "string" }
+  },
+  "required": ["path", "count", "pages", "message"]
+}

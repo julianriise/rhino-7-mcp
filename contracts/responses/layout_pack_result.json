@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "layout_pack_result.json",
+  "title": "LayoutPackResult",
+  "description": "Forsk Layout pages created. count is the page count. scale is the first page's applied denominator.",
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "count": { "type": "integer" },
+    "scale": { "type": "integer" },
+    "message": { "type": "string" }
+  },
+  "required": ["pages", "count", "scale", "message"]
+}

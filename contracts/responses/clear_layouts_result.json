@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_layouts_result.json",
+  "title": "ClearLayoutsResult",
+  "description": "Forsk Layout page names matched (and closed unless dry_run), plus title-block object ids.",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "object_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "count": { "type": "integer" },
+    "dry_run": { "type": "boolean" }
+  },
+  "required": ["deleted", "object_ids", "count", "dry_run"],
+  "additionalProperties": false
+}

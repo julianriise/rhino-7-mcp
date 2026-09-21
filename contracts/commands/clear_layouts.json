@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "clear_layouts.json",
+  "title": "ClearLayouts Command",
+  "description": "Delete Forsk Layout pages (name prefix Forsk —) and forsk:kind=layout title-block objects. Does not delete clay, X-EXIST, or forsk:kind=drawing.",
+  "type": "object",
+  "properties": {
+    "views": {
+      "type": "array",
+      "description": "If set, only these views. Omit to delete every Forsk layout.",
+      "items": {
+        "type": "string",
+        "enum": ["plan", "north", "east", "south", "west"]
+      }
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, return matching pages without deleting."
+    }
+  },
+  "additionalProperties": false
+}
