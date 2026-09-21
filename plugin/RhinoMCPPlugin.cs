@@ -1,5 +1,6 @@
 ﻿using System;
 using Rhino;
+using Rhino.PlugIns;
 
 namespace RhinoMCPPlugin
 {
@@ -21,8 +22,42 @@ namespace RhinoMCPPlugin
         ///<summary>Gets the only instance of the RhinoMCPPlugin plug-in.</summary>
         public static RhinoMCPPlugin Instance { get; private set; }
 
-        // You can override methods here to change the plug-in behavior on
-        // loading and shut down, add options pages to the Rhino _Option command
-        // and maintain plug-in wide options in a document.
+        protected override LoadReturnCode OnLoad(ref string errorMessage)
+        {
+            try
+            {
+                var icon = PanelIcon();
+                Rhino.UI.Panels.RegisterPanel(this, typeof(Forsk.ForskPanel), "Forsk", icon);
+            }
+            catch (Exception e)
+            {
+                RhinoApp.WriteLine("Forsk panel failed to register: " + e.Message);
+            }
+            return LoadReturnCode.Success;
+        }
+
+        static System.Drawing.Bitmap panelBitmap;
+        static System.Drawing.Icon panelIcon;
+
+        static System.Drawing.Icon PanelIcon()
+        {
+            if (panelIcon != null) return panelIcon;
+            try
+            {
+                if (System.Drawing.SystemIcons.Application != null)
+                    return System.Drawing.SystemIcons.Application;
+            }
+            catch
+            {
+                // Mono on Mac may not expose SystemIcons.
+            }
+
+            // Keep the bitmap alive: Icon.FromHandle borrows its pixels.
+            panelBitmap = new System.Drawing.Bitmap(16, 16);
+            using (var g = System.Drawing.Graphics.FromImage(panelBitmap))
+                g.Clear(System.Drawing.Color.Black);
+            panelIcon = System.Drawing.Icon.FromHandle(panelBitmap.GetHicon());
+            return panelIcon;
+        }
     }
 }

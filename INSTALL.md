@@ -82,6 +82,8 @@ mcpstart
 You should see `RhinoMCP server started on 127.0.0.1:1999`. `mcpstop` ends it.
 Run `mcpstart` once per Rhino session.
 
+`Forsk` (alias `ForskChat`) opens the chat panel in this same plugin. The bridge tip reads **Connected** after `mcpstart`. Chat uses `FORSK_GROK_API_KEY` from the environment or from `~/.forsk/grok.env`. **Generate 3D model** does not need the key. Product checklist: the forsk repo’s `docs/SMOKE.md`.
+
 If `mcpstart` is still unknown after a restart, open **Rhinoceros → Settings →
 Plug-ins** and look for `rhinomcp`, and read the command history for a load
 error.
