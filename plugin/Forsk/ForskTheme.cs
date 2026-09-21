@@ -90,6 +90,7 @@ namespace RhinoMCPPlugin.Forsk
         public static Font Ui { get; private set; }
         public static Font Button { get; private set; }
         public static Font Mark { get; private set; }
+        public static Font Input { get; private set; }
         public static bool IsGeist { get; private set; }
 
         public static void Load()
@@ -98,8 +99,8 @@ namespace RhinoMCPPlugin.Forsk
             _ready = true;
             try
             {
-                var regular = Open("RhinoMCPPlugin.Fonts.Geist-Regular.otf");
-                var medium = Open("RhinoMCPPlugin.Fonts.Geist-Medium.otf");
+                var regular = Open("RhinoMCPPlugin.Fonts.Geist-Regular.otf", "Geist-Regular.otf");
+                var medium = Open("RhinoMCPPlugin.Fonts.Geist-Medium.otf", "Geist-Medium.otf");
                 FontTypeface reg;
                 FontTypeface med;
                 try
@@ -120,6 +121,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = new Font(med, 12);
                 Button = new Font(med, 13);
                 Mark = new Font(med, 15);
+                Input = new Font(reg, 16);
                 IsGeist = true;
             }
             catch
@@ -129,6 +131,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = SystemFonts.Bold(12);
                 Button = SystemFonts.Bold(13);
                 Mark = SystemFonts.Bold(15);
+                Input = SystemFonts.Default(16);
                 IsGeist = false;
             }
         }
@@ -146,7 +149,7 @@ namespace RhinoMCPPlugin.Forsk
             return fallback;
         }
 
-        static Stream Open(string name)
+        static Stream Open(string name, string fileName)
         {
             var src = typeof(ForskType).Assembly.GetManifestResourceStream(name);
             if (src == null) throw new FileNotFoundException(name);
@@ -155,6 +158,7 @@ namespace RhinoMCPPlugin.Forsk
             src.Dispose();
             copy.Position = 0;
             Keep.Add(copy);
+            ForskNative.RegisterFontFile(fileName, copy.ToArray());
             return copy;
         }
     }
@@ -492,15 +496,15 @@ namespace RhinoMCPPlugin.Forsk
 
         public ForskComposer()
         {
-            Height = 44;
+            Height = 48;
             BackgroundColor = ForskPaint.Paper;
             _card = new ForskFill { Radius = 12 };
             Input = new TextBox
             {
                 ShowBorder = false,
-                BackgroundColor = Colors.White,
+                BackgroundColor = Colors.Transparent,
                 TextColor = ForskPaint.Ink,
-                Font = ForskType.Body,
+                Font = ForskType.Input,
                 PlaceholderText = "Build the plan…"
             };
             Send = new ForskIconButton();
@@ -524,13 +528,15 @@ namespace RhinoMCPPlugin.Forsk
         public void Place()
         {
             int w = Math.Max(Width, 160);
-            if (Height != 44) Height = 44;
-            _card.Size = new Size(w, 44);
+            const int h = 48;
+            if (Height != h) Height = h;
+            _card.Size = new Size(w, h);
             Send.Size = new Size(28, 28);
-            int sendX = w - 8 - 28;
-            Move(Send, sendX, 8);
-            Input.Size = new Size(Math.Max(40, sendX - 14 - 8), 28);
-            Move(Input, 14, 8);
+            int sendX = w - 10 - 28;
+            Move(Send, sendX, (h - 28) / 2);
+            // The field fills the card. Its own border and focus ring are turned off in ForskNative.
+            Input.Size = new Size(Math.Max(40, sendX - 16), h);
+            Move(Input, 14, 0);
         }
     }
 }

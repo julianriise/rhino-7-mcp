@@ -65,6 +65,13 @@ namespace RhinoMCPPlugin.Forsk
             _chip.Click += (s, e) => Bake();
             _modes.Picked += (s, e) => SetMode(_modes.Mode);
             _composer.Send.Click += (s, e) => Send();
+            _composer.Input.LoadComplete += (s, e) => ForskNative.QuietField(_composer.Input);
+            _composer.Input.GotFocus += (s, e) =>
+            {
+                ForskNative.QuietField(_composer.Input);
+                Application.Instance.AsyncInvoke(() => ForskNative.QuietField(_composer.Input));
+            };
+            _scroll.LoadComplete += (s, e) => ForskNative.QuietScroll(_scroll);
             _composer.Input.KeyDown += (s, e) =>
             {
                 if (e.Key == Keys.Enter && !e.Shift)
@@ -335,6 +342,8 @@ namespace RhinoMCPPlugin.Forsk
 
         void Relayout()
         {
+            ForskNative.QuietScroll(_scroll);
+            ForskNative.QuietField(_composer.Input);
             int inner = Math.Max(200, Width - 32);
             _target.Width = inner;
             _hint.Reflow(inner);
@@ -342,7 +351,11 @@ namespace RhinoMCPPlugin.Forsk
             _modes.Width = inner;
             _composer.Width = inner;
             _composer.Place();
-            int threadW = _scroll.Width > 80 ? _scroll.Width - 4 : inner;
+            int threadW = inner;
+            int client = _scroll.ClientSize.Width;
+            if (client > 80) threadW = client;
+            else if (_scroll.Width > 80) threadW = _scroll.Width;
+            if (threadW > 16) threadW -= 12;
             foreach (var line in _lines)
             {
                 line.Row.Width = threadW;
