@@ -121,7 +121,14 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = new Font(med, 12);
                 Button = new Font(med, 13);
                 Mark = new Font(med, 15);
-                Input = new Font(reg, 16);
+                try
+                {
+                    Input = new Font("Geist", 16);
+                }
+                catch
+                {
+                    Input = new Font(reg, 16);
+                }
                 IsGeist = true;
             }
             catch
@@ -502,7 +509,7 @@ namespace RhinoMCPPlugin.Forsk
             Input = new TextBox
             {
                 ShowBorder = false,
-                BackgroundColor = Colors.Transparent,
+                BackgroundColor = Colors.White,
                 TextColor = ForskPaint.Ink,
                 Font = ForskType.Input,
                 PlaceholderText = "Build the plan…"
@@ -534,7 +541,6 @@ namespace RhinoMCPPlugin.Forsk
             Send.Size = new Size(28, 28);
             int sendX = w - 10 - 28;
             Move(Send, sendX, (h - 28) / 2);
-            // The field fills the card. Its own border and focus ring are turned off in ForskNative.
             Input.Size = new Size(Math.Max(40, sendX - 16), h);
             Move(Input, 14, 0);
         }

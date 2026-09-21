@@ -30,6 +30,7 @@ namespace RhinoMCPPlugin.Forsk
         bool _busy;
         bool _warnedPrompt;
         bool _hooked;
+        bool _laying;
 
         public ForskPanel()
         {
@@ -163,6 +164,8 @@ namespace RhinoMCPPlugin.Forsk
         public void PanelShown(uint documentSerialNumber, ShowPanelReason reason)
         {
             Hook();
+            ForskNative.QuietScroll(_scroll);
+            ForskNative.QuietField(_composer.Input);
             RefreshChrome();
             if (!_warnedPrompt)
             {
@@ -342,8 +345,20 @@ namespace RhinoMCPPlugin.Forsk
 
         void Relayout()
         {
-            ForskNative.QuietScroll(_scroll);
-            ForskNative.QuietField(_composer.Input);
+            if (_laying) return;
+            _laying = true;
+            try
+            {
+                RelayoutCore();
+            }
+            finally
+            {
+                _laying = false;
+            }
+        }
+
+        void RelayoutCore()
+        {
             int inner = Math.Max(200, Width - 32);
             _target.Width = inner;
             _hint.Reflow(inner);
