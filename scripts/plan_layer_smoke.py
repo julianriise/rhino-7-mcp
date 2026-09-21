@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live plan-layer smoke: clear → floor → walls → roof → openings → tags → clear.
+"""Live plan-layer smoke: clear → floor → walls → roof → openings → rooms → tags → clear.
 
 Requires Rhino 7 with mcpstart and the demo DXF/.3dm open (mm).
 Does not go through the Python MCP server — talks framed TCP like mvp_smoke.py.
@@ -159,6 +159,7 @@ def main() -> int:
         wall_count_first = len(ids)
 
         heights = []
+        wall_forsk_ids = []
         for wid in ids:
             info = send_command(sock, "get_object_info", {"id": wid})
             h = bbox_height(info.get("bounding_box"))
@@ -169,11 +170,17 @@ def main() -> int:
                 failures.append(f"{info.get('name')} not on A-WALL")
             if abs(h - 3000) > 5:
                 failures.append(f"{info.get('name')} height {h} != 3000")
+            wid_attrs = attrs_of(info)
+            fid = wid_attrs.get("forsk:id") or ""
+            wall_forsk_ids.append(fid)
+            if not (fid.startswith("w") and fid[1:].isdigit() and len(fid) >= 3):
+                failures.append(f"{info.get('name')} forsk:id={fid!r} expected wNN")
 
         wall_info = send_command(sock, "get_object_info", {"id": ids[0]})
         wall_attrs = attrs_of(wall_info)
         print(f"    wall tags forsk:kind={wall_attrs.get('forsk:kind')} "
               f"generated={wall_attrs.get('forsk:generated')} "
+              f"id={wall_attrs.get('forsk:id')} "
               f"height={wall_attrs.get('forsk:height')}")
         if wall_attrs.get("forsk:kind") != "wall":
             failures.append(f"wall forsk:kind={wall_attrs.get('forsk:kind')}")
@@ -181,6 +188,8 @@ def main() -> int:
             failures.append(f"wall forsk:generated={wall_attrs.get('forsk:generated')}")
         if wall_attrs.get("forsk:height") != "3000":
             failures.append(f"wall forsk:height={wall_attrs.get('forsk:height')} expected 3000")
+        if (wall_attrs.get("forsk:id") or "") not in wall_forsk_ids:
+            failures.append(f"wall forsk:id={wall_attrs.get('forsk:id')}")
 
         print("==> default wall material (By Layer plaster)")
         wall_attrs_mat = send_command(sock, "get_object_attributes", {"id": ids[0]})
@@ -282,6 +291,7 @@ def main() -> int:
             marker_attrs = attrs_of(marker_info)
             print(f"    marker {marker_info.get('name')} kind={marker_attrs.get('forsk:kind')} "
                   f"host={marker_attrs.get('forsk:host')} "
+                  f"host_id={marker_attrs.get('forsk:host_id')} "
                   f"opening_kind={marker_attrs.get('forsk:opening_kind')} "
                   f"sill={marker_attrs.get('forsk:sill')} "
                   f"head={marker_attrs.get('forsk:head')} "
@@ -291,12 +301,42 @@ def main() -> int:
             host = marker_attrs.get("forsk:host") or ""
             if len(host) < 32:
                 failures.append(f"marker forsk:host missing/short: {host!r}")
+            host_stable = marker_attrs.get("forsk:host_id") or ""
+            if host_stable not in wall_forsk_ids:
+                failures.append(
+                    f"marker forsk:host_id={host_stable!r} not in wall ids {wall_forsk_ids}"
+                )
             okind = (marker_attrs.get("forsk:opening_kind") or "").lower()
             if okind not in ("door", "window"):
                 failures.append(f"marker forsk:opening_kind={marker_attrs.get('forsk:opening_kind')}")
             for key in ("forsk:sill", "forsk:head", "forsk:width"):
                 if not marker_attrs.get(key):
                     failures.append(f"marker {key} missing")
+
+        print("==> rooms_from_layer (skip when A-ROOM has no closed curves)")
+        rooms = send_command(sock, "rooms_from_layer", {})
+        room_ids = rooms.get("ids") or []
+        print(f"    {rooms.get('message')} count={rooms.get('count')} "
+              f"forsk_ids={rooms.get('forsk_ids')}")
+        if (rooms.get("count") or 0) == 0:
+            print("    no room curves — room tag asserts skipped")
+        else:
+            room_info = send_command(sock, "get_object_info", {"id": room_ids[0]})
+            room_attrs = attrs_of(room_info)
+            print(f"    {room_info.get('name')} layer={room_info.get('layer')} "
+                  f"kind={room_attrs.get('forsk:kind')} id={room_attrs.get('forsk:id')} "
+                  f"area={room_attrs.get('forsk:area')}")
+            if room_info.get("layer") != "A-ROOM":
+                failures.append(f"room layer={room_info.get('layer')} expected A-ROOM")
+            if room_attrs.get("forsk:kind") != "room":
+                failures.append(f"room forsk:kind={room_attrs.get('forsk:kind')}")
+            if room_attrs.get("forsk:generated") != "1":
+                failures.append(f"room forsk:generated={room_attrs.get('forsk:generated')}")
+            rid = room_attrs.get("forsk:id") or ""
+            if not (rid.startswith("r") and rid[1:].isdigit() and len(rid) >= 3):
+                failures.append(f"room forsk:id={rid!r} expected rNN")
+            if not room_attrs.get("forsk:area"):
+                failures.append("room forsk:area missing")
 
         after = send_command(sock, "get_document_summary", {})
         furniture_after = layer_count(after, "furniture")
@@ -349,6 +389,7 @@ def main() -> int:
             (floor_ids[0], "floor"),
             (roof_ids[0] if roof_ids else None, "roof"),
             (marker_ids[0] if marker_ids else None, "marker"),
+            (room_ids[0] if room_ids else None, "room"),
         ]:
             if not oid:
                 continue

@@ -310,6 +310,9 @@ public partial class RhinoMCPFunctions
             if (obj.Attributes.GetUserString("forsk:host") != oldStr)
                 continue;
             obj.Attributes.SetUserString("forsk:host", newStr);
+            var stable = ReadForskUserString(doc, newHost, "forsk:id");
+            if (!string.IsNullOrEmpty(stable))
+                obj.Attributes.SetUserString("forsk:host_id", stable);
             obj.CommitChanges();
         }
     }
@@ -342,6 +345,7 @@ public partial class RhinoMCPFunctions
             Kind = "opening_marker",
             Level = "0",
             Host = hostId.ToString(),
+            HostId = ReadForskUserString(doc, hostId, "forsk:id"),
             OpeningKind = openingKind,
             Sill = sill,
             Head = head,

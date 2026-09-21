@@ -165,6 +165,7 @@ public partial class RhinoMCPFunctions
 
         if (Math.Abs(tNew - tNow) * segment.Length < tol)
         {
+            StampOpeningHostId(doc, rec.MarkerId, host.Id);
             return new JObject
             {
                 ["marker_id"] = rec.MarkerId.ToString(),
@@ -193,6 +194,7 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException("Could not cut opening.");
         if (!doc.Objects.Replace(rec.MarkerId, markerBrep))
             throw new InvalidOperationException("Opening marker not found.");
+        StampOpeningHostId(doc, rec.MarkerId, hostId);
 
         doc.Views.Redraw();
         return new JObject

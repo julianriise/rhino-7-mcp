@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rooms_from_layer.json",
+  "title": "RoomsFromLayer Command",
+  "description": "Create planar room markers from closed curves on A-ROOM (layer room is an alias when the other name is missing). Source curves stay. Empty or missing layer returns count 0. Does not detect rooms from walls.",
+  "type": "object",
+  "properties": {
+    "layer": {
+      "type": "string",
+      "default": "A-ROOM",
+      "description": "Source layer for closed room outlines (case-insensitive). Default A-ROOM. Name room resolves to A-ROOM when that layer is missing, and the reverse."
+    },
+    "target_layer": {
+      "type": "string",
+      "default": "A-ROOM",
+      "description": "Layer for new room markers. Created if missing. Default A-ROOM."
+    },
+    "name_prefix": {
+      "type": "string",
+      "default": "room-",
+      "description": "Name prefix for new markers (room-01, room-02, …). forsk:id is r01, r02, … in the same bake order."
+    },
+    "join_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Join tolerance for open segments. Default is max(10× model tolerance, 1)."
+    }
+  },
+  "additionalProperties": false
+}

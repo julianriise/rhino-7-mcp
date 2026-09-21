@@ -49,6 +49,7 @@
             "floor_from_layer",
             "roof_flat_from_walls",
             "openings_from_layer",
+            "rooms_from_layer",
             "delete_opening",
             "add_opening",
             "move_opening",

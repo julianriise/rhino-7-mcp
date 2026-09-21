@@ -31,15 +31,16 @@ def walls_from_layer(
     Parameters:
     - layer: Source layer name, case-insensitive (default "wall")
     - height: Extrusion height in document units, default 3000.
-      Stamped on each wall as forsk:height.
+      Stamped on each wall as forsk:height. Bake order also stamps
+      forsk:id w01, w02, … matching wall-01, wall-02.
     - target_layer: Layer for new solids, created if missing (default "A-WALL")
     - name_prefix: Name prefix, default "wall-" → wall-01, wall-02, …
     - join_tolerance: Optional join tolerance for open segments
     - apply_default_materials: Assign plaster By Layer (default true)
 
     Returns:
-    Dictionary with ids (new GUIDs), count, source_curves, warnings, message,
-    and material_name when defaults were applied.
+    Dictionary with ids (new GUIDs), forsk_ids (w01…), count, source_curves,
+    warnings, message, and material_name when defaults were applied.
 
     Do not use this tool for furniture, doors, windows, roofs, or ceilings.
     """
@@ -62,6 +63,7 @@ def walls_from_layer(
         return {
             "success": True,
             "ids": result.get("ids", []),
+            "forsk_ids": result.get("forsk_ids", []),
             "count": result.get("count", 0),
             "source_curves": result.get("source_curves"),
             "joined": result.get("joined"),

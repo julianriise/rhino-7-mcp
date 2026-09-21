@@ -7,9 +7,9 @@
   "properties": {
     "kinds": {
       "type": "array",
-      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker.",
+      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker, room.",
       "items": { "type": "string" },
-      "default": ["wall", "floor", "roof", "opening", "opening_marker"]
+      "default": ["wall", "floor", "roof", "opening", "opening_marker", "room"]
     },
     "level": {
       "type": "string",
@@ -27,9 +27,9 @@
     },
     "name_prefixes": {
       "type": "array",
-      "description": "Name prefixes used only when include_untagged_prefixes is true. Default wall-, floor-, roof-, door-, window-.",
+      "description": "Name prefixes used only when include_untagged_prefixes is true. Default wall-, floor-, roof-, door-, window-, room-.",
       "items": { "type": "string" },
-      "default": ["wall-", "floor-", "roof-", "door-", "window-"]
+      "default": ["wall-", "floor-", "roof-", "door-", "window-", "room-"]
     }
   },
   "additionalProperties": false

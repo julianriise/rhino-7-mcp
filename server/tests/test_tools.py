@@ -2003,6 +2003,7 @@ class TestPackageApi:
             "floor_from_layer",
             "roof_flat_from_walls",
             "openings_from_layer",
+            "rooms_from_layer",
             "delete_opening",
             "add_opening",
             "move_opening",
@@ -2114,6 +2115,76 @@ class TestWallsFromLayerTool:
 
         walls_from_layer(ctx=None, apply_default_materials=False)
         assert mock_conn.send_command.call_args[0][1]["apply_default_materials"] is False
+
+
+class TestRoomsFromLayerTool:
+    @patch("rhinomcp.tools.rooms_from_layer.get_rhino_connection")
+    def test_defaults(self, mock_get_conn):
+        from rhinomcp.tools.rooms_from_layer import rooms_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": ["room-guid"],
+            "forsk_ids": ["r01"],
+            "count": 1,
+            "source_curves": 2,
+            "joined": 2,
+            "closed": 2,
+            "skipped": 0,
+            "warnings": [],
+            "message": "Created 1 room marker(s) on A-ROOM from layer 'A-ROOM'.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = rooms_from_layer(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with(
+            "rooms_from_layer",
+            {
+                "layer": "A-ROOM",
+                "target_layer": "A-ROOM",
+                "name_prefix": "room-",
+            },
+        )
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["ids"] == ["room-guid"]
+        assert result["forsk_ids"] == ["r01"]
+
+    @patch("rhinomcp.tools.rooms_from_layer.get_rhino_connection")
+    def test_empty_layer_is_success(self, mock_get_conn):
+        from rhinomcp.tools.rooms_from_layer import rooms_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": [],
+            "forsk_ids": [],
+            "count": 0,
+            "warnings": [],
+            "message": "No closed room curves. Layer 'A-ROOM' not found.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = rooms_from_layer(ctx=None, layer="room")
+        assert result["success"] is True
+        assert result["count"] == 0
+        assert mock_conn.send_command.call_args[0][1]["layer"] == "room"
+
+    @patch("rhinomcp.tools.rooms_from_layer.get_rhino_connection")
+    def test_forwards_join_tolerance(self, mock_get_conn):
+        from rhinomcp.tools.rooms_from_layer import rooms_from_layer
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "ids": [],
+            "count": 0,
+            "warnings": [],
+            "message": "No curves on layer 'A-ROOM'.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        rooms_from_layer(ctx=None, join_tolerance=2.5)
+        assert mock_conn.send_command.call_args[0][1]["join_tolerance"] == 2.5
 
 
 class TestFloorFromLayerTool:

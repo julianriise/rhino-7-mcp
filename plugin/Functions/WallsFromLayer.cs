@@ -58,6 +58,7 @@ public partial class RhinoMCPFunctions
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(180, 180, 180));
         var solids = BuildWallSolidsFromClosed(profiles.Closed, height, profiles.Tol, warnings);
         var ids = new JArray();
+        var forskIds = new JArray();
         var index = 1;
 
         foreach (var profile in solids)
@@ -81,10 +82,12 @@ public partial class RhinoMCPFunctions
                         LayerIndex = targetLayer.Index,
                         MaterialSource = ObjectMaterialSource.MaterialFromLayer
                     };
+                    var forskId = FormatStableId("w", index);
                     StampForskTags(attr, new ForskStamp
                     {
                         Kind = "wall",
                         Level = "0",
+                        Id = forskId,
                         Height = height,
                         SourceLayer = profiles.SourceLayer.Name
                     });
@@ -92,6 +95,7 @@ public partial class RhinoMCPFunctions
                     if (id != Guid.Empty)
                     {
                         ids.Add(id.ToString());
+                        forskIds.Add(forskId);
                         index++;
                     }
                 }
@@ -105,6 +109,7 @@ public partial class RhinoMCPFunctions
         var result = new JObject
         {
             ["ids"] = ids,
+            ["forsk_ids"] = forskIds,
             ["count"] = ids.Count,
             ["source_curves"] = profiles.SourceCount,
             ["joined"] = profiles.JoinedCount,

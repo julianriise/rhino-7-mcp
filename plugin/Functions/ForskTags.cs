@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Rhino;
 using Rhino.DocObjects;
 
 namespace RhinoMCPPlugin.Functions;
@@ -23,12 +24,15 @@ public partial class RhinoMCPFunctions
     {
         public string Kind;
         public string Level = "0";
+        public string Id;
         public string Host;
+        public string HostId;
         public string OpeningKind;
         public double? Sill;
         public double? Head;
         public double? Width;
         public double? Height;
+        public double? Area;
         public string SourceLayer;
     }
 
@@ -41,8 +45,12 @@ public partial class RhinoMCPFunctions
         attr.SetUserString("forsk:level", string.IsNullOrEmpty(stamp.Level) ? "0" : stamp.Level);
         attr.SetUserString("forsk:generated", "1");
 
+        if (!string.IsNullOrEmpty(stamp.Id))
+            attr.SetUserString("forsk:id", stamp.Id);
         if (!string.IsNullOrEmpty(stamp.Host))
             attr.SetUserString("forsk:host", stamp.Host);
+        if (!string.IsNullOrEmpty(stamp.HostId))
+            attr.SetUserString("forsk:host_id", stamp.HostId);
         if (!string.IsNullOrEmpty(stamp.OpeningKind))
             attr.SetUserString("forsk:opening_kind", stamp.OpeningKind);
         if (stamp.Sill.HasValue)
@@ -53,8 +61,34 @@ public partial class RhinoMCPFunctions
             attr.SetUserString("forsk:width", FormatMm(stamp.Width.Value));
         if (stamp.Height.HasValue)
             attr.SetUserString("forsk:height", FormatMm(stamp.Height.Value));
+        if (stamp.Area.HasValue)
+            attr.SetUserString("forsk:area", FormatMm(stamp.Area.Value));
         if (!string.IsNullOrEmpty(stamp.SourceLayer))
             attr.SetUserString("forsk:source_layer", stamp.SourceLayer);
+    }
+
+    /// <summary>Bake-order id: w01 matches wall-01, r01 matches room-01.</summary>
+    private static string FormatStableId(string prefix, int index)
+    {
+        return prefix + index.ToString("D2", CultureInfo.InvariantCulture);
+    }
+
+    private static string ReadForskUserString(RhinoDoc doc, Guid objectId, string key)
+    {
+        if (doc == null || objectId == Guid.Empty || string.IsNullOrEmpty(key))
+            return null;
+        var obj = doc.Objects.FindId(objectId);
+        return obj?.Attributes?.GetUserString(key);
+    }
+
+    private static void StampOpeningHostId(RhinoDoc doc, Guid markerId, Guid wallId)
+    {
+        var stable = ReadForskUserString(doc, wallId, "forsk:id");
+        if (string.IsNullOrEmpty(stable)) return;
+        var marker = doc.Objects.FindId(markerId);
+        if (marker?.Attributes == null) return;
+        marker.Attributes.SetUserString("forsk:host_id", stable);
+        marker.CommitChanges();
     }
 
     private static bool IsForskGenerated(RhinoObject obj)

@@ -1,19 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "walls_from_layer_result.json",
-  "title": "WallsFromLayerResult",
-  "description": "New wall solids created from a plan layer",
+  "$id": "rooms_from_layer_result.json",
+  "title": "RoomsFromLayerResult",
+  "description": "Planar room markers created from closed room curves",
   "type": "object",
   "properties": {
     "ids": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "GUIDs of new wall solids"
+      "description": "GUIDs of new room markers"
     },
     "forsk_ids": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "forsk:id values parallel to ids (w01, w02, …)"
+      "description": "forsk:id values parallel to ids (r01, r02, …)"
     },
     "count": { "type": "integer" },
     "source_curves": { "type": "integer" },
@@ -24,9 +24,7 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "message": { "type": "string" },
-    "material_name": { "type": "string" },
-    "objects_updated": { "type": "integer" }
+    "message": { "type": "string" }
   },
   "required": ["ids", "count", "message"]
 }

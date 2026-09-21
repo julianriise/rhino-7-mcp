@@ -127,6 +127,10 @@ def main() -> int:
         print(f"    cut={windows.get('cut_count')} fail={windows.get('failed_count')} "
               f"markers={len(windows.get('marker_ids') or [])}")
 
+        print("==> rooms_from_layer")
+        rooms = send_command(sock, "rooms_from_layer", {})
+        print(f"    {rooms.get('message')} count={rooms.get('count')}")
+
         after = send_command(sock, "get_document_summary", {})
         elapsed = time.perf_counter() - t0
         print(f"==> done  objects={after.get('object_count')} "
