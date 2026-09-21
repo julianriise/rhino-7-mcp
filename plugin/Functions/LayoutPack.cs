@@ -14,7 +14,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Paper Layouts of the clay. Details use a parallel camera (same look
-/// directions as Make2D) in Wireframe, so a floor slab does not fill the sheet.
+/// directions as Make2D) in Wireframe, and only the clay layers are visible
+/// in the detail. Source plan layers, especially labels, fill the sheet.
 /// PDF is Rhino.FileIO.FilePdf with ViewCaptureSettings(RhinoPageView, dpi),
 /// RasterMode false, and black-and-white output.
 /// AddPageView width and height are millimetres (A3 landscape 420 x 297).
@@ -49,11 +50,6 @@ public partial class RhinoMCPFunctions
     private const double TitleHeightMm = 46.0;
     private const double TitleGapMm = 6.0;
     private const double PdfDpi = 150.0;
-
-    private static readonly string[] LayoutHideLayerNames =
-    {
-        "S-PLAN", "S-ELEV-N", "S-ELEV-E", "S-ELEV-S", "S-ELEV-W", "A-OPEN", "A-ROOM"
-    };
 
     private static readonly string[] LayoutShowLayerNames = { "A-WALL", "A-FLOR", "A-ROOF" };
 
@@ -497,7 +493,7 @@ public partial class RhinoMCPFunctions
         framed.Inflate(pad);
         vp.ZoomBoundingBox(framed);
 
-        // Wireframe: Technical filled the floor slab solid black on the plan PDF.
+        // Wireframe of the clay. Technical filled the floor slab solid black.
         var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         if (mode != null)
             vp.DisplayMode = mode;
@@ -517,21 +513,32 @@ public partial class RhinoMCPFunctions
         return detail;
     }
 
+    /// <summary>
+    /// The detail shows clay only. Source layers such as label text fill the sheet.
+    /// </summary>
     private void SetDetailLayerVisibility(RhinoDoc doc, Guid viewportId, bool includeExisting)
     {
-        foreach (var name in LayoutHideLayerNames)
-            SetLayerVisibleInViewport(doc, name, viewportId, false);
-        foreach (var name in LayoutShowLayerNames)
-            SetLayerVisibleInViewport(doc, name, viewportId, true);
-        SetLayerVisibleInViewport(doc, "X-EXIST", viewportId, includeExisting);
+        if (viewportId == Guid.Empty) return;
+        for (int i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            var show = IsClayDetailLayer(layer.Name, includeExisting);
+            layer.SetPerViewportVisible(viewportId, show);
+            doc.Layers.Modify(layer, layer.Index, true);
+        }
     }
 
-    private void SetLayerVisibleInViewport(RhinoDoc doc, string name, Guid viewportId, bool visible)
+    private static bool IsClayDetailLayer(string name, bool includeExisting)
     {
-        var layer = FindLayerCaseInsensitive(doc, name);
-        if (layer == null || viewportId == Guid.Empty) return;
-        layer.SetPerViewportVisible(viewportId, visible);
-        doc.Layers.Modify(layer, layer.Index, true);
+        if (string.IsNullOrEmpty(name)) return false;
+        foreach (var clay in LayoutShowLayerNames)
+        {
+            if (name.Equals(clay, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return includeExisting &&
+               name.Equals("X-EXIST", StringComparison.OrdinalIgnoreCase);
     }
 
     private JArray AddTitleBlock(

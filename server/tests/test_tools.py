@@ -3320,8 +3320,11 @@ class TestPrintGuards:
         assert "pdf.Write" in src
         assert "ActiveSpace.PageSpace" in src
         assert "DisplayModeDescription.WireframeId" in src
+        assert "PenId" not in src
         assert "TechId" not in src
         assert "BlackAndWhite" in src
+        assert "IsClayDetailLayer" in src
+        assert "doc.Layers.Count" in src
         assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
         assert 'Kind = "layout"' in src
