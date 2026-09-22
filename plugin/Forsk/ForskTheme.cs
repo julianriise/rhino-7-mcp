@@ -121,7 +121,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = new Font(med, 12);
                 Button = new Font(med, 13);
                 Mark = new Font(med, 15);
-                Input = SystemFonts.Default(16);
+                Input = new Font(reg, 14);
                 IsGeist = true;
             }
             catch
@@ -131,7 +131,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = SystemFonts.Bold(12);
                 Button = SystemFonts.Bold(13);
                 Mark = SystemFonts.Bold(15);
-                Input = SystemFonts.Default(16);
+                Input = SystemFonts.Default(14);
                 IsGeist = false;
             }
         }
@@ -538,56 +538,123 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
+    /// <summary>
+    /// One line at rest. Grows with wrapped text up to five lines, then the
+    /// field scrolls. Enter sends. Shift+Enter keeps a line break.
+    /// </summary>
     sealed class ForskComposer : PixelLayout
     {
+        const int LineLimit = 5;
+        const int TextX = 14;
+        const int TextY = 12;
+        const int Button = 28;
+        const int Gap = 8;
+        const int Bottom = 10;
         readonly ForskFill _card;
+        readonly Drawable _hint;
+        string _placeholder = "Build the plan…";
+        bool _placing;
 
-        public TextBox Input { get; private set; }
+        public TextArea Input { get; private set; }
         public ForskIconButton Send { get; private set; }
 
         public ForskComposer()
         {
-            Height = 52;
             BackgroundColor = ForskPaint.Paper;
             _card = new ForskFill { Radius = 12 };
-            Input = new TextBox
+            // The native face is applied later. A stream font assigned here
+            // is not an NSFont, and the field falls back to a tiny size.
+            Input = new TextArea
             {
-                ShowBorder = false,
+                Wrap = true,
+                AcceptsReturn = true,
+                AcceptsTab = false,
+                SpellCheck = false,
+                TextReplacements = TextReplacements.None,
                 BackgroundColor = Colors.White,
                 TextColor = ForskPaint.Ink,
-                Font = ForskType.Input,
-                PlaceholderText = "Build the plan…"
+                Font = SystemFonts.Default(14)
             };
+            _hint = new Drawable { BackgroundColor = Colors.White };
+            _hint.Paint += (s, e) =>
+            {
+                if (string.IsNullOrEmpty(_placeholder)) return;
+                e.Graphics.DrawText(ForskType.Input, ForskPaint.Quiet, 0, 0, _placeholder);
+            };
+            _hint.MouseDown += (s, e) => Input.Focus();
             Send = new ForskIconButton();
             Add(_card, 0, 0);
-            Add(Input, 14, 8);
-            Add(Send, 0, 8);
-            Input.TextChanged += (s, e) => Send.Armed = (Input.Text ?? "").Trim().Length > 0;
+            Add(Input, TextX, TextY);
+            Add(_hint, TextX, TextY);
+            Add(Send, 0, 0);
+            Input.TextChanged += (s, e) =>
+            {
+                Send.Armed = (Input.Text ?? "").Trim().Length > 0;
+                _hint.Visible = string.IsNullOrEmpty(Input.Text);
+                Place();
+            };
             SizeChanged += (s, e) => Place();
             Place();
         }
 
         public void SetPlaceholder(ForskMode mode)
         {
-            Input.PlaceholderText = mode == ForskMode.Edit
+            _placeholder = mode == ForskMode.Edit
                 ? "Edit the selection…"
                 : mode == ForskMode.Sheets
                     ? "Draw the sheets…"
                     : "Build the plan…";
+            _hint.Invalidate();
         }
 
         public void Place()
         {
-            int w = Math.Max(Width, 160);
-            const int h = 52;
-            if (Height != h) Height = h;
-            _card.Size = new Size(w, h);
-            Send.Size = new Size(28, 28);
-            int sendX = w - 10 - 28;
-            Move(Send, sendX, (h - 28) / 2);
-            const int fieldH = 36;
-            Input.Size = new Size(Math.Max(40, sendX - 18), fieldH);
-            Move(Input, 16, (h - fieldH) / 2);
+            if (_placing) return;
+            _placing = true;
+            try
+            {
+                int w = Math.Max(Width, 160);
+                int textW = Math.Max(40, w - TextX - 12);
+                int textH = Lines(Input.Text, textW) * LinePx();
+                int h = TextY + textH + Gap + Button + Bottom;
+                if (Height != h) Height = h;
+                _card.Size = new Size(w, h);
+                Input.Size = new Size(textW, textH);
+                Move(Input, TextX, TextY);
+                _hint.Size = new Size(textW, LinePx());
+                Move(_hint, TextX + 4, TextY + 1);
+                Send.Size = new Size(Button, Button);
+                Move(Send, w - 10 - Button, h - Bottom - Button);
+            }
+            finally
+            {
+                _placing = false;
+            }
+        }
+
+        static int LinePx()
+        {
+            int line = (int)Math.Ceiling(ForskType.Input.MeasureString("Mg").Height);
+            if (line < 16) return 18;
+            if (line > 28) return 20;
+            return line;
+        }
+
+        static int Lines(string text, int width)
+        {
+            if (string.IsNullOrEmpty(text)) return 1;
+            float limit = Math.Max(8, width - 8);
+            int count = 0;
+            var parts = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var part = parts[i];
+                float wide = part.Length == 0 ? 0 : ForskType.Input.MeasureString(part).Width;
+                count += Math.Max(1, (int)Math.Ceiling(wide / limit));
+            }
+            if (count < 1) count = 1;
+            if (count > LineLimit) return LineLimit;
+            return count;
         }
     }
 }

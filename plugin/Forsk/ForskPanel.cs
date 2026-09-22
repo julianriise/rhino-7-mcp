@@ -78,11 +78,16 @@ namespace RhinoMCPPlugin.Forsk
             };
             _composer.Input.KeyDown += (s, e) =>
             {
-                if (e.Key == Keys.Enter && !e.Shift)
+                if (e.Key != Keys.Enter || e.Shift) return;
+                e.Handled = true;
+                Send();
+                // The text view may insert the return after this handler.
+                Application.Instance.AsyncInvoke(() =>
                 {
-                    e.Handled = true;
-                    Send();
-                }
+                    var left = _composer.Input.Text ?? "";
+                    if (left.Trim().Length == 0 && left.Length > 0)
+                        _composer.Input.Text = "";
+                });
             };
 
             var modeBlock = new StackLayout

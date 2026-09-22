@@ -7,10 +7,9 @@ using Eto.Forms;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// Rhino's Mac panel is Eto on AppKit. A TextBox is an NSTextField.
-    /// Eto can hide the bezel, but not the focus ring, and a face loaded from
-    /// a file is not an NSFont, so the field falls back to a tiny size.
-    /// These setters go through MonoMac's own properties, after the panel exists.
+    /// Rhino's Mac panel is Eto on AppKit. The composer is an NSTextView.
+    /// A face loaded from a file is not an NSFont, so the view falls back to a
+    /// tiny size until these setters run, after the panel exists.
     /// The field stays opaque. A clear background paints the whole dock black.
     /// </summary>
     static class ForskField
@@ -20,28 +19,25 @@ namespace RhinoMCPPlugin.Forsk
         static string _logged;
         static string _lookup = "not looked up";
 
-        public static void Style(TextBox box)
+        public static void Style(Control box)
         {
             try
             {
                 var view = box == null ? null : box.ControlObject;
                 if (view == null) return;
+                var font = InputFont(view.GetType().Assembly);
+                if (font != null) Set(view, "Font", font);
+                SetEnum(view, "FocusRingType", "None");
+                // A small control size shrinks a text field after Font is set.
+                SetEnum(view, "ControlSize", "Regular");
                 Set(view, "Bezeled", false);
                 Set(view, "Bordered", false);
-                SetEnum(view, "FocusRingType", "None");
-                // A small control size shrinks the face after Font is set. Regular first.
-                SetEnum(view, "ControlSize", "Regular");
-                var font = InputFont(view.GetType().Assembly);
                 var cell = Get(view, "Cell");
                 if (cell != null)
                 {
                     SetEnum(cell, "ControlSize", "Regular");
                     SetEnum(cell, "FocusRingType", "None");
-                }
-                if (font != null)
-                {
-                    Set(view, "Font", font);
-                    if (cell != null) Set(cell, "Font", font);
+                    if (font != null) Set(cell, "Font", font);
                 }
                 var editor = Get(view, "CurrentEditor");
                 if (editor != null)
@@ -50,6 +46,10 @@ namespace RhinoMCPPlugin.Forsk
                     SetEnum(editor, "ControlSize", "Regular");
                     if (font != null) Set(editor, "Font", font);
                 }
+                // The text view sits in a scroll view with a system bezel.
+                // Leave its background and scrollers alone. Those blanked the dock.
+                var scroll = Get(view, "EnclosingScrollView");
+                if (scroll != null) SetEnum(scroll, "BorderType", "NoBorder");
                 Log(font == null
                     ? "styled without a native font (" + _lookup + ")"
                     : "styled " + Describe(font) + " via " + _lookup);
@@ -66,8 +66,8 @@ namespace RhinoMCPPlugin.Forsk
             RegisterGeist();
             var nsFont = FindNsFont(mono);
             if (nsFont == null) return null;
-            _font = CallFont(nsFont, "FromFontName", "Geist-Regular", 16)
-                ?? CallFont(nsFont, "SystemFontOfSize", null, 16);
+            _font = CallFont(nsFont, "FromFontName", "Geist-Regular", 14)
+                ?? CallFont(nsFont, "SystemFontOfSize", null, 14);
             return _font;
         }
 
