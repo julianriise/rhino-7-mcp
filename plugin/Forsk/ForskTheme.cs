@@ -99,8 +99,8 @@ namespace RhinoMCPPlugin.Forsk
             _ready = true;
             try
             {
-                var regular = Open("RhinoMCPPlugin.Fonts.Geist-Regular.otf", "Geist-Regular.otf");
-                var medium = Open("RhinoMCPPlugin.Fonts.Geist-Medium.otf", "Geist-Medium.otf");
+                var regular = Open("RhinoMCPPlugin.Fonts.Geist-Regular.otf");
+                var medium = Open("RhinoMCPPlugin.Fonts.Geist-Medium.otf");
                 FontTypeface reg;
                 FontTypeface med;
                 try
@@ -121,14 +121,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = new Font(med, 12);
                 Button = new Font(med, 13);
                 Mark = new Font(med, 15);
-                try
-                {
-                    Input = new Font("Geist", 16);
-                }
-                catch
-                {
-                    Input = new Font(reg, 16);
-                }
+                Input = new Font(reg, 16);
                 IsGeist = true;
             }
             catch
@@ -156,7 +149,7 @@ namespace RhinoMCPPlugin.Forsk
             return fallback;
         }
 
-        static Stream Open(string name, string fileName)
+        static Stream Open(string name)
         {
             var src = typeof(ForskType).Assembly.GetManifestResourceStream(name);
             if (src == null) throw new FileNotFoundException(name);
@@ -165,7 +158,6 @@ namespace RhinoMCPPlugin.Forsk
             src.Dispose();
             copy.Position = 0;
             Keep.Add(copy);
-            ForskNative.RegisterFontFile(fileName, copy.ToArray());
             return copy;
         }
     }
@@ -541,8 +533,8 @@ namespace RhinoMCPPlugin.Forsk
             Send.Size = new Size(28, 28);
             int sendX = w - 10 - 28;
             Move(Send, sendX, (h - 28) / 2);
-            Input.Size = new Size(Math.Max(40, sendX - 16), h);
-            Move(Input, 14, 0);
+            Input.Size = new Size(Math.Max(40, sendX - 18), 32);
+            Move(Input, 14, (h - 32) / 2);
         }
     }
 }

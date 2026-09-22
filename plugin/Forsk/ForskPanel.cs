@@ -13,18 +13,18 @@ namespace RhinoMCPPlugin.Forsk
     [Guid("c4a7e2b1-9f63-4d18-a5e0-7b2c8d1f6a44")]
     public sealed class ForskPanel : Panel, IPanel
     {
-        readonly Label _bridge;
-        readonly ForskDot _dot;
-        readonly Label _target;
-        readonly ForskMessage _hint;
-        readonly ForskButton _chip;
-        readonly ForskModes _modes;
-        readonly ForskComposer _composer;
-        readonly Scrollable _scroll;
-        readonly StackLayout _thread;
+        Label _bridge;
+        ForskDot _dot;
+        Label _target;
+        ForskMessage _hint;
+        ForskButton _chip;
+        ForskModes _modes;
+        ForskComposer _composer;
+        Scrollable _scroll;
+        StackLayout _thread;
         readonly List<ForskLine> _lines = new List<ForskLine>();
         readonly List<JObject> _history = new List<JObject>();
-        readonly UITimer _timer;
+        UITimer _timer;
         ForskMode _mode = ForskMode.Build;
         BakeChip _chipState = new BakeChip();
         bool _busy;
@@ -33,6 +33,31 @@ namespace RhinoMCPPlugin.Forsk
         bool _laying;
 
         public ForskPanel()
+        {
+            try
+            {
+                BuildUi();
+            }
+            catch (Exception e)
+            {
+                Content = new Label
+                {
+                    Text = "Forsk panel failed to open.\n" + e.Message,
+                    Wrap = WrapMode.Word,
+                    TextColor = ForskPaint.Ink
+                };
+                try
+                {
+                    System.IO.File.WriteAllText("/tmp/forsk-panel.log", e.ToString());
+                }
+                catch
+                {
+                    // The label is the failure surface.
+                }
+            }
+        }
+
+        void BuildUi()
         {
             ForskType.Load();
             BackgroundColor = ForskPaint.Paper;
@@ -66,13 +91,6 @@ namespace RhinoMCPPlugin.Forsk
             _chip.Click += (s, e) => Bake();
             _modes.Picked += (s, e) => SetMode(_modes.Mode);
             _composer.Send.Click += (s, e) => Send();
-            _composer.Input.LoadComplete += (s, e) => ForskNative.QuietField(_composer.Input);
-            _composer.Input.GotFocus += (s, e) =>
-            {
-                ForskNative.QuietField(_composer.Input);
-                Application.Instance.AsyncInvoke(() => ForskNative.QuietField(_composer.Input));
-            };
-            _scroll.LoadComplete += (s, e) => ForskNative.QuietScroll(_scroll);
             _composer.Input.KeyDown += (s, e) =>
             {
                 if (e.Key == Keys.Enter && !e.Shift)
@@ -164,8 +182,6 @@ namespace RhinoMCPPlugin.Forsk
         public void PanelShown(uint documentSerialNumber, ShowPanelReason reason)
         {
             Hook();
-            ForskNative.QuietScroll(_scroll);
-            ForskNative.QuietField(_composer.Input);
             RefreshChrome();
             if (!_warnedPrompt)
             {
@@ -366,11 +382,7 @@ namespace RhinoMCPPlugin.Forsk
             _modes.Width = inner;
             _composer.Width = inner;
             _composer.Place();
-            int threadW = inner;
-            int client = _scroll.ClientSize.Width;
-            if (client > 80) threadW = client;
-            else if (_scroll.Width > 80) threadW = _scroll.Width;
-            if (threadW > 16) threadW -= 12;
+            int threadW = _scroll.Width > 100 ? _scroll.Width - 20 : inner;
             foreach (var line in _lines)
             {
                 line.Row.Width = threadW;
