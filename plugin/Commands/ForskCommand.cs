@@ -26,4 +26,15 @@ namespace RhinoMCPPlugin.Commands
             return Result.Success;
         }
     }
+
+    public class ForskWebCommand : Command
+    {
+        public override string EnglishName => "ForskWeb";
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            ForskWebForm.Open();
+            return Result.Success;
+        }
+    }
 }
