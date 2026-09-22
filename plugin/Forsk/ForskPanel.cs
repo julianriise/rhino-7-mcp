@@ -13,9 +13,7 @@ namespace RhinoMCPPlugin.Forsk
     [Guid("c4a7e2b1-9f63-4d18-a5e0-7b2c8d1f6a44")]
     public sealed class ForskPanel : Panel, IPanel
     {
-        Label _bridge;
-        ForskDot _dot;
-        Label _target;
+        ForskHeader _header;
         ForskMessage _hint;
         ForskButton _chip;
         ForskModes _modes;
@@ -63,26 +61,7 @@ namespace RhinoMCPPlugin.Forsk
             BackgroundColor = ForskPaint.Paper;
             MinimumSize = new Size(300, 460);
 
-            _bridge = new Label
-            {
-                Text = "Type mcpstart",
-                TextColor = ForskPaint.Quiet,
-                TextAlignment = TextAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                Font = ForskType.Caption,
-                Wrap = WrapMode.None,
-                BackgroundColor = ForskPaint.Paper
-            };
-            _dot = new ForskDot();
-            _target = new Label
-            {
-                Text = "Click something in the model.",
-                TextColor = ForskPaint.Quiet,
-                TextAlignment = TextAlignment.Left,
-                Wrap = WrapMode.Word,
-                Font = ForskType.Body,
-                BackgroundColor = ForskPaint.Paper
-            };
+            _header = new ForskHeader();
             _hint = new ForskMessage("hint", "Build bakes the plan. Edit changes the selection. Sheets draws the S-* views.");
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
             _modes = new ForskModes();
@@ -106,27 +85,6 @@ namespace RhinoMCPPlugin.Forsk
                 }
             };
 
-            var brand = new Label
-            {
-                Text = "Forsk",
-                Font = ForskType.Mark,
-                TextColor = ForskPaint.Ink,
-                TextAlignment = TextAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                Wrap = WrapMode.None,
-                BackgroundColor = ForskPaint.Paper
-            };
-            var status = new StackLayout
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 6,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                AlignLabels = false,
-                Items = { _dot, _bridge }
-            };
-            var header = new TableLayout { BackgroundColor = ForskPaint.Paper };
-            header.Rows.Add(new TableRow(new TableCell(brand, true), new TableCell(status, false)));
-
             var modeBlock = new StackLayout
             {
                 Spacing = 6,
@@ -140,7 +98,7 @@ namespace RhinoMCPPlugin.Forsk
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper,
-                Items = { header, _target, _chip, modeBlock }
+                Items = { _header, _chip, modeBlock }
             };
 
             _thread = new StackLayout
@@ -254,9 +212,7 @@ namespace RhinoMCPPlugin.Forsk
         void RefreshChrome()
         {
             bool connected = RhinoMCPServerController.IsServerRunning();
-            _bridge.Text = connected ? "Connected" : "Type mcpstart";
-            _dot.On = connected;
-            _dot.Invalidate();
+            _header.SetStatus(connected, connected ? "Connected" : "Type mcpstart");
             _chipState = ForskBake.Detect();
             _chip.Visible = _chipState.Visible;
             _chip.Text = _chipState.Label;
@@ -265,8 +221,7 @@ namespace RhinoMCPPlugin.Forsk
 
         void RefreshTarget()
         {
-            _target.Text = ForskTarget.Read();
-            _target.TextColor = _target.Text.StartsWith("Target:") ? ForskPaint.Ink : ForskPaint.Quiet;
+            _header.SetTarget(ForskTarget.Read());
         }
 
         void Send()
@@ -384,7 +339,7 @@ namespace RhinoMCPPlugin.Forsk
         void RelayoutCore()
         {
             int inner = Math.Max(200, Width - 32);
-            _target.Width = inner;
+            _header.Reflow(inner);
             _hint.Reflow(inner);
             _chip.Width = inner;
             _modes.Width = inner;

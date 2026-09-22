@@ -378,24 +378,76 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
-    sealed class ForskDot : Drawable
+    /// <summary>
+    /// Brand, connection, and selection line. Drawn, so they use Geist.
+    /// An Eto Label on Mac is an NSTextField and ignores a face loaded from a file.
+    /// </summary>
+    sealed class ForskHeader : Drawable
     {
-        public bool On;
+        string _status = "Type mcpstart";
+        string _target = "Click something in the model.";
+        bool _live;
+        readonly SolidBrush _quiet = new SolidBrush(ForskPaint.Quiet);
+        readonly SolidBrush _ink = new SolidBrush(ForskPaint.Ink);
+        FormattedText _targetText;
 
-        public ForskDot()
+        public ForskHeader()
         {
-            Size = new Size(14, 14);
             BackgroundColor = ForskPaint.Paper;
+            Height = 48;
+        }
+
+        public void SetStatus(bool live, string status)
+        {
+            _live = live;
+            _status = status ?? "";
+            Invalidate();
+        }
+
+        public void SetTarget(string target)
+        {
+            _target = string.IsNullOrEmpty(target) ? "Click something in the model." : target;
+            Reflow(Width > 40 ? Width : 260);
+        }
+
+        public void Reflow(float width)
+        {
+            if (width < 40) width = 40;
+            _targetText = new FormattedText
+            {
+                Font = ForskType.Body,
+                Text = _target,
+                ForegroundBrush = _target.StartsWith("Target:") ? _ink : _quiet,
+                Wrap = FormattedTextWrapMode.Word,
+                Alignment = FormattedTextAlignment.Left,
+                MaximumWidth = width
+            };
+            var size = _targetText.Measure();
+            Width = (int)Math.Ceiling(width);
+            Height = (int)Math.Ceiling(22 + 8 + Math.Max(16, size.Height));
+            Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.AntiAlias = true;
-            float d = 6;
-            float x = (Width - d) / 2f;
-            float y = (Height - d) / 2f;
-            g.FillEllipse(On ? ForskPaint.Live : ForskPaint.IdleDot, x, y, d, d);
+            g.PixelOffsetMode = PixelOffsetMode.None;
+            if (Width < 8 || _targetText == null) return;
+
+            var brand = g.MeasureString(ForskType.Mark, "Forsk");
+            var status = g.MeasureString(ForskType.Caption, _status);
+            float row = Math.Max(brand.Height, status.Height);
+            g.DrawText(ForskType.Mark, ForskPaint.Ink, 0, (row - brand.Height) / 2f, "Forsk");
+
+            const float dot = 6f;
+            const float gap = 6f;
+            float statusW = dot + gap + status.Width;
+            float sx = Math.Max(brand.Width + 12f, Width - statusW);
+            float sy = (row - status.Height) / 2f;
+            g.FillEllipse(_live ? ForskPaint.Live : ForskPaint.IdleDot, sx, sy + (status.Height - dot) / 2f, dot, dot);
+            g.DrawText(ForskType.Caption, ForskPaint.Quiet, sx + dot + gap, sy, _status);
+            g.DrawText(_targetText, new PointF(0, row + 8f));
         }
     }
 

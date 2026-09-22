@@ -18,6 +18,7 @@ namespace RhinoMCPPlugin.Forsk
         static bool _registered;
         static object _font;
         static string _logged;
+        static string _lookup = "not looked up";
 
         public static void Style(TextBox box)
         {
@@ -28,24 +29,30 @@ namespace RhinoMCPPlugin.Forsk
                 Set(view, "Bezeled", false);
                 Set(view, "Bordered", false);
                 SetEnum(view, "FocusRingType", "None");
+                // A small control size shrinks the face after Font is set. Regular first.
+                SetEnum(view, "ControlSize", "Regular");
                 var font = InputFont(view.GetType().Assembly);
+                var cell = Get(view, "Cell");
+                if (cell != null)
+                {
+                    SetEnum(cell, "ControlSize", "Regular");
+                    SetEnum(cell, "FocusRingType", "None");
+                }
                 if (font != null)
                 {
                     Set(view, "Font", font);
-                    var cell = Get(view, "Cell");
-                    if (cell != null)
-                    {
-                        Set(cell, "Font", font);
-                        SetEnum(cell, "FocusRingType", "None");
-                    }
+                    if (cell != null) Set(cell, "Font", font);
                 }
                 var editor = Get(view, "CurrentEditor");
                 if (editor != null)
                 {
                     SetEnum(editor, "FocusRingType", "None");
+                    SetEnum(editor, "ControlSize", "Regular");
                     if (font != null) Set(editor, "Font", font);
                 }
-                Log(font == null ? "styled without a native font" : "styled " + Describe(font));
+                Log(font == null
+                    ? "styled without a native font (" + _lookup + ")"
+                    : "styled " + Describe(font) + " via " + _lookup);
             }
             catch (Exception e)
             {
@@ -57,11 +64,53 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (_font != null) return _font;
             RegisterGeist();
-            var nsFont = mono.GetType("MonoMac.AppKit.NSFont") ?? mono.GetType("AppKit.NSFont");
+            var nsFont = FindNsFont(mono);
             if (nsFont == null) return null;
             _font = CallFont(nsFont, "FromFontName", "Geist-Regular", 16)
                 ?? CallFont(nsFont, "SystemFontOfSize", null, 16);
             return _font;
+        }
+
+        static Type FindNsFont(Assembly preferred)
+        {
+            var direct = TypeIn(preferred, "AppKit.NSFont") ?? TypeIn(preferred, "MonoMac.AppKit.NSFont");
+            if (direct != null)
+            {
+                _lookup = direct.FullName + " in " + preferred.GetName().Name;
+                return direct;
+            }
+            Assembly[] loaded;
+            try
+            {
+                loaded = AppDomain.CurrentDomain.GetAssemblies();
+            }
+            catch (Exception e)
+            {
+                _lookup = "assembly list failed: " + e.Message;
+                return null;
+            }
+            foreach (var asm in loaded)
+            {
+                var found = TypeIn(asm, "AppKit.NSFont") ?? TypeIn(asm, "MonoMac.AppKit.NSFont");
+                if (found == null) continue;
+                _lookup = found.FullName + " in " + asm.GetName().Name;
+                return found;
+            }
+            _lookup = "NSFont missing in " + loaded.Length + " assemblies";
+            return null;
+        }
+
+        static Type TypeIn(Assembly asm, string name)
+        {
+            if (asm == null) return null;
+            try
+            {
+                return asm.GetType(name, false);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         static object CallFont(Type nsFont, string name, string family, double size)
@@ -74,9 +123,17 @@ namespace RhinoMCPPlugin.Forsk
                 try
                 {
                     if (family == null && args.Length == 1)
-                        return method.Invoke(null, new[] { Size(args[0].ParameterType, size) });
+                    {
+                        var point = Size(args[0].ParameterType, size);
+                        if (point == null) continue;
+                        return method.Invoke(null, new[] { point });
+                    }
                     if (family != null && args.Length == 2 && args[0].ParameterType == typeof(string))
-                        return method.Invoke(null, new[] { (object)family, Size(args[1].ParameterType, size) });
+                    {
+                        var point = Size(args[1].ParameterType, size);
+                        if (point == null) continue;
+                        return method.Invoke(null, new[] { (object)family, point });
+                    }
                 }
                 catch
                 {
@@ -91,7 +148,24 @@ namespace RhinoMCPPlugin.Forsk
             if (type == typeof(float)) return (float)size;
             if (type == typeof(double)) return size;
             if (type == typeof(int)) return (int)size;
-            return Convert.ChangeType(size, type);
+            // Xamarin.Mac nfloat is a struct with a float or double constructor.
+            var ctor = type.GetConstructor(new[] { typeof(float) })
+                ?? type.GetConstructor(new[] { typeof(double) });
+            if (ctor != null)
+            {
+                var arg = ctor.GetParameters()[0].ParameterType == typeof(float)
+                    ? (object)(float)size
+                    : size;
+                return ctor.Invoke(new[] { arg });
+            }
+            try
+            {
+                return Convert.ChangeType(size, type);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         static void RegisterGeist()
