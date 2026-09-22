@@ -200,7 +200,6 @@ namespace RhinoMCPPlugin.Forsk
             _mode = mode;
             _composer.ModePick.Mode = mode;
             _composer.ModePick.Invalidate();
-            _composer.SetPlaceholder(mode);
         }
 
         void RefreshChrome()

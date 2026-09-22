@@ -517,8 +517,6 @@ namespace RhinoMCPPlugin.Forsk
         const int Gap = 8;
         const int Bottom = 10;
         readonly ForskFill _card;
-        readonly Drawable _hint;
-        string _placeholder = "Build the plan…";
         bool _placing;
 
         public TextArea Input { get; private set; }
@@ -542,38 +540,19 @@ namespace RhinoMCPPlugin.Forsk
                 TextColor = ForskPaint.Ink,
                 Font = SystemFonts.Default(14)
             };
-            _hint = new Drawable { BackgroundColor = Colors.White };
-            _hint.Paint += (s, e) =>
-            {
-                if (string.IsNullOrEmpty(_placeholder)) return;
-                e.Graphics.DrawText(ForskType.Input, ForskPaint.Quiet, 0, 0, _placeholder);
-            };
-            _hint.MouseDown += (s, e) => Input.Focus();
             Send = new ForskIconButton();
             ModePick = new ForskModePick();
             Add(_card, 0, 0);
             Add(Input, TextX, TextY);
-            Add(_hint, TextX, TextY);
             Add(ModePick, 10, 0);
             Add(Send, 0, 0);
             Input.TextChanged += (s, e) =>
             {
                 Send.Armed = (Input.Text ?? "").Trim().Length > 0;
-                _hint.Visible = string.IsNullOrEmpty(Input.Text);
                 Place();
             };
             SizeChanged += (s, e) => Place();
             Place();
-        }
-
-        public void SetPlaceholder(ForskMode mode)
-        {
-            _placeholder = mode == ForskMode.Edit
-                ? "Edit the selection…"
-                : mode == ForskMode.Sheets
-                    ? "Draw the sheets…"
-                    : "Build the plan…";
-            _hint.Invalidate();
         }
 
         public void Place()
@@ -590,8 +569,6 @@ namespace RhinoMCPPlugin.Forsk
                 _card.Size = new Size(w, h);
                 Input.Size = new Size(textW, textH);
                 Move(Input, TextX, TextY);
-                _hint.Size = new Size(textW, LinePx());
-                Move(_hint, TextX + 4, TextY + 1);
                 int rowY = h - Bottom - Button;
                 Send.Size = new Size(Button, Button);
                 int sendX = w - 10 - Button;
