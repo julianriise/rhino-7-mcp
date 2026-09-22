@@ -6,11 +6,13 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using Eto.Forms;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
+using Rhino.UI;
 using RhinoMCPPlugin.Functions;
 using rhinomcp.Serializers;
 
@@ -74,7 +76,11 @@ namespace RhinoMCPPlugin.Forsk
             "get_objects",
             "sheet_pack",
             "make2d_view",
-            "clear_drawings"
+            "clear_drawings",
+            "set_project_meta",
+            "layout_pack",
+            "export_pdf",
+            "clear_layouts"
         };
 
         public static JArray ToolsFor(ForskMode mode)
@@ -406,6 +412,50 @@ namespace RhinoMCPPlugin.Forsk
                             ["items"] = ViewEnum("A view to clear."),
                             ["description"] = "Omit to clear every drawing."
                         }
+                    }),
+                Fn("set_project_meta",
+                    "Store project, client, address, date, and scale label for the Layout title block. Omitted keys stay. An empty string clears that key. Call when the user states project, client, or address.",
+                    new JObject
+                    {
+                        ["project"] = Str("Project name."),
+                        ["client"] = Str("Client name."),
+                        ["address"] = Str("Site address."),
+                        ["date"] = Str("Date yyyy-MM-dd. Unset reads as today."),
+                        ["scale_label"] = Str("Title scale text. Unset reads as 1:100.")
+                    }),
+                Fn("layout_pack",
+                    "A3 Layout pages of the clay. One Detail per view and a title block bottom-right. Not Make2D and not a PDF. Requires walls. Default views are plan, north, east, south, and west.",
+                    new JObject
+                    {
+                        ["paper"] = Str("A3 only. Default A3."),
+                        ["views"] = new JObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = ViewEnum("A view to lay out."),
+                            ["description"] = "Omit for plan and four elevations."
+                        },
+                        ["scale"] = Num("Requested scale denominator. 100 means 1:100."),
+                        ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
+                        ["include_existing"] = Bool("Show X-EXIST in the details. Default true.")
+                    }),
+                Fn("export_pdf",
+                    "Write Forsk Layout pages to a PDF. In this panel, omit path. A save dialog supplies the absolute .pdf path. Do not invent a path and do not ask the user to type one. Call layout_pack first.",
+                    new JObject
+                    {
+                        ["path"] = Str("Omit in the panel. The save dialog sets an absolute .pdf path."),
+                        ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page.")
+                    }),
+                Fn("clear_layouts",
+                    "Delete Forsk Layout pages and their title blocks. Does not delete clay, X-EXIST, or S-* drawings. clear_generated also leaves layouts.",
+                    new JObject
+                    {
+                        ["views"] = new JObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = ViewEnum("A view to clear."),
+                            ["description"] = "Omit to clear every Forsk layout."
+                        },
+                        ["dry_run"] = Bool("List matches without deleting. Default false.")
                     })
             };
 
@@ -443,7 +493,7 @@ Roof or openings before walls: Walls first. Call walls_from_layer before roof_fl
 
 Delete this door or window is delete_opening. Add is add_opening. Move millimetres along the wall is move_opening delta_mm.
 
-Sheets are model-space Make2D curves, not Layout pages and not PDFs. Make sheets is sheet_pack. One view is make2d_view. Clear sheets is clear_drawings, never clear_generated.
+Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack makes the pages. clear_layouts removes Forsk layouts only. Make2D on S-* is optional: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
 Do not call Grasshopper tools or execute code. Reply in one or two sentences. The panel prints tool receipts.";
 
@@ -511,8 +561,11 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             }
             if (mode == ForskMode.Sheets)
             {
-                return "Mode: Sheets. sheet_pack, make2d_view, clear_drawings. "
-                    + "Model-space curves, not a PDF. Clear sheets with clear_drawings, never clear_generated.";
+                return "Mode: Sheets. Delivery is Layout pages plus a PDF. "
+                    + "Print PDF opens a save dialog. Do not invent a file path. "
+                    + "set_project_meta, layout_pack, export_pdf, clear_layouts. "
+                    + "Make2D stays available: sheet_pack, make2d_view, clear_drawings. "
+                    + "Clear layouts with clear_layouts. Clear drawings with clear_drawings. Never clear_generated.";
             }
             return "Mode: Build. Bake, heights, tilbygg, clear_generated. "
                 + "Order: floor, walls, roof, openings, rooms. "
@@ -523,7 +576,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
     public static class ForskKeys
     {
         public const string Missing =
-            "Set FORSK_GROK_API_KEY to chat. Export it before launching Rhino, or put FORSK_GROK_API_KEY=… in ~/.forsk/grok.env. Generate 3D still runs without a key.";
+            "Set FORSK_GROK_API_KEY to chat. Export it before launching Rhino, or put FORSK_GROK_API_KEY=… in ~/.forsk/grok.env. Generate 3D and Print PDF still run without a key.";
 
         public static string Load()
         {
@@ -660,18 +713,36 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
 
         static string PanelHeader(ForskMode mode)
         {
-            return "You are answering inside the Forsk panel. Active mode: " + ForskTools.ModeName(mode) + ". "
+            var text = "You are answering inside the Forsk panel. Active mode: " + ForskTools.ModeName(mode) + ". "
                 + "Call only the tools offered this turn. The user already sees a one-line receipt per tool; reply in one or two sentences, not raw JSON. "
                 + "Do not call capture_viewport unless the user asks to see the view. "
                 + "If they ask for a job that belongs on another chip, tell them to switch Build, Edit, or Sheets.";
+            if (mode == ForskMode.Sheets)
+            {
+                text += " Sheets prefers Layout pages and a PDF. "
+                    + "set_project_meta, layout_pack, export_pdf, and clear_layouts are in this tool set, with sheet_pack, make2d_view, and clear_drawings. "
+                    + "When the user states a project, client, or address, call set_project_meta. Clear layouts is clear_layouts. "
+                    + "For a PDF, call layout_pack if the pages are not already there, then export_pdf with path omitted. "
+                    + "The panel opens a save dialog. Do not invent a path and do not ask the user to type one.";
+            }
+            return text;
         }
 
         static JObject CallOnUi(string name, JObject args, ForskMode mode)
         {
+            var callArgs = args;
+            if (name == "export_pdf")
+            {
+                var path = ForskPrint.PickPathFromBackground();
+                if (string.IsNullOrEmpty(path))
+                    return ForskTools.Fail("Print cancelled.");
+                callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
+                callArgs["path"] = path;
+            }
             JObject envelope = null;
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                envelope = ForskTools.Execute(name, args, mode);
+                envelope = ForskTools.Execute(name, callArgs, mode);
             }));
             return envelope ?? ForskTools.Fail("No result");
         }
@@ -982,6 +1053,300 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             public double WallHeight = 3000;
             public double FloorThickness = 400;
             public double RoofThickness = 200;
+        }
+    }
+
+    /// <summary>
+    /// Sheets print. Same path for the Print PDF button and for chat
+    /// print / make PDF / skriv ut. The save dialog picks the path.
+    /// </summary>
+    public static class ForskPrint
+    {
+        const string MetaSection = "forsk";
+
+        static readonly string[] MetaKeys =
+        {
+            "project", "client", "address", "date", "scale_label"
+        };
+
+        public static bool IsRequest(string text)
+        {
+            var t = Normalize(text);
+            if (t.Length == 0 || t.Length > 160) return false;
+            if (t.Contains("clear")) return false;
+            if (t.Contains("project is") || t.Contains("client") || t.Contains("address")) return false;
+            if (t.Contains("make sheet") || t.Contains("tegning") || t.Contains("drawing")) return false;
+            if (t.Contains("make2d") || t.Contains("sheet_pack")) return false;
+
+            if (t == "pdf" || t == "print" || t == "print pdf" || t == "skriv ut") return true;
+            if (HasWord(t, "print")) return true;
+            if (t.Contains("skriv ut")) return true;
+            if (t.Contains("make pdf") || t.Contains("make a pdf") || t.Contains("make the pdf")) return true;
+            return false;
+        }
+
+        public static string Run()
+        {
+            var units = UnitsProblem();
+            if (units != null)
+                return "Print PDF · error · " + units;
+
+            var meta = KnownMeta();
+            if (meta != null)
+            {
+                var stored = Call("set_project_meta", meta);
+                if (!Ok(stored)) return FailLine(stored);
+            }
+
+            var pack = Call("layout_pack", new JObject());
+            if (!Ok(pack)) return FailLine(pack);
+
+            var path = PickPathFromBackground();
+            if (string.IsNullOrEmpty(path))
+                return "Print PDF · cancelled";
+
+            var exported = Call("export_pdf", new JObject { ["path"] = path });
+            if (!Ok(exported)) return FailLine(exported);
+
+            var result = exported["result"] as JObject;
+            var count = result?["count"]?.ToString();
+            var written = result?["path"]?.ToString();
+            if (string.IsNullOrWhiteSpace(written)) written = path;
+            if (string.IsNullOrWhiteSpace(count))
+                return "Print PDF · ok · " + written;
+            return "Print PDF · ok · " + count + " · " + written;
+        }
+
+        public static string PickPathFromBackground()
+        {
+            string path = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try { path = PickPath(); }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            return path;
+        }
+
+        public static string PickPath()
+        {
+            var dialog = new Eto.Forms.SaveFileDialog
+            {
+                Title = "Print PDF",
+                FileName = DefaultFileName(),
+                CheckFileExists = false
+            };
+            dialog.Filters.Add(new FileFilter("PDF", ".pdf"));
+            TrySetDesktop(dialog);
+            var parent = RhinoEtoApp.MainWindow;
+            if (dialog.ShowDialog(parent) != DialogResult.Ok)
+                return null;
+            return AbsolutePdf(dialog.FileName, dialog.Directory);
+        }
+
+        static JObject KnownMeta()
+        {
+            JObject meta = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                var doc = RhinoDoc.ActiveDoc;
+                if (doc == null) return;
+                var obj = new JObject();
+                var any = false;
+                foreach (var key in MetaKeys)
+                {
+                    var value = doc.Strings.GetValue(MetaSection, key);
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+                    obj[key] = value.Trim();
+                    any = true;
+                }
+                if (any) meta = obj;
+            }));
+            return meta;
+        }
+
+        static string DefaultFileName()
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            var project = doc == null ? "" : doc.Strings.GetValue(MetaSection, "project");
+            var stem = Sanitize(project);
+            if (stem.Length == 0) return "forsk-print.pdf";
+            return stem + ".pdf";
+        }
+
+        static string Sanitize(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            var invalid = Path.GetInvalidFileNameChars();
+            var sb = new StringBuilder();
+            foreach (var ch in name.Trim())
+            {
+                if (ch == '/' || ch == '\\' || Array.IndexOf(invalid, ch) >= 0)
+                    sb.Append('-');
+                else
+                    sb.Append(ch);
+            }
+            var text = sb.ToString().Trim().Trim('.');
+            if (text.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(0, text.Length - 4).Trim().Trim('.');
+            if (text.Length > 80) text = text.Substring(0, 80).Trim();
+            return text;
+        }
+
+        static void TrySetDesktop(Eto.Forms.SaveFileDialog dialog)
+        {
+            try
+            {
+                var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                if (string.IsNullOrEmpty(desktop) || !Directory.Exists(desktop)) return;
+                var full = Path.GetFullPath(desktop);
+                if (!full.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                    full += Path.DirectorySeparatorChar;
+                dialog.Directory = new Uri("file://" + full);
+            }
+            catch
+            {
+                // The dialog still opens. The user picks the folder.
+            }
+        }
+
+        static string AbsolutePdf(string fileName, Uri directory)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return null;
+            var path = fileName.Trim();
+            if (!Path.IsPathRooted(path))
+            {
+                string dir = null;
+                try
+                {
+                    if (directory != null && directory.IsAbsoluteUri)
+                        dir = directory.LocalPath;
+                }
+                catch
+                {
+                    dir = null;
+                }
+                if (string.IsNullOrEmpty(dir))
+                    dir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                path = Path.Combine(dir ?? "", Path.GetFileName(path));
+            }
+            if (!path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                path += ".pdf";
+            try { return Path.GetFullPath(path); }
+            catch { return null; }
+        }
+
+        static string UnitsProblem()
+        {
+            string problem = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                var doc = RhinoDoc.ActiveDoc;
+                if (doc == null)
+                {
+                    problem = "No active document.";
+                    return;
+                }
+                var units = doc.ModelUnitSystem.ToString();
+                if (units.Equals("Millimeters", StringComparison.OrdinalIgnoreCase)) return;
+                if (units.Equals("Millimetres", StringComparison.OrdinalIgnoreCase)) return;
+                problem = "Document units must be millimetres. Switch the .3dm to millimetres.";
+            }));
+            return problem;
+        }
+
+        static JObject Call(string name, JObject args)
+        {
+            JObject envelope = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                envelope = ForskTools.ExecuteAllowed(name, args);
+            }));
+            return envelope ?? ForskTools.Fail("No result");
+        }
+
+        static bool Ok(JObject envelope)
+        {
+            if (envelope == null) return false;
+            if (!string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                return false;
+            var result = envelope["result"] as JObject;
+            if (result == null) return true;
+            var message = result["message"]?.ToString() ?? "";
+            if (message.IndexOf("Nothing to lay out", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("PDF write failed", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("No layouts to print", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("requires a file path", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("must be an absolute", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("Unknown paper", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("Unknown view", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            var count = result["count"];
+            int n;
+            if (count != null && count.Type != JTokenType.Null
+                && int.TryParse(count.ToString(), out n) && n == 0 && message.Length > 0)
+                return false;
+            return true;
+        }
+
+        static string FailLine(JObject envelope)
+        {
+            var message = envelope?["message"]?.ToString();
+            var result = envelope?["result"] as JObject;
+            if (string.IsNullOrWhiteSpace(message))
+                message = result?["message"]?.ToString();
+            if (string.IsNullOrWhiteSpace(message))
+                message = "Print failed.";
+            return "Print PDF · error · " + ForskTools.Clip(message);
+        }
+
+        static string Normalize(string text)
+        {
+            var raw = (text ?? "").Trim().ToLowerInvariant();
+            var sb = new StringBuilder();
+            var space = false;
+            foreach (var ch in raw)
+            {
+                if (char.IsWhiteSpace(ch))
+                {
+                    space = sb.Length > 0;
+                    continue;
+                }
+                if (ch == '.' || ch == '!' || ch == '?') continue;
+                if (space)
+                {
+                    sb.Append(' ');
+                    space = false;
+                }
+                sb.Append(ch);
+            }
+            return sb.ToString();
+        }
+
+        static bool HasWord(string text, string word)
+        {
+            var i = 0;
+            while (i < text.Length)
+            {
+                var at = text.IndexOf(word, i, StringComparison.Ordinal);
+                if (at < 0) return false;
+                var left = at == 0 || !char.IsLetterOrDigit(text[at - 1]);
+                var end = at + word.Length;
+                var right = end >= text.Length || !char.IsLetterOrDigit(text[end]);
+                if (left && right) return true;
+                i = at + word.Length;
+            }
+            return false;
         }
     }
 

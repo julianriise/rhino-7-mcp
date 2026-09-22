@@ -63,7 +63,11 @@ namespace RhinoMCPPlugin.Forsk
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
             _composer = new ForskComposer();
 
-            _chip.Click += (s, e) => Bake();
+            _chip.Click += (s, e) =>
+            {
+                if (_mode == ForskMode.Sheets) PrintPdf();
+                else Bake();
+            };
             _composer.ModePick.Picked += (s, e) => SetMode(_composer.ModePick.Mode);
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
@@ -220,6 +224,7 @@ namespace RhinoMCPPlugin.Forsk
             _mode = mode;
             _composer.ModePick.Mode = mode;
             _composer.ModePick.Invalidate();
+            RefreshChrome();
         }
 
         void RefreshChrome()
@@ -227,8 +232,16 @@ namespace RhinoMCPPlugin.Forsk
             bool connected = RhinoMCPServerController.IsServerRunning();
             _header.SetStatus(connected, connected ? "Connected" : "Type mcpstart");
             _chipState = ForskBake.Detect();
-            _chip.Visible = _chipState.Visible;
-            _chip.Text = _chipState.Label;
+            if (_mode == ForskMode.Sheets)
+            {
+                _chip.Visible = true;
+                _chip.Text = "Print PDF";
+            }
+            else
+            {
+                _chip.Visible = _chipState.Visible;
+                _chip.Text = _chipState.Label;
+            }
             RefreshTarget();
         }
 
@@ -247,6 +260,11 @@ namespace RhinoMCPPlugin.Forsk
             _composer.Send.EnabledClick = false;
             AddLine("user", text);
             var mode = _mode;
+            if (mode == ForskMode.Sheets && ForskPrint.IsRequest(text))
+            {
+                QueuePrint(text);
+                return;
+            }
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
@@ -270,6 +288,47 @@ namespace RhinoMCPPlugin.Forsk
                         RefreshChrome();
                     });
                 }
+            });
+        }
+
+        void PrintPdf()
+        {
+            if (_busy || _mode != ForskMode.Sheets) return;
+            _busy = true;
+            _composer.Send.EnabledClick = false;
+            _chip.EnabledClick = false;
+            AddLine("user", "Print PDF");
+            QueuePrint("Print PDF");
+        }
+
+        void QueuePrint(string historyUser)
+        {
+            _chip.EnabledClick = false;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string line;
+                try
+                {
+                    line = ForskPrint.Run();
+                }
+                catch (Exception e)
+                {
+                    line = "Print PDF · error · " + ForskTools.Clip(e.Message);
+                }
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    AddLine("receipt", line);
+                    _history.Add(new JObject { ["role"] = "user", ["content"] = historyUser });
+                    _history.Add(new JObject
+                    {
+                        ["role"] = "assistant",
+                        ["content"] = line
+                    });
+                    _busy = false;
+                    _composer.Send.EnabledClick = true;
+                    _chip.EnabledClick = true;
+                    RefreshChrome();
+                });
             });
         }
 
