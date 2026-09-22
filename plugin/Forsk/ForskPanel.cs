@@ -91,6 +91,12 @@ namespace RhinoMCPPlugin.Forsk
             _chip.Click += (s, e) => Bake();
             _modes.Picked += (s, e) => SetMode(_modes.Mode);
             _composer.Send.Click += (s, e) => Send();
+            _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
+            _composer.Input.GotFocus += (s, e) =>
+            {
+                ForskField.Style(_composer.Input);
+                Application.Instance.AsyncInvoke(() => ForskField.Style(_composer.Input));
+            };
             _composer.Input.KeyDown += (s, e) =>
             {
                 if (e.Key == Keys.Enter && !e.Shift)
@@ -182,6 +188,8 @@ namespace RhinoMCPPlugin.Forsk
         public void PanelShown(uint documentSerialNumber, ShowPanelReason reason)
         {
             Hook();
+            ForskField.Style(_composer.Input);
+            Application.Instance.AsyncInvoke(() => ForskField.Style(_composer.Input));
             RefreshChrome();
             if (!_warnedPrompt)
             {

@@ -121,7 +121,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ui = new Font(med, 12);
                 Button = new Font(med, 13);
                 Mark = new Font(med, 15);
-                Input = new Font(reg, 16);
+                Input = SystemFonts.Default(16);
                 IsGeist = true;
             }
             catch
@@ -495,7 +495,7 @@ namespace RhinoMCPPlugin.Forsk
 
         public ForskComposer()
         {
-            Height = 48;
+            Height = 52;
             BackgroundColor = ForskPaint.Paper;
             _card = new ForskFill { Radius = 12 };
             Input = new TextBox
@@ -527,14 +527,15 @@ namespace RhinoMCPPlugin.Forsk
         public void Place()
         {
             int w = Math.Max(Width, 160);
-            const int h = 48;
+            const int h = 52;
             if (Height != h) Height = h;
             _card.Size = new Size(w, h);
             Send.Size = new Size(28, 28);
             int sendX = w - 10 - 28;
             Move(Send, sendX, (h - 28) / 2);
-            Input.Size = new Size(Math.Max(40, sendX - 18), 32);
-            Move(Input, 14, (h - 32) / 2);
+            const int fieldH = 36;
+            Input.Size = new Size(Math.Max(40, sendX - 18), fieldH);
+            Move(Input, 16, (h - fieldH) / 2);
         }
     }
 }
