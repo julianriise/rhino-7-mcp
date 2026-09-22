@@ -273,77 +273,79 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
-    sealed class ForskModes : Drawable
+    /// <summary>
+    /// Closed state is drawn. The open list is the platform menu.
+    /// </summary>
+    sealed class ForskModePick : Drawable
     {
-        static readonly string[] Labels = { "Build", "Edit", "Sheets" };
-        int _hover = -1;
+        bool _hover;
 
         public ForskMode Mode { get; set; }
         public event EventHandler<EventArgs> Picked;
 
-        public ForskModes()
+        public static string Label(ForskMode mode)
         {
-            Height = 34;
-            BackgroundColor = ForskPaint.Paper;
+            if (mode == ForskMode.Edit) return "Edit";
+            if (mode == ForskMode.Sheets) return "Sheets";
+            return "Build";
+        }
+
+        public ForskModePick()
+        {
+            var wide = ForskType.Ui.MeasureString("Sheets").Width;
+            Size = new Size((int)Math.Ceiling(wide + 22), 28);
+            BackgroundColor = Colors.White;
             Cursor = Cursors.Pointer;
-            MouseLeave += (s, e) => { _hover = -1; Invalidate(); };
-            MouseMove += (s, e) =>
-            {
-                int next = Hit(e.Location.X);
-                if (next == _hover) return;
-                _hover = next;
-                Invalidate();
-            };
+            MouseEnter += (s, e) => { _hover = true; Invalidate(); };
+            MouseLeave += (s, e) => { _hover = false; Invalidate(); };
             MouseDown += (s, e) =>
             {
                 if (e.Buttons != MouseButtons.Primary) return;
-                int index = Hit(e.Location.X);
-                if (index < 0) return;
-                Mode = (ForskMode)index;
-                Invalidate();
-                var picked = Picked;
-                if (picked != null) picked(this, EventArgs.Empty);
+                Open();
             };
         }
 
-        int Hit(float x)
+        void Open()
         {
-            if (Width < 3) return -1;
-            int index = (int)(x / (Width / 3f));
-            if (index < 0) return 0;
-            if (index > 2) return 2;
-            return index;
+            var menu = new ContextMenu();
+            menu.Items.Add(Item(ForskMode.Build));
+            menu.Items.Add(Item(ForskMode.Edit));
+            menu.Items.Add(Item(ForskMode.Sheets));
+            menu.Show(this);
+        }
+
+        ButtonMenuItem Item(ForskMode mode)
+        {
+            var item = new ButtonMenuItem((s, e) => Choose(mode));
+            item.Text = Label(mode);
+            return item;
+        }
+
+        void Choose(ForskMode mode)
+        {
+            Mode = mode;
+            Invalidate();
+            var picked = Picked;
+            if (picked != null) picked(this, EventArgs.Empty);
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            float w = Width;
-            float h = Height;
-            if (w < 3 || h < 3) return;
-            ForskPaint.Rect(g, ForskPaint.Track, 0, 0, w, h, false);
-
-            int selected = (int)Mode;
-            float seg = w / 3f;
-            ForskPaint.Rect(g, Colors.White, seg * selected, 0, seg, h, false);
+            if (_hover)
+                ForskPaint.Rect(g, ForskPaint.Track, 0, 0, Width, Height, false);
+            g.AntiAlias = true;
+            var label = Label(Mode);
+            var size = g.MeasureString(ForskType.Ui, label);
+            float y = (Height - size.Height) / 2f;
+            g.DrawText(ForskType.Ui, _hover ? ForskPaint.Ink : ForskPaint.Quiet, 2, y, label);
+            float cx = 4 + size.Width + 4;
+            float cy = Height / 2f;
             g.AntiAlias = false;
-            using (var pen = new Pen(ForskPaint.Line, 1))
+            using (var pen = new Pen(ForskPaint.Quiet, 1))
             {
-                g.DrawRectangle(pen, 0, 0, w - 1, h - 1);
-                g.DrawLine(pen, seg, 0, seg, h - 1);
-                g.DrawLine(pen, seg * 2, 0, seg * 2, h - 1);
-            }
-
-            for (int i = 0; i < 3; i++)
-            {
-                bool on = i == selected;
-                g.AntiAlias = true;
-                var font = on ? ForskType.Ui : ForskType.Caption;
-                var color = on || i == _hover ? ForskPaint.Ink : ForskPaint.Quiet;
-                var size = g.MeasureString(font, Labels[i]);
-                float tx = seg * i + (seg - size.Width) / 2f;
-                float ty = (h - size.Height) / 2f;
-                g.DrawText(font, color, tx, ty, Labels[i]);
+                g.DrawLine(pen, cx, cy - 1, cx + 3, cy + 2);
+                g.DrawLine(pen, cx + 3, cy + 2, cx + 6, cy - 1);
             }
         }
     }
@@ -521,6 +523,7 @@ namespace RhinoMCPPlugin.Forsk
 
         public TextArea Input { get; private set; }
         public ForskIconButton Send { get; private set; }
+        public ForskModePick ModePick { get; private set; }
 
         public ForskComposer()
         {
@@ -547,9 +550,11 @@ namespace RhinoMCPPlugin.Forsk
             };
             _hint.MouseDown += (s, e) => Input.Focus();
             Send = new ForskIconButton();
+            ModePick = new ForskModePick();
             Add(_card, 0, 0);
             Add(Input, TextX, TextY);
             Add(_hint, TextX, TextY);
+            Add(ModePick, 10, 0);
             Add(Send, 0, 0);
             Input.TextChanged += (s, e) =>
             {
@@ -587,8 +592,10 @@ namespace RhinoMCPPlugin.Forsk
                 Move(Input, TextX, TextY);
                 _hint.Size = new Size(textW, LinePx());
                 Move(_hint, TextX + 4, TextY + 1);
+                int rowY = h - Bottom - Button;
+                Move(ModePick, 10, rowY);
                 Send.Size = new Size(Button, Button);
-                Move(Send, w - 10 - Button, h - Bottom - Button);
+                Move(Send, w - 10 - Button, rowY);
             }
             finally
             {

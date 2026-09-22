@@ -14,9 +14,7 @@ namespace RhinoMCPPlugin.Forsk
     public sealed class ForskPanel : Panel, IPanel
     {
         ForskHeader _header;
-        ForskMessage _hint;
         ForskButton _chip;
-        ForskModes _modes;
         ForskComposer _composer;
         Scrollable _scroll;
         StackLayout _thread;
@@ -62,13 +60,11 @@ namespace RhinoMCPPlugin.Forsk
             MinimumSize = new Size(300, 460);
 
             _header = new ForskHeader();
-            _hint = new ForskMessage("hint", "Build bakes the plan. Edit changes the selection. Sheets draws the S-* views.");
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
-            _modes = new ForskModes();
             _composer = new ForskComposer();
 
             _chip.Click += (s, e) => Bake();
-            _modes.Picked += (s, e) => SetMode(_modes.Mode);
+            _composer.ModePick.Picked += (s, e) => SetMode(_composer.ModePick.Mode);
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
             _composer.Input.GotFocus += (s, e) =>
@@ -90,20 +86,13 @@ namespace RhinoMCPPlugin.Forsk
                 });
             };
 
-            var modeBlock = new StackLayout
-            {
-                Spacing = 6,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                AlignLabels = false,
-                Items = { _modes, _hint }
-            };
             var chrome = new StackLayout
             {
                 Spacing = 12,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper,
-                Items = { _header, _chip, modeBlock }
+                Items = { _header, _chip }
             };
 
             _thread = new StackLayout
@@ -209,8 +198,8 @@ namespace RhinoMCPPlugin.Forsk
         void SetMode(ForskMode mode)
         {
             _mode = mode;
-            _modes.Mode = mode;
-            _modes.Invalidate();
+            _composer.ModePick.Mode = mode;
+            _composer.ModePick.Invalidate();
             _composer.SetPlaceholder(mode);
         }
 
@@ -345,9 +334,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             int inner = Math.Max(200, Width - 32);
             _header.Reflow(inner);
-            _hint.Reflow(inner);
             _chip.Width = inner;
-            _modes.Width = inner;
             _composer.Width = inner;
             _composer.Place();
             int threadW = _scroll.Width > 100 ? _scroll.Width - 20 : inner;
