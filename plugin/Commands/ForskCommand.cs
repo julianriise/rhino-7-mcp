@@ -12,6 +12,7 @@ namespace RhinoMCPPlugin.Commands
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             Panels.OpenPanel(typeof(ForskPanel));
+            ForskPanel.FocusAfterCommand(doc);
             return Result.Success;
         }
     }
@@ -23,6 +24,7 @@ namespace RhinoMCPPlugin.Commands
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             Panels.OpenPanel(typeof(ForskPanel));
+            ForskPanel.FocusAfterCommand(doc);
             return Result.Success;
         }
     }

@@ -137,6 +137,26 @@ namespace RhinoMCPPlugin.Forsk
             _timer.Start();
         }
 
+        public static void FocusAfterCommand(RhinoDoc doc)
+        {
+            // The command line takes focus back when the command returns.
+            // Focus on the next turn, then once more so the caret wins.
+            Application.Instance.AsyncInvoke(() =>
+            {
+                FocusComposer(doc);
+                Application.Instance.AsyncInvoke(() => FocusComposer(doc));
+            });
+        }
+
+        static void FocusComposer(RhinoDoc doc)
+        {
+            var active = doc ?? RhinoDoc.ActiveDoc;
+            if (active == null) return;
+            var found = Panels.GetPanel(typeof(ForskPanel).GUID, active.RuntimeSerialNumber) as ForskPanel;
+            if (found == null) return;
+            found._composer.Input.Focus();
+        }
+
         public void PanelShown(uint documentSerialNumber, ShowPanelReason reason)
         {
             Hook();
