@@ -206,9 +206,27 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
+        // NSTextField.Cell hides NSControl.Cell. GetProperty(name) throws on that pair
+        // and the font was never applied. Walk each type on its own and keep the nearest one.
+        static PropertyInfo Prop(object target, string name)
+        {
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly;
+            for (var type = target.GetType(); type != null; type = type.BaseType)
+            {
+                PropertyInfo match = null;
+                foreach (var prop in type.GetProperties(flags))
+                {
+                    if (prop.Name != name || prop.GetIndexParameters().Length != 0) continue;
+                    if (match == null || (prop.CanWrite && !match.CanWrite)) match = prop;
+                }
+                if (match != null) return match;
+            }
+            return null;
+        }
+
         static void Set(object target, string name, object value)
         {
-            var prop = target.GetType().GetProperty(name);
+            var prop = Prop(target, name);
             if (prop == null || !prop.CanWrite || value == null) return;
             if (!prop.PropertyType.IsInstanceOfType(value) && !prop.PropertyType.IsAssignableFrom(value.GetType()))
                 return;
@@ -217,15 +235,15 @@ namespace RhinoMCPPlugin.Forsk
 
         static void SetEnum(object target, string name, string value)
         {
-            var prop = target.GetType().GetProperty(name);
+            var prop = Prop(target, name);
             if (prop == null || !prop.CanWrite || !prop.PropertyType.IsEnum) return;
             prop.SetValue(target, Enum.Parse(prop.PropertyType, value), null);
         }
 
         static object Get(object target, string name)
         {
-            var prop = target.GetType().GetProperty(name);
-            if (prop == null) return null;
+            var prop = Prop(target, name);
+            if (prop == null || !prop.CanRead) return null;
             return prop.GetValue(target, null);
         }
 
