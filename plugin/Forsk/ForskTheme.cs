@@ -18,27 +18,19 @@ namespace RhinoMCPPlugin.Forsk
         public static readonly Color IdleDot = Color.FromArgb(201, 196, 186);
         public static readonly Color Clay = Color.FromArgb(159, 45, 45);
 
-        public static GraphicsPath RoundRect(float x, float y, float w, float h, float r)
+        public static void Rect(Graphics g, Color fill, float x, float y, float w, float h, bool stroke)
         {
-            var path = new GraphicsPath();
-            r = Math.Max(0, Math.Min(r, Math.Min(w, h) / 2f));
-            if (w <= 0 || h <= 0) return path;
-            if (r < 0.5f)
-            {
-                path.AddRectangle(x, y, w, h);
-                return path;
-            }
-            float d = r * 2f;
-            path.AddArc(x, y, d, d, 180, 90);
-            path.AddArc(x + w - d, y, d, d, 270, 90);
-            path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
-            path.AddArc(x, y + h - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
+            if (w < 1 || h < 1) return;
+            g.AntiAlias = false;
+            g.FillRectangle(fill, x, y, w, h);
+            if (!stroke) return;
+            using (var pen = new Pen(Line, 1))
+                g.DrawRectangle(pen, x, y, w - 1, h - 1);
         }
 
         public static void Icon(Graphics g, ForskIcon icon, RectangleF box, Color color)
         {
+            g.AntiAlias = true;
             using (g.SaveTransformState())
             using (var path = new GraphicsPath())
             using (var pen = new Pen(color, 1.6f))
@@ -166,7 +158,6 @@ namespace RhinoMCPPlugin.Forsk
     {
         public Color Fill = Colors.White;
         public bool Stroke = true;
-        public float Radius = 12;
 
         public ForskFill()
         {
@@ -175,17 +166,8 @@ namespace RhinoMCPPlugin.Forsk
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = e.Graphics;
-            g.AntiAlias = true;
-            g.PixelOffsetMode = PixelOffsetMode.None;
             if (Width < 2 || Height < 2) return;
-            using (var path = ForskPaint.RoundRect(0.5f, 0.5f, Width - 1f, Height - 1f, Radius))
-            {
-                g.FillPath(Fill, path);
-                if (!Stroke) return;
-                using (var pen = new Pen(ForskPaint.Line, 1))
-                    g.DrawPath(pen, path);
-            }
+            ForskPaint.Rect(e.Graphics, Fill, 0, 0, Width, Height, Stroke);
         }
     }
 
@@ -227,15 +209,13 @@ namespace RhinoMCPPlugin.Forsk
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.AntiAlias = true;
-            g.PixelOffsetMode = PixelOffsetMode.None;
             float w = Width;
             float h = Height;
             if (w < 2 || h < 2) return;
             var fill = !_enabled ? ForskPaint.Track : _hover ? ForskPaint.InkHover : ForskPaint.Ink;
             var fg = !_enabled ? ForskPaint.Quiet : Colors.White;
-            using (var path = ForskPaint.RoundRect(0.5f, 0.5f, w - 1f, h - 1f, 8))
-                g.FillPath(fill, path);
+            ForskPaint.Rect(g, fill, 0, 0, w, h, false);
+            g.AntiAlias = true;
             var size = g.MeasureString(ForskType.Button, _text);
             g.DrawText(ForskType.Button, fg, (w - size.Width) / 2f, (h - size.Height) / 2f, _text);
         }
@@ -279,23 +259,15 @@ namespace RhinoMCPPlugin.Forsk
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.AntiAlias = true;
-            g.PixelOffsetMode = PixelOffsetMode.None;
             float w = Width;
             float h = Height;
             if (w < 2 || h < 2) return;
             bool hot = _enabled && _armed;
-            using (var path = ForskPaint.RoundRect(0.5f, 0.5f, w - 1f, h - 1f, 8))
-            {
-                if (hot)
-                    g.FillPath(_hover ? ForskPaint.InkHover : ForskPaint.Ink, path);
-                else
-                {
-                    g.FillPath(_hover ? ForskPaint.Track : Colors.White, path);
-                    using (var pen = new Pen(ForskPaint.Line, 1))
-                        g.DrawPath(pen, path);
-                }
-            }
+            var fill = hot
+                ? (_hover ? ForskPaint.InkHover : ForskPaint.Ink)
+                : (_hover ? ForskPaint.Track : Colors.White);
+            ForskPaint.Rect(g, fill, 0, 0, w, h, !hot);
+            g.AntiAlias = true;
             var ink = hot ? Colors.White : ForskPaint.Quiet;
             ForskPaint.Icon(g, ForskIcon.ArrowUp, new RectangleF((w - 14) / 2f, (h - 14) / 2f, 14, 14), ink);
         }
@@ -346,32 +318,30 @@ namespace RhinoMCPPlugin.Forsk
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.AntiAlias = true;
-            g.PixelOffsetMode = PixelOffsetMode.None;
             float w = Width;
             float h = Height;
             if (w < 3 || h < 3) return;
-            using (var track = ForskPaint.RoundRect(0.5f, 0.5f, w - 1f, h - 1f, 9))
-                g.FillPath(ForskPaint.Track, track);
+            ForskPaint.Rect(g, ForskPaint.Track, 0, 0, w, h, false);
 
             int selected = (int)Mode;
-            float inset = 3;
-            float seg = (w - inset * 2) / 3f;
-            float x = inset + seg * selected;
-            using (var pill = ForskPaint.RoundRect(x, inset, seg, h - inset * 2, 7))
+            float seg = w / 3f;
+            ForskPaint.Rect(g, Colors.White, seg * selected, 0, seg, h, false);
+            g.AntiAlias = false;
+            using (var pen = new Pen(ForskPaint.Line, 1))
             {
-                g.FillPath(Colors.White, pill);
-                using (var pen = new Pen(ForskPaint.Line, 1))
-                    g.DrawPath(pen, pill);
+                g.DrawRectangle(pen, 0, 0, w - 1, h - 1);
+                g.DrawLine(pen, seg, 0, seg, h - 1);
+                g.DrawLine(pen, seg * 2, 0, seg * 2, h - 1);
             }
 
             for (int i = 0; i < 3; i++)
             {
                 bool on = i == selected;
+                g.AntiAlias = true;
                 var font = on ? ForskType.Ui : ForskType.Caption;
                 var color = on || i == _hover ? ForskPaint.Ink : ForskPaint.Quiet;
                 var size = g.MeasureString(font, Labels[i]);
-                float tx = inset + seg * i + (seg - size.Width) / 2f;
+                float tx = seg * i + (seg - size.Width) / 2f;
                 float ty = (h - size.Height) / 2f;
                 g.DrawText(font, color, tx, ty, Labels[i]);
             }
@@ -515,14 +485,8 @@ namespace RhinoMCPPlugin.Forsk
             g.AntiAlias = true;
             g.PixelOffsetMode = PixelOffsetMode.None;
             if (Role == "user" && Width > 2 && Height > 2)
-            {
-                using (var path = ForskPaint.RoundRect(0.5f, 0.5f, Width - 1f, Height - 1f, 12))
-                using (var pen = new Pen(ForskPaint.Line, 1))
-                {
-                    g.FillPath(Colors.White, path);
-                    g.DrawPath(pen, path);
-                }
-            }
+                ForskPaint.Rect(g, Colors.White, 0, 0, Width, Height, true);
+            g.AntiAlias = true;
             if (_text == null) return;
             if (Role == "receipt")
             {
@@ -561,7 +525,7 @@ namespace RhinoMCPPlugin.Forsk
         public ForskComposer()
         {
             BackgroundColor = ForskPaint.Paper;
-            _card = new ForskFill { Radius = 12 };
+            _card = new ForskFill();
             // The native face is applied later. A stream font assigned here
             // is not an NSFont, and the field falls back to a tiny size.
             Input = new TextArea

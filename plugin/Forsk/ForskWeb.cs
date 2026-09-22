@@ -206,7 +206,7 @@ p.note { margin: 8px 0 0; color: #78716C; font-size: 13px; line-height: 1.4; }
   margin-left: 48px;
   background: #fff;
   border: 1px solid #E4E0D8;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 10px 12px;
 }
 .reply { color: #78716C; font-size: 14px; }
@@ -220,7 +220,7 @@ form {
   height: 48px;
   background: #fff;
   border: 1px solid #E4E0D8;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 0 8px 0 16px;
 }
 input {
@@ -236,7 +236,7 @@ button {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: #1C1917;
   color: #fff;
   font: 16px Geist, -apple-system, sans-serif;
