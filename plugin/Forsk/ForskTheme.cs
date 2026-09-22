@@ -294,7 +294,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             var wide = ForskType.Ui.MeasureString("Sheets").Width;
             Size = new Size((int)Math.Ceiling(wide + 22), 28);
-            BackgroundColor = Colors.White;
+            BackgroundColor = Colors.Transparent;
             Cursor = Cursors.Pointer;
             MouseEnter += (s, e) => { _hover = true; Invalidate(); };
             MouseLeave += (s, e) => { _hover = false; Invalidate(); };
@@ -332,14 +332,14 @@ namespace RhinoMCPPlugin.Forsk
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            if (_hover)
-                ForskPaint.Rect(g, ForskPaint.Track, 0, 0, Width, Height, false);
             g.AntiAlias = true;
             var label = Label(Mode);
             var size = g.MeasureString(ForskType.Ui, label);
             float y = (Height - size.Height) / 2f;
-            g.DrawText(ForskType.Ui, _hover ? ForskPaint.Ink : ForskPaint.Quiet, 2, y, label);
-            float cx = 4 + size.Width + 4;
+            float x = Width - size.Width - 14;
+            if (x < 0) x = 0;
+            g.DrawText(ForskType.Ui, _hover ? ForskPaint.Ink : ForskPaint.Quiet, x, y, label);
+            float cx = x + size.Width + 4;
             float cy = Height / 2f;
             g.AntiAlias = false;
             using (var pen = new Pen(ForskPaint.Quiet, 1))
@@ -593,9 +593,10 @@ namespace RhinoMCPPlugin.Forsk
                 _hint.Size = new Size(textW, LinePx());
                 Move(_hint, TextX + 4, TextY + 1);
                 int rowY = h - Bottom - Button;
-                Move(ModePick, 10, rowY);
                 Send.Size = new Size(Button, Button);
-                Move(Send, w - 10 - Button, rowY);
+                int sendX = w - 10 - Button;
+                Move(Send, sendX, rowY);
+                Move(ModePick, sendX - 8 - ModePick.Width, rowY);
             }
             finally
             {
