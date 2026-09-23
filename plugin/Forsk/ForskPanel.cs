@@ -100,7 +100,7 @@ namespace RhinoMCPPlugin.Forsk
             _thread = new StackLayout
             {
                 Padding = new Padding(0, 2, 0, 8),
-                Spacing = 8,
+                Spacing = 2,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper

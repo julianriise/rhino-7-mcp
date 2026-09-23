@@ -399,7 +399,8 @@ namespace RhinoMCPPlugin.Forsk
             else
             {
                 Width = (int)Math.Ceiling(width);
-                Height = (int)Math.Ceiling(Math.Max(22, size.Height + 10));
+                float min = Role == "receipt" ? 16 : 14;
+                Height = (int)Math.Ceiling(Math.Max(min, size.Height + 2));
             }
             Invalidate();
         }
@@ -417,12 +418,12 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var mark = Error ? ForskPaint.Clay : ForskPaint.Ink;
                 var icon = Error ? ForskIcon.Cross : ForskIcon.Check;
-                ForskPaint.Icon(g, icon, new RectangleF(1, 3, 14, 14), mark);
-                g.DrawText(_text, new PointF(20, 2));
+                ForskPaint.Icon(g, icon, new RectangleF(1, 1, 14, 14), mark);
+                g.DrawText(_text, new PointF(20, 0));
                 return;
             }
             float x = Role == "user" ? 12 : 0;
-            float y = Role == "user" ? 8 : 2;
+            float y = Role == "user" ? 8 : 0;
             g.DrawText(_text, new PointF(x, y));
         }
     }
