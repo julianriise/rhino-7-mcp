@@ -3377,10 +3377,18 @@ class TestPrintGuards:
         assert "S-DRAW" in src
         assert "greyscale make2d" in src
         assert "Greyscale drawing" in src
-        assert "AddClippingPlane" in src
         assert "plan_cut" in src
         assert "-Vector3d.ZAxis" in src
-        assert "Plan cut failed. The plan detail has no clipping plane." in src
+        assert "DefinedViewportProjection.Top" in src
+        assert "TryAddPlanCut" not in src
+        assert "Plan cut failed. The plan detail has no clipping plane." not in src
+        aim = src[src.index("private static void AimDetailCamera"):src.index("private static void ApplyPaperDisplay")]
+        assert "spec.Look" not in aim
+        assert "-Vector3d.ZAxis" in aim
+        assert "Vector3d.YAxis" in aim
+        pan = src[src.index("private static void PanDetailOntoClay"):src.index("private static bool LockDetailScale")]
+        assert "spec.Look" not in pan
+        assert "-Vector3d.ZAxis" in pan
         assert "TechId" not in src
         assert "BlackAndWhite" in src
         assert "doc.Layers.Count" in src
@@ -3399,8 +3407,13 @@ class TestPrintGuards:
         assert "SetDetailDrawingVisibility" in prep or "ApplyPageDrawingDisplay" in prep
         bake = self._text("plugin", "Functions", "Make2dView.cs")
         assert "HiddenLineDrawing.Compute" in bake
-        assert "AddClippingPlane" in bake
+        assert "AddGeometryAndPlanes" in bake
+        assert "KeepSectionSide" in bake
+        assert "SilhouetteType.SectionCut" in bake
         assert "IsSceneSilhouette" in bake
+        bake_fn = bake[bake.index("private GreyscaleDrawing BakeGreyscaleDrawing"):bake.index("private Layer EnsureDrawLayer")]
+        assert "hldParams.AddClippingPlane" not in bake_fn
+        assert "hldPlane.Flip()" in bake_fn
         assert "PlotWeightFromObject" in bake
         assert "ColorFromObject" in bake
         assert 'DrawParentName = "S-DRAW"' in bake

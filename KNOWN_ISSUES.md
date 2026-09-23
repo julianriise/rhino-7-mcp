@@ -75,12 +75,17 @@ zoom-extents back (see `9fd120c`). If the frustum misses the drawing, that
 page fails with `Layout detail is empty. The sheet does not show the drawing.`
 
 The plan cut is a horizontal plane at the floor top plus 1200 mm, normal
-down, passed into `HiddenLineDrawingParameters.AddClippingPlane`. A hidden
-clipping-plane object is also stored on the Plan detail only. Elevations
-are not clipped. Hidden curves and tangent edges are off. Silhouettes plot
-at 0.35 mm. Other curves plot at 0.18 mm. The detail is Wireframe, so
-`GetPreviewImage` sees object-black curves. Plot weight is for the vector
-path. Forsk Pen is not the sheet ink.
+down. HiddenLineDrawing’s clip faces the other way, so the bake flips the
+plane. Rhino 7.34 has no `AddGeometryAndPlanes`. `AddClippingPlane` alone
+left the floor outline, so each solid is trimmed and the kept half is drawn.
+There is no detail clipping plane. `clear_layouts` still deletes a leftover
+`forsk:role=plan_cut` object. Elevations are not clipped. Hidden curves and
+tangent edges are off. Section-cut segments are kept. Silhouettes plot at
+0.35 mm. Other curves plot at 0.18 mm. Every detail is a Top view of the
+flattened curves (look `-Z`, camera up world Y). An elevation look sees
+that sheet edge-on. The detail is Wireframe, so `GetPreviewImage` sees
+object-black curves. Plot weight is for the vector path. Forsk Pen is not
+the sheet ink.
 
 `ViewCaptureSettings` on this Mac wrote a white page, including the title
 block. `GetPreviewImage` of the same Layout, taken after a redraw and a

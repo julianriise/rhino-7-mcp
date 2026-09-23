@@ -19,7 +19,8 @@ namespace RhinoMCPPlugin.Functions;
 /// ClippingDrawings. Before each page, layout_pack bakes black curves on
 /// S-DRAW (Plan, North, East, South, West). The plan drawing includes the
 /// horizontal cut 1200 mm above the floor. Details show that drawing layer
-/// only, in Wireframe, so the Mac preview is black lines on white. The model
+/// only, in a Top view (the curves are flat in XY), Wireframe, so the Mac
+/// preview is black lines on white. The model
 /// viewport keeps the clay. PDF is Rhino.FileIO.FilePdf. Vector output uses
 /// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
 /// wrote a white sheet, so Mac export activates each layout, redraws, waits,
@@ -51,7 +52,6 @@ public partial class RhinoMCPFunctions
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the drawing.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
-    private const string PlanCutMissingMessage = "Plan cut failed. The plan detail has no clipping plane.";
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
     private const int PenEdgePx = 1;
@@ -268,22 +268,14 @@ public partial class RhinoMCPFunctions
             };
             if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
             {
-                if (!TryAddPlanCut(doc, detail, clay, bbox, out var cutZ))
-                {
-                    RhinoApp.WriteLine(PlanCutMissingMessage);
-                    try { LeaveDetail(page); } catch (Exception) { }
-                    try { page.Close(); } catch (Exception) { }
-                    throw new InvalidOperationException(PlanCutMissingMessage);
-                }
-                var drawLayer = FindDrawLayer(doc, spec.View);
-                if (detail.Viewport != null && drawLayer != null)
-                    SetDetailDrawingVisibility(doc, detail.Viewport.Id, drawLayer);
-                pageRecord["cut_z"] = cutZ;
+                // The cut is already in the S-DRAW curves. A detail clipping
+                // plane is not part of this pack.
+                pageRecord["cut_z"] = planCutZ;
                 pageRecord["cut_height_mm"] = ForskDefaults.PlanCutHeightMm;
                 cutNote = " Plan cut "
                     + ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture)
                     + " mm above the floor (Z "
-                    + cutZ.ToString("0.###", CultureInfo.InvariantCulture)
+                    + planCutZ.ToString("0.###", CultureInfo.InvariantCulture)
                     + ").";
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
             }
@@ -807,16 +799,13 @@ public partial class RhinoMCPFunctions
 
     private static double ViewSpanWidth(BoundingBox bbox, string view)
     {
-        if (view == "east" || view == "west")
-            return bbox.Max.Y - bbox.Min.Y;
+        // S-DRAW packs are flattened into XY and the detail looks down.
         return bbox.Max.X - bbox.Min.X;
     }
 
     private static double ViewSpanHeight(BoundingBox bbox, string view)
     {
-        if (view == "plan")
-            return bbox.Max.Y - bbox.Min.Y;
-        return bbox.Max.Z - bbox.Min.Z;
+        return bbox.Max.Y - bbox.Min.Y;
     }
 
     private readonly struct Span
@@ -878,8 +867,10 @@ public partial class RhinoMCPFunctions
 
         // Frame while the detail is active, then leave it before the scale lock.
         // CommitChanges on an active detail puts zoom-extents back.
+        // AddDetailView already starts as Top. The drawing is flat in XY.
+        // Do not aim this with the elevation look: that sees the sheet edge-on.
         page.SetActiveDetail(detail.Id);
-        AimDetailCamera(detail, spec, bbox);
+        AimDetailCamera(detail, bbox);
         detail.CommitViewportChanges();
         LeaveDetail(page);
 
@@ -891,7 +882,7 @@ public partial class RhinoMCPFunctions
         detail = ReloadDetail(page, detail);
         if (detail == null) return null;
         page.SetActiveDetail(detail.Id);
-        PanDetailOntoClay(detail, spec, bbox);
+        PanDetailOntoClay(detail, bbox);
         detail.CommitViewportChanges();
         LeaveDetail(page);
 
@@ -901,7 +892,7 @@ public partial class RhinoMCPFunctions
             var geom = detail.DetailGeometry;
             if (geom != null)
                 geom.IsProjectionLocked = false;
-            AimDetailCamera(detail, spec, bbox);
+            AimDetailCamera(detail, bbox);
             detail.CommitViewportChanges();
             LeaveDetail(page);
             scaleLocked = LockDetailScale(detail, scale);
@@ -909,7 +900,7 @@ public partial class RhinoMCPFunctions
             detail = ReloadDetail(page, detail);
             if (detail == null) return null;
             page.SetActiveDetail(detail.Id);
-            PanDetailOntoClay(detail, spec, bbox);
+            PanDetailOntoClay(detail, bbox);
             detail.CommitViewportChanges();
             LeaveDetail(page);
         }
@@ -931,26 +922,37 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Parallel camera framed on the greyscale drawing. Wireframe shows the
-    /// black curves. The plan cut is already in those curves.
+    /// Top view of a flattened S-DRAW pack. Look is -Z. Camera up is world Y,
+    /// or world X when the pack has no Y extent. An elevation look vector
+    /// sees the sheet edge-on (one hairline).
     /// </summary>
-    private static void AimDetailCamera(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
+    private static void AimDetailCamera(DetailViewObject detail, BoundingBox bbox)
     {
-        var look = spec.Look;
-        if (!look.Unitize())
-            look = -Vector3d.ZAxis;
+        var vp = detail?.Viewport;
+        if (vp == null || !bbox.IsValid) return;
+        var look = -Vector3d.ZAxis;
         var target = bbox.Center;
         var dist = Math.Max(bbox.Diagonal.Length * 2.0, 5000.0);
-        var vp = detail.Viewport;
         vp.ChangeToParallelProjection(true);
         vp.SetCameraLocations(target, target - (look * dist));
-        vp.CameraUp = spec.Up;
+        vp.CameraUp = DrawingCameraUp(bbox);
         vp.SetCameraDirection(look, false);
         var framed = bbox;
         var pad = Math.Max(500.0, framed.Diagonal.Length * 0.02);
         framed.Inflate(pad);
+        if (framed.Max.Z - framed.Min.Z < 1.0)
+            framed.Inflate(0, 0, 1000.0);
         vp.ZoomBoundingBox(framed);
         ApplyDetailDisplay(vp);
+    }
+
+    private static Vector3d DrawingCameraUp(BoundingBox bbox)
+    {
+        var dx = bbox.Max.X - bbox.Min.X;
+        var dy = bbox.Max.Y - bbox.Min.Y;
+        if (dy <= Math.Max(1.0, dx * 0.02) && dx > dy)
+            return Vector3d.XAxis;
+        return Vector3d.YAxis;
     }
 
     private static void ApplyPaperDisplay(RhinoPageView page)
@@ -1650,55 +1652,6 @@ public partial class RhinoMCPFunctions
             + color.B.ToString(CultureInfo.InvariantCulture);
     }
 
-    /// <summary>
-    /// Horizontal section for the plan detail only. The Rhino pointer faces the
-    /// visible side, so the normal points down: geometry below the cut stays,
-    /// and the roof above it is clipped. The plane is infinite; the widget size
-    /// is only the on-screen grip.
-    /// </summary>
-    private bool TryAddPlanCut(
-        RhinoDoc doc, DetailViewObject detail, List<RhinoObject> clay, BoundingBox bbox, out double cutZ)
-    {
-        cutZ = 0;
-        if (doc == null || detail?.Viewport == null || detail.Viewport.Id == Guid.Empty)
-            return false;
-        DeletePlanCuts(doc);
-        var ffl = FloorTopZ(clay);
-        cutZ = ffl + ForskDefaults.PlanCutHeightMm;
-        var origin = new Point3d(bbox.Center.X, bbox.Center.Y, cutZ);
-        var plane = new Plane(origin, -Vector3d.ZAxis);
-        var u = Math.Max(1000.0, bbox.Max.X - bbox.Min.X);
-        var v = Math.Max(1000.0, bbox.Max.Y - bbox.Min.Y);
-        var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
-        var attr = new ObjectAttributes
-        {
-            LayerIndex = layer.Index,
-            Name = "forsk-plan-cut",
-            Space = ActiveSpace.ModelSpace,
-            Visible = false
-        };
-        StampForskTags(attr, new ForskStamp
-        {
-            Kind = "layout",
-            View = "plan",
-            Id = "cut"
-        });
-        attr.SetUserString("forsk:role", PlanCutRole);
-        attr.SetUserString("forsk:cut_z", cutZ.ToString("0.###", CultureInfo.InvariantCulture));
-        var clipId = doc.Objects.AddClippingPlane(
-            plane, u, v, new[] { detail.Viewport.Id }, attr);
-        if (clipId == Guid.Empty) return false;
-        doc.Strings.SetString(
-            LayoutMetaSection,
-            "plan_cut_z",
-            cutZ.ToString("0.###", CultureInfo.InvariantCulture));
-        doc.Strings.SetString(
-            LayoutMetaSection,
-            "plan_cut_height_mm",
-            ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture));
-        return PlanDetailIsClipped(doc, clipId, detail.Viewport.Id);
-    }
-
     /// <summary>Top of the floor solids. Walls start at 0 when no floor is baked.</summary>
     private static double FloorTopZ(List<RhinoObject> clay)
     {
@@ -1716,66 +1669,17 @@ public partial class RhinoMCPFunctions
         return top ?? 0;
     }
 
-    private static void ShowPlanCutInDetail(RhinoDoc doc, Layer layer, Guid detailId)
-    {
-        if (doc == null || layer == null || detailId == Guid.Empty) return;
-        var modelViews = doc.Views.GetViewList(true, false);
-        if (modelViews != null)
-        {
-            foreach (var view in modelViews)
-            {
-                var id = view?.MainViewport?.Id ?? Guid.Empty;
-                if (id == Guid.Empty) continue;
-                layer.SetPerViewportVisible(id, false);
-            }
-        }
-        layer.SetPerViewportVisible(detailId, true);
-        layer.SetPerViewportPlotWeight(detailId, 0);
-        doc.Layers.Modify(layer, layer.Index, true);
-    }
-
-    private static bool PlanDetailIsClipped(RhinoDoc doc, Guid clipId, Guid detailId)
-    {
-        var obj = doc?.Objects.FindId(clipId) as ClippingPlaneObject;
-        var geom = obj?.ClippingPlaneGeometry;
-        if (geom == null) return false;
-        var ids = geom.ViewportIds();
-        if (ids == null) return false;
-        foreach (var id in ids)
-        {
-            if (id == detailId) return true;
-        }
-        return false;
-    }
-
-    private static void DeletePlanCuts(RhinoDoc doc)
-    {
-        if (doc == null) return;
-        var ids = new List<Guid>();
-        foreach (var obj in doc.Objects)
-        {
-            if (obj == null) continue;
-            var role = obj.Attributes?.GetUserString("forsk:role") ?? "";
-            if (role.Equals(PlanCutRole, StringComparison.OrdinalIgnoreCase))
-                ids.Add(obj.Id);
-        }
-        foreach (var id in ids)
-            doc.Objects.Delete(id, true);
-    }
-
     /// <summary>
-    /// Move the locked view onto the clay. ZoomBoundingBox would change the scale.
+    /// Move the locked Top view onto the drawing. ZoomBoundingBox would change the scale.
     /// </summary>
-    private static void PanDetailOntoClay(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
+    private static void PanDetailOntoClay(DetailViewObject detail, BoundingBox bbox)
     {
-        var look = spec.Look;
-        if (!look.Unitize())
-            look = -Vector3d.ZAxis;
-        var vp = detail.Viewport;
+        var vp = detail?.Viewport;
+        if (vp == null || !bbox.IsValid) return;
         vp.ChangeToParallelProjection(true);
-        vp.CameraUp = spec.Up;
+        vp.CameraUp = DrawingCameraUp(bbox);
         vp.SetCameraTarget(bbox.Center, true);
-        vp.SetCameraDirection(look, false);
+        vp.SetCameraDirection(-Vector3d.ZAxis, false);
     }
 
     private static bool LockDetailScale(DetailViewObject detail, int scale)

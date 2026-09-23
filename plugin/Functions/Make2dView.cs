@@ -477,6 +477,129 @@ public partial class RhinoMCPFunctions
         return vp;
     }
 
+    /// <summary>
+    /// Visible segments stay. A section cut is the wall line at the plan
+    /// plane, including when its visibility is not Visible.
+    /// </summary>
+    private static bool KeepGreyscaleSegment(HiddenLineDrawingSegment seg)
+    {
+        if (seg == null) return false;
+        if (seg.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Visible)
+            return true;
+        return IsSectionCut(seg);
+    }
+
+    private static bool IsSectionCut(HiddenLineDrawingSegment seg)
+    {
+        var parent = seg?.ParentCurve;
+        if (parent == null) return false;
+        return parent.SilhouetteType == SilhouetteType.SectionCut;
+    }
+
+    /// <summary>
+    /// Keep the half opposite the HLD normal (the side a document clipping
+    /// plane would show). Fully removed solids are dropped. A solid that
+    /// crosses the plane is trimmed. Brep.Trim keeps the half opposite the
+    /// normal, which is the side a document clipping plane would show.
+    /// Openings the plane passes through stay gaps in that cut.
+    /// </summary>
+    private static List<GeometryBase> KeepSectionSide(GeometryBase geom, Plane hldPlane, double tolerance)
+    {
+        var kept = new List<GeometryBase>();
+        if (geom == null) return kept;
+        var tol = tolerance > 0 ? tolerance : 0.01;
+
+        Brep brep = geom as Brep;
+        Brep owned = null;
+        if (brep == null && geom is Extrusion extrusion)
+            owned = brep = extrusion.ToBrep();
+        else if (brep == null && geom is Surface surface)
+            owned = brep = surface.ToBrep();
+
+        if (brep == null)
+        {
+            if (SectionSide(geom.GetBoundingBox(true), hldPlane, tol) > 0)
+            {
+                var dup = geom.Duplicate();
+                if (dup != null) kept.Add(dup);
+            }
+            return kept;
+        }
+
+        try
+        {
+            var side = SectionSide(brep.GetBoundingBox(true), hldPlane, tol);
+            if (side < 0) return kept;
+            if (side > 0)
+            {
+                var dup = brep.Duplicate();
+                if (dup != null) kept.Add(dup);
+                return kept;
+            }
+
+            Brep[] pieces = null;
+            try { pieces = brep.Trim(hldPlane, tol); }
+            catch (Exception) { pieces = null; }
+
+            if (pieces != null && pieces.Length > 0)
+            {
+                foreach (var piece in pieces)
+                {
+                    if (piece == null) continue;
+                    // Trim keeps the half opposite the normal. Drop a piece
+                    // whose center is still on the removed side.
+                    if (SectionCenterDot(piece.GetBoundingBox(true), hldPlane) <= tol)
+                        kept.Add(piece);
+                    else
+                        piece.Dispose();
+                }
+                if (kept.Count > 0) return kept;
+            }
+
+            // Trim produced nothing. The intersection curves are still the
+            // wall section. Do not put the uncut solid back in: that draws
+            // the floor outline and the roof.
+            Curve[] contours = null;
+            try { contours = Brep.CreateContourCurves(brep, hldPlane); }
+            catch (Exception) { contours = null; }
+            if (contours == null) return kept;
+            foreach (var curve in contours)
+            {
+                if (curve != null) kept.Add(curve);
+            }
+            return kept;
+        }
+        finally
+        {
+            owned?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// +1 kept, -1 removed, 0 crosses. The HLD normal points at the removed side.
+    /// </summary>
+    private static int SectionSide(BoundingBox box, Plane hldPlane, double tol)
+    {
+        if (!box.IsValid) return -1;
+        double min = double.MaxValue;
+        double max = double.MinValue;
+        foreach (var corner in box.GetCorners())
+        {
+            var dot = (corner - hldPlane.Origin) * hldPlane.Normal;
+            if (dot < min) min = dot;
+            if (dot > max) max = dot;
+        }
+        if (max <= tol) return 1;
+        if (min >= -tol) return -1;
+        return 0;
+    }
+
+    private static double SectionCenterDot(BoundingBox box, Plane hldPlane)
+    {
+        if (!box.IsValid) return double.MaxValue;
+        return (box.Center - hldPlane.Origin) * hldPlane.Normal;
+    }
+
     private static void SetWideFrustum(ViewportInfo vp, double radius, double distance)
     {
         vp.SetFrustum(
@@ -601,10 +724,35 @@ public partial class RhinoMCPFunctions
         var visible = new List<WeightedCurve>();
         string fail = null;
         HiddenLineDrawing hld = null;
+        List<GeometryBase> sectioned = null;
         try
         {
+            var tolerance = doc.ModelAbsoluteTolerance;
+            if (tolerance <= 0) tolerance = 0.01;
+            var draw = geometries;
+            if (clip.HasValue)
+            {
+                // Document clipping keeps the side the normal points at.
+                // HLD keeps the opposite side, so flip before the cut
+                // (https://discourse.mcneel.com/t/hiddenlinedrawing-clipping-planes-are-ignored-in-make2d-calculation-c/215626).
+                // Rhino 7.34 net48 has AddGeometry and AddClippingPlane only.
+                // AddGeometryAndPlanes(geom, xform, tag, occluding, planeList) is not
+                // on this RhinoCommon. AddClippingPlane alone drops solids that cross
+                // the plane and the plan is the floor outline. Trim each solid on
+                // the flipped plane and draw the kept half. The cut edge is the section.
+                var hldPlane = clip.Value;
+                hldPlane.Flip();
+                sectioned = new List<GeometryBase>();
+                foreach (var geom in geometries)
+                {
+                    foreach (var piece in KeepSectionSide(geom, hldPlane, tolerance))
+                        sectioned.Add(piece);
+                }
+                draw = sectioned;
+            }
+
             var bbox = BoundingBox.Empty;
-            foreach (var geom in geometries)
+            foreach (var geom in draw)
                 bbox.Union(geom.GetBoundingBox(true));
             if (!bbox.IsValid)
             {
@@ -612,8 +760,6 @@ public partial class RhinoMCPFunctions
             }
             else
             {
-                var tolerance = doc.ModelAbsoluteTolerance;
-                if (tolerance <= 0) tolerance = 0.01;
                 var hldParams = new HiddenLineDrawingParameters
                 {
                     AbsoluteTolerance = tolerance,
@@ -622,8 +768,6 @@ public partial class RhinoMCPFunctions
                     IncludeTangentEdges = false,
                     IncludeTangentSeams = false
                 };
-                if (clip.HasValue)
-                    hldParams.AddClippingPlane(clip.Value);
                 var viewport = BuildParallelViewport(bbox, spec.Look, spec.Up);
                 if (viewport == null || !viewport.IsValidCamera || !viewport.IsValidFrustum)
                 {
@@ -632,7 +776,7 @@ public partial class RhinoMCPFunctions
                 else
                 {
                     hldParams.SetViewport(viewport);
-                    foreach (var geom in geometries)
+                    foreach (var geom in draw)
                         hldParams.AddGeometry(geom, Transform.Identity, null);
                     hld = HiddenLineDrawing.Compute(hldParams, true);
                     if (hld == null)
@@ -641,15 +785,16 @@ public partial class RhinoMCPFunctions
                     {
                         foreach (var seg in hld.Segments)
                         {
-                            if (seg == null) continue;
-                            if (seg.SegmentVisibility != HiddenLineDrawingSegment.Visibility.Visible)
-                                continue;
+                            if (!KeepGreyscaleSegment(seg)) continue;
                             var dup = seg.CurveGeometry?.DuplicateCurve();
                             if (dup == null) continue;
+                            var section = IsSectionCut(seg);
                             visible.Add(new WeightedCurve
                             {
                                 Curve = dup,
-                                Weight = seg.IsSceneSilhouette ? DrawSilhouetteMm : DrawHairlineMm
+                                Weight = seg.IsSceneSilhouette || section
+                                    ? DrawSilhouetteMm
+                                    : DrawHairlineMm
                             });
                         }
                     }
@@ -665,6 +810,11 @@ public partial class RhinoMCPFunctions
             hld?.Dispose();
             foreach (var geom in geometries)
                 geom?.Dispose();
+            if (sectioned != null)
+            {
+                foreach (var geom in sectioned)
+                    geom?.Dispose();
+            }
         }
 
         if (fail != null || visible.Count == 0)
