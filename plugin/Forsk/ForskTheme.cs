@@ -274,83 +274,6 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// Closed state is drawn. The open list is the platform menu.
-    /// </summary>
-    sealed class ForskModePick : Drawable
-    {
-        bool _hover;
-
-        public ForskMode Mode { get; set; }
-        public event EventHandler<EventArgs> Picked;
-
-        public static string Label(ForskMode mode)
-        {
-            if (mode == ForskMode.Edit) return "Edit";
-            if (mode == ForskMode.Sheets) return "Sheets";
-            return "Build";
-        }
-
-        public ForskModePick()
-        {
-            var wide = ForskType.Ui.MeasureString("Sheets").Width;
-            Size = new Size((int)Math.Ceiling(wide + 22), 28);
-            BackgroundColor = Colors.Transparent;
-            Cursor = Cursors.Pointer;
-            MouseEnter += (s, e) => { _hover = true; Invalidate(); };
-            MouseLeave += (s, e) => { _hover = false; Invalidate(); };
-            MouseDown += (s, e) =>
-            {
-                if (e.Buttons != MouseButtons.Primary) return;
-                Open();
-            };
-        }
-
-        void Open()
-        {
-            var menu = new ContextMenu();
-            menu.Items.Add(Item(ForskMode.Build));
-            menu.Items.Add(Item(ForskMode.Edit));
-            menu.Items.Add(Item(ForskMode.Sheets));
-            menu.Show(this);
-        }
-
-        ButtonMenuItem Item(ForskMode mode)
-        {
-            var item = new ButtonMenuItem((s, e) => Choose(mode));
-            item.Text = Label(mode);
-            return item;
-        }
-
-        void Choose(ForskMode mode)
-        {
-            Mode = mode;
-            Invalidate();
-            var picked = Picked;
-            if (picked != null) picked(this, EventArgs.Empty);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            g.AntiAlias = true;
-            var label = Label(Mode);
-            var size = g.MeasureString(ForskType.Ui, label);
-            float y = (Height - size.Height) / 2f;
-            float x = Width - size.Width - 14;
-            if (x < 0) x = 0;
-            g.DrawText(ForskType.Ui, _hover ? ForskPaint.Ink : ForskPaint.Quiet, x, y, label);
-            float cx = x + size.Width + 4;
-            float cy = Height / 2f;
-            g.AntiAlias = false;
-            using (var pen = new Pen(ForskPaint.Quiet, 1))
-            {
-                g.DrawLine(pen, cx, cy - 1, cx + 3, cy + 2);
-                g.DrawLine(pen, cx + 3, cy + 2, cx + 6, cy - 1);
-            }
-        }
-    }
-
-    /// <summary>
     /// Brand, connection, and selection line. Drawn, so they use Geist.
     /// An Eto Label on Mac is an NSTextField and ignores a face loaded from a file.
     /// </summary>
@@ -521,7 +444,6 @@ namespace RhinoMCPPlugin.Forsk
 
         public TextArea Input { get; private set; }
         public ForskIconButton Send { get; private set; }
-        public ForskModePick ModePick { get; private set; }
 
         public ForskComposer()
         {
@@ -541,10 +463,8 @@ namespace RhinoMCPPlugin.Forsk
                 Font = SystemFonts.Default(14)
             };
             Send = new ForskIconButton();
-            ModePick = new ForskModePick();
             Add(_card, 0, 0);
             Add(Input, TextX, TextY);
-            Add(ModePick, 10, 0);
             Add(Send, 0, 0);
             Input.TextChanged += (s, e) =>
             {
@@ -573,7 +493,6 @@ namespace RhinoMCPPlugin.Forsk
                 Send.Size = new Size(Button, Button);
                 int sendX = w - 10 - Button;
                 Move(Send, sendX, rowY);
-                Move(ModePick, sendX - 8 - ModePick.Width, rowY);
             }
             finally
             {

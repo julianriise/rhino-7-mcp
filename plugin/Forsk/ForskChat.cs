@@ -18,19 +18,141 @@ using rhinomcp.Serializers;
 
 namespace RhinoMCPPlugin.Forsk
 {
-    public enum ForskMode
+    public enum ForskIntent
     {
         Build,
         Edit,
-        Sheets
+        Sheets,
+        Print,
+        General
+    }
+
+    /// <summary>
+    /// One-turn tool bias from the message. Order is print, sheets, edit, build.
+    /// An opening selection is edit when those words are absent.
+    /// </summary>
+    public static class ForskIntentRouter
+    {
+        public static ForskIntent Classify(string text, string target)
+        {
+            var t = Normalize(text);
+            if (IsPrint(t)) return ForskIntent.Print;
+            if (IsSheets(t)) return ForskIntent.Sheets;
+            if (IsEdit(t)) return ForskIntent.Edit;
+            if (IsBuild(t)) return ForskIntent.Build;
+            if (TargetIsOpening(target)) return ForskIntent.Edit;
+            return ForskIntent.General;
+        }
+
+        static string Normalize(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+            var sb = new StringBuilder(text.Length);
+            var space = true;
+            foreach (var raw in text.ToLowerInvariant())
+            {
+                var c = raw == '_' ? ' ' : raw;
+                if (char.IsLetterOrDigit(c))
+                {
+                    sb.Append(c);
+                    space = false;
+                }
+                else if (!space)
+                {
+                    sb.Append(' ');
+                    space = true;
+                }
+            }
+            return sb.ToString().Trim();
+        }
+
+        static bool IsPrint(string t)
+        {
+            if (t.Length == 0) return false;
+            if (HasWord(t, "print") || HasWord(t, "pdf") || HasWord(t, "a3")) return true;
+            if (HasWord(t, "layout") || HasWord(t, "layouts")) return true;
+            return t.Contains("skriv ut");
+        }
+
+        static bool IsSheets(string t)
+        {
+            if (HasWord(t, "sheets") || HasWord(t, "sheet")) return true;
+            if (t.Contains("make2d") || t.Contains("make 2d")) return true;
+            if (HasWord(t, "drawings") || HasWord(t, "tegning") || HasWord(t, "tegninger")) return true;
+            return t.Contains("sheet pack") || t.Contains("clear drawings");
+        }
+
+        static bool IsEdit(string t)
+        {
+            if (t.Contains("move opening") || t.Contains("add opening") || t.Contains("delete opening"))
+                return true;
+            var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove");
+            var noun = HasWord(t, "window") || HasWord(t, "windows")
+                || HasWord(t, "door") || HasWord(t, "doors")
+                || HasWord(t, "opening") || HasWord(t, "openings");
+            return verb && noun;
+        }
+
+        static bool IsBuild(string t)
+        {
+            if (t.Contains("wall height") || t.Contains("tilbygg") || t.Contains("påbygg")) return true;
+            if (t.Contains("paabygg") || t.Contains("pabygg") || HasWord(t, "extension")) return true;
+            if (HasWord(t, "generate") || HasWord(t, "bake") || HasWord(t, "rebuild") || HasWord(t, "regenerate"))
+                return true;
+            if (t.Contains("clear generated") || t.Contains("clear and regenerate")) return true;
+            if (t.Contains("mark as existing") || t.Contains("mark existing")) return true;
+            return WallsWithHeight(t);
+        }
+
+        static bool WallsWithHeight(string t)
+        {
+            var i = 0;
+            while ((i = t.IndexOf("wall", i, StringComparison.Ordinal)) >= 0)
+            {
+                var left = i == 0 || t[i - 1] == ' ';
+                var end = i + 4;
+                if (end < t.Length && t[end] == 's') end++;
+                if (left && (end == t.Length || t[end] == ' '))
+                {
+                    var j = end;
+                    while (j < t.Length && t[j] == ' ') j++;
+                    if (j < t.Length && char.IsDigit(t[j])) return true;
+                }
+                i += 4;
+            }
+            return false;
+        }
+
+        static bool TargetIsOpening(string target)
+        {
+            if (string.IsNullOrWhiteSpace(target)) return false;
+            var t = target.ToLowerInvariant();
+            return t.Contains("forsk:opening") || t.Contains("a-open");
+        }
+
+        static bool HasWord(string text, string word)
+        {
+            var i = 0;
+            while ((i = text.IndexOf(word, i, StringComparison.Ordinal)) >= 0)
+            {
+                var left = i == 0 || text[i - 1] == ' ';
+                var end = i + word.Length;
+                var right = end == text.Length || text[end] == ' ';
+                if (left && right) return true;
+                i = end;
+            }
+            return false;
+        }
     }
 
     public sealed class BakeChip
     {
         public bool HasPlan;
         public bool HasWalls;
-        public bool Visible => HasPlan;
-        public string Label => HasWalls ? "Rebuild 3D" : "Generate 3D model";
+        public bool ShowPrint => HasWalls;
+        public bool ShowGenerate => HasPlan && !HasWalls;
+        public bool Visible => ShowPrint || ShowGenerate;
+        public string Label => ShowPrint ? "Print PDF" : "Generate 3D model";
     }
 
     /// <summary>
@@ -43,6 +165,7 @@ namespace RhinoMCPPlugin.Forsk
         static readonly RhinoMCPFunctions Handler = new RhinoMCPFunctions();
         static readonly Dictionary<string, JObject> Catalog = BuildCatalog();
 
+        // Intent only picks a prompt pack. This allow-list is the union.
         static readonly string[] Shared =
         {
             "get_document_summary",
@@ -83,28 +206,31 @@ namespace RhinoMCPPlugin.Forsk
             "clear_layouts"
         };
 
-        public static JArray ToolsFor(ForskMode mode)
+        public static JArray ToolsFor()
         {
-            var names = new List<string>(Shared);
-            if (mode == ForskMode.Build) names.AddRange(BuildOnly);
-            else if (mode == ForskMode.Edit) names.AddRange(EditOnly);
-            else names.AddRange(SheetsOnly);
-
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             var tools = new JArray();
-            foreach (var name in names)
-            {
-                if (Catalog.TryGetValue(name, out var tool))
-                    tools.Add(tool);
-            }
+            AddTools(Shared, seen, tools);
+            AddTools(BuildOnly, seen, tools);
+            AddTools(EditOnly, seen, tools);
+            AddTools(SheetsOnly, seen, tools);
             return tools;
         }
 
-        public static JObject Execute(string name, JObject parameters, ForskMode mode)
+        static void AddTools(string[] names, HashSet<string> seen, JArray tools)
         {
-            if (!Allowed(name, mode))
+            foreach (var name in names)
             {
-                return Fail("Tool " + name + " is not available in " + ModeName(mode) + " mode.");
+                if (!seen.Add(name)) continue;
+                if (Catalog.TryGetValue(name, out var tool))
+                    tools.Add(tool);
             }
+        }
+
+        public static JObject Execute(string name, JObject parameters)
+        {
+            if (!Allowed(name))
+                return Fail("Tool " + name + " is not available in the Forsk panel.");
             return ExecuteAllowed(name, parameters);
         }
 
@@ -159,20 +285,13 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
-        public static string ModeName(ForskMode mode)
+        static bool Allowed(string name)
         {
-            if (mode == ForskMode.Edit) return "Edit";
-            if (mode == ForskMode.Sheets) return "Sheets";
-            return "Build";
-        }
-
-        static bool Allowed(string name, ForskMode mode)
-        {
-            if (string.IsNullOrEmpty(name) || !Catalog.ContainsKey(name)) return false;
-            if (Array.IndexOf(Shared, name) >= 0) return true;
-            if (mode == ForskMode.Build) return Array.IndexOf(BuildOnly, name) >= 0;
-            if (mode == ForskMode.Edit) return Array.IndexOf(EditOnly, name) >= 0;
-            return Array.IndexOf(SheetsOnly, name) >= 0;
+            if (string.IsNullOrEmpty(name)) return false;
+            return Array.IndexOf(Shared, name) >= 0
+                || Array.IndexOf(BuildOnly, name) >= 0
+                || Array.IndexOf(EditOnly, name) >= 0
+                || Array.IndexOf(SheetsOnly, name) >= 0;
         }
 
         static JObject Dispatch(string name, JObject parameters)
@@ -499,7 +618,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
 
         public static string Warning { get; private set; }
 
-        public static string Load(ForskMode mode)
+        public static string Load(ForskIntent intent)
         {
             var root = FindRoot();
             string core = null;
@@ -518,7 +637,8 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 Warning = "Using the built-in prompt. prompts/system.md was not found.";
             }
 
-            var pack = LoadPack(root, mode);
+            var pack = LoadPack(root, intent);
+            if (string.IsNullOrWhiteSpace(pack)) return core.Trim();
             return core.Trim() + "\n\n" + pack;
         }
 
@@ -538,12 +658,10 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             return File.Exists(Path.Combine(path, "prompts", "system.md"));
         }
 
-        static string LoadPack(string root, ForskMode mode)
+        static string LoadPack(string root, ForskIntent intent)
         {
-            var file = mode == ForskMode.Edit ? "ui_edit.md"
-                : mode == ForskMode.Sheets ? "ui_sheets.md"
-                : "ui_build.md";
-            if (root != null)
+            var file = PackFile(intent);
+            if (file != null && root != null)
             {
                 var path = Path.Combine(root, "prompts", "packs", file);
                 if (File.Exists(path))
@@ -553,23 +671,47 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                         return text.Trim();
                 }
             }
-            if (mode == ForskMode.Edit)
+            return BuiltinPack(intent);
+        }
+
+        static string PackFile(ForskIntent intent)
+        {
+            if (intent == ForskIntent.Edit) return "ui_edit.md";
+            if (intent == ForskIntent.Sheets) return "ui_sheets.md";
+            if (intent == ForskIntent.Print) return "ui_print.md";
+            if (intent == ForskIntent.Build) return "ui_build.md";
+            return null;
+        }
+
+        static string BuiltinPack(ForskIntent intent)
+        {
+            if (intent == ForskIntent.Edit)
             {
-                return "Mode: Edit. Selection first. add_opening, move_opening, delete_opening only. "
+                return "Turn bias: Edit. Selection first. Prefer add_opening, move_opening, delete_opening. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
-                    + "Bake and sheets belong on the other chips.";
+                    + "Bake, sheets, and print stay available when the user asks.";
             }
-            if (mode == ForskMode.Sheets)
+            if (intent == ForskIntent.Sheets)
             {
-                return "Mode: Sheets. Delivery is Layout pages plus a PDF. "
-                    + "Print PDF opens a save dialog. Do not invent a file path. "
-                    + "set_project_meta, layout_pack, export_pdf, clear_layouts. "
-                    + "Make2D stays available: sheet_pack, make2d_view, clear_drawings. "
-                    + "Clear layouts with clear_layouts. Clear drawings with clear_drawings. Never clear_generated.";
+                return "Turn bias: Sheets. Prefer sheet_pack, make2d_view, clear_drawings. "
+                    + "Layout pages and a PDF stay available: set_project_meta, layout_pack, export_pdf, clear_layouts. "
+                    + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
-            return "Mode: Build. Bake, heights, tilbygg, clear_generated. "
-                + "Order: floor, walls, roof, openings, rooms. "
-                + "Refuse X-EXIST as a bake source.";
+            if (intent == ForskIntent.Print)
+            {
+                return "Turn bias: Print. layout_pack, export_pdf, clear_layouts. "
+                    + "Print PDF opens a save dialog. Do not invent a file path. "
+                    + "clear_layouts removes the pages and the S-DRAW curves. "
+                    + "sheet_pack stays available when the user asks for drawings.";
+            }
+            if (intent == ForskIntent.Build)
+            {
+                return "Turn bias: Build. Bake, heights, tilbygg, clear_generated. "
+                    + "Order: floor, walls, roof, openings, rooms. "
+                    + "Rebuild is clear_generated, then that order. There is no Rebuild button. "
+                    + "Refuse X-EXIST as a bake source.";
+            }
+            return "";
         }
     }
 
@@ -644,7 +786,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             return new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
         }
 
-        public static void RunTurn(string userText, ForskMode mode, List<JObject> history, Action<string, string> show)
+        public static void RunTurn(string userText, string target, List<JObject> history, Action<string, string> show)
         {
             history.Add(new JObject { ["role"] = "user", ["content"] = userText });
             var key = ForskKeys.Load();
@@ -655,13 +797,14 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 return;
             }
 
-            var system = PanelHeader(mode) + "\n\n" + ForskPrompts.Load(mode);
+            var intent = ForskIntentRouter.Classify(userText, target);
+            var system = PanelHeader(intent) + "\n\n" + ForskPrompts.Load(intent);
             for (var round = 0; round < MaxRounds; round++)
             {
                 JObject message;
                 try
                 {
-                    message = Complete(key, system, history, ForskTools.ToolsFor(mode));
+                    message = Complete(key, system, history, ForskTools.ToolsFor());
                 }
                 catch (Exception e)
                 {
@@ -695,7 +838,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                     var fn = call?["function"] as JObject;
                     var name = fn?["name"]?.ToString() ?? "";
                     var args = ParseArgs(fn?["arguments"]?.ToString());
-                    var envelope = CallOnUi(name, args, mode);
+                    var envelope = CallOnUi(name, args);
                     show("receipt", ForskTools.Receipt(string.IsNullOrEmpty(name) ? "tool" : name, envelope));
                     history.Add(new JObject
                     {
@@ -711,24 +854,40 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             Trim(history);
         }
 
-        static string PanelHeader(ForskMode mode)
+        static string PanelHeader(ForskIntent intent)
         {
-            var text = "You are answering inside the Forsk panel. Active mode: " + ForskTools.ModeName(mode) + ". "
-                + "Call only the tools offered this turn. The user already sees a one-line receipt per tool; reply in one or two sentences, not raw JSON. "
-                + "Do not call capture_viewport unless the user asks to see the view. "
-                + "If they ask for a job that belongs on another chip, tell them to switch Build, Edit, or Sheets.";
-            if (mode == ForskMode.Sheets)
+            var bias = intent == ForskIntent.General
+                ? "No tool bias this turn. Follow the message."
+                : "This turn is biased toward " + IntentName(intent) + ". The bias is a hint.";
+            var text = "You are answering inside the Forsk panel. " + bias + " "
+                + "Every panel tool stays available. Call the tool the user asked for. "
+                + "The user already sees a one-line receipt per tool; reply in one or two sentences, not raw JSON. "
+                + "Do not call capture_viewport unless the user asks to see the view.";
+            if (intent == ForskIntent.Print || intent == ForskIntent.Sheets)
             {
-                text += " Sheets prefers Layout pages and a PDF. "
-                    + "set_project_meta, layout_pack, export_pdf, and clear_layouts are in this tool set, with sheet_pack, make2d_view, and clear_drawings. "
-                    + "When the user states a project, client, or address, call set_project_meta. Clear layouts is clear_layouts. "
+                text += " When the user states a project, client, or address, call set_project_meta. "
                     + "For a PDF, call layout_pack if the pages are not already there, then export_pdf with path omitted. "
-                    + "The panel opens a save dialog. Do not invent a path and do not ask the user to type one.";
+                    + "The panel opens a save dialog. Do not invent a path and do not ask the user to type one. "
+                    + "Clear layouts is clear_layouts. Clear drawings is clear_drawings.";
+            }
+            if (intent == ForskIntent.Build)
+            {
+                text += " Rebuild, bake again, or clear and regenerate is clear_generated, then the bake order. "
+                    + "There is no Rebuild button.";
             }
             return text;
         }
 
-        static JObject CallOnUi(string name, JObject args, ForskMode mode)
+        static string IntentName(ForskIntent intent)
+        {
+            if (intent == ForskIntent.Edit) return "Edit";
+            if (intent == ForskIntent.Sheets) return "Sheets";
+            if (intent == ForskIntent.Print) return "Print";
+            if (intent == ForskIntent.Build) return "Build";
+            return "General";
+        }
+
+        static JObject CallOnUi(string name, JObject args)
         {
             var callArgs = args;
             if (name == "export_pdf")
@@ -743,7 +902,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             JObject envelope = null;
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                envelope = ForskTools.Execute(name, callArgs, mode);
+                envelope = ForskTools.Execute(name, callArgs);
             }));
             return envelope ?? ForskTools.Fail("No result");
         }
@@ -1058,8 +1217,8 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
     }
 
     /// <summary>
-    /// Sheets print. Same path for the Print PDF button and for chat
-    /// print / make PDF / skriv ut. The save dialog picks the path.
+    /// Same path for the Print PDF chip and for chat print / make PDF / skriv ut.
+    /// The save dialog picks the path.
     /// </summary>
     public static class ForskPrint
     {

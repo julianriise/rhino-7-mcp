@@ -21,7 +21,6 @@ namespace RhinoMCPPlugin.Forsk
         readonly List<ForskLine> _lines = new List<ForskLine>();
         readonly List<JObject> _history = new List<JObject>();
         UITimer _timer;
-        ForskMode _mode = ForskMode.Build;
         BakeChip _chipState = new BakeChip();
         bool _busy;
         bool _warnedPrompt;
@@ -65,10 +64,9 @@ namespace RhinoMCPPlugin.Forsk
 
             _chip.Click += (s, e) =>
             {
-                if (_mode == ForskMode.Sheets) PrintPdf();
+                if (_chipState.ShowPrint) PrintPdf();
                 else Bake();
             };
-            _composer.ModePick.Picked += (s, e) => SetMode(_composer.ModePick.Mode);
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
             _composer.Input.GotFocus += (s, e) =>
@@ -134,7 +132,6 @@ namespace RhinoMCPPlugin.Forsk
             };
 
             SizeChanged += (s, e) => Relayout();
-            SetMode(ForskMode.Build);
             Hook();
             RefreshChrome();
             Relayout();
@@ -169,7 +166,7 @@ namespace RhinoMCPPlugin.Forsk
             RefreshChrome();
             if (!_warnedPrompt)
             {
-                ForskPrompts.Load(_mode);
+                ForskPrompts.Load(ForskIntent.General);
                 if (!string.IsNullOrEmpty(ForskPrompts.Warning))
                 {
                     _warnedPrompt = true;
@@ -219,29 +216,13 @@ namespace RhinoMCPPlugin.Forsk
             RefreshTarget();
         }
 
-        void SetMode(ForskMode mode)
-        {
-            _mode = mode;
-            _composer.ModePick.Mode = mode;
-            _composer.ModePick.Invalidate();
-            RefreshChrome();
-        }
-
         void RefreshChrome()
         {
             bool connected = RhinoMCPServerController.IsServerRunning();
             _header.SetStatus(connected, connected ? "Connected" : "Type mcpstart");
             _chipState = ForskBake.Detect();
-            if (_mode == ForskMode.Sheets)
-            {
-                _chip.Visible = true;
-                _chip.Text = "Print PDF";
-            }
-            else
-            {
-                _chip.Visible = _chipState.Visible;
-                _chip.Text = _chipState.Label;
-            }
+            _chip.Visible = _chipState.Visible;
+            _chip.Text = _chipState.Label;
             RefreshTarget();
         }
 
@@ -259,8 +240,8 @@ namespace RhinoMCPPlugin.Forsk
             _busy = true;
             _composer.Send.EnabledClick = false;
             AddLine("user", text);
-            var mode = _mode;
-            if (mode == ForskMode.Sheets && ForskPrint.IsRequest(text))
+            var target = ForskTarget.Read();
+            if (ForskPrint.IsRequest(text))
             {
                 QueuePrint(text);
                 return;
@@ -269,7 +250,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 try
                 {
-                    ForskGrok.RunTurn(text, mode, _history, (role, line) =>
+                    ForskGrok.RunTurn(text, target, _history, (role, line) =>
                     {
                         Application.Instance.AsyncInvoke(() => AddLine(role, line));
                     });
@@ -293,7 +274,7 @@ namespace RhinoMCPPlugin.Forsk
 
         void PrintPdf()
         {
-            if (_busy || _mode != ForskMode.Sheets) return;
+            if (_busy || !_chipState.ShowPrint) return;
             _busy = true;
             _composer.Send.EnabledClick = false;
             _chip.EnabledClick = false;
@@ -334,11 +315,10 @@ namespace RhinoMCPPlugin.Forsk
 
         void Bake()
         {
-            if (_busy || !_chipState.Visible) return;
+            if (_busy || !_chipState.ShowGenerate) return;
             _busy = true;
             _composer.Send.EnabledClick = false;
             _chip.EnabledClick = false;
-            var rebuild = _chipState.HasWalls;
             var label = _chipState.Label;
             AddLine("user", label);
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
@@ -346,7 +326,7 @@ namespace RhinoMCPPlugin.Forsk
                 List<string> lines;
                 try
                 {
-                    lines = ForskBake.Run(rebuild);
+                    lines = ForskBake.Run(false);
                 }
                 catch (Exception e)
                 {
