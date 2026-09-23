@@ -736,6 +736,7 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 var path = ForskPrint.PickPathFromBackground();
                 if (string.IsNullOrEmpty(path))
                     return ForskTools.Fail("Print cancelled.");
+                ForskPrint.SettleAfterDialog();
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
             }
@@ -1105,6 +1106,8 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             if (string.IsNullOrEmpty(path))
                 return "Print PDF · cancelled";
 
+            // The layout capture runs after this returns, with Rhino focused.
+            SettleAfterDialog();
             var exported = Call("export_pdf", new JObject { ["path"] = path });
             if (!Ok(exported)) return FailLine(exported);
 
@@ -1130,6 +1133,23 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 done.WaitOne();
             }
             return path;
+        }
+
+        public static void SettleAfterDialog()
+        {
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                try
+                {
+                    var window = RhinoEtoApp.MainWindow;
+                    if (window != null)
+                        window.Focus();
+                }
+                catch (Exception)
+                {
+                }
+                RhinoApp.Wait();
+            }));
         }
 
         public static string PickPath()
@@ -1284,6 +1304,8 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             if (message.IndexOf("No layouts to print", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
             if (message.IndexOf("does not show the clay", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("capture failed after activate/Wait", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
             if (message.IndexOf("requires a file path", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;

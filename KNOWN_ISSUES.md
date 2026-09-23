@@ -72,21 +72,34 @@ back onto the clay. `CommitChanges` while the detail is still active puts
 zoom-extents back (see `9fd120c`). If the frustum still misses the clay, that
 page fails with `Layout detail is empty. The sheet does not show the clay.`
 
-`ViewCaptureSettings` on this Mac wrote a white page. `GetPreviewImage` of the
-same Layout has the plan and the title block, and `FilePdf.DrawBitmap` places
-that bitmap on the sheet when width and height are the bitmap's pixel size.
-Calling `Redraw` immediately before the preview replaces it with an unpainted
-white frame. That white frame is what `/Users/jr/Downloads/forsk-print.pdf`
-contained (`ink 0` in `/tmp/forsk-print.log`). Mac export now takes the preview
-without redrawing. Off Mac the capture stays vector (`RasterMode` false).
-Each export appends one line to `/tmp/forsk-print.log` and prints that path in
-the Rhino command line. It refuses when the detail frustum misses the clay:
-`PDF detail is empty. The sheet does not show the clay.`
+`ViewCaptureSettings` on this Mac wrote a white page, including the title
+block. `GetPreviewImage` of the same Layout, taken on its own at 2480×1754,
+has the plan and the title block, and `FilePdf.DrawBitmap` places that bitmap
+when width and height are the bitmap's pixel size. A redraw that is captured
+immediately photographs an unpainted white frame. Skipping the redraw did not
+fix the Print button: `/tmp/forsk-print.log` still showed ink 0 at 2480×1754.
+Mac layout capture is asynchronous. The button now resolves the save path
+first, then for each Forsk page sets that page active (detail not active),
+sets the layout display mode to Wireframe, redraws, calls `RhinoApp.Wait`,
+lets one idle pass, and only then calls `GetPreviewImage`. Off Mac the
+capture stays vector (`RasterMode` false). Do not put `ViewCaptureSettings`
+back on the Mac path until this preview has ink.
 
-Live check: quit, reinstall, reopen, `mcpstart`, Print PDF again. Do not
-Generate 3D first if the Layout tabs are already there. Open the PDF and
+Each export appends one line to `/tmp/forsk-print.log` and prints that path
+in the Rhino command line. Ink 0 also writes `/tmp/forsk-print-page-N.png`.
+The write is refused only after that activate/Wait still has no ink, with
+`capture failed after activate/Wait` and those PNG paths. A frustum miss is
+still `PDF detail is empty. The sheet does not show the clay.`
+
+If the button log is still ink 0, the optional Mac fallback is `ExportAll`,
+file type Rhino PDF, Multiple layouts, only the `Forsk —` pages, one PDF.
+That command opens Rhino's export dialog (`! _ExportAll` in the Mac menu),
+so Print does not run it.
+
+Live check: quit, reinstall, reopen, `mcpstart`. If the Layout tabs are
+already there, do not Generate 3D first. Print PDF, then open the PDF and
 `/tmp/forsk-print.log`. Plan and at least one elevation must show the clay
-and the title block. A log line with `ink 0` means the preview itself was white.
+and the title block, and the log ink must be greater than 0.
 
 ## Upstream
 

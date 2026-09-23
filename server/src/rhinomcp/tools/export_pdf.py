@@ -53,7 +53,7 @@ def export_pdf(
             _EMPTY_DETAIL,
             _NEEDS_PATH,
             _NEEDS_PDF,
-        ) or "does not show the clay" in str(message):
+        ) or "does not show the clay" in str(message) or "capture failed after activate/Wait" in str(message):
             ok = False
         return {
             "success": ok,

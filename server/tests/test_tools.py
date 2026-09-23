@@ -3303,6 +3303,24 @@ class TestExportPdfTool:
         assert result["success"] is False
         assert result["message"] == "PDF detail is empty. The sheet does not show the clay."
 
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_blank_capture_is_not_success(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "",
+            "count": 0,
+            "pages": [],
+            "message": "capture failed after activate/Wait. Debug images: /tmp/forsk-print-page-1.png",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
+        assert result["success"] is False
+        assert "capture failed after activate/Wait" in result["message"]
+        assert "/tmp/forsk-print-page-1.png" in result["message"]
+
 
 class TestClearLayoutsTool:
     @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
@@ -3371,6 +3389,14 @@ class TestPrintGuards:
         assert "GetPreviewImage" in src
         assert "DrawBitmap" in src
         assert "forsk-print.log" in src
+        assert "capture failed after activate/Wait" in src
+        assert "forsk-print-page-" in src
+        assert "RhinoApp.Wait()" in src
+        assert "RhinoApp.Idle" in src
+        mac = src[src.index("private JObject ExportMacPreviewPdf"):src.index("private static int CountDarkSamples")]
+        assert "ViewCaptureSettings" not in mac
+        assert mac.index("Redraw") < mac.index("GetPreviewImage")
+        assert "SetPageAsActive" in mac
         assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src

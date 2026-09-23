@@ -17,9 +17,9 @@ namespace RhinoMCPPlugin.Functions;
 /// directions as Make2D) in Wireframe, and only the clay layers are visible
 /// in the detail. Source plan layers, especially labels, fill the sheet.
 /// PDF is Rhino.FileIO.FilePdf. Vector output uses ViewCaptureSettings with
-/// RasterMode false. On Rhino 7 Mac that capture, and a raster capture of the
-/// same page, wrote a white sheet, so Mac export draws the page preview into
-/// the PDF instead. Each export appends a line to /tmp/forsk-print.log.
+/// RasterMode false. On Rhino 7 Mac that capture wrote a white sheet, so Mac
+/// export activates each layout, redraws, waits, then draws GetPreviewImage
+/// into the PDF. Each export appends a line to /tmp/forsk-print.log.
 /// AddPageView width and height are millimetres (A3 landscape 420 x 297).
 /// Detail corners and the title block are converted into the document page units.
 /// Does not bake model-space drawing curves and does not require S-* layers.
@@ -46,6 +46,7 @@ public partial class RhinoMCPFunctions
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the clay.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the clay.";
+    private const string CaptureFailedPrefix = "capture failed after activate/Wait";
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -310,9 +311,9 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Draw the layout preview onto the PDF page. Do not redraw first: a redraw
-    /// that has not finished painting replaces the sheet with a white bitmap,
-    /// and that white bitmap is what forsk-print.pdf contained.
+    /// Draw the layout preview onto the PDF page. The save dialog has already
+    /// closed. Activate each page, redraw, and wait before GetPreviewImage so
+    /// the capture is not the unpainted frame left by the modal.
     /// </summary>
     private JObject ExportMacPreviewPdf(RhinoDoc doc, List<RhinoPageView> pages, string full)
     {
@@ -321,9 +322,12 @@ public partial class RhinoMCPFunctions
         int dotsH = (int)Math.Round(A3HeightMm / 25.4 * dpi);
         var names = new JArray();
         var notes = new List<string>();
+        var blanks = new List<string>();
+        var shots = new List<Bitmap>();
         try
         {
-            var pdf = FilePdf.Create();
+            FocusRhino();
+            RhinoApp.Wait();
             int pageNumber = 0;
             foreach (var page in pages)
             {
@@ -331,21 +335,52 @@ public partial class RhinoMCPFunctions
                 Bitmap bmp = null;
                 try
                 {
-                    bmp = page.GetPreviewImage(new Size(dotsW, dotsH), false);
-                    var ink = CountDarkSamples(bmp);
-                    int width = bmp != null ? bmp.Width : dotsW;
-                    int height = bmp != null ? bmp.Height : dotsH;
-                    pdf.AddPage(width, height, dpi);
-                    if (bmp != null)
-                        pdf.DrawBitmap(pageNumber, bmp, 0, 0, width, height, 0);
-                    var size = bmp == null ? "null" : width + "x" + height;
-                    notes.Add((page.PageName ?? "") + " ink " + ink + " " + size);
+                    bmp = CapturePageAfterWait(page, dotsW, dotsH, out var ink);
+                    var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
+                    var note = (page.PageName ?? "") + " ink " + ink + " " + size;
+                    if (ink <= 0)
+                    {
+                        var debug = "/tmp/forsk-print-page-" + pageNumber.ToString(CultureInfo.InvariantCulture) + ".png";
+                        if (!SaveDebugPng(bmp, debug))
+                            note += " debug save failed " + debug;
+                        else
+                            note += " " + debug;
+                        blanks.Add(debug);
+                        if (bmp != null)
+                        {
+                            bmp.Dispose();
+                            bmp = null;
+                        }
+                    }
+                    else
+                    {
+                        shots.Add(bmp);
+                        bmp = null;
+                        names.Add(page.PageName ?? "");
+                    }
+                    notes.Add(note);
                 }
                 finally
                 {
                     if (bmp != null) bmp.Dispose();
                 }
-                names.Add(page.PageName ?? "");
+            }
+
+            if (blanks.Count > 0)
+            {
+                LogPrint(full, 0, string.Join("; ", notes.ToArray()));
+                var message = CaptureFailedPrefix + ". Debug images: " + string.Join(", ", blanks.ToArray());
+                return ExportPdfResult("", new JArray(), message);
+            }
+
+            var pdf = FilePdf.Create();
+            for (int i = 0; i < shots.Count; i++)
+            {
+                var bmp = shots[i];
+                int width = bmp.Width;
+                int height = bmp.Height;
+                pdf.AddPage(width, height, dpi);
+                pdf.DrawBitmap(i + 1, bmp, 0, 0, width, height, 0);
             }
 
             pdf.Write(full);
@@ -356,6 +391,113 @@ public partial class RhinoMCPFunctions
         {
             LogPrint(full, names.Count, "write failed");
             return ExportPdfResult(full, names, PdfWriteFailedMessage);
+        }
+        finally
+        {
+            foreach (var shot in shots)
+            {
+                if (shot != null) shot.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Page active, detail not active, layout display mode Wireframe, then paint.
+    /// </summary>
+    private static void PrepareMacPage(RhinoPageView page)
+    {
+        if (page == null) return;
+        LeaveDetail(page);
+        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        if (mode != null)
+        {
+            if (page.MainViewport != null)
+                page.MainViewport.DisplayMode = mode;
+            var details = page.GetDetailViews();
+            if (details != null)
+            {
+                foreach (var detail in details)
+                {
+                    if (detail == null) continue;
+                    if (detail.IsActive)
+                        detail.IsActive = false;
+                    if (detail.Viewport != null)
+                        detail.Viewport.DisplayMode = mode;
+                }
+            }
+        }
+
+        var doc = page.Document ?? RhinoDoc.ActiveDoc;
+        if (doc != null)
+            doc.Views.ActiveView = page;
+        page.SetPageAsActive();
+        page.Redraw();
+        RhinoApp.Wait();
+        WaitForOneIdle();
+    }
+
+    private static Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink)
+    {
+        PrepareMacPage(page);
+        var size = new Size(dotsW, dotsH);
+        var bmp = page.GetPreviewImage(size, false);
+        ink = CountDarkSamples(bmp);
+        if (ink > 0) return bmp;
+        if (bmp != null) bmp.Dispose();
+        // The first preview after a paint can still be empty. One more wait, then the same call.
+        RhinoApp.Wait();
+        bmp = page.GetPreviewImage(size, false);
+        ink = CountDarkSamples(bmp);
+        return bmp;
+    }
+
+    private static void WaitForOneIdle()
+    {
+        var idle = false;
+        EventHandler handler = null;
+        handler = (sender, args) =>
+        {
+            idle = true;
+            RhinoApp.Idle -= handler;
+        };
+        RhinoApp.Idle += handler;
+        try
+        {
+            var start = Environment.TickCount;
+            while (!idle && unchecked(Environment.TickCount - start) < 800)
+                RhinoApp.Wait();
+        }
+        finally
+        {
+            if (!idle)
+                RhinoApp.Idle -= handler;
+        }
+    }
+
+    private static void FocusRhino()
+    {
+        try
+        {
+            var window = Rhino.UI.RhinoEtoApp.MainWindow;
+            if (window != null)
+                window.Focus();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static bool SaveDebugPng(Bitmap bmp, string path)
+    {
+        if (bmp == null || string.IsNullOrEmpty(path)) return false;
+        try
+        {
+            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
