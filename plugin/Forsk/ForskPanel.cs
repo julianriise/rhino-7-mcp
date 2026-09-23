@@ -285,12 +285,19 @@ namespace RhinoMCPPlugin.Forsk
         void QueuePrint(string historyUser)
         {
             _chip.EnabledClick = false;
+            AddLine("assistant", "Generating layouts…");
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
+                // layout_pack takes the UI thread. Let the status line paint first.
+                System.Threading.Thread.Sleep(50);
                 string line;
                 try
                 {
-                    line = ForskPrint.Run();
+                    line = ForskPrint.Run(status =>
+                    {
+                        if (string.IsNullOrWhiteSpace(status)) return;
+                        Application.Instance.AsyncInvoke(() => AddLine("assistant", status));
+                    });
                 }
                 catch (Exception e)
                 {

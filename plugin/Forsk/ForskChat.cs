@@ -1378,6 +1378,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static string Run()
         {
+            return Run(null);
+        }
+
+        public static string Run(Action<string> progress)
+        {
             var units = UnitsProblem();
             if (units != null)
                 return "Print PDF · error · " + units;
@@ -1392,6 +1397,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var pack = Call("layout_pack", new JObject());
             if (!Ok(pack)) return FailLine(pack);
 
+            Report(progress, "Layouts ready — choose where to save.");
             var path = PickPathFromBackground();
             if (string.IsNullOrEmpty(path))
                 return "Print PDF · cancelled";
@@ -1411,6 +1417,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (string.IsNullOrWhiteSpace(count))
                 return "Print PDF · ok · " + written + blank;
             return "Print PDF · ok · " + count + " · " + written + blank;
+        }
+
+        static void Report(Action<string> progress, string status)
+        {
+            if (progress == null || string.IsNullOrWhiteSpace(status)) return;
+            try
+            {
+                progress(status);
+            }
+            catch (Exception)
+            {
+                // A status line must not replace the receipt.
+            }
         }
 
         public static string PickPathFromBackground()
