@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "layout_pack.json",
   "title": "LayoutPack Command",
-  "description": "Create A3 landscape Layout pages. Each page has one parallel Detail of the clay and a title block at the bottom-right. Does not use Make2D curves.",
+  "description": "Create A3 landscape Layout pages. Each page has one parallel Detail of the greyscale HiddenLineDrawing on S-DRAW and a title block at the bottom-right. The plan drawing is a cut 1200 mm above the floor.",
   "type": "object",
   "properties": {
     "paper": {
@@ -23,7 +23,7 @@
       "type": "integer",
       "minimum": 1,
       "default": 100,
-      "description": "Requested detail scale denominator. 100 means 1:100. Bumped if the clay does not fit the detail."
+      "description": "Requested detail scale denominator. 100 means 1:100. Bumped if the drawing does not fit the detail."
     },
     "replace": {
       "type": "boolean",
@@ -33,7 +33,7 @@
     "include_existing": {
       "type": "boolean",
       "default": true,
-      "description": "Include X-EXIST in the detail."
+      "description": "Include X-EXIST in the greyscale drawing."
     }
   },
   "additionalProperties": false

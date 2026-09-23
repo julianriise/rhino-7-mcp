@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "clear_layouts.json",
   "title": "ClearLayouts Command",
-  "description": "Delete Forsk Layout pages (name prefix Forsk —) and forsk:kind=layout title-block objects. Does not delete clay, X-EXIST, or forsk:kind=drawing.",
+  "description": "Delete Forsk Layout pages (name prefix Forsk —), forsk:kind=layout title-block objects, and greyscale curves on S-DRAW. Does not delete clay, X-EXIST, or the S-PLAN / S-ELEV sheet cache.",
   "type": "object",
   "properties": {
     "views": {

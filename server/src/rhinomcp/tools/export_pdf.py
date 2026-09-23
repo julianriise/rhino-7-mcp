@@ -8,7 +8,7 @@ from rhinomcp.server import get_rhino_connection, mcp, logger
 
 _NEEDS_PATH = "export_pdf requires a file path."
 _NEEDS_PDF = "export_pdf path must be an absolute .pdf file."
-_EMPTY_DETAIL = "PDF detail is empty. The sheet does not show the clay."
+_EMPTY_DETAIL = "PDF detail is empty. The sheet does not show the drawing."
 
 
 @mcp.tool()
@@ -53,7 +53,7 @@ def export_pdf(
             _EMPTY_DETAIL,
             _NEEDS_PATH,
             _NEEDS_PDF,
-        ) or "does not show the clay" in str(message) or "capture failed after activate/Wait" in str(message):
+        ) or "does not show the drawing" in str(message) or "does not show the clay" in str(message) or "capture failed after activate/Wait" in str(message):
             ok = False
         return {
             "success": ok,

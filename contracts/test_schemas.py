@@ -703,7 +703,7 @@ def test_responses():
         "path": "",
         "count": 0,
         "pages": [],
-        "message": "PDF detail is empty. The sheet does not show the clay.",
+        "message": "PDF detail is empty. The sheet does not show the drawing.",
     }
     if not validate("responses/export_pdf_result.json", pdf_blank):
         all_passed = False
@@ -711,7 +711,7 @@ def test_responses():
         "pages": [],
         "count": 0,
         "scale": 100,
-        "message": "Layout detail is empty. The sheet does not show the clay.",
+        "message": "Layout detail is empty. The sheet does not show the drawing.",
     }
     if not validate("responses/layout_pack_result.json", layout_blank):
         all_passed = False

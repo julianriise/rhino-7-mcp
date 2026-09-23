@@ -20,21 +20,21 @@ def layout_pack(
     include_existing: bool = True,
 ) -> Dict[str, Any]:
     """
-    Create Rhino Layout pages of the 3D clay. Not Make2D and not a PDF.
+    Create A3 Layout pages of a greyscale HiddenLineDrawing.
 
-    Each page is A3 landscape with one parallel Detail (plan looks down,
-    elevations match the sheet-pack directions) and a title block at the
-    bottom-right. Requires generated walls. replace removes previous Forsk
-    pages for those views so a re-run does not duplicate tabs.
+    Each page has one parallel Detail of black curves on S-DRAW and a title
+    block at the bottom-right. The plan is a cut 1200 mm above the floor.
+    Requires generated walls. replace removes previous Forsk pages for those
+    views so a re-run does not duplicate tabs. Not a PDF.
 
     Parameters:
     - paper: A3 only (default A3)
     - views: Optional list of plan, north, east, south, west.
       Omit for plan plus four elevations.
-    - scale: Requested denominator, 100 means 1:100. Bumped if the clay
+    - scale: Requested denominator, 100 means 1:100. Bumped if the drawing
       does not fit the detail.
     - replace: Replace existing Forsk layouts for these views (default true)
-    - include_existing: Show X-EXIST in the details (default true)
+    - include_existing: Include X-EXIST in the greyscale drawing (default true)
 
     Returns:
     Dictionary with pages, count, scale, and message.
@@ -66,7 +66,11 @@ def layout_pack(
         result = rhino.send_command("layout_pack", params)
         message = result.get("message", "")
         # The plugin throws this. A result with the same text is still a failure.
-        empty_detail = "Layout detail is empty" in str(message)
+        empty_detail = (
+            "Layout detail is empty" in str(message)
+            or "does not show the drawing" in str(message)
+            or "does not show the clay" in str(message)
+        )
         return {
             "success": not empty_detail,
             "pages": result.get("pages", []),

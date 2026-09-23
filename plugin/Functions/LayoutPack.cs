@@ -15,18 +15,18 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Paper Layouts of the clay. Details use a parallel camera (same look
-/// directions as Make2D). Plan and elevations use a Pen copy. The plan is a
-/// horizontal cut 1200 mm above the floor, clipped only in that detail.
-/// Only the clay layers are visible
-/// in the detail. Source plan layers, especially labels, fill the sheet.
-/// PDF is Rhino.FileIO.FilePdf. Vector output uses ViewCaptureSettings with
-/// RasterMode false. On Rhino 7 Mac that capture wrote a white sheet, so Mac
-/// export activates each layout, redraws, waits, then draws GetPreviewImage
-/// into the PDF. Each export appends a line to /tmp/forsk-print.log.
-/// AddPageView width and height are millimetres (A3 landscape 420 x 297).
-/// Detail corners and the title block are converted into the document page units.
-/// Does not bake model-space drawing curves and does not require S-* layers.
+/// Paper layouts of a greyscale HiddenLineDrawing. Rhino 7 has no
+/// ClippingDrawings. Before each page, layout_pack bakes black curves on
+/// S-DRAW (Plan, North, East, South, West). The plan drawing includes the
+/// horizontal cut 1200 mm above the floor. Details show that drawing layer
+/// only, in Wireframe, so the Mac preview is black lines on white. The model
+/// viewport keeps the clay. PDF is Rhino.FileIO.FilePdf. Vector output uses
+/// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
+/// wrote a white sheet, so Mac export activates each layout, redraws, waits,
+/// then draws GetPreviewImage into the PDF. Each export appends a line to
+/// /tmp/forsk-print.log. AddPageView width and height are millimetres
+/// (A3 landscape 420 x 297). Detail corners and the title block are converted
+/// into the document page units.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -48,8 +48,8 @@ public partial class RhinoMCPFunctions
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
     private const string PdfWriteFailedMessage = "PDF write failed.";
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
-    private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the clay.";
-    private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the clay.";
+    private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
+    private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the drawing.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
     private const string PlanCutMissingMessage = "Plan cut failed. The plan detail has no clipping plane.";
     private const string PlanCutRole = "plan_cut";
@@ -63,7 +63,7 @@ public partial class RhinoMCPFunctions
     private const string PrintRgbKey = "forsk:print_rgb";
     private const string PenReloadFailedMessage =
         "Forsk Pen failed. The display mode did not reload, so the layout was not assigned a deleted mode.";
-    private static int _penPass;
+    private static int _penPass = 0;
     private static int _penApplied = -1;
     private static string _penLog = "";
     private static bool _penForceObjectBlack;
@@ -75,7 +75,7 @@ public partial class RhinoMCPFunctions
     private static Guid _penSourceId;
     private static int _penSamplePass = -2;
     private static bool _penKeysStarted;
-    private static bool _penIncludeExisting = true;
+    private static bool _drawIncludeExisting = true;
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -165,7 +165,6 @@ public partial class RhinoMCPFunctions
 
         var views = ReadLayoutViews(parameters);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
-        _penIncludeExisting = includeExisting;
         var replace = ReadBoolParam(parameters, "replace", true);
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
@@ -193,21 +192,39 @@ public partial class RhinoMCPFunctions
         }
 
         RestorePrintColors(doc);
+        _drawIncludeExisting = includeExisting;
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
         var detailH = A3HeightMm - LayoutMarginMm - TitleHeightMm - TitleGapMm - LayoutMarginMm;
-        _penPass++;
         var pages = new JArray();
         var applied = new List<int>();
+        var drawingNotes = new List<string>();
         string cutNote = null;
+        var planCutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
+        var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
         foreach (var viewName in views)
         {
             if (!TryGetLayoutView(viewName, out var spec))
                 throw new InvalidOperationException(UnknownViewMessage);
 
-            var scale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH);
-            applied.Add(scale);
             if (replace)
                 RemoveLayoutPages(doc, spec.View, false);
+
+            Plane? clip = null;
+            if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
+                clip = planClip;
+            var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip);
+            if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
+            {
+                var why = string.IsNullOrEmpty(drawn.Error)
+                    ? "No visible curves for " + spec.View + "."
+                    : drawn.Error;
+                throw new InvalidOperationException(why);
+            }
+            drawingNotes.Add(
+                spec.View + " " + drawn.Count.ToString(CultureInfo.InvariantCulture));
+
+            var scale = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
+            applied.Add(scale);
 
             var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
             if (page == null)
@@ -219,7 +236,7 @@ public partial class RhinoMCPFunctions
             try
             {
                 detail = AddClayDetail(
-                    doc, page, spec, bbox, scale, includeExisting, clay, out scaleLocked);
+                    doc, page, spec, drawn.Box, scale, drawn.Layer, out scaleLocked);
             }
             catch
             {
@@ -245,6 +262,8 @@ public partial class RhinoMCPFunctions
                 ["page"] = spec.PageName,
                 ["scale"] = scale,
                 ["detail_count"] = 1,
+                ["curves"] = drawn.Count,
+                ["layer"] = drawn.Layer,
                 ["ids"] = ids
             };
             if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
@@ -256,6 +275,9 @@ public partial class RhinoMCPFunctions
                     try { page.Close(); } catch (Exception) { }
                     throw new InvalidOperationException(PlanCutMissingMessage);
                 }
+                var drawLayer = FindDrawLayer(doc, spec.View);
+                if (detail.Viewport != null && drawLayer != null)
+                    SetDetailDrawingVisibility(doc, detail.Viewport.Id, drawLayer);
                 pageRecord["cut_z"] = cutZ;
                 pageRecord["cut_height_mm"] = ForskDefaults.PlanCutHeightMm;
                 cutNote = " Plan cut "
@@ -278,12 +300,15 @@ public partial class RhinoMCPFunctions
         var at = sameScale
             ? "at 1:" + reported.ToString(CultureInfo.InvariantCulture)
             : "with per-page scales";
+        var curveNote = drawingNotes.Count == 0
+            ? ""
+            : " Greyscale drawing: " + string.Join(", ", drawingNotes.ToArray()) + ".";
         return new JObject
         {
             ["pages"] = pages,
             ["count"] = pages.Count,
             ["scale"] = reported,
-            ["message"] = $"Laid out {pages.Count} page(s) on A3 {at}.{cutNote}"
+            ["message"] = $"Laid out {pages.Count} page(s) on A3 {at}.{curveNote}{cutNote}"
         };
     }
 
@@ -301,7 +326,6 @@ public partial class RhinoMCPFunctions
             return ExportPdfResult("", new JArray(), ExportNeedsPdfMessage);
 
         RestorePrintColors(doc);
-        _penPass++;
         var layout = parameters?["layout"]?.ToString();
         var pages = MatchingForskPages(doc, layout);
         if (pages.Count == 0)
@@ -313,10 +337,20 @@ public partial class RhinoMCPFunctions
         foreach (var page in pages)
             LeaveDetail(page);
 
-        if (!ForskPagesShowClay(doc, pages))
+        var full = Path.GetFullPath(path);
+        var drawError = EnsureGreyscaleDrawings(doc, pages);
+        if (!string.IsNullOrEmpty(drawError))
+        {
+            LogPrint(full, 0, "greyscale make2d " + drawError);
+            return ExportPdfResult("", new JArray(), drawError);
+        }
+
+        foreach (var page in pages)
+            ApplyPageDrawingDisplay(doc, page);
+
+        if (!ForskPagesShowDrawing(doc, pages))
             return ExportPdfResult("", new JArray(), EmptyPdfMessage);
 
-        var full = Path.GetFullPath(path);
         var dir = Path.GetDirectoryName(full);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
@@ -333,7 +367,7 @@ public partial class RhinoMCPFunctions
             var pdf = FilePdf.Create();
             foreach (var page in pages)
             {
-                LeaveDetail(page);
+                ApplyPageDrawingDisplay(doc, page);
                 var settings = new ViewCaptureSettings(page, PdfDpi)
                 {
                     RasterMode = false,
@@ -350,7 +384,7 @@ public partial class RhinoMCPFunctions
             }
 
             pdf.Write(full);
-            LogPrint(full, names.Count, "vector" + PenLogSuffix());
+            LogPrint(full, names.Count, "vector " + GreyscaleMake2dNote(doc));
             return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
         }
         catch (Exception)
@@ -422,7 +456,7 @@ public partial class RhinoMCPFunctions
 
             if (blanks.Count > 0)
             {
-                LogPrint(full, 0, string.Join("; ", notes.ToArray()) + PenLogSuffix());
+                LogPrint(full, 0, GreyscaleMake2dNote(doc) + "; " + string.Join("; ", notes.ToArray()));
                 var message = CaptureFailedPrefix + ". Debug images: " + string.Join(", ", blanks.ToArray());
                 return ExportPdfResult("", new JArray(), message);
             }
@@ -438,7 +472,7 @@ public partial class RhinoMCPFunctions
             }
 
             pdf.Write(full);
-            LogPrint(full, names.Count, string.Join("; ", notes.ToArray()) + PenLogSuffix());
+            LogPrint(full, names.Count, GreyscaleMake2dNote(doc) + "; " + string.Join("; ", notes.ToArray()));
             return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
         }
         catch (Exception)
@@ -456,44 +490,16 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Page active, detail not active, then paint. The paper stays Wireframe
-    /// so the Mac capture still has a page to photograph. Each detail uses
-    /// Forsk Pen.
+    /// Page active, detail not active, drawing layers only, then paint.
+    /// The paper and the detail stay Wireframe. Curves are already black.
     /// </summary>
-    private static void PrepareMacPage(RhinoPageView page)
+    private void PrepareMacPage(RhinoPageView page)
     {
         if (page == null) return;
-        LeaveDetail(page);
-        ApplyPaperDisplay(page);
-        var details = page.GetDetailViews();
-        if (details != null)
-        {
-            foreach (var detail in details)
-            {
-                if (detail == null) continue;
-                if (detail.IsActive)
-                    detail.IsActive = false;
-                ApplyDetailDisplay(detail.Viewport);
-            }
-        }
-
         var doc = page.Document ?? RhinoDoc.ActiveDoc;
-        List<RhinoObject> clay = null;
-        Guid sampleId = Guid.Empty;
-        if (doc != null)
-            clay = CollectLayoutClay(doc, _penIncludeExisting, out _);
-        if (details != null && doc != null)
-        {
-            foreach (var detail in details)
-            {
-                if (detail?.Viewport == null || detail.Viewport.Id == Guid.Empty) continue;
-                SetDetailLayerVisibility(doc, detail.Viewport.Id, true, clay);
-                if (sampleId == Guid.Empty)
-                    sampleId = detail.Viewport.Id;
-            }
-            PaintClayForPreview(doc, clay, _penForceObjectBlack);
-            LogPenWalls(doc, clay, sampleId);
-        }
+        if (doc != null && CountPrintDrawings(doc, ViewKeyForPage(page)) == 0)
+            EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
+        ApplyPageDrawingDisplay(doc, page);
         if (doc != null)
             doc.Views.ActiveView = page;
         page.SetPageAsActive();
@@ -502,7 +508,72 @@ public partial class RhinoMCPFunctions
         WaitForOneIdle();
     }
 
-    private static Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink)
+    /// <summary>
+    /// Rebuild a view when its S-DRAW curves are missing. layout_pack always
+    /// refreshes them; export only fills gaps.
+    /// </summary>
+    private string EnsureGreyscaleDrawings(RhinoDoc doc, List<RhinoPageView> pages)
+    {
+        if (doc == null || pages == null) return null;
+        RestorePrintColors(doc);
+        List<RhinoObject> clay = null;
+        foreach (var page in pages)
+        {
+            var view = ViewKeyForPage(page);
+            if (string.IsNullOrEmpty(view)) continue;
+            if (CountPrintDrawings(doc, view) > 0) continue;
+            if (clay == null)
+                clay = CollectLayoutClay(doc, _drawIncludeExisting, out _);
+            Plane? clip = null;
+            if (view.Equals("plan", StringComparison.OrdinalIgnoreCase))
+            {
+                var cutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
+                clip = new Plane(new Point3d(0, 0, cutZ), -Vector3d.ZAxis);
+            }
+            var drawn = BakeGreyscaleDrawing(doc, view, _drawIncludeExisting, clip);
+            if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1)
+            {
+                return string.IsNullOrEmpty(drawn.Error)
+                    ? "No visible curves for " + view + "."
+                    : drawn.Error;
+            }
+        }
+        return null;
+    }
+
+    private static void ApplyPageDrawingDisplay(RhinoDoc doc, RhinoPageView page)
+    {
+        if (page == null) return;
+        LeaveDetail(page);
+        ApplyPaperDisplay(page);
+        var view = ViewKeyForPage(page);
+        var drawLayer = doc == null ? null : FindDrawLayer(doc, view);
+        var details = page.GetDetailViews();
+        if (details == null) return;
+        foreach (var detail in details)
+        {
+            if (detail == null) continue;
+            if (detail.IsActive)
+                detail.IsActive = false;
+            ApplyDetailDisplay(detail.Viewport);
+            if (doc != null && detail.Viewport != null && drawLayer != null)
+                SetDetailDrawingVisibility(doc, detail.Viewport.Id, drawLayer);
+        }
+    }
+
+    private static string ViewKeyForPage(RhinoPageView page)
+    {
+        if (page == null) return null;
+        foreach (var name in new[] { "plan", "north", "east", "south", "west" })
+        {
+            if (!TryGetLayoutView(name, out var spec)) continue;
+            if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))
+                return spec.View;
+        }
+        return null;
+    }
+
+    private Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink)
     {
         PrepareMacPage(page);
         var size = new Size(dotsW, dotsH);
@@ -788,8 +859,7 @@ public partial class RhinoMCPFunctions
         LayoutViewSpec spec,
         BoundingBox bbox,
         int scale,
-        bool includeExisting,
-        List<RhinoObject> clay,
+        string drawLayerPath,
         out bool scaleLocked)
     {
         scaleLocked = false;
@@ -850,17 +920,19 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException(EmptyDetailMessage);
 
         ApplyDetailDisplay(detail.Viewport);
-        SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
-        PaintClayForPreview(doc, clay, _penForceObjectBlack);
-        LogPenWalls(doc, clay, detail.Viewport.Id);
+        var drawLayer = FindDrawLayer(doc, spec.View);
+        if (drawLayer == null && !string.IsNullOrEmpty(drawLayerPath))
+            drawLayer = FindLayerCaseInsensitive(doc, drawLayerPath);
+        if (drawLayer == null)
+            throw new InvalidOperationException(EmptyDetailMessage);
+        SetDetailDrawingVisibility(doc, detail.Viewport.Id, drawLayer);
         LeaveDetail(page);
         return detail;
     }
 
     /// <summary>
-    /// Parallel camera, zoomed to the clay. Details use Forsk Pen. A shaded
-    /// Technical mode filled the roof footprint, so the plan cut removes
-    /// everything above the floor plus 1200 mm instead.
+    /// Parallel camera framed on the greyscale drawing. Wireframe shows the
+    /// black curves. The plan cut is already in those curves.
     /// </summary>
     private static void AimDetailCamera(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
     {
@@ -889,13 +961,12 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Pen copy, re-applied on every layout and export so a saved preference
-    /// cannot leave object-colored edges in place.
+    /// Wireframe. The curves are already black, so the detail does not need a pen mode.
     /// </summary>
     private static void ApplyDetailDisplay(RhinoViewport viewport)
     {
         if (viewport == null) return;
-        var mode = EnsureForskPen();
+        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         if (mode != null)
             viewport.DisplayMode = mode;
     }
@@ -906,6 +977,10 @@ public partial class RhinoMCPFunctions
         return string.IsNullOrEmpty(_penLog) ? "" : " | " + _penLog;
     }
 
+    /// <summary>
+    /// Kept from the Pen experiments. Sheet ink does not call this.
+    /// Details show S-DRAW curves in Wireframe.
+    /// </summary>
     private static DisplayModeDescription EnsureForskPen()
     {
         if (_penApplied == _penPass && _penModeCached != null)
@@ -1599,7 +1674,8 @@ public partial class RhinoMCPFunctions
         {
             LayerIndex = layer.Index,
             Name = "forsk-plan-cut",
-            Space = ActiveSpace.ModelSpace
+            Space = ActiveSpace.ModelSpace,
+            Visible = false
         };
         StampForskTags(attr, new ForskStamp
         {
@@ -1620,7 +1696,6 @@ public partial class RhinoMCPFunctions
             LayoutMetaSection,
             "plan_cut_height_mm",
             ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture));
-        ShowPlanCutInDetail(doc, layer, detail.Viewport.Id);
         return PlanDetailIsClipped(doc, clipId, detail.Viewport.Id);
     }
 
@@ -1773,14 +1848,15 @@ public partial class RhinoMCPFunctions
             && a.Max.Z >= b.Min.Z && a.Min.Z <= b.Max.Z;
     }
 
-    private static bool ForskPagesShowClay(RhinoDoc doc, List<RhinoPageView> pages)
+    private static bool ForskPagesShowDrawing(RhinoDoc doc, List<RhinoPageView> pages)
     {
-        var clay = CollectLayoutClay(doc, true, out var hasWall);
-        if (!hasWall) return false;
-        var bbox = ClayBoundingBox(clay);
-        if (!bbox.IsValid) return false;
+        if (doc == null || pages == null || pages.Count == 0) return false;
         foreach (var page in pages)
         {
+            var view = ViewKeyForPage(page);
+            if (string.IsNullOrEmpty(view)) return false;
+            var bbox = PrintDrawingBounds(doc, view);
+            if (!bbox.IsValid) return false;
             var details = page?.GetDetailViews();
             if (details == null || details.Length == 0) return false;
             var seen = false;
@@ -1792,6 +1868,28 @@ public partial class RhinoMCPFunctions
             if (!seen) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// The detail shows one S-DRAW child. Clay, source labels, and the other
+    /// drawing views stay off. The parent has to be on in that viewport or
+    /// Rhino hides the child.
+    /// </summary>
+    private static void SetDetailDrawingVisibility(RhinoDoc doc, Guid viewportId, Layer drawLayer)
+    {
+        if (doc == null || viewportId == Guid.Empty || drawLayer == null) return;
+        Layer parent = null;
+        if (drawLayer.ParentLayerId != Guid.Empty)
+            parent = doc.Layers.FindId(drawLayer.ParentLayerId);
+        for (int i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            var show = layer.Index == drawLayer.Index
+                || (parent != null && layer.Index == parent.Index);
+            layer.SetPerViewportVisible(viewportId, show);
+            doc.Layers.Modify(layer, layer.Index, true);
+        }
     }
 
     /// <summary>
@@ -2021,7 +2119,9 @@ public partial class RhinoMCPFunctions
             if (obj == null) continue;
             var role = obj.Attributes.GetUserString("forsk:role") ?? "";
             var isCut = role.Equals(PlanCutRole, StringComparison.OrdinalIgnoreCase);
-            if (!string.Equals(GetForskKind(obj), "layout", StringComparison.OrdinalIgnoreCase) && !isCut)
+            var isDrawing = IsPrintDrawing(doc, obj);
+            if (!string.Equals(GetForskKind(obj), "layout", StringComparison.OrdinalIgnoreCase)
+                && !isCut && !isDrawing)
                 continue;
             if (viewSet != null)
             {

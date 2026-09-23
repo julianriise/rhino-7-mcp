@@ -525,4 +525,394 @@ public partial class RhinoMCPFunctions
         foreach (var curve in curves)
             curve?.Transform(move);
     }
+
+    /// <summary>
+    /// Print linework. Rhino 7 Mac has no ClippingDrawings, so this is
+    /// HiddenLineDrawing.Compute. Plan passes the horizontal cut. Curves are
+    /// black hairlines on S-DRAW children, hidden in the model viewport.
+    /// </summary>
+    private struct GreyscaleDrawing
+    {
+        public string View;
+        public string Layer;
+        public int Count;
+        public BoundingBox Box;
+        public string Error;
+    }
+
+    private struct WeightedCurve
+    {
+        public Curve Curve;
+        public double Weight;
+    }
+
+    private const string DrawParentName = "S-DRAW";
+    private const double DrawHairlineMm = 0.18;
+    private const double DrawSilhouetteMm = 0.35;
+
+    private static string DrawChildName(string view)
+    {
+        if (string.IsNullOrEmpty(view)) return null;
+        switch (view.Trim().ToLowerInvariant())
+        {
+            case "plan": return "Plan";
+            case "north": return "North";
+            case "east": return "East";
+            case "south": return "South";
+            case "west": return "West";
+            default: return null;
+        }
+    }
+
+    private GreyscaleDrawing BakeGreyscaleDrawing(
+        RhinoDoc doc, string view, bool includeExisting, Plane? clip)
+    {
+        var result = new GreyscaleDrawing
+        {
+            View = view ?? "",
+            Layer = "",
+            Count = 0,
+            Box = BoundingBox.Empty,
+            Error = null
+        };
+        if (doc == null || !TryGetSheetView(view, out var spec))
+        {
+            result.Error = UnknownViewMessage;
+            return result;
+        }
+
+        var child = DrawChildName(spec.View);
+        var sources = ResolveDrawSources(doc, new JObject(), includeExisting, out _);
+        if (sources.Count == 0)
+        {
+            result.Error = NothingToDrawMessage;
+            return result;
+        }
+
+        var geometries = new List<GeometryBase>();
+        foreach (var obj in sources)
+            AppendDrawable(obj, Transform.Identity, geometries, 0);
+        if (geometries.Count == 0)
+        {
+            result.Error = NothingToDrawMessage;
+            return result;
+        }
+
+        var visible = new List<WeightedCurve>();
+        string fail = null;
+        HiddenLineDrawing hld = null;
+        try
+        {
+            var bbox = BoundingBox.Empty;
+            foreach (var geom in geometries)
+                bbox.Union(geom.GetBoundingBox(true));
+            if (!bbox.IsValid)
+            {
+                fail = "Hidden line drawing failed.";
+            }
+            else
+            {
+                var tolerance = doc.ModelAbsoluteTolerance;
+                if (tolerance <= 0) tolerance = 0.01;
+                var hldParams = new HiddenLineDrawingParameters
+                {
+                    AbsoluteTolerance = tolerance,
+                    Flatten = true,
+                    IncludeHiddenCurves = false,
+                    IncludeTangentEdges = false,
+                    IncludeTangentSeams = false
+                };
+                if (clip.HasValue)
+                    hldParams.AddClippingPlane(clip.Value);
+                var viewport = BuildParallelViewport(bbox, spec.Look, spec.Up);
+                if (viewport == null || !viewport.IsValidCamera || !viewport.IsValidFrustum)
+                {
+                    fail = "Hidden line drawing failed.";
+                }
+                else
+                {
+                    hldParams.SetViewport(viewport);
+                    foreach (var geom in geometries)
+                        hldParams.AddGeometry(geom, Transform.Identity, null);
+                    hld = HiddenLineDrawing.Compute(hldParams, true);
+                    if (hld == null)
+                        fail = "Hidden line drawing failed.";
+                    else if (hld.Segments != null)
+                    {
+                        foreach (var seg in hld.Segments)
+                        {
+                            if (seg == null) continue;
+                            if (seg.SegmentVisibility != HiddenLineDrawingSegment.Visibility.Visible)
+                                continue;
+                            var dup = seg.CurveGeometry?.DuplicateCurve();
+                            if (dup == null) continue;
+                            visible.Add(new WeightedCurve
+                            {
+                                Curve = dup,
+                                Weight = seg.IsSceneSilhouette ? DrawSilhouetteMm : DrawHairlineMm
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            fail = "Hidden line drawing failed.";
+        }
+        finally
+        {
+            hld?.Dispose();
+            foreach (var geom in geometries)
+                geom?.Dispose();
+        }
+
+        if (fail != null || visible.Count == 0)
+        {
+            foreach (var item in visible)
+                item.Curve?.Dispose();
+            result.Error = fail ?? ("No visible curves for " + spec.View + ".");
+            return result;
+        }
+
+        var layer = EnsureDrawLayer(doc, child);
+        if (layer == null)
+        {
+            foreach (var item in visible)
+                item.Curve?.Dispose();
+            result.Error = "Hidden line drawing failed.";
+            return result;
+        }
+
+        DeletePrintDrawings(doc, layer);
+        var curves = new List<Curve>();
+        foreach (var item in visible)
+            if (item.Curve != null) curves.Add(item.Curve);
+        PlaceCurvePack(curves, spec.Offset, doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01);
+
+        var box = BoundingBox.Empty;
+        var count = 0;
+        var index = 1;
+        foreach (var item in visible)
+        {
+            var curve = item.Curve;
+            if (curve == null) continue;
+            if (!curve.IsValid)
+            {
+                curve.Dispose();
+                continue;
+            }
+            box.Union(curve.GetBoundingBox(true));
+            var stableId = FormatStableId("d", index);
+            var attr = new ObjectAttributes
+            {
+                LayerIndex = layer.Index,
+                Name = stableId,
+                ColorSource = ObjectColorSource.ColorFromObject,
+                ObjectColor = Color.Black,
+                PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
+                PlotColor = Color.Black,
+                PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
+                PlotWeight = item.Weight < 0 ? DrawHairlineMm : item.Weight
+            };
+            StampForskTags(attr, new ForskStamp
+            {
+                Kind = "drawing",
+                Level = "0",
+                Id = stableId,
+                View = spec.View
+            });
+            attr.SetUserString("forsk:role", "greyscale");
+            var id = doc.Objects.AddCurve(curve, attr);
+            curve.Dispose();
+            if (id == Guid.Empty) continue;
+            count++;
+            index++;
+        }
+
+        result.View = spec.View;
+        result.Layer = layer.FullPath ?? layer.Name;
+        result.Count = count;
+        result.Box = box;
+        if (count == 0)
+            result.Error = "No visible curves for " + spec.View + ".";
+        return result;
+    }
+
+    private Layer EnsureDrawLayer(RhinoDoc doc, string childName)
+    {
+        if (doc == null || string.IsNullOrEmpty(childName)) return null;
+        var parent = FindLayerCaseInsensitive(doc, DrawParentName);
+        if (parent == null || parent.IsDeleted)
+        {
+            var created = new Layer
+            {
+                Name = DrawParentName,
+                Color = Color.Black,
+                IsVisible = true
+            };
+            var parentIndex = doc.Layers.Add(created);
+            if (parentIndex < 0) return null;
+            parent = doc.Layers.FindIndex(parentIndex);
+        }
+        if (parent == null) return null;
+        StyleDrawLayer(doc, parent, DrawHairlineMm);
+
+        Layer child = null;
+        var kids = parent.GetChildren();
+        if (kids != null)
+        {
+            foreach (var kid in kids)
+            {
+                if (kid == null || kid.IsDeleted) continue;
+                if (!kid.Name.Equals(childName, StringComparison.OrdinalIgnoreCase)) continue;
+                child = kid;
+                break;
+            }
+        }
+        if (child == null)
+        {
+            var created = new Layer
+            {
+                Name = childName,
+                Color = Color.Black,
+                IsVisible = true,
+                ParentLayerId = parent.Id
+            };
+            var childIndex = doc.Layers.Add(created);
+            if (childIndex < 0) return null;
+            child = doc.Layers.FindIndex(childIndex);
+        }
+        if (child == null) return null;
+        StyleDrawLayer(doc, child, DrawHairlineMm);
+        HideDrawLayerInModel(doc, parent);
+        HideDrawLayerInModel(doc, child);
+        return child;
+    }
+
+    private static void StyleDrawLayer(RhinoDoc doc, Layer layer, double plotMm)
+    {
+        if (doc == null || layer == null) return;
+        layer.Color = Color.Black;
+        layer.PlotColor = Color.Black;
+        if (plotMm < 0) plotMm = DrawHairlineMm;
+        layer.PlotWeight = plotMm;
+        // Global on, then model viewports off. A globally off layer stays off
+        // in a detail even when that detail asks for it.
+        layer.IsVisible = true;
+        doc.Layers.Modify(layer, layer.Index, true);
+    }
+
+    private static void HideDrawLayerInModel(RhinoDoc doc, Layer layer)
+    {
+        if (doc == null || layer == null) return;
+        var views = doc.Views.GetViewList(true, false);
+        if (views == null) return;
+        foreach (var view in views)
+        {
+            var id = view?.MainViewport?.Id ?? Guid.Empty;
+            if (id == Guid.Empty) continue;
+            layer.SetPerViewportVisible(id, false);
+        }
+        doc.Layers.Modify(layer, layer.Index, true);
+    }
+
+    private static void DeletePrintDrawings(RhinoDoc doc, Layer layer)
+    {
+        if (doc == null || layer == null) return;
+        var doomed = new List<Guid>();
+        foreach (var obj in doc.Objects)
+        {
+            if (obj == null) continue;
+            if (!string.Equals(GetForskKind(obj), "drawing", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (obj.Attributes.LayerIndex != layer.Index) continue;
+            doomed.Add(obj.Id);
+        }
+        foreach (var id in doomed)
+            doc.Objects.Delete(id, true);
+    }
+
+    private static Layer FindDrawLayer(RhinoDoc doc, string view)
+    {
+        var child = DrawChildName(view);
+        if (doc == null || child == null) return null;
+        var want = DrawParentName + "::" + child;
+        for (int i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            if ((layer.FullPath ?? "").Equals(want, StringComparison.OrdinalIgnoreCase))
+                return layer;
+        }
+        return null;
+    }
+
+    private static int CountPrintDrawings(RhinoDoc doc, string view)
+    {
+        if (doc == null) return 0;
+        var count = 0;
+        foreach (var obj in doc.Objects)
+        {
+            if (!IsPrintDrawing(doc, obj)) continue;
+            if (!string.IsNullOrEmpty(view))
+            {
+                var objView = obj.Attributes.GetUserString("forsk:view") ?? "";
+                if (!objView.Equals(view, StringComparison.OrdinalIgnoreCase)) continue;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    private static BoundingBox PrintDrawingBounds(RhinoDoc doc, string view)
+    {
+        var box = BoundingBox.Empty;
+        if (doc == null) return box;
+        foreach (var obj in doc.Objects)
+        {
+            if (!IsPrintDrawing(doc, obj)) continue;
+            if (!string.IsNullOrEmpty(view))
+            {
+                var objView = obj.Attributes.GetUserString("forsk:view") ?? "";
+                if (!objView.Equals(view, StringComparison.OrdinalIgnoreCase)) continue;
+            }
+            var geom = obj.Geometry;
+            if (geom == null) continue;
+            var one = geom.GetBoundingBox(true);
+            if (one.IsValid) box.Union(one);
+        }
+        return box;
+    }
+
+    private static bool IsPrintDrawing(RhinoDoc doc, RhinoObject obj)
+    {
+        if (doc == null || obj?.Attributes == null) return false;
+        if (!string.Equals(GetForskKind(obj), "drawing", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var index = obj.Attributes.LayerIndex;
+        if (index < 0 || index >= doc.Layers.Count) return false;
+        return IsUnderDrawLayer(doc.Layers[index]);
+    }
+
+    private static bool IsUnderDrawLayer(Layer layer)
+    {
+        if (layer == null || layer.IsDeleted) return false;
+        var path = layer.FullPath ?? "";
+        if (path.Equals(DrawParentName, StringComparison.OrdinalIgnoreCase)) return true;
+        return path.StartsWith(DrawParentName + "::", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GreyscaleMake2dNote(RhinoDoc doc)
+    {
+        var parts = new List<string>();
+        foreach (var view in new[] { "plan", "north", "east", "south", "west" })
+        {
+            var count = CountPrintDrawings(doc, view);
+            if (count <= 0) continue;
+            parts.Add(view + "=" + count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        if (parts.Count == 0) return "greyscale make2d";
+        return "greyscale make2d " + string.Join(" ", parts.ToArray());
+    }
 }

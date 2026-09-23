@@ -3225,13 +3225,13 @@ class TestLayoutPackTool:
             "pages": [],
             "count": 0,
             "scale": 100,
-            "message": "Layout detail is empty. The sheet does not show the clay.",
+            "message": "Layout detail is empty. The sheet does not show the drawing.",
         }
         mock_get_conn.return_value = mock_conn
 
         result = layout_pack(ctx=None)
         assert result["success"] is False
-        assert "does not show the clay" in result["message"]
+        assert "does not show the drawing" in result["message"]
 
 
 class TestExportPdfTool:
@@ -3295,13 +3295,13 @@ class TestExportPdfTool:
             "path": "",
             "count": 0,
             "pages": [],
-            "message": "PDF detail is empty. The sheet does not show the clay.",
+            "message": "PDF detail is empty. The sheet does not show the drawing.",
         }
         mock_get_conn.return_value = mock_conn
 
         result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
         assert result["success"] is False
-        assert result["message"] == "PDF detail is empty. The sheet does not show the clay."
+        assert result["message"] == "PDF detail is empty. The sheet does not show the drawing."
 
     @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
     def test_blank_capture_is_not_success(self, mock_get_conn):
@@ -3372,25 +3372,38 @@ class TestPrintGuards:
         assert "pdf.Write" in src
         assert "ActiveSpace.PageSpace" in src
         assert "DisplayModeDescription.WireframeId" in src
-        assert "DisplayModeDescription.PenId" in src
-        assert "Forsk Pen" in src
+        assert "BakeGreyscaleDrawing" in src
+        assert "HiddenLineDrawing" in src
+        assert "S-DRAW" in src
+        assert "greyscale make2d" in src
+        assert "Greyscale drawing" in src
         assert "AddClippingPlane" in src
         assert "plan_cut" in src
         assert "-Vector3d.ZAxis" in src
         assert "Plan cut failed. The plan detail has no clipping plane." in src
-        assert "ShowTangentEdges = false" in src
-        assert "SetPerViewportColor" in src
-        assert "GetPreviewImage reads this display color" in src
-        assert "EdgeColorUsage" in src
-        assert "SurfaceEdgeThickness = PenEdgePx" in src
         assert "TechId" not in src
         assert "BlackAndWhite" in src
-        assert "IsClayDetailLayer" in src
         assert "doc.Layers.Count" in src
         assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
-        assert "Layout detail is empty. The sheet does not show the clay." in src
-        assert "PDF detail is empty. The sheet does not show the clay." in src
+        assert "Layout detail is empty. The sheet does not show the drawing." in src
+        assert "PDF detail is empty. The sheet does not show the drawing." in src
+        pack = src[src.index('[McpCommand("layout_pack")]'):src.index('[McpCommand("export_pdf")]')]
+        assert "EnsureForskPen" not in pack
+        assert "PaintClayForPreview" not in pack
+        assert "BakeGreyscaleDrawing" in pack
+        prep = src[src.index("private void PrepareMacPage"):src.index("private string EnsureGreyscaleDrawings")]
+        assert "EnsureForskPen" not in prep
+        assert "Forsk Pen" not in prep
+        assert "PaintClayForPreview" not in prep
+        assert "SetDetailDrawingVisibility" in prep or "ApplyPageDrawingDisplay" in prep
+        bake = self._text("plugin", "Functions", "Make2dView.cs")
+        assert "HiddenLineDrawing.Compute" in bake
+        assert "AddClippingPlane" in bake
+        assert "IsSceneSilhouette" in bake
+        assert "PlotWeightFromObject" in bake
+        assert "ColorFromObject" in bake
+        assert 'DrawParentName = "S-DRAW"' in bake
         assert "SetPageAsActive" in src
         assert "GetFrustumBoundingBox" in src
         assert "SetPerViewportPlotWeight" in src
@@ -3410,7 +3423,6 @@ class TestPrintGuards:
         assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src
-        assert "HiddenLineDrawing" not in src
         assert "SaveFileDialog" not in src
         assert "RunScript" not in src
         assert "sheet_pack" not in src
@@ -3429,7 +3441,7 @@ class TestPrintGuards:
         assert "AddPageView" not in clear
         assert "page.Close" not in clear
 
-    def test_clear_layouts_matches_forsk_pages_only(self):
+    def test_clear_layouts_removes_pages_and_greyscale(self):
         src = self._text("plugin", "Functions", "LayoutPack.cs")
         assert '[McpCommand("clear_layouts")]' in src
         remover = src[src.index(
@@ -3437,6 +3449,7 @@ class TestPrintGuards:
         ):]
         assert "IsForskLayoutPage" in remover
         assert '"layout"' in remover
+        assert "IsPrintDrawing" in remover
         assert "PlanCutRole" in remover
         assert '"wall"' not in remover
         assert '"drawing"' not in remover

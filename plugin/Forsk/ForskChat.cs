@@ -424,7 +424,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["scale_label"] = Str("Title scale text. Unset reads as 1:100.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of the clay. One Detail per view and a title block bottom-right. Not Make2D and not a PDF. Requires walls. Default views are plan, north, east, south, and west.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default views are plan, north, east, south, and west.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),
@@ -436,7 +436,7 @@ namespace RhinoMCPPlugin.Forsk
                         },
                         ["scale"] = Num("Requested scale denominator. 100 means 1:100."),
                         ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
-                        ["include_existing"] = Bool("Show X-EXIST in the details. Default true.")
+                        ["include_existing"] = Bool("Include X-EXIST in the greyscale drawing. Default true.")
                     }),
                 Fn("export_pdf",
                     "Write Forsk Layout pages to a PDF. In this panel, omit path. A save dialog supplies the absolute .pdf path. Do not invent a path and do not ask the user to type one. Call layout_pack first.",
@@ -446,7 +446,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page.")
                     }),
                 Fn("clear_layouts",
-                    "Delete Forsk Layout pages and their title blocks. Does not delete clay, X-EXIST, or S-* drawings. clear_generated also leaves layouts.",
+                    "Delete Forsk Layout pages, their title blocks, and the greyscale S-DRAW curves. Does not delete clay, X-EXIST, or the S-PLAN / S-ELEV sheet cache. clear_generated also leaves layouts.",
                     new JObject
                     {
                         ["views"] = new JObject
@@ -493,7 +493,7 @@ Roof or openings before walls: Walls first. Call walls_from_layer before roof_fl
 
 Delete this door or window is delete_opening. Add is add_opening. Move millimetres along the wall is move_opening delta_mm.
 
-Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack makes the pages. clear_layouts removes Forsk layouts only. Make2D on S-* is optional: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
+Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
 Do not call Grasshopper tools or execute code. Reply in one or two sentences. The panel prints tool receipts.";
 
@@ -1304,6 +1304,12 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
             if (message.IndexOf("No layouts to print", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
             if (message.IndexOf("does not show the clay", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("does not show the drawing", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("Hidden line drawing failed", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (message.IndexOf("No visible curves", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
             if (message.IndexOf("capture failed after activate/Wait", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;

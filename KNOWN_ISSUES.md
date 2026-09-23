@@ -67,54 +67,53 @@ Still unverified, out of MVP scope:
 
 ## Layout PDF on Rhino 7 Mac
 
-`layout_pack` frames each Detail, locks the scale, then pans the locked view
-back onto the clay. `CommitChanges` while the detail is still active puts
-zoom-extents back (see `9fd120c`). If the frustum still misses the clay, that
-page fails with `Layout detail is empty. The sheet does not show the clay.`
+Sheets are a greyscale `HiddenLineDrawing`, not a photo of the clay. Rhino 7
+has no ClippingDrawings. `layout_pack` bakes black curves on `S-DRAW::Plan`
+and `S-DRAW::North` / `East` / `South` / `West`, then frames each Detail on
+that drawing. `CommitChanges` while the detail is still active puts
+zoom-extents back (see `9fd120c`). If the frustum misses the drawing, that
+page fails with `Layout detail is empty. The sheet does not show the drawing.`
+
+The plan cut is a horizontal plane at the floor top plus 1200 mm, normal
+down, passed into `HiddenLineDrawingParameters.AddClippingPlane`. A hidden
+clipping-plane object is also stored on the Plan detail only. Elevations
+are not clipped. Hidden curves and tangent edges are off. Silhouettes plot
+at 0.35 mm. Other curves plot at 0.18 mm. The detail is Wireframe, so
+`GetPreviewImage` sees object-black curves. Plot weight is for the vector
+path. Forsk Pen is not the sheet ink.
 
 `ViewCaptureSettings` on this Mac wrote a white page, including the title
-block. `GetPreviewImage` of the same Layout, taken on its own at 2480×1754,
-has the plan and the title block, and `FilePdf.DrawBitmap` places that bitmap
-when width and height are the bitmap's pixel size. A redraw that is captured
-immediately photographs an unpainted white frame. Skipping the redraw did not
-fix the Print button: `/tmp/forsk-print.log` still showed ink 0 at 2480×1754.
-Mac layout capture is asynchronous. The button now resolves the save path
-first, then for each Forsk page sets that page active (detail not active),
-keeps the paper in Wireframe, sets each detail to the `Forsk Pen` copy,
-redraws, calls `RhinoApp.Wait`,
-lets one idle pass, and only then calls `GetPreviewImage`. Off Mac the
-capture stays vector (`RasterMode` false). Do not put `ViewCaptureSettings`
-back on the Mac path until this preview has ink.
+block. `GetPreviewImage` of the same Layout, taken after a redraw and a
+wait, has the lines and the title block, and `FilePdf.DrawBitmap` places
+that bitmap when width and height are the bitmap's pixel size. A redraw
+that is captured immediately photographs an unpainted white frame. Mac
+layout capture is asynchronous. The button resolves the save path first,
+then for each Forsk page sets that page active (detail not active), keeps
+the paper and the detail in Wireframe, shows only that `S-DRAW` child,
+redraws, calls `RhinoApp.Wait`, lets one idle pass, and only then calls
+`GetPreviewImage`. Off Mac the capture stays vector (`RasterMode` false,
+`OutputColor` BlackAndWhite). Do not put `ViewCaptureSettings` back on the
+Mac path until this preview has ink.
 
 Each export appends one line to `/tmp/forsk-print.log` and prints that path
-in the Rhino command line. Ink 0 also writes `/tmp/forsk-print-page-N.png`.
-The write is refused only after that activate/Wait still has no ink, with
+in the Rhino command line. The line includes `greyscale make2d`, curve
+counts, and ink. Ink 0 also writes `/tmp/forsk-print-page-N.png`. The write
+is refused only after that activate/Wait still has no ink, with
 `capture failed after activate/Wait` and those PNG paths. A frustum miss is
-still `PDF detail is empty. The sheet does not show the clay.`
+`PDF detail is empty. The sheet does not show the drawing.`
 
 If the button log is still ink 0, the optional Mac fallback is `ExportAll`,
 file type Rhino PDF, Multiple layouts, only the `Forsk —` pages, one PDF.
 That command opens Rhino's export dialog (`! _ExportAll` in the Mac menu),
 so Print does not run it.
 
-The plan detail is a horizontal cut. `layout_pack` places one clipping
-plane at the top of the floor solids plus 1200 mm, normal pointing down,
-and assigns it only to that detail. Elevations are not clipped. The roof
-above the cut drops out of the plan. Rhino 7 Mac still captures the page
-as a bitmap. `Forsk Pen` is display quality, not an Rhino 8 vector
-Technical print. On this Rhino 7 the public attributes have surface-edge
-thickness and curve color, not a silhouette-color property. The mode file
-sets edge color usage to a single black color (usage 2; 0 is the object
-color) and silhouette thickness to 2 px. The detail display color is black
-because `GetPreviewImage` ignores plot color. RhinoCommon does not expose the hidden-line switch.
-Pen leaves hidden lines off. Tangent and iso edges are turned off on the
-`Forsk Pen` copy. To inspect that switch: Rhino Options, View, Display
-Modes, Forsk Pen.
+Rhino 8 ClippingDrawings, as in the McNeel drafting guide
+(https://www.rhino3d.com/docs/guides/user-guide/drafting-architecture/),
+are later. This slice does not call them and does not recolor the clay.
 
 Live check: quit, reinstall, reopen, `mcpstart`, Generate 3D, then Print.
-Open the PDF and `/tmp/forsk-print.log`. Plan shows wall openings at the
-cut, not a filled roof. Elevations show the facade outline. Log ink must
-be greater than 0.
+`Forsk — Plan` is thin black wall lines through the windows. Elevations are
+black facades. The model viewport stays clay. Log ink must be greater than 0.
 
 ## Upstream
 

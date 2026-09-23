@@ -17,10 +17,11 @@ def clear_layouts(
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """
-    Delete Forsk Layout pages and their title-block objects.
+    Delete Forsk Layout pages, their title-block objects, and the greyscale
+    S-DRAW curves for those views.
 
-    Does not delete walls, floors, roofs, openings, rooms, X-EXIST, or
-    Make2D curves (forsk:kind=drawing). clear_generated also leaves layouts.
+    Does not delete walls, floors, roofs, openings, rooms, X-EXIST, or the
+    sheet-cache curves on S-PLAN / S-ELEV-*. clear_generated also leaves layouts.
 
     Parameters:
     - views: Optional filter (plan, north, east, south, west).
