@@ -310,8 +310,9 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Mac FilePdf capture of a Layout is a white bitmap. Draw the page preview,
-    /// which already shows the clay and the title block, onto each PDF page.
+    /// Draw the layout preview onto the PDF page. Do not redraw first: a redraw
+    /// that has not finished painting replaces the sheet with a white bitmap,
+    /// and that white bitmap is what forsk-print.pdf contained.
     /// </summary>
     private JObject ExportMacPreviewPdf(RhinoDoc doc, List<RhinoPageView> pages, string full)
     {
@@ -320,7 +321,6 @@ public partial class RhinoMCPFunctions
         int dotsH = (int)Math.Round(A3HeightMm / 25.4 * dpi);
         var names = new JArray();
         var notes = new List<string>();
-        var previous = doc.Views.ActiveView;
         try
         {
             var pdf = FilePdf.Create();
@@ -328,26 +328,17 @@ public partial class RhinoMCPFunctions
             foreach (var page in pages)
             {
                 pageNumber++;
-                LeaveDetail(page);
-                doc.Views.ActiveView = page;
-                page.SetPageAsActive();
-                page.Redraw();
                 Bitmap bmp = null;
                 try
                 {
                     bmp = page.GetPreviewImage(new Size(dotsW, dotsH), false);
                     var ink = CountDarkSamples(bmp);
-                    if (ink == 0)
-                    {
-                        if (bmp != null) bmp.Dispose();
-                        page.Redraw();
-                        bmp = page.GetPreviewImage(new Size(dotsW, dotsH), false);
-                        ink = CountDarkSamples(bmp);
-                    }
-                    pdf.AddPage(dotsW, dotsH, dpi);
+                    int width = bmp != null ? bmp.Width : dotsW;
+                    int height = bmp != null ? bmp.Height : dotsH;
+                    pdf.AddPage(width, height, dpi);
                     if (bmp != null)
-                        pdf.DrawBitmap(pageNumber, bmp, 0, 0, dotsW, dotsH, 0);
-                    var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
+                        pdf.DrawBitmap(pageNumber, bmp, 0, 0, width, height, 0);
+                    var size = bmp == null ? "null" : width + "x" + height;
                     notes.Add((page.PageName ?? "") + " ink " + ink + " " + size);
                 }
                 finally
@@ -365,11 +356,6 @@ public partial class RhinoMCPFunctions
         {
             LogPrint(full, names.Count, "write failed");
             return ExportPdfResult(full, names, PdfWriteFailedMessage);
-        }
-        finally
-        {
-            if (previous != null)
-                doc.Views.ActiveView = previous;
         }
     }
 

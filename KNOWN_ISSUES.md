@@ -72,11 +72,13 @@ back onto the clay. `CommitChanges` while the detail is still active puts
 zoom-extents back (see `9fd120c`). If the frustum still misses the clay, that
 page fails with `Layout detail is empty. The sheet does not show the clay.`
 
-`ViewCaptureSettings` on this Mac, vector or raster, wrote a white page:
-`/Users/jr/Downloads/forsk-print.pdf` is five A3 pages and every pixel is white.
-The Layout tab and `RhinoPageView.GetPreviewImage` of the same pages show the
-plan and the elevations. `export_pdf` on Mac draws that preview into the PDF
-with `FilePdf.DrawBitmap`. Off Mac the capture stays vector (`RasterMode` false).
+`ViewCaptureSettings` on this Mac wrote a white page. `GetPreviewImage` of the
+same Layout has the plan and the title block, and `FilePdf.DrawBitmap` places
+that bitmap on the sheet when width and height are the bitmap's pixel size.
+Calling `Redraw` immediately before the preview replaces it with an unpainted
+white frame. That white frame is what `/Users/jr/Downloads/forsk-print.pdf`
+contained (`ink 0` in `/tmp/forsk-print.log`). Mac export now takes the preview
+without redrawing. Off Mac the capture stays vector (`RasterMode` false).
 Each export appends one line to `/tmp/forsk-print.log` and prints that path in
 the Rhino command line. It refuses when the detail frustum misses the clay:
 `PDF detail is empty. The sheet does not show the clay.`
