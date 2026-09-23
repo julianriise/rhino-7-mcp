@@ -80,7 +80,8 @@ immediately photographs an unpainted white frame. Skipping the redraw did not
 fix the Print button: `/tmp/forsk-print.log` still showed ink 0 at 2480×1754.
 Mac layout capture is asynchronous. The button now resolves the save path
 first, then for each Forsk page sets that page active (detail not active),
-sets the layout display mode to Wireframe, redraws, calls `RhinoApp.Wait`,
+keeps the paper in Wireframe, sets an elevation detail to Pen (plan stays
+Wireframe; a shaded mode filled the roof footprint), redraws, calls `RhinoApp.Wait`,
 lets one idle pass, and only then calls `GetPreviewImage`. Off Mac the
 capture stays vector (`RasterMode` false). Do not put `ViewCaptureSettings`
 back on the Mac path until this preview has ink.

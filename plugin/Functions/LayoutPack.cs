@@ -14,7 +14,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Paper Layouts of the clay. Details use a parallel camera (same look
-/// directions as Make2D) in Wireframe, and only the clay layers are visible
+/// directions as Make2D). Plan stays Wireframe. Elevations use Pen so edges
+/// behind the facade drop out. Only the clay layers are visible
 /// in the detail. Source plan layers, especially labels, fill the sheet.
 /// PDF is Rhino.FileIO.FilePdf. Vector output uses ViewCaptureSettings with
 /// RasterMode false. On Rhino 7 Mac that capture wrote a white sheet, so Mac
@@ -402,28 +403,24 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Page active, detail not active, layout display mode Wireframe, then paint.
+    /// Page active, detail not active, then paint. The paper stays Wireframe.
+    /// An elevation detail uses Pen so the capture matches the sheet.
     /// </summary>
     private static void PrepareMacPage(RhinoPageView page)
     {
         if (page == null) return;
         LeaveDetail(page);
-        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
-        if (mode != null)
+        ApplyPaperDisplay(page);
+        var elevation = IsElevationPage(page);
+        var details = page.GetDetailViews();
+        if (details != null)
         {
-            if (page.MainViewport != null)
-                page.MainViewport.DisplayMode = mode;
-            var details = page.GetDetailViews();
-            if (details != null)
+            foreach (var detail in details)
             {
-                foreach (var detail in details)
-                {
-                    if (detail == null) continue;
-                    if (detail.IsActive)
-                        detail.IsActive = false;
-                    if (detail.Viewport != null)
-                        detail.Viewport.DisplayMode = mode;
-                }
+                if (detail == null) continue;
+                if (detail.IsActive)
+                    detail.IsActive = false;
+                ApplyDetailDisplay(detail.Viewport, elevation);
             }
         }
 
@@ -736,12 +733,7 @@ public partial class RhinoMCPFunctions
             DefinedViewportProjection.Top);
         if (detail == null) return null;
 
-        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
-        if (mode != null)
-        {
-            if (page.MainViewport != null)
-                page.MainViewport.DisplayMode = mode;
-        }
+        ApplyPaperDisplay(page);
 
         // Frame while the detail is active, then leave it before the scale lock.
         // CommitChanges on an active detail puts zoom-extents back.
@@ -787,12 +779,16 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException(EmptyDetailMessage);
 
         SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
+        var elevation = !string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
+        ApplyDetailDisplay(detail.Viewport, elevation);
         LeaveDetail(page);
         return detail;
     }
 
     /// <summary>
-    /// Parallel camera, Wireframe, zoomed to the clay. Technical filled the floor slab solid black.
+    /// Parallel camera, zoomed to the clay. Plan is Wireframe: a shaded mode
+    /// filled the roof and floor footprint. Elevations are Pen, which occludes
+    /// edges behind the front face. Technical filled that footprint solid black.
     /// </summary>
     private static void AimDetailCamera(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
     {
@@ -810,9 +806,42 @@ public partial class RhinoMCPFunctions
         var pad = Math.Max(500.0, framed.Diagonal.Length * 0.02);
         framed.Inflate(pad);
         vp.ZoomBoundingBox(framed);
+        var elevation = !string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
+        ApplyDetailDisplay(vp, elevation);
+    }
+
+    private static void ApplyPaperDisplay(RhinoPageView page)
+    {
         var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        if (mode != null && page?.MainViewport != null)
+            page.MainViewport.DisplayMode = mode;
+    }
+
+    /// <summary>
+    /// Pen hides edges behind surfaces. Missing Pen falls back to Wireframe.
+    /// </summary>
+    private static void ApplyDetailDisplay(RhinoViewport viewport, bool elevation)
+    {
+        if (viewport == null) return;
+        DisplayModeDescription mode = null;
+        if (elevation)
+            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId);
+        if (mode == null)
+            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         if (mode != null)
-            vp.DisplayMode = mode;
+            viewport.DisplayMode = mode;
+    }
+
+    private static bool IsElevationPage(RhinoPageView page)
+    {
+        var name = page?.PageName ?? "";
+        foreach (var view in new[] { "north", "east", "south", "west" })
+        {
+            if (!TryGetLayoutView(view, out var spec)) continue;
+            if (string.Equals(name, spec.PageName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

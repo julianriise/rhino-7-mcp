@@ -3372,7 +3372,7 @@ class TestPrintGuards:
         assert "pdf.Write" in src
         assert "ActiveSpace.PageSpace" in src
         assert "DisplayModeDescription.WireframeId" in src
-        assert "PenId" not in src
+        assert "DisplayModeDescription.PenId" in src
         assert "TechId" not in src
         assert "BlackAndWhite" in src
         assert "IsClayDetailLayer" in src
