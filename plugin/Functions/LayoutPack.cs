@@ -55,10 +55,27 @@ public partial class RhinoMCPFunctions
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
     private const int PenEdgePx = 1;
-    private const int PenSilhouettePx = 2;
+    private const string PenIniPath = "/tmp/forsk-pen.ini";
+    private const string PenAfterPath = "/tmp/forsk-pen-after.ini";
+    private const string PenKeysPath = "/tmp/forsk-pen-keys.txt";
+    private const string PenStockPath = "/tmp/forsk-pen-stock.ini";
+    private const string PrintColorSourceKey = "forsk:print_cs";
+    private const string PrintRgbKey = "forsk:print_rgb";
+    private const string PenReloadFailedMessage =
+        "Forsk Pen failed. The display mode did not reload, so the layout was not assigned a deleted mode.";
     private static int _penPass;
     private static int _penApplied = -1;
     private static string _penLog = "";
+    private static bool _penForceObjectBlack;
+    private static bool _penReloadFailed;
+    private static int _penUsageZero;
+    private static bool _penSawEdgeUsage;
+    private static int _singleColorUsage = 2;
+    private static bool _singleColorLearned;
+    private static Guid _penSourceId;
+    private static int _penSamplePass = -2;
+    private static bool _penKeysStarted;
+    private static bool _penIncludeExisting = true;
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -148,6 +165,7 @@ public partial class RhinoMCPFunctions
 
         var views = ReadLayoutViews(parameters);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
+        _penIncludeExisting = includeExisting;
         var replace = ReadBoolParam(parameters, "replace", true);
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
@@ -174,6 +192,7 @@ public partial class RhinoMCPFunctions
             };
         }
 
+        RestorePrintColors(doc);
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
         var detailH = A3HeightMm - LayoutMarginMm - TitleHeightMm - TitleGapMm - LayoutMarginMm;
         _penPass++;
@@ -281,6 +300,7 @@ public partial class RhinoMCPFunctions
         if (!Path.IsPathRooted(path) || !path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
             return ExportPdfResult("", new JArray(), ExportNeedsPdfMessage);
 
+        RestorePrintColors(doc);
         _penPass++;
         var layout = parameters?["layout"]?.ToString();
         var pages = MatchingForskPages(doc, layout);
@@ -458,6 +478,22 @@ public partial class RhinoMCPFunctions
         }
 
         var doc = page.Document ?? RhinoDoc.ActiveDoc;
+        List<RhinoObject> clay = null;
+        Guid sampleId = Guid.Empty;
+        if (doc != null)
+            clay = CollectLayoutClay(doc, _penIncludeExisting, out _);
+        if (details != null && doc != null)
+        {
+            foreach (var detail in details)
+            {
+                if (detail?.Viewport == null || detail.Viewport.Id == Guid.Empty) continue;
+                SetDetailLayerVisibility(doc, detail.Viewport.Id, true, clay);
+                if (sampleId == Guid.Empty)
+                    sampleId = detail.Viewport.Id;
+            }
+            PaintClayForPreview(doc, clay, _penForceObjectBlack);
+            LogPenWalls(doc, clay, sampleId);
+        }
         if (doc != null)
             doc.Views.ActiveView = page;
         page.SetPageAsActive();
@@ -583,6 +619,8 @@ public partial class RhinoMCPFunctions
         }
 
         var dryRun = ReadBoolParam(parameters, "dry_run", false);
+        if (!dryRun)
+            RestorePrintColors(doc);
         return RemoveLayoutPages(doc, viewSet, dryRun);
     }
 
@@ -811,8 +849,10 @@ public partial class RhinoMCPFunctions
         if (!DetailSeesClay(detail.Viewport, bbox))
             throw new InvalidOperationException(EmptyDetailMessage);
 
-        SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
         ApplyDetailDisplay(detail.Viewport);
+        SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
+        PaintClayForPreview(doc, clay, _penForceObjectBlack);
+        LogPenWalls(doc, clay, detail.Viewport.Id);
         LeaveDetail(page);
         return detail;
     }
@@ -869,33 +909,79 @@ public partial class RhinoMCPFunctions
     private static DisplayModeDescription EnsureForskPen()
     {
         if (_penApplied == _penPass && _penModeCached != null)
-            return _penModeCached;
-        var mode = DisplayModeDescription.FindByName(ForskPenName);
-        if (mode == null || mode.Id == DisplayModeDescription.PenId)
         {
-            var id = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.PenId, ForskPenName);
-            if (id != Guid.Empty)
-                mode = DisplayModeDescription.GetDisplayMode(id);
+            var cached = DisplayModeDescription.GetDisplayMode(_penModeCached.Id);
+            if (cached != null) return cached;
         }
-        if (mode == null || mode.Id == DisplayModeDescription.PenId)
+
+        _penForceObjectBlack = false;
+        _penReloadFailed = false;
+        _penUsageZero = 0;
+        _penSawEdgeUsage = false;
+        _penKeysStarted = false;
+        _penSourceId = DisplayModeDescription.PenId;
+
+        var mode = ResolveForskPen(DisplayModeDescription.PenId, false);
+        if (mode == null)
+            throw new InvalidOperationException(PenReloadFailedMessage);
+        var note = RepatchPenIni(mode, out mode);
+        if (_penReloadFailed || mode == null)
+            throw new InvalidOperationException(PenReloadFailedMessage);
+
+        if (EdgeUsageFailed())
         {
-            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId)
-                ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+            var source = FindModeId("Monochrome");
+            var sourceName = "Monochrome";
+            if (source == Guid.Empty)
+            {
+                source = FindModeId("Technical");
+                sourceName = "Technical";
+            }
+            if (source == Guid.Empty)
+                source = DisplayModeDescription.PenId;
+            _penSourceId = source;
+            mode = ResolveForskPen(source, true);
+            if (mode == null)
+                throw new InvalidOperationException(PenReloadFailedMessage);
+            var second = RepatchPenIni(mode, out mode);
+            note = sourceName + " " + note + " | " + second;
+            if (_penReloadFailed || mode == null)
+                throw new InvalidOperationException(PenReloadFailedMessage);
+            // Technical still on object color would fill the plan. Stay on Pen
+            // and let the object-black belt draw the lines.
+            if (sourceName == "Technical" && EdgeUsageFailed())
+            {
+                _penSourceId = DisplayModeDescription.PenId;
+                mode = ResolveForskPen(DisplayModeDescription.PenId, true);
+                if (mode == null)
+                    throw new InvalidOperationException(PenReloadFailedMessage);
+                var third = RepatchPenIni(mode, out mode);
+                note = note + " | pen-again " + third;
+                if (_penReloadFailed || mode == null)
+                    throw new InvalidOperationException(PenReloadFailedMessage);
+            }
         }
-        else
-        {
-            var iniNote = RepatchPenIni(mode);
-            mode = DisplayModeDescription.FindByName(ForskPenName) ?? mode;
-            var reflected = "";
-            try { reflected = ApplyManagedPen(mode); }
-            catch (Exception) { reflected = "attrs-failed"; }
-            _penLog = "pen edge " + PenEdgePx + "px silhouette " + PenSilhouettePx
-                + "px " + iniNote
-                + (reflected.Length == 0 ? " r7-props-only" : " reflected " + reflected);
-        }
-        _penModeCached = mode;
+
+        if (EdgeUsageFailed())
+            _penForceObjectBlack = true;
+
+        var live = DisplayModeDescription.GetDisplayMode(mode.Id);
+        if (live == null || live.Id == Guid.Empty)
+            throw new InvalidOperationException(PenReloadFailedMessage);
+
+        _penLog = (live.EnglishName ?? ForskPenName) + " " + live.Id
+            + " edge " + PenEdgePx + "px usage0 " + _penUsageZero
+            + (_penForceObjectBlack ? " object-black" : "")
+            + " " + note;
+        LogPenLine(_penLog);
+        _penModeCached = live;
         _penApplied = _penPass;
-        return mode;
+        return live;
+    }
+
+    private static bool EdgeUsageFailed()
+    {
+        return _penUsageZero > 0 || !_penSawEdgeUsage;
     }
 
     private static DisplayModeDescription _penModeCached;
@@ -935,8 +1021,8 @@ public partial class RhinoMCPFunctions
         if (TrySet(attr, "SilhouetteColor", Color.Black)) hit.Add("SilhouetteColor");
         if (TrySet(attr, "EdgeLineColor", Color.Black)) hit.Add("EdgeLineColor");
         if (TrySet(attr, "ClippingEdgeColor", Color.Black)) hit.Add("ClippingEdgeColor");
-        if (TrySet(attr, "ClippingEdgeThickness", PenSilhouettePx)) hit.Add("ClippingEdgeThickness");
-        if (TrySet(attr, "ClippingEdgeColorUsage", 1)) hit.Add("ClippingEdgeColorUsage=1");
+        if (TrySet(attr, "ClippingEdgeThickness", PenEdgePx)) hit.Add("ClippingEdgeThickness");
+        if (TrySet(attr, "ClippingEdgeColorUsage", SingleColorUsage())) hit.Add("ClippingEdgeColorUsage");
         try { DisplayModeDescription.UpdateDisplayMode(mode); }
         catch (Exception) { }
         return string.Join(",", hit.ToArray());
@@ -962,92 +1048,531 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static string RepatchPenIni(DisplayModeDescription mode)
+    /// <summary>
+    /// Managed props first (UpdateDisplayMode, no delete). Real ini keys are
+    /// patched only when that export already contains them, then imported.
+    /// A later UpdateDisplayMode would drop those keys, so it is not called again.
+    /// </summary>
+    private static string RepatchPenIni(DisplayModeDescription mode, out DisplayModeDescription live)
     {
-        var path = "/tmp/forsk-pen.ini";
+        live = mode;
+        var single = SingleColorUsage();
+        string reflected = "";
         try
         {
-            var exported = DisplayModeDescription.ExportToFile(mode, path);
-            if (exported is bool ok && !ok) return "ini-export-failed";
-            if (!File.Exists(path)) return "ini-missing";
-            var text = File.ReadAllText(path);
-            int replaced;
-            var patched = PatchPenIni(text, out replaced);
-            File.WriteAllText(path, patched);
-            if (mode.Id != DisplayModeDescription.PenId)
+            try { reflected = ApplyManagedPen(mode); }
+            catch (Exception) { reflected = "attrs-failed"; }
+            live = DisplayModeDescription.FindByName(ForskPenName) ?? mode;
+            if (!ExportMode(live, PenIniPath))
             {
-                try { DisplayModeDescription.DeleteDisplayMode(mode.Id); }
-                catch (Exception) { }
+                _penUsageZero = 1;
+                return "ini-export-failed";
             }
-            var imported = DisplayModeDescription.ImportFromFile(path);
-            if (imported == Guid.Empty) return "ini-import-failed keys " + replaced;
-            return "ini-keys " + replaced;
+
+            var text = File.ReadAllText(PenIniPath);
+            DumpPenKeys(text, false);
+            int replaced;
+            string changed;
+            var patched = PatchPenIni(text, single, out replaced, out changed);
+            File.WriteAllText(PenIniPath, patched);
+            if (replaced > 0)
+            {
+                live = ImportPatchedMode(live, PenIniPath);
+                if (_penReloadFailed || live == null)
+                    return "ini-import-failed keys " + replaced;
+            }
+
+            if (!ExportMode(live, PenAfterPath))
+            {
+                _penUsageZero = 1;
+                return "ini-after-failed keys " + replaced;
+            }
+
+            var after = File.ReadAllText(PenAfterPath);
+            DumpPenKeys(after, true);
+            _penSawEdgeUsage = HasEdgeColorUsageKey(after);
+            _penUsageZero = CountEdgeUsageZero(after);
+            var note = "ini-keys " + replaced + " usage0 " + _penUsageZero
+                + " single " + single.ToString(CultureInfo.InvariantCulture);
+            if (reflected.Length > 0) note += " reflected " + reflected;
+            if (changed.Length > 0) note += " " + changed;
+            return note;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch (Exception)
         {
+            _penUsageZero = 1;
             return "ini-export-failed";
         }
     }
 
-    private static string PatchPenIni(string text, out int replaced)
+    private static DisplayModeDescription ImportPatchedMode(DisplayModeDescription current, string path)
     {
-        var wanted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var previousId = current?.Id ?? Guid.Empty;
+        // The managed UpdateDisplayMode already ran. Ini keys are applied by
+        // replacing the custom mode. The caller assigns FindByName, never previousId.
+        if (previousId != Guid.Empty)
+            DropCustomMode(previousId);
+        var leftover = LiveForskPen();
+        if (leftover != null)
+            DropCustomMode(leftover.Id);
+
+        var imported = TryImport(path);
+        var named = LiveForskPen();
+        if (named == null)
         {
-            { "EdgeColorUsage", "2" },
-            { "EdgeColor", "0,0,0" },
-            { "EdgeThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "NakedEdgeColorUsage", "2" },
-            { "NakedEdgeColor", "0,0,0" },
-            { "NakedEdgeThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "ClippingEdgesUsage", "1" },
-            { "ClippingEdgeColor", "0,0,0" },
-            { "ClippingEdgeThickness", PenSilhouettePx.ToString(CultureInfo.InvariantCulture) },
-            { "THThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "TEThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "TSiThickness", PenSilhouettePx.ToString(CultureInfo.InvariantCulture) },
-            { "TCThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "TSThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "TIThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
-            { "THColor", "0,0,0" },
-            { "TEColor", "0,0,0" },
-            { "TSiColor", "0,0,0" },
-            { "TCColor", "0,0,0" },
-            { "TSColor", "0,0,0" },
-            { "TIColor", "0,0,0" },
-            { "surfaceEdgeColorUsageIndex", "2" },
-            { "singleCurveColorIndex", "1" },
-            { "clippingEdgesUsage", "1" }
-        };
+            var source = _penSourceId == Guid.Empty ? DisplayModeDescription.PenId : _penSourceId;
+            var copied = DisplayModeDescription.CopyDisplayMode(source, ForskPenName);
+            if (copied != Guid.Empty)
+                DisplayModeDescription.GetDisplayMode(copied);
+            _penReloadFailed = true;
+            return null;
+        }
+        if (imported != Guid.Empty && imported != named.Id)
+            DropCustomMode(imported);
+        return named;
+    }
+
+    private static Guid TryImport(string path)
+    {
+        try
+        {
+            return DisplayModeDescription.ImportFromFile(path);
+        }
+        catch (Exception)
+        {
+            return Guid.Empty;
+        }
+    }
+
+    private static DisplayModeDescription LiveForskPen()
+    {
+        var named = DisplayModeDescription.FindByName(ForskPenName);
+        if (named == null || named.Id == Guid.Empty || named.Id == DisplayModeDescription.PenId)
+            return null;
+        return DisplayModeDescription.GetDisplayMode(named.Id);
+    }
+
+    private static void DropCustomMode(Guid id)
+    {
+        if (id == Guid.Empty || id == DisplayModeDescription.PenId) return;
+        var mode = DisplayModeDescription.GetDisplayMode(id);
+        if (mode == null) return;
+        var name = mode.EnglishName ?? "";
+        if (!name.Equals(ForskPenName, StringComparison.OrdinalIgnoreCase)
+            && !name.StartsWith(ForskPenName, StringComparison.OrdinalIgnoreCase))
+            return;
+        try { DisplayModeDescription.DeleteDisplayMode(id); }
+        catch (Exception) { }
+    }
+
+    private static DisplayModeDescription ResolveForskPen(Guid sourceId, bool replace)
+    {
+        if (sourceId == Guid.Empty)
+            sourceId = DisplayModeDescription.PenId;
+        _penSourceId = sourceId;
+        var existing = LiveForskPen();
+        if (replace && existing != null)
+        {
+            DropCustomMode(existing.Id);
+            existing = null;
+        }
+        if (existing != null)
+            return existing;
+        var id = DisplayModeDescription.CopyDisplayMode(sourceId, ForskPenName);
+        if (id == Guid.Empty)
+        {
+            _penReloadFailed = true;
+            return null;
+        }
+        var mode = DisplayModeDescription.GetDisplayMode(id) ?? LiveForskPen();
+        if (mode == null || mode.Id == DisplayModeDescription.PenId)
+        {
+            _penReloadFailed = true;
+            return null;
+        }
+        return mode;
+    }
+
+    private static Guid FindModeId(string englishName)
+    {
+        var named = DisplayModeDescription.FindByName(englishName);
+        if (named != null && named.Id != Guid.Empty)
+            return named.Id;
+        var all = DisplayModeDescription.GetDisplayModes();
+        if (all == null) return Guid.Empty;
+        foreach (var candidate in all)
+        {
+            if (candidate?.EnglishName != null &&
+                candidate.EnglishName.Equals(englishName, StringComparison.OrdinalIgnoreCase))
+                return candidate.Id;
+        }
+        return Guid.Empty;
+    }
+
+    private static bool ExportMode(DisplayModeDescription mode, string path)
+    {
+        if (mode == null || string.IsNullOrEmpty(path)) return false;
+        var exported = DisplayModeDescription.ExportToFile(mode, path);
+        if (exported is bool ok && !ok) return false;
+        return File.Exists(path);
+    }
+
+    private static int SingleColorUsage()
+    {
+        if (_singleColorLearned) return _singleColorUsage;
+        _singleColorLearned = true;
+        _singleColorUsage = 2;
+        var pen = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId);
+        if (!ExportMode(pen, PenStockPath)) return _singleColorUsage;
+        string text;
+        try { text = File.ReadAllText(PenStockPath); }
+        catch (Exception) { return _singleColorUsage; }
+        var learned = LearnSingleColor(text);
+        if (learned.HasValue && learned.Value != 0)
+            _singleColorUsage = learned.Value;
+        return _singleColorUsage;
+    }
+
+    /// <summary>
+    /// Stock Pen silhouettes are already black. A non-zero usage on those
+    /// keys is the "single color" enum. Surface edges stay 0 (object color).
+    /// </summary>
+    private static int? LearnSingleColor(string text)
+    {
+        int? learned = null;
+        foreach (var line in IniLines(text))
+        {
+            string key, value;
+            if (!TryIniKey(line, out key, out value)) continue;
+            if (!IsTechnicalColorUsage(key)) continue;
+            int number;
+            if (!TryIniInt(value, out number) || number == 0) continue;
+            learned = number;
+        }
+        return learned;
+    }
+
+    private static string PatchPenIni(string text, int singleColor, out int replaced, out string changed)
+    {
         replaced = 0;
-        var lines = (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var notes = new List<string>();
+        var lines = IniLines(text);
+        var singleText = singleColor.ToString(CultureInfo.InvariantCulture);
         for (int i = 0; i < lines.Length; i++)
         {
-            var eq = lines[i].IndexOf('=');
-            if (eq <= 0) continue;
-            var key = lines[i].Substring(0, eq).Trim();
-            string value;
-            if (!wanted.TryGetValue(key, out value)) continue;
-            lines[i] = key + "=" + value;
-            seen.Add(key);
+            string key, value;
+            if (!TryIniKey(lines[i], out key, out value)) continue;
+            string next = null;
+            int ignored;
+            if (IsColorUsageKey(key) && TryIniInt(value, out ignored))
+                next = singleText;
+            else if (IsLineColorKey(key) && LooksLikeRgb(value))
+                next = BlackColorLike(value);
+            else if (IsLineThicknessKey(key) && TryIniInt(value, out ignored))
+                next = PenEdgePx.ToString(CultureInfo.InvariantCulture);
+            if (next == null || string.Equals(value, next, StringComparison.Ordinal)) continue;
+            lines[i] = key + "=" + next;
             replaced++;
+            if (notes.Count < 12)
+                notes.Add(key + " " + value + "->" + next);
         }
+        changed = notes.Count == 0 ? "" : string.Join(", ", notes.ToArray());
         var sb = new StringBuilder();
-        foreach (var line in lines)
+        for (int i = 0; i < lines.Length; i++)
         {
-            if (sb.Length > 0) sb.Append('\n');
-            sb.Append(line);
-        }
-        if (seen.Count < wanted.Count)
-        {
-            sb.Append("\n[ForskPen]\n");
-            foreach (var pair in wanted)
-            {
-                if (seen.Contains(pair.Key)) continue;
-                sb.Append(pair.Key).Append('=').Append(pair.Value).Append('\n');
-            }
+            if (i > 0) sb.Append('\n');
+            sb.Append(lines[i]);
         }
         return sb.ToString();
+    }
+
+    private static void DumpPenKeys(string text, bool after)
+    {
+        try
+        {
+            var sb = new StringBuilder();
+            sb.Append(after ? "--- after ---\n" : "--- before ---\n");
+            foreach (var line in IniLines(text))
+            {
+                if (!IsPenDiagLine(line)) continue;
+                sb.Append(line).Append('\n');
+            }
+            if (_penKeysStarted)
+                File.AppendAllText(PenKeysPath, sb.ToString());
+            else
+                File.WriteAllText(PenKeysPath, sb.ToString());
+            _penKeysStarted = true;
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static bool IsPenDiagLine(string line)
+    {
+        var lower = (line ?? "").ToLowerInvariant();
+        return lower.Contains("color") || lower.Contains("thick") || lower.Contains("edge")
+            || lower.Contains("usage") || lower.Contains("silhou") || lower.Contains("curve")
+            || lower.Contains("wire") || lower.Contains("fill");
+    }
+
+    private static int CountEdgeUsageZero(string text)
+    {
+        int count = 0;
+        foreach (var line in IniLines(text))
+        {
+            string key, value;
+            if (!TryIniKey(line, out key, out value)) continue;
+            if (!IsEdgeColorUsageKey(key)) continue;
+            int number;
+            if (TryIniInt(value, out number) && number == 0)
+                count++;
+        }
+        return count;
+    }
+
+    private static bool HasEdgeColorUsageKey(string text)
+    {
+        foreach (var line in IniLines(text))
+        {
+            string key, value;
+            if (!TryIniKey(line, out key, out value)) continue;
+            if (IsEdgeColorUsageKey(key)) return true;
+        }
+        return false;
+    }
+
+    private static bool IsEdgeColorUsageKey(string key)
+    {
+        var k = (key ?? "").ToLowerInvariant();
+        if (k.Contains("surface") && k.Contains("edge") && k.Contains("usage"))
+            return true;
+        return k.Contains("edge") && k.Contains("color") && k.Contains("usage");
+    }
+
+    private static bool IsColorUsageKey(string key)
+    {
+        var k = (key ?? "").ToLowerInvariant();
+        if (k.Contains("mask") || k.Contains("override") || k.Contains("pattern"))
+            return false;
+        var usage = k.Contains("colorusage") || k.Contains("usageindex")
+            || (k.Contains("usage") && k.Contains("color"));
+        if (!usage) return false;
+        return MentionsLineFamily(k);
+    }
+
+    private static bool IsTechnicalColorUsage(string key)
+    {
+        if (!IsColorUsageKey(key)) return false;
+        var k = key.ToLowerInvariant();
+        return k.Contains("silhou") || k.Contains("tech") || k.Contains("curve") || k.Contains("tsi");
+    }
+
+    private static bool IsLineColorKey(string key)
+    {
+        var k = (key ?? "").ToLowerInvariant();
+        if (!k.Contains("color") || k.Contains("usage")) return false;
+        if (k.Contains("reduction") || k.Contains("back") || k.Contains("ambient")
+            || k.Contains("shadow") || k.Contains("lock") || k.Contains("grid")
+            || k.Contains("material") || k.Contains("diffuse") || k.Contains("specul")
+            || k.Contains("emiss") || k.Contains("reflect") || k.Contains("transparent")
+            || k.Contains("wallpaper") || k.Contains("fill"))
+            return false;
+        if (k.Contains("surface") && !k.Contains("edge")) return false;
+        if (k.Contains("edge") || k.Contains("naked") || k.Contains("silhou")
+            || k.Contains("curve") || k.Contains("clip") || k.Contains("tech"))
+            return true;
+        return k == "thcolor" || k == "tecolor" || k == "tsicolor"
+            || k == "tccolor" || k == "tscolor" || k == "ticolor";
+    }
+
+    private static bool IsLineThicknessKey(string key)
+    {
+        var k = (key ?? "").ToLowerInvariant();
+        if (!k.Contains("thickness")) return false;
+        if (k.Contains("shadow")) return false;
+        if (k.Contains("edge") || k.Contains("naked") || k.Contains("silhou")
+            || k.Contains("curve") || k.Contains("clip") || k.Contains("tech")
+            || k.Contains("surface") || k.Contains("wire"))
+            return true;
+        return k == "ththickness" || k == "tethickness" || k == "tsithickness"
+            || k == "tcthickness" || k == "tsthickness" || k == "tithickness";
+    }
+
+    private static bool MentionsLineFamily(string k)
+    {
+        return k.Contains("edge") || k.Contains("naked") || k.Contains("silhou")
+            || k.Contains("clip") || k.Contains("curve") || k.Contains("tech")
+            || k.Contains("surface");
+    }
+
+    private static string BlackColorLike(string existing)
+    {
+        var parts = (existing ?? "").Split(',');
+        if (parts.Length >= 4) return "0,0,0,255";
+        return "0,0,0";
+    }
+
+    private static bool LooksLikeRgb(string value)
+    {
+        var parts = (value ?? "").Split(',');
+        if (parts.Length < 3 || parts.Length > 4) return false;
+        foreach (var part in parts)
+        {
+            int number;
+            if (!int.TryParse(part.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TryIniInt(string value, out int number)
+    {
+        number = 0;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var text = value.Trim();
+        var dot = text.IndexOf('.');
+        if (dot >= 0) text = text.Substring(0, dot);
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out number);
+    }
+
+    private static bool TryIniKey(string line, out string key, out string value)
+    {
+        key = null;
+        value = null;
+        if (string.IsNullOrEmpty(line)) return false;
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0 || trimmed[0] == '[' || trimmed[0] == ';' || trimmed[0] == '#')
+            return false;
+        var eq = trimmed.IndexOf('=');
+        if (eq <= 0) return false;
+        key = trimmed.Substring(0, eq).Trim();
+        value = trimmed.Substring(eq + 1).Trim();
+        return key.Length > 0;
+    }
+
+    private static string[] IniLines(string text)
+    {
+        return (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+    }
+
+    private static void LogPenLine(string detail)
+    {
+        try
+        {
+            var line = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+                + " pen " + detail + "\n";
+            File.AppendAllText(PrintLogPath, line);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static void LogPenWalls(RhinoDoc doc, List<RhinoObject> clay, Guid detailId)
+    {
+        if (doc == null || _penSamplePass == _penPass) return;
+        _penSamplePass = _penPass;
+        var parts = new List<string>();
+        if (clay != null)
+        {
+            foreach (var obj in clay)
+            {
+                if (parts.Count >= 5 || obj?.Attributes == null) continue;
+                var kind = GetForskKind(obj) ?? "";
+                if (!kind.Equals("wall", StringComparison.OrdinalIgnoreCase)) continue;
+                var layer = obj.Attributes.LayerIndex >= 0 ? doc.Layers[obj.Attributes.LayerIndex] : null;
+                var layerRgb = layer == null ? "?" : Rgb(layer.Color);
+                var perView = "?";
+                if (layer != null && detailId != Guid.Empty)
+                {
+                    try { perView = Rgb(layer.PerViewportColor(detailId)); }
+                    catch (Exception) { perView = "?"; }
+                }
+                parts.Add("cs=" + obj.Attributes.ColorSource
+                    + " obj=" + Rgb(obj.Attributes.ObjectColor)
+                    + " layer=" + layerRgb
+                    + " pvc=" + perView);
+            }
+        }
+        LogPenLine("walls " + parts.Count + " " + string.Join("; ", parts.ToArray()));
+    }
+
+    private static void PaintClayForPreview(RhinoDoc doc, List<RhinoObject> clay, bool forceObjectBlack)
+    {
+        if (doc == null || clay == null) return;
+        foreach (var obj in clay)
+        {
+            var attrs = obj?.Attributes;
+            if (attrs == null) continue;
+            if (forceObjectBlack)
+            {
+                RememberPrintColor(attrs);
+                attrs.ColorSource = ObjectColorSource.ColorFromObject;
+                attrs.ObjectColor = Color.Black;
+                obj.CommitChanges();
+            }
+            else if (attrs.ColorSource != ObjectColorSource.ColorFromLayer)
+            {
+                RememberPrintColor(attrs);
+                attrs.ColorSource = ObjectColorSource.ColorFromLayer;
+                obj.CommitChanges();
+            }
+        }
+    }
+
+    private static void RememberPrintColor(ObjectAttributes attrs)
+    {
+        if (attrs == null) return;
+        if (!string.IsNullOrEmpty(attrs.GetUserString(PrintColorSourceKey))) return;
+        attrs.SetUserString(PrintColorSourceKey, attrs.ColorSource.ToString());
+        attrs.SetUserString(PrintRgbKey, Rgb(attrs.ObjectColor));
+    }
+
+    private static void RestorePrintColors(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        foreach (var obj in doc.Objects)
+        {
+            var attrs = obj?.Attributes;
+            if (attrs == null) continue;
+            var stored = attrs.GetUserString(PrintColorSourceKey);
+            if (string.IsNullOrEmpty(stored)) continue;
+            ObjectColorSource source;
+            if (Enum.TryParse(stored, true, out source))
+                attrs.ColorSource = source;
+            var rgb = attrs.GetUserString(PrintRgbKey) ?? "";
+            var parts = rgb.Split(',');
+            int r, g, b;
+            if (parts.Length >= 3
+                && int.TryParse(parts[0].Trim(), out r)
+                && int.TryParse(parts[1].Trim(), out g)
+                && int.TryParse(parts[2].Trim(), out b))
+            {
+                attrs.ObjectColor = Color.FromArgb(ClampByte(r), ClampByte(g), ClampByte(b));
+            }
+            attrs.DeleteUserString(PrintColorSourceKey);
+            attrs.DeleteUserString(PrintRgbKey);
+            obj.CommitChanges();
+        }
+    }
+
+    private static int ClampByte(int value)
+    {
+        if (value < 0) return 0;
+        if (value > 255) return 255;
+        return value;
+    }
+
+    private static string Rgb(Color color)
+    {
+        return color.R.ToString(CultureInfo.InvariantCulture) + ","
+            + color.G.ToString(CultureInfo.InvariantCulture) + ","
+            + color.B.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -1274,7 +1799,7 @@ public partial class RhinoMCPFunctions
     /// Opening markers stay off. Walls, floor, and roof stay visible and printable
     /// even when the bake layer is not the A-WALL / A-FLOR / A-ROOF name.
     /// </summary>
-    private void SetDetailLayerVisibility(
+    private static void SetDetailLayerVisibility(
         RhinoDoc doc, Guid viewportId, bool includeExisting, List<RhinoObject> clay)
     {
         if (viewportId == Guid.Empty) return;
