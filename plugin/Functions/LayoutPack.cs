@@ -269,14 +269,18 @@ public partial class RhinoMCPFunctions
             if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
             {
                 // The cut is already in the S-DRAW curves. A detail clipping
-                // plane is not part of this pack.
+                // plane is not part of this pack. Section fill is the solid
+                // hatch of mass the plane crosses.
                 pageRecord["cut_z"] = planCutZ;
                 pageRecord["cut_height_mm"] = ForskDefaults.PlanCutHeightMm;
+                pageRecord["fills"] = drawn.Fills;
                 cutNote = " Plan cut "
                     + ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture)
                     + " mm above the floor (Z "
                     + planCutZ.ToString("0.###", CultureInfo.InvariantCulture)
-                    + ").";
+                    + "). Section fill "
+                    + drawn.Fills.ToString(CultureInfo.InvariantCulture)
+                    + ".";
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
             }
             pages.Add(pageRecord);
@@ -963,7 +967,9 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Wireframe. The curves are already black, so the detail does not need a pen mode.
+    /// Wireframe. Solid section hatches are annotations, and Wireframe draws
+    /// them. Surfaces stay unshaded. The detail shows only S-DRAW, so clay
+    /// does not appear. Object color on the hatch is black.
     /// </summary>
     private static void ApplyDetailDisplay(RhinoViewport viewport)
     {
@@ -1792,6 +1798,13 @@ public partial class RhinoMCPFunctions
             var show = layer.Index == drawLayer.Index
                 || (parent != null && layer.Index == parent.Index);
             layer.SetPerViewportVisible(viewportId, show);
+            if (show)
+            {
+                // GetPreviewImage paints this display color. Plot color does
+                // not affect that bitmap. Black keeps the solid hatch inked.
+                layer.SetPerViewportColor(viewportId, Color.Black);
+                layer.SetPerViewportPlotColor(viewportId, Color.Black);
+            }
             doc.Layers.Modify(layer, layer.Index, true);
         }
     }

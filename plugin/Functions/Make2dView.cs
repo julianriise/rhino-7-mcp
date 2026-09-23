@@ -650,15 +650,430 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
+    /// Outlines draw after the poché. 0 is the normal depth-buffer order.
+    /// </summary>
+    private const int SectionFillOrder = -1;
+    private const int SectionLineOrder = 1;
+    private const string SectionFillRole = "section_fill";
+
+    private sealed class SectionLoop
+    {
+        public Curve Curve;
+        public double Area;
+        public Point3d Probe;
+        public int Depth;
+        public SectionLoop Parent;
+    }
+
+    /// <summary>
+    /// Closed section loops of each solid that crosses the cut, one group
+    /// per solid. Floor, openings, rooms, and drawings are not filled.
+    /// A roof fully above the plane does not cross, so it is not filled.
+    /// </summary>
+    private static List<List<Curve>> SectionFillLoops(
+        IList<RhinoObject> sources, Plane clip, double tolerance)
+    {
+        var groups = new List<List<Curve>>();
+        if (sources == null) return groups;
+        var cut = new Plane(new Point3d(0, 0, clip.Origin.Z), Vector3d.ZAxis);
+        foreach (var obj in sources)
+            CollectSectionGroups(obj, Transform.Identity, cut, tolerance, groups, 0);
+        return groups;
+    }
+
+    private static bool IsSkippedFillKind(string kind)
+    {
+        if (string.IsNullOrEmpty(kind)) return false;
+        return kind.Equals("floor", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("room", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("drawing", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("layout", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CollectSectionGroups(
+        RhinoObject obj, Transform xform, Plane cutPlane, double tolerance,
+        List<List<Curve>> groups, int depth)
+    {
+        if (obj == null || depth > 6) return;
+        if (IsSkippedFillKind(GetForskKind(obj))) return;
+        if (obj is InstanceObject iref)
+        {
+            var idef = iref.InstanceDefinition;
+            if (idef == null) return;
+            var next = xform * iref.InstanceXform;
+            var members = idef.GetObjects();
+            if (members == null) return;
+            foreach (var member in members)
+                CollectSectionGroups(member, next, cutPlane, tolerance, groups, depth + 1);
+            return;
+        }
+
+        var geom = obj.Geometry?.Duplicate();
+        if (geom == null) return;
+        try
+        {
+            if (!xform.IsIdentity && !geom.Transform(xform)) return;
+            var group = new List<Curve>();
+            ContourMass(geom, cutPlane, tolerance, group);
+            if (group.Count > 0) groups.Add(group);
+        }
+        finally
+        {
+            geom.Dispose();
+        }
+    }
+
+    private static void ContourMass(
+        GeometryBase geom, Plane cutPlane, double tolerance, List<Curve> group)
+    {
+        if (geom == null) return;
+        Brep brep = null;
+        var disposeBrep = false;
+        try
+        {
+            if (geom is Brep asBrep)
+                brep = asBrep;
+            else if (geom is Extrusion extrusion)
+            {
+                brep = extrusion.ToBrep();
+                disposeBrep = true;
+            }
+            else if (geom is Surface surface)
+            {
+                brep = surface.ToBrep();
+                disposeBrep = true;
+            }
+            else if (geom is Mesh mesh)
+            {
+                if (SectionSide(mesh.GetBoundingBox(true), cutPlane, tolerance) != 0) return;
+                Curve[] raw = null;
+                try { raw = Mesh.CreateContourCurves(mesh, cutPlane, tolerance); }
+                catch (Exception) { raw = null; }
+                AbsorbContours(raw, tolerance, group);
+                return;
+            }
+            else return;
+
+            if (brep == null) return;
+            if (SectionSide(brep.GetBoundingBox(true), cutPlane, tolerance) != 0) return;
+            Curve[] contours = null;
+            try { contours = Brep.CreateContourCurves(brep, cutPlane); }
+            catch (Exception) { contours = null; }
+            AbsorbContours(contours, tolerance, group);
+        }
+        finally
+        {
+            if (disposeBrep) brep?.Dispose();
+        }
+    }
+
+    private static void AbsorbContours(Curve[] raw, double tolerance, List<Curve> group)
+    {
+        if (raw == null || raw.Length == 0 || group == null) return;
+        var input = new List<Curve>();
+        foreach (var curve in raw)
+        {
+            if (curve != null) input.Add(curve);
+        }
+        if (input.Count == 0) return;
+        var joinTol = Math.Min(1.0, Math.Max(tolerance * 10.0, 0.1));
+        Curve[] joined = null;
+        try { joined = Curve.JoinCurves(input, joinTol, false); }
+        catch (Exception) { joined = null; }
+        foreach (var curve in input)
+            curve?.Dispose();
+        if (joined == null) return;
+        foreach (var curve in joined)
+        {
+            if (curve == null) continue;
+            if (!curve.IsClosed)
+            {
+                var gap = curve.PointAtStart.DistanceTo(curve.PointAtEnd);
+                if (gap > joinTol || !curve.MakeClosed(joinTol))
+                {
+                    curve.Dispose();
+                    continue;
+                }
+            }
+            if (!curve.IsValid || !curve.IsClosed)
+            {
+                curve.Dispose();
+                continue;
+            }
+            var area = AreaMassProperties.Compute(curve);
+            if (area == null || area.Area < 1.0)
+            {
+                curve.Dispose();
+                continue;
+            }
+            group.Add(curve);
+        }
+    }
+
+    private static void ProjectFillGroupsToZ(List<List<Curve>> groups, double z)
+    {
+        if (groups == null) return;
+        foreach (var group in groups)
+        {
+            if (group == null) continue;
+            foreach (var curve in group)
+            {
+                if (curve == null) continue;
+                var box = curve.GetBoundingBox(true);
+                if (!box.IsValid) continue;
+                var dz = z - box.Center.Z;
+                if (Math.Abs(dz) <= 1e-6) continue;
+                curve.Transform(Transform.Translation(0, 0, dz));
+            }
+        }
+    }
+
+    private static double CurveSheetZ(List<Curve> curves)
+    {
+        if (curves == null) return 0;
+        foreach (var curve in curves)
+        {
+            if (curve == null) continue;
+            var box = curve.GetBoundingBox(true);
+            if (box.IsValid) return box.Center.Z;
+        }
+        return 0;
+    }
+
+    private static void DisposeFillGroups(List<List<Curve>> groups)
+    {
+        if (groups == null) return;
+        foreach (var group in groups)
+        {
+            if (group == null) continue;
+            foreach (var curve in group)
+                curve?.Dispose();
+        }
+    }
+
+    private static int SolidPatternIndex(RhinoDoc doc)
+    {
+        if (doc == null) return -1;
+        var found = doc.HatchPatterns.FindName("Solid");
+        if (found != null && !found.IsDeleted && found.Index >= 0)
+            return found.Index;
+        var solid = HatchPattern.Defaults.Solid;
+        if (solid == null) return -1;
+        return doc.HatchPatterns.Add(solid);
+    }
+
+    private static bool TryInsideProbe(Curve curve, Plane plane, double tolerance, out Point3d probe)
+    {
+        probe = Point3d.Unset;
+        if (curve == null) return false;
+        var area = AreaMassProperties.Compute(curve);
+        if (area != null &&
+            curve.Contains(area.Centroid, plane, tolerance) == PointContainment.Inside)
+        {
+            probe = area.Centroid;
+            return true;
+        }
+        var domain = curve.Domain;
+        var step = Math.Max(tolerance * 10.0, 2.0);
+        for (int i = 1; i <= 12; i++)
+        {
+            var t = domain.ParameterAt(i / 13.0);
+            var point = curve.PointAt(t);
+            var tangent = curve.TangentAt(t);
+            if (!tangent.Unitize()) continue;
+            var normal = Vector3d.CrossProduct(plane.Normal, tangent);
+            if (!normal.Unitize()) continue;
+            foreach (var sign in new[] { 1.0, -1.0 })
+            {
+                var candidate = point + (normal * (sign * step));
+                if (curve.Contains(candidate, plane, tolerance) != PointContainment.Inside)
+                    continue;
+                probe = candidate;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Even nesting depth is wall mass. The next depth is a hole (room or
+    /// a void still closed inside the mass). Hatches use the Solid pattern.
+    /// </summary>
+    private static Hatch[] HatchesForGroup(
+        List<Curve> group, Plane plane, int pattern, double tolerance)
+    {
+        var loops = new List<SectionLoop>();
+        foreach (var curve in group)
+        {
+            if (curve == null || !curve.IsClosed) continue;
+            var area = AreaMassProperties.Compute(curve);
+            if (area == null || area.Area < 1.0) continue;
+            if (!TryInsideProbe(curve, plane, tolerance, out var probe)) continue;
+            loops.Add(new SectionLoop { Curve = curve, Area = area.Area, Probe = probe });
+        }
+        if (loops.Count == 0)
+        {
+            try { return Hatch.Create(group, pattern, 0.0, 1.0, tolerance); }
+            catch (Exception) { return null; }
+        }
+        var unique = new List<SectionLoop>();
+        foreach (var loop in loops)
+        {
+            var duplicate = false;
+            foreach (var kept in unique)
+            {
+                var bigger = Math.Max(loop.Area, kept.Area);
+                if (bigger <= 1.0) continue;
+                if (Math.Abs(loop.Area - kept.Area) / bigger > 0.02) continue;
+                if (kept.Curve.Contains(loop.Probe, plane, tolerance) != PointContainment.Inside)
+                    continue;
+                duplicate = true;
+                break;
+            }
+            if (!duplicate) unique.Add(loop);
+        }
+        loops = unique;
+        if (loops.Count == 0) return null;
+
+        foreach (var loop in loops)
+        {
+            SectionLoop parent = null;
+            var parentArea = double.MaxValue;
+            var depth = 0;
+            foreach (var other in loops)
+            {
+                if (ReferenceEquals(other, loop)) continue;
+                if (other.Area <= loop.Area + 1.0) continue;
+                if (other.Curve.Contains(loop.Probe, plane, tolerance) != PointContainment.Inside)
+                    continue;
+                depth++;
+                if (other.Area < parentArea)
+                {
+                    parent = other;
+                    parentArea = other.Area;
+                }
+            }
+            loop.Depth = depth;
+            loop.Parent = parent;
+        }
+
+        var built = new List<Hatch>();
+        foreach (var loop in loops)
+        {
+            if ((loop.Depth % 2) != 0) continue;
+            var holes = new List<Curve>();
+            foreach (var other in loops)
+            {
+                if (other.Parent != loop) continue;
+                if (other.Depth != loop.Depth + 1) continue;
+                holes.Add(other.Curve);
+            }
+            Hatch hatch = null;
+            try { hatch = Hatch.Create(plane, loop.Curve, holes, pattern, 0.0, 1.0); }
+            catch (Exception) { hatch = null; }
+            if (hatch != null)
+            {
+                built.Add(hatch);
+                continue;
+            }
+            var curves = new List<Curve> { loop.Curve };
+            curves.AddRange(holes);
+            Hatch[] many = null;
+            try { many = Hatch.Create(curves, pattern, 0.0, 1.0, tolerance); }
+            catch (Exception) { many = null; }
+            if (many == null) continue;
+            foreach (var one in many)
+            {
+                if (one != null) built.Add(one);
+            }
+        }
+        if (built.Count > 0) return built.ToArray();
+        try { return Hatch.Create(group, pattern, 0.0, 1.0, tolerance); }
+        catch (Exception) { return null; }
+    }
+
+    private static int BakeSectionFills(
+        RhinoDoc doc, Layer layer, string view, List<List<Curve>> groups,
+        double tolerance, ref int index, ref BoundingBox box)
+    {
+        if (doc == null || layer == null || groups == null || groups.Count == 0) return 0;
+        var pattern = SolidPatternIndex(doc);
+        if (pattern < 0) return 0;
+        var sheetZ = 0.0;
+        var haveZ = false;
+        foreach (var group in groups)
+        {
+            if (group == null) continue;
+            foreach (var curve in group)
+            {
+                if (curve == null) continue;
+                sheetZ = curve.PointAtStart.Z;
+                haveZ = true;
+                break;
+            }
+            if (haveZ) break;
+        }
+        var plane = new Plane(new Point3d(0, 0, sheetZ), Vector3d.ZAxis);
+        var count = 0;
+        foreach (var group in groups)
+        {
+            if (group == null || group.Count == 0) continue;
+            Hatch[] hatches = null;
+            try { hatches = HatchesForGroup(group, plane, pattern, tolerance); }
+            catch (Exception) { hatches = null; }
+            if (hatches == null) continue;
+            foreach (var hatch in hatches)
+            {
+                if (hatch == null) continue;
+                var hatchBox = hatch.GetBoundingBox(true);
+                var stableId = FormatStableId("d", index);
+                var attr = new ObjectAttributes
+                {
+                    LayerIndex = layer.Index,
+                    Name = stableId,
+                    ColorSource = ObjectColorSource.ColorFromObject,
+                    ObjectColor = Color.Black,
+                    PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
+                    PlotColor = Color.Black,
+                    PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
+                    PlotWeight = DrawHairlineMm,
+                    DisplayOrder = SectionFillOrder
+                };
+                StampForskTags(attr, new ForskStamp
+                {
+                    Kind = "drawing",
+                    Level = "0",
+                    Id = stableId,
+                    View = view
+                });
+                attr.SetUserString("forsk:role", SectionFillRole);
+                var id = Guid.Empty;
+                try { id = doc.Objects.AddHatch(hatch, attr); }
+                catch (Exception) { id = Guid.Empty; }
+                hatch.Dispose();
+                if (id == Guid.Empty) continue;
+                if (hatchBox.IsValid) box.Union(hatchBox);
+                count++;
+                index++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
     /// Print linework. Rhino 7 Mac has no ClippingDrawings, so this is
-    /// HiddenLineDrawing.Compute. Plan passes the horizontal cut. Curves are
-    /// black hairlines on S-DRAW children, hidden in the model viewport.
+    /// HiddenLineDrawing.Compute. Plan passes the horizontal cut and a solid
+    /// black hatch of the mass that plane cuts. Curves are black hairlines
+    /// on S-DRAW children, hidden in the model viewport.
     /// </summary>
     private struct GreyscaleDrawing
     {
         public string View;
         public string Layer;
         public int Count;
+        public int Fills;
         public BoundingBox Box;
         public string Error;
     }
@@ -695,6 +1110,7 @@ public partial class RhinoMCPFunctions
             View = view ?? "",
             Layer = "",
             Count = 0,
+            Fills = 0,
             Box = BoundingBox.Empty,
             Error = null
         };
@@ -725,10 +1141,9 @@ public partial class RhinoMCPFunctions
         string fail = null;
         HiddenLineDrawing hld = null;
         List<GeometryBase> sectioned = null;
+        var tolerance = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
         try
         {
-            var tolerance = doc.ModelAbsoluteTolerance;
-            if (tolerance <= 0) tolerance = 0.01;
             var draw = geometries;
             if (clip.HasValue)
             {
@@ -838,51 +1253,89 @@ public partial class RhinoMCPFunctions
         var curves = new List<Curve>();
         foreach (var item in visible)
             if (item.Curve != null) curves.Add(item.Curve);
-        PlaceCurvePack(curves, spec.Offset, doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01);
-
+        List<List<Curve>> fillGroups = null;
         var box = BoundingBox.Empty;
         var count = 0;
+        var fills = 0;
         var index = 1;
-        foreach (var item in visible)
+        try
         {
-            var curve = item.Curve;
-            if (curve == null) continue;
-            if (!curve.IsValid)
+            if (clip.HasValue)
+                fillGroups = SectionFillLoops(sources, clip.Value, tolerance);
+            if (fillGroups != null && fillGroups.Count > 0)
+                ProjectFillGroupsToZ(fillGroups, CurveSheetZ(curves));
+            var packed = new List<Curve>(curves);
+            if (fillGroups != null)
             {
-                curve.Dispose();
-                continue;
+                foreach (var group in fillGroups)
+                {
+                    if (group == null) continue;
+                    foreach (var loop in group)
+                        if (loop != null) packed.Add(loop);
+                }
             }
-            box.Union(curve.GetBoundingBox(true));
-            var stableId = FormatStableId("d", index);
-            var attr = new ObjectAttributes
+            PlaceCurvePack(packed, spec.Offset, tolerance);
+
+            foreach (var item in visible)
             {
-                LayerIndex = layer.Index,
-                Name = stableId,
-                ColorSource = ObjectColorSource.ColorFromObject,
-                ObjectColor = Color.Black,
-                PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
-                PlotColor = Color.Black,
-                PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
-                PlotWeight = item.Weight < 0 ? DrawHairlineMm : item.Weight
-            };
-            StampForskTags(attr, new ForskStamp
+                var curve = item.Curve;
+                if (curve == null) continue;
+                if (!curve.IsValid)
+                {
+                    curve.Dispose();
+                    continue;
+                }
+                box.Union(curve.GetBoundingBox(true));
+                var stableId = FormatStableId("d", index);
+                var attr = new ObjectAttributes
+                {
+                    LayerIndex = layer.Index,
+                    Name = stableId,
+                    ColorSource = ObjectColorSource.ColorFromObject,
+                    ObjectColor = Color.Black,
+                    PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
+                    PlotColor = Color.Black,
+                    PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
+                    PlotWeight = item.Weight < 0 ? DrawHairlineMm : item.Weight,
+                    DisplayOrder = SectionLineOrder
+                };
+                StampForskTags(attr, new ForskStamp
+                {
+                    Kind = "drawing",
+                    Level = "0",
+                    Id = stableId,
+                    View = spec.View
+                });
+                attr.SetUserString("forsk:role", "greyscale");
+                var id = doc.Objects.AddCurve(curve, attr);
+                curve.Dispose();
+                if (id == Guid.Empty) continue;
+                count++;
+                index++;
+            }
+
+            if (clip.HasValue && fillGroups != null)
             {
-                Kind = "drawing",
-                Level = "0",
-                Id = stableId,
-                View = spec.View
-            });
-            attr.SetUserString("forsk:role", "greyscale");
-            var id = doc.Objects.AddCurve(curve, attr);
-            curve.Dispose();
-            if (id == Guid.Empty) continue;
-            count++;
-            index++;
+                try
+                {
+                    fills = BakeSectionFills(
+                        doc, layer, spec.View, fillGroups, tolerance, ref index, ref box);
+                }
+                catch (Exception)
+                {
+                    fills = 0;
+                }
+            }
+        }
+        finally
+        {
+            DisposeFillGroups(fillGroups);
         }
 
         result.View = spec.View;
         result.Layer = layer.FullPath ?? layer.Name;
         result.Count = count;
+        result.Fills = fills;
         result.Box = box;
         if (count == 0)
             result.Error = "No visible curves for " + spec.View + ".";

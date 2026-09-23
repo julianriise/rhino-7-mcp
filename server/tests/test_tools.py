@@ -3417,6 +3417,19 @@ class TestPrintGuards:
         assert "PlotWeightFromObject" in bake
         assert "ColorFromObject" in bake
         assert 'DrawParentName = "S-DRAW"' in bake
+        assert "SectionFillLoops" in bake_fn
+        fill_at = bake_fn.index("SectionFillLoops")
+        assert "clip.HasValue" in bake_fn[max(0, fill_at - 120):fill_at]
+        assert "CreateContourCurves" in bake
+        assert "Hatch.Create" in bake
+        assert 'FindName("Solid")' in bake
+        assert "section_fill" in bake
+        assert "IsSkippedFillKind" in bake
+        assert 'kind.Equals("floor"' in bake
+        assert "SectionFillOrder = -1" in bake
+        assert "SectionLineOrder = 1" in bake
+        deleter = bake[bake.index("private static void DeletePrintDrawings"):bake.index("private static Layer FindDrawLayer")]
+        assert "forsk:role" not in deleter
         assert "SetPageAsActive" in src
         assert "GetFrustumBoundingBox" in src
         assert "SetPerViewportPlotWeight" in src
