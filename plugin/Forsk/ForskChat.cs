@@ -248,7 +248,7 @@ namespace RhinoMCPPlugin.Forsk
             if (!string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
             {
                 var err = envelope["message"]?.ToString();
-                return name + " · error · " + Clip(string.IsNullOrEmpty(err) ? "failed" : err);
+                return name + " · error · " + Short(string.IsNullOrEmpty(err) ? "failed" : err);
             }
 
             var result = envelope["result"] as JObject;
@@ -260,12 +260,19 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var count = countTok.ToString();
                 if (count == "0" && !string.IsNullOrEmpty(message))
-                    return name + " · ok · 0 · " + Clip(message);
+                    return name + " · ok · 0 · " + Short(message);
                 return name + " · ok · " + count;
             }
             if (!string.IsNullOrEmpty(message))
-                return name + " · ok · " + Clip(message);
+                return name + " · ok · " + Short(message);
             return name + " · ok";
+        }
+
+        static string Short(string text)
+        {
+            var one = Clip(text);
+            if (one.Length <= 96) return one;
+            return one.Substring(0, 93) + "...";
         }
 
         public static string Clip(string text)
@@ -614,7 +621,7 @@ Delete this door or window is delete_opening. Add is add_opening. Move millimetr
 
 Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
-Do not call Grasshopper tools or execute code. Reply in one or two sentences. The panel prints tool receipts.";
+Do not call Grasshopper tools or execute code. Reply in at most two sentences: one past-tense status line, then at most three short facts. No Target block on success. The panel prints one row per tool.";
 
         public static string Warning { get; private set; }
 
@@ -687,26 +694,30 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
         {
             if (intent == ForskIntent.Edit)
             {
-                return "Turn bias: Edit. Selection first. Prefer add_opening, move_opening, delete_opening. "
+                return "Turn bias: Edit. At most two sentences. No Target block on success. "
+                    + "Prefer add_opening, move_opening, delete_opening. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
                     + "Bake, sheets, and print stay available when the user asks.";
             }
             if (intent == ForskIntent.Sheets)
             {
-                return "Turn bias: Sheets. Prefer sheet_pack, make2d_view, clear_drawings. "
+                return "Turn bias: Sheets. At most two sentences. No Target block on success. "
+                    + "Prefer sheet_pack, make2d_view, clear_drawings. "
                     + "Layout pages and a PDF stay available: set_project_meta, layout_pack, export_pdf, clear_layouts. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
             {
-                return "Turn bias: Print. layout_pack, export_pdf, clear_layouts. "
+                return "Turn bias: Print. At most two sentences. No Target block on success. "
+                    + "layout_pack, export_pdf, clear_layouts. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";
             }
             if (intent == ForskIntent.Build)
             {
-                return "Turn bias: Build. Bake, heights, tilbygg, clear_generated. "
+                return "Turn bias: Build. At most two sentences. A full bake is one line. "
+                    + "Bake, heights, tilbygg, clear_generated. "
                     + "Order: floor, walls, roof, openings, rooms. "
                     + "Rebuild is clear_generated, then that order. There is no Rebuild button. "
                     + "Refuse X-EXIST as a bake source.";
@@ -764,6 +775,105 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
         }
     }
 
+    /// <summary>
+    /// Dock bubble is the closing text. Target essays stay off the happy path.
+    /// </summary>
+    public static class ForskReply
+    {
+        static readonly string[] KeepWhole =
+        {
+            "Nothing is selected. Click the object in Rhino, then say it again. Or name it and I will select it.",
+            "Nothing is selected. Select the existing building, then mark it again.",
+            "Walls first. Call walls_from_layer before roof_flat_from_walls.",
+            "Walls first. Call walls_from_layer before openings_from_layer.",
+            "Walls first. Call walls_from_layer before add_opening.",
+            "X-EXIST is existing underlay, not a bake source.",
+            "Existing underlay is not a Forsk host wall.",
+            "Not an opening marker.",
+            "Not a Forsk wall.",
+            "Unknown view. Use plan, north, east, south, or west.",
+            "Document units must be millimetres. Switch the .3dm to millimetres."
+        };
+
+        public static string Shape(string userText, string assistant)
+        {
+            if (string.IsNullOrWhiteSpace(assistant)) return "";
+            var text = assistant.Trim();
+            foreach (var keep in KeepWhole)
+            {
+                if (text.StartsWith(keep, StringComparison.Ordinal))
+                    return keep;
+            }
+
+            var target = new List<string>();
+            var prose = new StringBuilder();
+            var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i].Trim();
+                if (line.Length == 0) continue;
+                if (IsTargetLine(line))
+                {
+                    if (target.Count < 2) target.Add(line);
+                    continue;
+                }
+                if (prose.Length > 0) prose.Append(' ');
+                prose.Append(line);
+            }
+
+            var body = TakeSentences(prose.ToString(), 2);
+            var keepTarget = AsksSelection(userText) || (target.Count > 0 && body.IndexOf('?') >= 0);
+            if (!keepTarget || target.Count == 0) return body;
+            if (body.Length == 0) return string.Join("\n", target.ToArray());
+            return string.Join("\n", target.ToArray()) + "\n" + body;
+        }
+
+        static bool AsksSelection(string user)
+        {
+            if (string.IsNullOrWhiteSpace(user)) return false;
+            var t = user.ToLowerInvariant();
+            return t.Contains("what is selected")
+                || t.Contains("what's selected")
+                || t.Contains("what’s selected")
+                || t.Contains("whats selected")
+                || t.Contains("what is the selection");
+        }
+
+        static bool IsTargetLine(string line)
+        {
+            if (line.StartsWith("Target (", StringComparison.OrdinalIgnoreCase)) return true;
+            if (line.StartsWith("Target:", StringComparison.OrdinalIgnoreCase)) return true;
+            var hasName = line.IndexOf("name=", StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasLayer = line.IndexOf("layer=", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (hasName && hasLayer) return true;
+            return line.IndexOf("bounding_box", StringComparison.OrdinalIgnoreCase) >= 0
+                && line.IndexOf("id=", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static string TakeSentences(string text, int max)
+        {
+            if (string.IsNullOrWhiteSpace(text) || max < 1) return "";
+            var count = 0;
+            var end = text.Length;
+            for (var i = 0; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (c != '.' && c != '!' && c != '?') continue;
+                if (c == '.' && i > 0 && i + 1 < text.Length
+                    && char.IsDigit(text[i - 1]) && char.IsDigit(text[i + 1]))
+                    continue;
+                count++;
+                if (count < max) continue;
+                end = i + 1;
+                break;
+            }
+            var cut = text.Substring(0, end).Trim();
+            if (count == 0 && cut.Length > 240)
+                return cut.Substring(0, 237).Trim() + "...";
+            return cut;
+        }
+    }
+
     public static class ForskGrok
     {
         const string Endpoint = "https://api.x.ai/v1/chat/completions";
@@ -818,13 +928,29 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                     ? ""
                     : message["content"]?.ToString() ?? "";
                 var calls = message["tool_calls"] as JArray;
+                if (calls != null && calls.Count > 0)
+                {
+                    // The row under the bubble is the tool. Drop the preamble.
+                    message["content"] = JValue.CreateNull();
+                }
+                else
+                {
+                    var shaped = ForskReply.Shape(userText, content);
+                    if (string.IsNullOrWhiteSpace(shaped))
+                        message["content"] = JValue.CreateNull();
+                    else
+                        message["content"] = shaped;
+                    if (!string.IsNullOrWhiteSpace(shaped))
+                        show("assistant", shaped);
+                }
                 history.Add(message);
-                if (!string.IsNullOrWhiteSpace(content))
-                    show("assistant", content.Trim());
 
                 if (calls == null || calls.Count == 0)
                 {
-                    if (string.IsNullOrWhiteSpace(content))
+                    var shown = message["content"]?.Type == JTokenType.Null
+                        ? ""
+                        : message["content"]?.ToString() ?? "";
+                    if (string.IsNullOrWhiteSpace(shown))
                         show("assistant", "Done.");
                     Trim(history);
                     return;
@@ -861,7 +987,12 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 : "This turn is biased toward " + IntentName(intent) + ". The bias is a hint.";
             var text = "You are answering inside the Forsk panel. " + bias + " "
                 + "Every panel tool stays available. Call the tool the user asked for. "
-                + "The user already sees a one-line receipt per tool; reply in one or two sentences, not raw JSON. "
+                + "Reply in at most two sentences: one past-tense status line, then at most three short facts. "
+                + "Do not print a Target block on success. Empty selection uses the refuse copy. "
+                + "Ambiguous selection prints one Target line and asks. "
+                + "Do not restate the user. Do not say you are happy to help. Do not teach unless they asked how or why. "
+                + "Do not narrate tools. The panel prints one dim row per tool, such as walls_from_layer · ok. "
+                + "A multi-step bake is one line: Floor, walls, roof, openings, rooms baked. Say defaults once. "
                 + "Do not call capture_viewport unless the user asks to see the view.";
             if (intent == ForskIntent.Print || intent == ForskIntent.Sheets)
             {
