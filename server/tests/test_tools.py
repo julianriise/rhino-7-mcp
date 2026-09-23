@@ -3368,7 +3368,9 @@ class TestPrintGuards:
         assert "SetPerViewportPlotWeight" in src
         assert "SetPerViewportVisible" in src
         assert "RunningOnOSX" in src
-        assert "RasterMode = true" in src
+        assert "GetPreviewImage" in src
+        assert "DrawBitmap" in src
+        assert "forsk-print.log" in src
         assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src

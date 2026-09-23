@@ -72,18 +72,19 @@ back onto the clay. `CommitChanges` while the detail is still active puts
 zoom-extents back (see `9fd120c`). If the frustum still misses the clay, that
 page fails with `Layout detail is empty. The sheet does not show the clay.`
 
-Vector `FilePdf` (`ViewCaptureSettings.RasterMode` false) on this Mac draws
-the page-space title block and drops Detail viewport ink. The Layout tab can
-still show the clay. `export_pdf` keeps Wireframe and black-and-white output.
-On Mac (`HostUtils.RunningOnOSX`) it sets `RasterMode` true so the clay is in
-the file. Off Mac the capture stays vector. A page preview taken immediately
-after `Redraw` can be paper-white while the detail already shows the clay, so
-`export_pdf` does not refuse on that snapshot. It refuses when the detail
-frustum misses the clay: `PDF detail is empty. The sheet does not show the clay.`
+`ViewCaptureSettings` on this Mac, vector or raster, wrote a white page:
+`/Users/jr/Downloads/forsk-print.pdf` is five A3 pages and every pixel is white.
+The Layout tab and `RhinoPageView.GetPreviewImage` of the same pages show the
+plan and the elevations. `export_pdf` on Mac draws that preview into the PDF
+with `FilePdf.DrawBitmap`. Off Mac the capture stays vector (`RasterMode` false).
+Each export appends one line to `/tmp/forsk-print.log` and prints that path in
+the Rhino command line. It refuses when the detail frustum misses the clay:
+`PDF detail is empty. The sheet does not show the clay.`
 
-Live check, port 1999 was closed when this was written: reinstall, Generate
-3D, Print PDF, open the PDF. Plan and at least one elevation must show the
-clay silhouette and the title block.
+Live check: quit, reinstall, reopen, `mcpstart`, Print PDF again. Do not
+Generate 3D first if the Layout tabs are already there. Open the PDF and
+`/tmp/forsk-print.log`. Plan and at least one elevation must show the clay
+and the title block. A log line with `ink 0` means the preview itself was white.
 
 ## Upstream
 

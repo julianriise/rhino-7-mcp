@@ -16,10 +16,10 @@ namespace RhinoMCPPlugin.Functions;
 /// Paper Layouts of the clay. Details use a parallel camera (same look
 /// directions as Make2D) in Wireframe, and only the clay layers are visible
 /// in the detail. Source plan layers, especially labels, fill the sheet.
-/// PDF is Rhino.FileIO.FilePdf with ViewCaptureSettings(RhinoPageView, dpi)
-/// and black-and-white output. Vector (RasterMode false) is the default.
-/// Rhino 7 Mac drops Detail ink in that vector file, so export uses raster
-/// there. The title block is page-space geometry and still draws either way.
+/// PDF is Rhino.FileIO.FilePdf. Vector output uses ViewCaptureSettings with
+/// RasterMode false. On Rhino 7 Mac that capture, and a raster capture of the
+/// same page, wrote a white sheet, so Mac export draws the page preview into
+/// the PDF instead. Each export appends a line to /tmp/forsk-print.log.
 /// AddPageView width and height are millimetres (A3 landscape 420 x 297).
 /// Detail corners and the title block are converted into the document page units.
 /// Does not bake model-space drawing curves and does not require S-* layers.
@@ -54,6 +54,7 @@ public partial class RhinoMCPFunctions
     private const double TitleHeightMm = 46.0;
     private const double TitleGapMm = 6.0;
     private const double PdfDpi = 150.0;
+    private const string PrintLogPath = "/tmp/forsk-print.log";
 
     private static readonly string[] LayoutShowLayerNames = { "A-WALL", "A-FLOR", "A-ROOF" };
 
@@ -257,14 +258,19 @@ public partial class RhinoMCPFunctions
         foreach (var page in pages)
             LeaveDetail(page);
 
-        // The camera frustum is the refuse. A page preview taken right after
-        // Redraw is paper-white even when the detail already shows the clay.
         if (!ForskPagesShowClay(doc, pages))
             return ExportPdfResult("", new JArray(), EmptyPdfMessage);
 
-        // Vector first. Rhino 7 Mac FilePdf omits Detail vectors and keeps the
-        // page-space title block, so that target writes a raster page instead.
-        var rasterDetails = Rhino.Runtime.HostUtils.RunningOnOSX;
+        var full = Path.GetFullPath(path);
+        var dir = Path.GetDirectoryName(full);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        // ViewCaptureSettings on this Mac wrote a white page (no title block,
+        // no clay). The page preview of the same layout has the drawing.
+        if (Rhino.Runtime.HostUtils.RunningOnOSX)
+            return ExportMacPreviewPdf(doc, pages, full);
+
         var names = new JArray();
         var captures = new List<ViewCaptureSettings>();
         try
@@ -283,18 +289,13 @@ public partial class RhinoMCPFunctions
                     DrawWallpaper = false,
                     DefaultPrintWidthMillimeters = 0.18
                 };
-                if (rasterDetails)
-                    settings.RasterMode = true;
                 captures.Add(settings);
                 pdf.AddPage(settings);
                 names.Add(page.PageName ?? "");
             }
 
-            var full = Path.GetFullPath(path);
-            var dir = Path.GetDirectoryName(full);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
             pdf.Write(full);
+            LogPrint(full, names.Count, "vector");
             return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
         }
         catch (Exception)
@@ -305,6 +306,102 @@ public partial class RhinoMCPFunctions
         {
             foreach (var settings in captures)
                 settings.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Mac FilePdf capture of a Layout is a white bitmap. Draw the page preview,
+    /// which already shows the clay and the title block, onto each PDF page.
+    /// </summary>
+    private JObject ExportMacPreviewPdf(RhinoDoc doc, List<RhinoPageView> pages, string full)
+    {
+        int dpi = (int)Math.Round(PdfDpi);
+        int dotsW = (int)Math.Round(A3WidthMm / 25.4 * dpi);
+        int dotsH = (int)Math.Round(A3HeightMm / 25.4 * dpi);
+        var names = new JArray();
+        var notes = new List<string>();
+        var previous = doc.Views.ActiveView;
+        try
+        {
+            var pdf = FilePdf.Create();
+            int pageNumber = 0;
+            foreach (var page in pages)
+            {
+                pageNumber++;
+                LeaveDetail(page);
+                doc.Views.ActiveView = page;
+                page.SetPageAsActive();
+                page.Redraw();
+                Bitmap bmp = null;
+                try
+                {
+                    bmp = page.GetPreviewImage(new Size(dotsW, dotsH), false);
+                    var ink = CountDarkSamples(bmp);
+                    if (ink == 0)
+                    {
+                        if (bmp != null) bmp.Dispose();
+                        page.Redraw();
+                        bmp = page.GetPreviewImage(new Size(dotsW, dotsH), false);
+                        ink = CountDarkSamples(bmp);
+                    }
+                    pdf.AddPage(dotsW, dotsH, dpi);
+                    if (bmp != null)
+                        pdf.DrawBitmap(pageNumber, bmp, 0, 0, dotsW, dotsH, 0);
+                    var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
+                    notes.Add((page.PageName ?? "") + " ink " + ink + " " + size);
+                }
+                finally
+                {
+                    if (bmp != null) bmp.Dispose();
+                }
+                names.Add(page.PageName ?? "");
+            }
+
+            pdf.Write(full);
+            LogPrint(full, names.Count, string.Join("; ", notes.ToArray()));
+            return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
+        }
+        catch (Exception)
+        {
+            LogPrint(full, names.Count, "write failed");
+            return ExportPdfResult(full, names, PdfWriteFailedMessage);
+        }
+        finally
+        {
+            if (previous != null)
+                doc.Views.ActiveView = previous;
+        }
+    }
+
+    private static int CountDarkSamples(Bitmap bmp)
+    {
+        if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return 0;
+        int dark = 0;
+        int step = Math.Max(8, bmp.Width / 40);
+        for (int y = 0; y < bmp.Height; y += step)
+        {
+            for (int x = 0; x < bmp.Width; x += step)
+            {
+                Color color;
+                try { color = bmp.GetPixel(x, y); }
+                catch (Exception) { return dark; }
+                if ((color.R + color.G + color.B) / 3 < 248) dark++;
+            }
+        }
+        return dark;
+    }
+
+    private static void LogPrint(string path, int pages, string detail)
+    {
+        try
+        {
+            var line = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+                + " pages " + pages + " " + detail + " " + path + "\n";
+            File.AppendAllText(PrintLogPath, line);
+            RhinoApp.WriteLine("Forsk PDF log: " + PrintLogPath);
+        }
+        catch (Exception)
+        {
         }
     }
 
