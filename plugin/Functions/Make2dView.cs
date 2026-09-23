@@ -812,34 +812,82 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static void ProjectFillGroupsToZ(List<List<Curve>> groups, double z)
+    /// <summary>
+    /// Section contours are in model space. HiddenLineDrawing segments are
+    /// already in drawing space. WorldToHiddenLine is that same map, so the
+    /// poché lands on the line drawing instead of a second copy of the plan.
+    /// </summary>
+    private static void TransformFillGroups(List<List<Curve>> groups, Transform xform)
     {
-        if (groups == null) return;
+        if (groups == null || !xform.IsValid) return;
+        foreach (var group in groups)
+        {
+            if (group == null) continue;
+            for (int i = group.Count - 1; i >= 0; i--)
+            {
+                var curve = group[i];
+                if (curve != null && curve.Transform(xform)) continue;
+                curve?.Dispose();
+                group.RemoveAt(i);
+            }
+        }
+    }
+
+    private static Vector3d PackDelta(List<Curve> curves, Vector3d offset, double tolerance)
+    {
+        var bbox = BoundingBox.Empty;
+        if (curves != null)
+        {
+            foreach (var curve in curves)
+            {
+                if (curve == null) continue;
+                bbox.Union(curve.GetBoundingBox(true));
+            }
+        }
+        if (!bbox.IsValid) return Vector3d.Zero;
+        var delta = new Vector3d(
+            offset.X - bbox.Min.X,
+            offset.Y - bbox.Min.Y,
+            offset.Z - bbox.Min.Z);
+        if (delta.Length <= tolerance) return Vector3d.Zero;
+        return delta;
+    }
+
+    private static void TranslateCurves(IList<Curve> curves, Vector3d delta)
+    {
+        if (curves == null || delta.IsTiny()) return;
+        var move = Transform.Translation(delta);
+        foreach (var curve in curves)
+            curve?.Transform(move);
+    }
+
+    private static BoundingBox FillBounds(List<List<Curve>> groups)
+    {
+        var box = BoundingBox.Empty;
+        if (groups == null) return box;
         foreach (var group in groups)
         {
             if (group == null) continue;
             foreach (var curve in group)
             {
                 if (curve == null) continue;
-                var box = curve.GetBoundingBox(true);
-                if (!box.IsValid) continue;
-                var dz = z - box.Center.Z;
-                if (Math.Abs(dz) <= 1e-6) continue;
-                curve.Transform(Transform.Translation(0, 0, dz));
+                var one = curve.GetBoundingBox(true);
+                if (one.IsValid) box.Union(one);
             }
         }
+        return box;
     }
 
-    private static double CurveSheetZ(List<Curve> curves)
+    /// <summary>
+    /// True when the poché sits on the line drawing. A miss of a few
+    /// millimetres still counts. A second plan, metres away, does not.
+    /// </summary>
+    private static bool OverlapsPlan(BoundingBox lines, BoundingBox fills)
     {
-        if (curves == null) return 0;
-        foreach (var curve in curves)
-        {
-            if (curve == null) continue;
-            var box = curve.GetBoundingBox(true);
-            if (box.IsValid) return box.Center.Z;
-        }
-        return 0;
+        if (!lines.IsValid || !fills.IsValid) return false;
+        const double pad = 100.0;
+        return lines.Max.X + pad >= fills.Min.X && lines.Min.X - pad <= fills.Max.X
+            && lines.Max.Y + pad >= fills.Min.Y && lines.Min.Y - pad <= fills.Max.Y;
     }
 
     private static void DisposeFillGroups(List<List<Curve>> groups)
@@ -970,14 +1018,8 @@ public partial class RhinoMCPFunctions
                 if (other.Depth != loop.Depth + 1) continue;
                 holes.Add(other.Curve);
             }
-            Hatch hatch = null;
-            try { hatch = Hatch.Create(plane, loop.Curve, holes, pattern, 0.0, 1.0); }
-            catch (Exception) { hatch = null; }
-            if (hatch != null)
-            {
-                built.Add(hatch);
-                continue;
-            }
+            // The curve overload keeps the hatch on these loops. The plane
+            // overload treats the coordinates as plane-local and shifts them.
             var curves = new List<Curve> { loop.Curve };
             curves.AddRange(holes);
             Hatch[] many = null;
@@ -1001,21 +1043,7 @@ public partial class RhinoMCPFunctions
         if (doc == null || layer == null || groups == null || groups.Count == 0) return 0;
         var pattern = SolidPatternIndex(doc);
         if (pattern < 0) return 0;
-        var sheetZ = 0.0;
-        var haveZ = false;
-        foreach (var group in groups)
-        {
-            if (group == null) continue;
-            foreach (var curve in group)
-            {
-                if (curve == null) continue;
-                sheetZ = curve.PointAtStart.Z;
-                haveZ = true;
-                break;
-            }
-            if (haveZ) break;
-        }
-        var plane = new Plane(new Point3d(0, 0, sheetZ), Vector3d.ZAxis);
+        var plane = Plane.WorldXY;
         var count = 0;
         foreach (var group in groups)
         {
@@ -1141,6 +1169,8 @@ public partial class RhinoMCPFunctions
         string fail = null;
         HiddenLineDrawing hld = null;
         List<GeometryBase> sectioned = null;
+        var worldToHld = Transform.Identity;
+        var haveWorldToHld = false;
         var tolerance = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
         try
         {
@@ -1198,6 +1228,12 @@ public partial class RhinoMCPFunctions
                         fail = "Hidden line drawing failed.";
                     else if (hld.Segments != null)
                     {
+                        var toDrawing = hld.WorldToHiddenLine;
+                        if (toDrawing.IsValid)
+                        {
+                            worldToHld = toDrawing;
+                            haveWorldToHld = true;
+                        }
                         foreach (var seg in hld.Segments)
                         {
                             if (!KeepGreyscaleSegment(seg)) continue;
@@ -1260,21 +1296,20 @@ public partial class RhinoMCPFunctions
         var index = 1;
         try
         {
-            if (clip.HasValue)
+            if (clip.HasValue && haveWorldToHld)
+            {
                 fillGroups = SectionFillLoops(sources, clip.Value, tolerance);
-            if (fillGroups != null && fillGroups.Count > 0)
-                ProjectFillGroupsToZ(fillGroups, CurveSheetZ(curves));
-            var packed = new List<Curve>(curves);
+                TransformFillGroups(fillGroups, worldToHld);
+            }
+            // Delta comes from the line drawing only, so the poché cannot
+            // shove the sheet to a second copy of the plan.
+            var delta = PackDelta(curves, spec.Offset, tolerance);
+            TranslateCurves(curves, delta);
             if (fillGroups != null)
             {
                 foreach (var group in fillGroups)
-                {
-                    if (group == null) continue;
-                    foreach (var loop in group)
-                        if (loop != null) packed.Add(loop);
-                }
+                    TranslateCurves(group, delta);
             }
-            PlaceCurvePack(packed, spec.Offset, tolerance);
 
             foreach (var item in visible)
             {
@@ -1314,7 +1349,7 @@ public partial class RhinoMCPFunctions
                 index++;
             }
 
-            if (clip.HasValue && fillGroups != null)
+            if (clip.HasValue && fillGroups != null && OverlapsPlan(box, FillBounds(fillGroups)))
             {
                 try
                 {

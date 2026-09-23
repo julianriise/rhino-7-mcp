@@ -3418,8 +3418,10 @@ class TestPrintGuards:
         assert "ColorFromObject" in bake
         assert 'DrawParentName = "S-DRAW"' in bake
         assert "SectionFillLoops" in bake_fn
+        assert "WorldToHiddenLine" in bake_fn
         fill_at = bake_fn.index("SectionFillLoops")
-        assert "clip.HasValue" in bake_fn[max(0, fill_at - 120):fill_at]
+        assert "clip.HasValue" in bake_fn[max(0, fill_at - 180):fill_at]
+        assert "PackDelta" in bake_fn
         assert "CreateContourCurves" in bake
         assert "Hatch.Create" in bake
         assert 'FindName("Solid")' in bake
