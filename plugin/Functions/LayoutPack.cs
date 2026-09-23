@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
+using System.Text;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -52,6 +54,11 @@ public partial class RhinoMCPFunctions
     private const string PlanCutMissingMessage = "Plan cut failed. The plan detail has no clipping plane.";
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
+    private const int PenEdgePx = 1;
+    private const int PenSilhouettePx = 2;
+    private static int _penPass;
+    private static int _penApplied = -1;
+    private static string _penLog = "";
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -169,6 +176,7 @@ public partial class RhinoMCPFunctions
 
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
         var detailH = A3HeightMm - LayoutMarginMm - TitleHeightMm - TitleGapMm - LayoutMarginMm;
+        _penPass++;
         var pages = new JArray();
         var applied = new List<int>();
         string cutNote = null;
@@ -273,6 +281,7 @@ public partial class RhinoMCPFunctions
         if (!Path.IsPathRooted(path) || !path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
             return ExportPdfResult("", new JArray(), ExportNeedsPdfMessage);
 
+        _penPass++;
         var layout = parameters?["layout"]?.ToString();
         var pages = MatchingForskPages(doc, layout);
         if (pages.Count == 0)
@@ -321,7 +330,7 @@ public partial class RhinoMCPFunctions
             }
 
             pdf.Write(full);
-            LogPrint(full, names.Count, "vector");
+            LogPrint(full, names.Count, "vector" + PenLogSuffix());
             return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
         }
         catch (Exception)
@@ -393,7 +402,7 @@ public partial class RhinoMCPFunctions
 
             if (blanks.Count > 0)
             {
-                LogPrint(full, 0, string.Join("; ", notes.ToArray()));
+                LogPrint(full, 0, string.Join("; ", notes.ToArray()) + PenLogSuffix());
                 var message = CaptureFailedPrefix + ". Debug images: " + string.Join(", ", blanks.ToArray());
                 return ExportPdfResult("", new JArray(), message);
             }
@@ -409,7 +418,7 @@ public partial class RhinoMCPFunctions
             }
 
             pdf.Write(full);
-            LogPrint(full, names.Count, string.Join("; ", notes.ToArray()));
+            LogPrint(full, names.Count, string.Join("; ", notes.ToArray()) + PenLogSuffix());
             return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
         }
         catch (Exception)
@@ -840,19 +849,27 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Pen copy: silhouettes from the Pen pipeline, tangent and iso edges off.
-    /// RhinoCommon does not expose the hidden-line toggle. Pen leaves it off.
+    /// Pen copy, re-applied on every layout and export so a saved preference
+    /// cannot leave object-colored edges in place.
     /// </summary>
     private static void ApplyDetailDisplay(RhinoViewport viewport)
     {
         if (viewport == null) return;
-        var mode = ForskPenMode();
+        var mode = EnsureForskPen();
         if (mode != null)
             viewport.DisplayMode = mode;
     }
 
-    private static DisplayModeDescription ForskPenMode()
+    private static string PenLogSuffix()
     {
+        EnsureForskPen();
+        return string.IsNullOrEmpty(_penLog) ? "" : " | " + _penLog;
+    }
+
+    private static DisplayModeDescription EnsureForskPen()
+    {
+        if (_penApplied == _penPass && _penModeCached != null)
+            return _penModeCached;
         var mode = DisplayModeDescription.FindByName(ForskPenName);
         if (mode == null || mode.Id == DisplayModeDescription.PenId)
         {
@@ -860,26 +877,177 @@ public partial class RhinoMCPFunctions
             if (id != Guid.Empty)
                 mode = DisplayModeDescription.GetDisplayMode(id);
         }
-        if (mode != null && mode.Id != DisplayModeDescription.PenId)
+        if (mode == null || mode.Id == DisplayModeDescription.PenId)
         {
-            TightenForskPen(mode);
-            return mode;
+            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId)
+                ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         }
-        return DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId)
-            ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        else
+        {
+            var iniNote = RepatchPenIni(mode);
+            mode = DisplayModeDescription.FindByName(ForskPenName) ?? mode;
+            var reflected = "";
+            try { reflected = ApplyManagedPen(mode); }
+            catch (Exception) { reflected = "attrs-failed"; }
+            _penLog = "pen edge " + PenEdgePx + "px silhouette " + PenSilhouettePx
+                + "px " + iniNote
+                + (reflected.Length == 0 ? " r7-props-only" : " reflected " + reflected);
+        }
+        _penModeCached = mode;
+        _penApplied = _penPass;
+        return mode;
     }
 
-    private static void TightenForskPen(DisplayModeDescription mode)
+    private static DisplayModeDescription _penModeCached;
+
+    /// <summary>
+    /// R7 RhinoCommon exposes surface-edge thickness and curve color, not
+    /// silhouette color. The ini keys are the R7 display-mode record:
+    /// surface edge usage 2 is "single color", 0 is the object color.
+    /// </summary>
+    private static string ApplyManagedPen(DisplayModeDescription mode)
     {
         var attr = mode?.DisplayAttributes;
-        if (attr == null) return;
+        if (attr == null) return "";
         attr.ShowIsoCurves = false;
         attr.ShowTangentEdges = false;
         attr.ShowTangentSeams = false;
         attr.ShowSurfaceEdges = true;
         attr.ShowClippingPlanes = false;
+        attr.SurfaceEdgeThickness = PenEdgePx;
+        attr.CurveThickness = PenEdgePx;
+        attr.UseSingleCurveColor = true;
+        attr.CurveColor = Color.Black;
+        attr.UseAssignedObjectMaterial = false;
+        attr.UseCustomObjectMaterial = false;
+        try { attr.SetFill(Color.White); }
+        catch (Exception) { }
+        var mesh = attr.MeshSpecificAttributes;
+        if (mesh != null)
+        {
+            mesh.AllMeshWiresColor = Color.Black;
+            mesh.MeshWireThickness = PenEdgePx;
+        }
+        var hit = new List<string>();
+        if (TrySet(attr, "SurfaceEdgeColor", Color.Black)) hit.Add("SurfaceEdgeColor");
+        if (TrySet(attr, "SurfaceEdgeColorUsage", 2)) hit.Add("SurfaceEdgeColorUsage=2");
+        if (TrySet(attr, "SilhouetteLineColor", Color.Black)) hit.Add("SilhouetteLineColor");
+        if (TrySet(attr, "SilhouetteColor", Color.Black)) hit.Add("SilhouetteColor");
+        if (TrySet(attr, "EdgeLineColor", Color.Black)) hit.Add("EdgeLineColor");
+        if (TrySet(attr, "ClippingEdgeColor", Color.Black)) hit.Add("ClippingEdgeColor");
+        if (TrySet(attr, "ClippingEdgeThickness", PenSilhouettePx)) hit.Add("ClippingEdgeThickness");
+        if (TrySet(attr, "ClippingEdgeColorUsage", 1)) hit.Add("ClippingEdgeColorUsage=1");
         try { DisplayModeDescription.UpdateDisplayMode(mode); }
         catch (Exception) { }
+        return string.Join(",", hit.ToArray());
+    }
+
+    private static bool TrySet(object target, string name, object value)
+    {
+        if (target == null || value == null) return false;
+        try
+        {
+            var prop = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (prop == null || !prop.CanWrite) return false;
+            if (prop.PropertyType.IsEnum && value is int)
+                value = Enum.ToObject(prop.PropertyType, (int)value);
+            else if (prop.PropertyType != value.GetType() && !prop.PropertyType.IsInstanceOfType(value))
+                return false;
+            prop.SetValue(target, value, null);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string RepatchPenIni(DisplayModeDescription mode)
+    {
+        var path = "/tmp/forsk-pen.ini";
+        try
+        {
+            var exported = DisplayModeDescription.ExportToFile(mode, path);
+            if (exported is bool ok && !ok) return "ini-export-failed";
+            if (!File.Exists(path)) return "ini-missing";
+            var text = File.ReadAllText(path);
+            int replaced;
+            var patched = PatchPenIni(text, out replaced);
+            File.WriteAllText(path, patched);
+            if (mode.Id != DisplayModeDescription.PenId)
+            {
+                try { DisplayModeDescription.DeleteDisplayMode(mode.Id); }
+                catch (Exception) { }
+            }
+            var imported = DisplayModeDescription.ImportFromFile(path);
+            if (imported == Guid.Empty) return "ini-import-failed keys " + replaced;
+            return "ini-keys " + replaced;
+        }
+        catch (Exception)
+        {
+            return "ini-export-failed";
+        }
+    }
+
+    private static string PatchPenIni(string text, out int replaced)
+    {
+        var wanted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "EdgeColorUsage", "2" },
+            { "EdgeColor", "0,0,0" },
+            { "EdgeThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "NakedEdgeColorUsage", "2" },
+            { "NakedEdgeColor", "0,0,0" },
+            { "NakedEdgeThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "ClippingEdgesUsage", "1" },
+            { "ClippingEdgeColor", "0,0,0" },
+            { "ClippingEdgeThickness", PenSilhouettePx.ToString(CultureInfo.InvariantCulture) },
+            { "THThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "TEThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "TSiThickness", PenSilhouettePx.ToString(CultureInfo.InvariantCulture) },
+            { "TCThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "TSThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "TIThickness", PenEdgePx.ToString(CultureInfo.InvariantCulture) },
+            { "THColor", "0,0,0" },
+            { "TEColor", "0,0,0" },
+            { "TSiColor", "0,0,0" },
+            { "TCColor", "0,0,0" },
+            { "TSColor", "0,0,0" },
+            { "TIColor", "0,0,0" },
+            { "surfaceEdgeColorUsageIndex", "2" },
+            { "singleCurveColorIndex", "1" },
+            { "clippingEdgesUsage", "1" }
+        };
+        replaced = 0;
+        var lines = (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var eq = lines[i].IndexOf('=');
+            if (eq <= 0) continue;
+            var key = lines[i].Substring(0, eq).Trim();
+            string value;
+            if (!wanted.TryGetValue(key, out value)) continue;
+            lines[i] = key + "=" + value;
+            seen.Add(key);
+            replaced++;
+        }
+        var sb = new StringBuilder();
+        foreach (var line in lines)
+        {
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(line);
+        }
+        if (seen.Count < wanted.Count)
+        {
+            sb.Append("\n[ForskPen]\n");
+            foreach (var pair in wanted)
+            {
+                if (seen.Contains(pair.Key)) continue;
+                sb.Append(pair.Key).Append('=').Append(pair.Value).Append('\n');
+            }
+        }
+        return sb.ToString();
     }
 
     /// <summary>
@@ -1119,8 +1287,11 @@ public partial class RhinoMCPFunctions
             layer.SetPerViewportVisible(viewportId, show);
             if (show)
             {
-                // PlotWeight -1 is "do not print". 0 is the default pen.
+                // GetPreviewImage reads this display color. Plot color is for a
+                // vector print such as ExportAll and does not affect that bitmap.
+                layer.SetPerViewportColor(viewportId, Color.Black);
                 layer.SetPerViewportPlotColor(viewportId, Color.Black);
+                // PlotWeight -1 is "do not print". 0.18 mm is the vector pen.
                 layer.SetPerViewportPlotWeight(viewportId, 0.18);
                 if (layer.PlotWeight < 0)
                     layer.PlotWeight = 0;

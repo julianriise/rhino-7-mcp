@@ -102,7 +102,11 @@ plane at the top of the floor solids plus 1200 mm, normal pointing down,
 and assigns it only to that detail. Elevations are not clipped. The roof
 above the cut drops out of the plan. Rhino 7 Mac still captures the page
 as a bitmap. `Forsk Pen` is display quality, not an Rhino 8 vector
-Technical print. RhinoCommon does not expose the hidden-line switch.
+Technical print. On this Rhino 7 the public attributes have surface-edge
+thickness and curve color, not a silhouette-color property. The mode file
+sets edge color usage to a single black color (usage 2; 0 is the object
+color) and silhouette thickness to 2 px. The detail display color is black
+because `GetPreviewImage` ignores plot color. RhinoCommon does not expose the hidden-line switch.
 Pen leaves hidden lines off. Tangent and iso edges are turned off on the
 `Forsk Pen` copy. To inspect that switch: Rhino Options, View, Display
 Modes, Forsk Pen.

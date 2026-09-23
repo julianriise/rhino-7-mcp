@@ -3379,6 +3379,10 @@ class TestPrintGuards:
         assert "-Vector3d.ZAxis" in src
         assert "Plan cut failed. The plan detail has no clipping plane." in src
         assert "ShowTangentEdges = false" in src
+        assert "SetPerViewportColor" in src
+        assert "GetPreviewImage reads this display color" in src
+        assert "EdgeColorUsage" in src
+        assert "SurfaceEdgeThickness = PenEdgePx" in src
         assert "TechId" not in src
         assert "BlackAndWhite" in src
         assert "IsClayDetailLayer" in src
