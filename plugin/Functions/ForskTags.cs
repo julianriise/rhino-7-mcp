@@ -19,6 +19,7 @@ public partial class RhinoMCPFunctions
         public const double WindowSill = 900.0;
         public const double WindowHead = 2100.0;
         public const double WindowWidth = 1200.0;
+        public const double PlanCutHeightMm = 1200.0;
     }
 
     private sealed class ForskStamp

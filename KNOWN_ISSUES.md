@@ -80,8 +80,8 @@ immediately photographs an unpainted white frame. Skipping the redraw did not
 fix the Print button: `/tmp/forsk-print.log` still showed ink 0 at 2480×1754.
 Mac layout capture is asynchronous. The button now resolves the save path
 first, then for each Forsk page sets that page active (detail not active),
-keeps the paper in Wireframe, sets an elevation detail to Pen (plan stays
-Wireframe; a shaded mode filled the roof footprint), redraws, calls `RhinoApp.Wait`,
+keeps the paper in Wireframe, sets each detail to the `Forsk Pen` copy,
+redraws, calls `RhinoApp.Wait`,
 lets one idle pass, and only then calls `GetPreviewImage`. Off Mac the
 capture stays vector (`RasterMode` false). Do not put `ViewCaptureSettings`
 back on the Mac path until this preview has ink.
@@ -97,10 +97,20 @@ file type Rhino PDF, Multiple layouts, only the `Forsk —` pages, one PDF.
 That command opens Rhino's export dialog (`! _ExportAll` in the Mac menu),
 so Print does not run it.
 
-Live check: quit, reinstall, reopen, `mcpstart`. If the Layout tabs are
-already there, do not Generate 3D first. Print PDF, then open the PDF and
-`/tmp/forsk-print.log`. Plan and at least one elevation must show the clay
-and the title block, and the log ink must be greater than 0.
+The plan detail is a horizontal cut. `layout_pack` places one clipping
+plane at the top of the floor solids plus 1200 mm, normal pointing down,
+and assigns it only to that detail. Elevations are not clipped. The roof
+above the cut drops out of the plan. Rhino 7 Mac still captures the page
+as a bitmap. `Forsk Pen` is display quality, not an Rhino 8 vector
+Technical print. RhinoCommon does not expose the hidden-line switch.
+Pen leaves hidden lines off. Tangent and iso edges are turned off on the
+`Forsk Pen` copy. To inspect that switch: Rhino Options, View, Display
+Modes, Forsk Pen.
+
+Live check: quit, reinstall, reopen, `mcpstart`, Generate 3D, then Print.
+Open the PDF and `/tmp/forsk-print.log`. Plan shows wall openings at the
+cut, not a filled roof. Elevations show the facade outline. Log ink must
+be greater than 0.
 
 ## Upstream
 

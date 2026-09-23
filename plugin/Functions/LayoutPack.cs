@@ -14,8 +14,9 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Paper Layouts of the clay. Details use a parallel camera (same look
-/// directions as Make2D). Plan stays Wireframe. Elevations use Pen so edges
-/// behind the facade drop out. Only the clay layers are visible
+/// directions as Make2D). Plan and elevations use a Pen copy. The plan is a
+/// horizontal cut 1200 mm above the floor, clipped only in that detail.
+/// Only the clay layers are visible
 /// in the detail. Source plan layers, especially labels, fill the sheet.
 /// PDF is Rhino.FileIO.FilePdf. Vector output uses ViewCaptureSettings with
 /// RasterMode false. On Rhino 7 Mac that capture wrote a white sheet, so Mac
@@ -48,6 +49,9 @@ public partial class RhinoMCPFunctions
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the clay.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the clay.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
+    private const string PlanCutMissingMessage = "Plan cut failed. The plan detail has no clipping plane.";
+    private const string PlanCutRole = "plan_cut";
+    private const string ForskPenName = "Forsk Pen";
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -167,6 +171,7 @@ public partial class RhinoMCPFunctions
         var detailH = A3HeightMm - LayoutMarginMm - TitleHeightMm - TitleGapMm - LayoutMarginMm;
         var pages = new JArray();
         var applied = new List<int>();
+        string cutNote = null;
         foreach (var viewName in views)
         {
             if (!TryGetLayoutView(viewName, out var spec))
@@ -207,14 +212,33 @@ public partial class RhinoMCPFunctions
                 ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
                 : "fit";
             var ids = AddTitleBlock(doc, page, spec, stableId, scaleLabel);
-            pages.Add(new JObject
+            var pageRecord = new JObject
             {
                 ["view"] = spec.View,
                 ["page"] = spec.PageName,
                 ["scale"] = scale,
                 ["detail_count"] = 1,
                 ["ids"] = ids
-            });
+            };
+            if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryAddPlanCut(doc, detail, clay, bbox, out var cutZ))
+                {
+                    RhinoApp.WriteLine(PlanCutMissingMessage);
+                    try { LeaveDetail(page); } catch (Exception) { }
+                    try { page.Close(); } catch (Exception) { }
+                    throw new InvalidOperationException(PlanCutMissingMessage);
+                }
+                pageRecord["cut_z"] = cutZ;
+                pageRecord["cut_height_mm"] = ForskDefaults.PlanCutHeightMm;
+                cutNote = " Plan cut "
+                    + ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture)
+                    + " mm above the floor (Z "
+                    + cutZ.ToString("0.###", CultureInfo.InvariantCulture)
+                    + ").";
+                RhinoApp.WriteLine("Forsk " + cutNote.Trim());
+            }
+            pages.Add(pageRecord);
         }
 
         doc.Views.Redraw();
@@ -232,7 +256,7 @@ public partial class RhinoMCPFunctions
             ["pages"] = pages,
             ["count"] = pages.Count,
             ["scale"] = reported,
-            ["message"] = $"Laid out {pages.Count} page(s) on A3 {at}."
+            ["message"] = $"Laid out {pages.Count} page(s) on A3 {at}.{cutNote}"
         };
     }
 
@@ -403,15 +427,15 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Page active, detail not active, then paint. The paper stays Wireframe.
-    /// An elevation detail uses Pen so the capture matches the sheet.
+    /// Page active, detail not active, then paint. The paper stays Wireframe
+    /// so the Mac capture still has a page to photograph. Each detail uses
+    /// Forsk Pen.
     /// </summary>
     private static void PrepareMacPage(RhinoPageView page)
     {
         if (page == null) return;
         LeaveDetail(page);
         ApplyPaperDisplay(page);
-        var elevation = IsElevationPage(page);
         var details = page.GetDetailViews();
         if (details != null)
         {
@@ -420,7 +444,7 @@ public partial class RhinoMCPFunctions
                 if (detail == null) continue;
                 if (detail.IsActive)
                     detail.IsActive = false;
-                ApplyDetailDisplay(detail.Viewport, elevation);
+                ApplyDetailDisplay(detail.Viewport);
             }
         }
 
@@ -779,16 +803,15 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException(EmptyDetailMessage);
 
         SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
-        var elevation = !string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
-        ApplyDetailDisplay(detail.Viewport, elevation);
+        ApplyDetailDisplay(detail.Viewport);
         LeaveDetail(page);
         return detail;
     }
 
     /// <summary>
-    /// Parallel camera, zoomed to the clay. Plan is Wireframe: a shaded mode
-    /// filled the roof and floor footprint. Elevations are Pen, which occludes
-    /// edges behind the front face. Technical filled that footprint solid black.
+    /// Parallel camera, zoomed to the clay. Details use Forsk Pen. A shaded
+    /// Technical mode filled the roof footprint, so the plan cut removes
+    /// everything above the floor plus 1200 mm instead.
     /// </summary>
     private static void AimDetailCamera(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
     {
@@ -806,8 +829,7 @@ public partial class RhinoMCPFunctions
         var pad = Math.Max(500.0, framed.Diagonal.Length * 0.02);
         framed.Inflate(pad);
         vp.ZoomBoundingBox(framed);
-        var elevation = !string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
-        ApplyDetailDisplay(vp, elevation);
+        ApplyDetailDisplay(vp);
     }
 
     private static void ApplyPaperDisplay(RhinoPageView page)
@@ -818,30 +840,159 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Pen hides edges behind surfaces. Missing Pen falls back to Wireframe.
+    /// Pen copy: silhouettes from the Pen pipeline, tangent and iso edges off.
+    /// RhinoCommon does not expose the hidden-line toggle. Pen leaves it off.
     /// </summary>
-    private static void ApplyDetailDisplay(RhinoViewport viewport, bool elevation)
+    private static void ApplyDetailDisplay(RhinoViewport viewport)
     {
         if (viewport == null) return;
-        DisplayModeDescription mode = null;
-        if (elevation)
-            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId);
-        if (mode == null)
-            mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        var mode = ForskPenMode();
         if (mode != null)
             viewport.DisplayMode = mode;
     }
 
-    private static bool IsElevationPage(RhinoPageView page)
+    private static DisplayModeDescription ForskPenMode()
     {
-        var name = page?.PageName ?? "";
-        foreach (var view in new[] { "north", "east", "south", "west" })
+        var mode = DisplayModeDescription.FindByName(ForskPenName);
+        if (mode == null || mode.Id == DisplayModeDescription.PenId)
         {
-            if (!TryGetLayoutView(view, out var spec)) continue;
-            if (string.Equals(name, spec.PageName, StringComparison.OrdinalIgnoreCase))
-                return true;
+            var id = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.PenId, ForskPenName);
+            if (id != Guid.Empty)
+                mode = DisplayModeDescription.GetDisplayMode(id);
+        }
+        if (mode != null && mode.Id != DisplayModeDescription.PenId)
+        {
+            TightenForskPen(mode);
+            return mode;
+        }
+        return DisplayModeDescription.GetDisplayMode(DisplayModeDescription.PenId)
+            ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+    }
+
+    private static void TightenForskPen(DisplayModeDescription mode)
+    {
+        var attr = mode?.DisplayAttributes;
+        if (attr == null) return;
+        attr.ShowIsoCurves = false;
+        attr.ShowTangentEdges = false;
+        attr.ShowTangentSeams = false;
+        attr.ShowSurfaceEdges = true;
+        attr.ShowClippingPlanes = false;
+        try { DisplayModeDescription.UpdateDisplayMode(mode); }
+        catch (Exception) { }
+    }
+
+    /// <summary>
+    /// Horizontal section for the plan detail only. The Rhino pointer faces the
+    /// visible side, so the normal points down: geometry below the cut stays,
+    /// and the roof above it is clipped. The plane is infinite; the widget size
+    /// is only the on-screen grip.
+    /// </summary>
+    private bool TryAddPlanCut(
+        RhinoDoc doc, DetailViewObject detail, List<RhinoObject> clay, BoundingBox bbox, out double cutZ)
+    {
+        cutZ = 0;
+        if (doc == null || detail?.Viewport == null || detail.Viewport.Id == Guid.Empty)
+            return false;
+        DeletePlanCuts(doc);
+        var ffl = FloorTopZ(clay);
+        cutZ = ffl + ForskDefaults.PlanCutHeightMm;
+        var origin = new Point3d(bbox.Center.X, bbox.Center.Y, cutZ);
+        var plane = new Plane(origin, -Vector3d.ZAxis);
+        var u = Math.Max(1000.0, bbox.Max.X - bbox.Min.X);
+        var v = Math.Max(1000.0, bbox.Max.Y - bbox.Min.Y);
+        var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
+        var attr = new ObjectAttributes
+        {
+            LayerIndex = layer.Index,
+            Name = "forsk-plan-cut",
+            Space = ActiveSpace.ModelSpace
+        };
+        StampForskTags(attr, new ForskStamp
+        {
+            Kind = "layout",
+            View = "plan",
+            Id = "cut"
+        });
+        attr.SetUserString("forsk:role", PlanCutRole);
+        attr.SetUserString("forsk:cut_z", cutZ.ToString("0.###", CultureInfo.InvariantCulture));
+        var clipId = doc.Objects.AddClippingPlane(
+            plane, u, v, new[] { detail.Viewport.Id }, attr);
+        if (clipId == Guid.Empty) return false;
+        doc.Strings.SetString(
+            LayoutMetaSection,
+            "plan_cut_z",
+            cutZ.ToString("0.###", CultureInfo.InvariantCulture));
+        doc.Strings.SetString(
+            LayoutMetaSection,
+            "plan_cut_height_mm",
+            ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture));
+        ShowPlanCutInDetail(doc, layer, detail.Viewport.Id);
+        return PlanDetailIsClipped(doc, clipId, detail.Viewport.Id);
+    }
+
+    /// <summary>Top of the floor solids. Walls start at 0 when no floor is baked.</summary>
+    private static double FloorTopZ(List<RhinoObject> clay)
+    {
+        double? top = null;
+        if (clay == null) return 0;
+        foreach (var obj in clay)
+        {
+            var kind = GetForskKind(obj) ?? "";
+            if (!kind.Equals("floor", StringComparison.OrdinalIgnoreCase)) continue;
+            var box = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            if (!box.IsValid) continue;
+            if (!top.HasValue || box.Max.Z > top.Value)
+                top = box.Max.Z;
+        }
+        return top ?? 0;
+    }
+
+    private static void ShowPlanCutInDetail(RhinoDoc doc, Layer layer, Guid detailId)
+    {
+        if (doc == null || layer == null || detailId == Guid.Empty) return;
+        var modelViews = doc.Views.GetViewList(true, false);
+        if (modelViews != null)
+        {
+            foreach (var view in modelViews)
+            {
+                var id = view?.MainViewport?.Id ?? Guid.Empty;
+                if (id == Guid.Empty) continue;
+                layer.SetPerViewportVisible(id, false);
+            }
+        }
+        layer.SetPerViewportVisible(detailId, true);
+        layer.SetPerViewportPlotWeight(detailId, 0);
+        doc.Layers.Modify(layer, layer.Index, true);
+    }
+
+    private static bool PlanDetailIsClipped(RhinoDoc doc, Guid clipId, Guid detailId)
+    {
+        var obj = doc?.Objects.FindId(clipId) as ClippingPlaneObject;
+        var geom = obj?.ClippingPlaneGeometry;
+        if (geom == null) return false;
+        var ids = geom.ViewportIds();
+        if (ids == null) return false;
+        foreach (var id in ids)
+        {
+            if (id == detailId) return true;
         }
         return false;
+    }
+
+    private static void DeletePlanCuts(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        var ids = new List<Guid>();
+        foreach (var obj in doc.Objects)
+        {
+            if (obj == null) continue;
+            var role = obj.Attributes?.GetUserString("forsk:role") ?? "";
+            if (role.Equals(PlanCutRole, StringComparison.OrdinalIgnoreCase))
+                ids.Add(obj.Id);
+        }
+        foreach (var id in ids)
+            doc.Objects.Delete(id, true);
     }
 
     /// <summary>
@@ -1172,12 +1323,17 @@ public partial class RhinoMCPFunctions
         foreach (var obj in doc.Objects)
         {
             if (obj == null) continue;
-            if (!string.Equals(GetForskKind(obj), "layout", StringComparison.OrdinalIgnoreCase))
+            var role = obj.Attributes.GetUserString("forsk:role") ?? "";
+            var isCut = role.Equals(PlanCutRole, StringComparison.OrdinalIgnoreCase);
+            if (!string.Equals(GetForskKind(obj), "layout", StringComparison.OrdinalIgnoreCase) && !isCut)
                 continue;
             if (viewSet != null)
             {
                 var objView = obj.Attributes.GetUserString("forsk:view") ?? "";
-                if (!viewSet.Contains(objView)) continue;
+                var clearsThis = viewSet.Contains(objView);
+                if (isCut)
+                    clearsThis = viewSet.Contains("plan") || viewSet.Contains(objView);
+                if (!clearsThis) continue;
             }
             objectGuids.Add(obj.Id);
             objectIds.Add(obj.Id.ToString());

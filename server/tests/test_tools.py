@@ -3373,6 +3373,12 @@ class TestPrintGuards:
         assert "ActiveSpace.PageSpace" in src
         assert "DisplayModeDescription.WireframeId" in src
         assert "DisplayModeDescription.PenId" in src
+        assert "Forsk Pen" in src
+        assert "AddClippingPlane" in src
+        assert "plan_cut" in src
+        assert "-Vector3d.ZAxis" in src
+        assert "Plan cut failed. The plan detail has no clipping plane." in src
+        assert "ShowTangentEdges = false" in src
         assert "TechId" not in src
         assert "BlackAndWhite" in src
         assert "IsClayDetailLayer" in src
@@ -3427,6 +3433,7 @@ class TestPrintGuards:
         ):]
         assert "IsForskLayoutPage" in remover
         assert '"layout"' in remover
+        assert "PlanCutRole" in remover
         assert '"wall"' not in remover
         assert '"drawing"' not in remover
 
