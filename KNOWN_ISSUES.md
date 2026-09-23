@@ -65,6 +65,24 @@ Still unverified, out of MVP scope:
 - `create_object` BOX is authored **centered on the origin**. The smoke script
   translates by half-size so a corner sits at `(0,0,0)`.
 
+## Layout PDF on Rhino 7 Mac
+
+`layout_pack` frames each Detail, locks the scale, then pans the locked view
+back onto the clay. `CommitChanges` while the detail is still active puts
+zoom-extents back (see `9fd120c`). If the frustum still misses the clay, that
+page fails with `Layout detail is empty. The sheet does not show the clay.`
+
+Vector `FilePdf` (`ViewCaptureSettings.RasterMode` false) on this Mac draws
+the page-space title block and drops Detail viewport ink. The Layout tab can
+still show the clay. `export_pdf` keeps Wireframe and black-and-white output.
+On Mac (`HostUtils.RunningOnOSX`) it sets `RasterMode` true so the clay is in
+the file. Off Mac the capture stays vector. A paper-white detail preview
+refuses with `PDF detail is empty. The sheet does not show the clay.`
+
+Live check, port 1999 was closed when this was written: reinstall, Generate
+3D, Print PDF, open the PDF. Plan and at least one elevation must show the
+clay silhouette and the title block.
+
 ## Upstream
 
 `upstream` is `https://github.com/jingcheng-chen/rhinomcp.git`. Merge

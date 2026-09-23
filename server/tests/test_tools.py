@@ -3216,6 +3216,23 @@ class TestLayoutPackTool:
         assert layout_pack(ctx=None, scale=0)["success"] is False
         mock_get_conn.assert_not_called()
 
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_empty_detail_is_not_success(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "pages": [],
+            "count": 0,
+            "scale": 100,
+            "message": "Layout detail is empty. The sheet does not show the clay.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = layout_pack(ctx=None)
+        assert result["success"] is False
+        assert "does not show the clay" in result["message"]
+
 
 class TestExportPdfTool:
     @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
@@ -3268,6 +3285,23 @@ class TestExportPdfTool:
 
         result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
         assert result["success"] is False
+
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_empty_detail_is_not_success(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "",
+            "count": 0,
+            "pages": [],
+            "message": "PDF detail is empty. The sheet does not show the clay.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
+        assert result["success"] is False
+        assert result["message"] == "PDF detail is empty. The sheet does not show the clay."
 
 
 class TestClearLayoutsTool:
@@ -3327,6 +3361,15 @@ class TestPrintGuards:
         assert "doc.Layers.Count" in src
         assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
+        assert "Layout detail is empty. The sheet does not show the clay." in src
+        assert "PDF detail is empty. The sheet does not show the clay." in src
+        assert "SetPageAsActive" in src
+        assert "GetFrustumBoundingBox" in src
+        assert "SetPerViewportPlotWeight" in src
+        assert "SetPerViewportVisible" in src
+        assert "RunningOnOSX" in src
+        assert "RasterMode = true" in src
+        assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src
         assert "HiddenLineDrawing" not in src

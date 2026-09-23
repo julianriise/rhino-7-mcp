@@ -1283,6 +1283,8 @@ Do not call Grasshopper tools or execute code. Reply in one or two sentences. Th
                 return false;
             if (message.IndexOf("No layouts to print", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
+            if (message.IndexOf("does not show the clay", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
             if (message.IndexOf("requires a file path", StringComparison.OrdinalIgnoreCase) >= 0)
                 return false;
             if (message.IndexOf("must be an absolute", StringComparison.OrdinalIgnoreCase) >= 0)

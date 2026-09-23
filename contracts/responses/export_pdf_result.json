@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "export_pdf_result.json",
   "title": "ExportPdfResult",
-  "description": "Vector PDF written by FilePdf, or a refuse message when path or layouts are missing.",
+  "description": "PDF written by FilePdf, or a refuse message when the path, layouts, or detail ink is missing. Rhino 7 Mac writes raster pages.",
   "type": "object",
   "properties": {
     "path": { "type": "string" },

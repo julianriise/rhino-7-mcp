@@ -699,6 +699,22 @@ def test_responses():
     }
     if not validate("responses/export_pdf_result.json", pdf_refuse):
         all_passed = False
+    pdf_blank = {
+        "path": "",
+        "count": 0,
+        "pages": [],
+        "message": "PDF detail is empty. The sheet does not show the clay.",
+    }
+    if not validate("responses/export_pdf_result.json", pdf_blank):
+        all_passed = False
+    layout_blank = {
+        "pages": [],
+        "count": 0,
+        "scale": 100,
+        "message": "Layout detail is empty. The sheet does not show the clay.",
+    }
+    if not validate("responses/layout_pack_result.json", layout_blank):
+        all_passed = False
 
     print("  clear_layouts_result:")
     clear_layouts = {

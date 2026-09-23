@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -16,8 +18,10 @@ namespace RhinoMCPPlugin.Functions;
 /// Paper Layouts of the clay. Details use a parallel camera (same look
 /// directions as Make2D) in Wireframe, and only the clay layers are visible
 /// in the detail. Source plan layers, especially labels, fill the sheet.
-/// PDF is Rhino.FileIO.FilePdf with ViewCaptureSettings(RhinoPageView, dpi),
-/// RasterMode false, and black-and-white output.
+/// PDF is Rhino.FileIO.FilePdf with ViewCaptureSettings(RhinoPageView, dpi)
+/// and black-and-white output. Vector (RasterMode false) is the default.
+/// Rhino 7 Mac drops Detail ink in that vector file, so export uses raster
+/// there. The title block is page-space geometry and still draws either way.
 /// AddPageView width and height are millimetres (A3 landscape 420 x 297).
 /// Detail corners and the title block are converted into the document page units.
 /// Does not bake model-space drawing curves and does not require S-* layers.
@@ -42,6 +46,8 @@ public partial class RhinoMCPFunctions
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
     private const string PdfWriteFailedMessage = "PDF write failed.";
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
+    private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the clay.";
+    private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the clay.";
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -175,9 +181,22 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException(LayoutDetailFailedMessage);
 
             page.SetPageAsActive();
-            var detail = AddClayDetail(doc, page, spec, bbox, scale, includeExisting, out var scaleLocked);
+            DetailViewObject detail;
+            bool scaleLocked;
+            try
+            {
+                detail = AddClayDetail(
+                    doc, page, spec, bbox, scale, includeExisting, clay, out scaleLocked);
+            }
+            catch
+            {
+                try { LeaveDetail(page); } catch (Exception) { }
+                try { page.Close(); } catch (Exception) { }
+                throw;
+            }
             if (detail == null)
             {
+                LeaveDetail(page);
                 page.Close();
                 throw new InvalidOperationException(LayoutDetailFailedMessage);
             }
@@ -237,6 +256,21 @@ public partial class RhinoMCPFunctions
             return ExportPdfResult("", new JArray(), message);
         }
 
+        foreach (var page in pages)
+            LeaveDetail(page);
+
+        if (!ForskPagesShowClay(doc, pages))
+            return ExportPdfResult("", new JArray(), EmptyPdfMessage);
+        foreach (var page in pages)
+        {
+            if (DetailCaptureIsBlank(page))
+                return ExportPdfResult("", new JArray(), EmptyPdfMessage);
+            LeaveDetail(page);
+        }
+
+        // Vector first. Rhino 7 Mac FilePdf omits Detail vectors and keeps the
+        // page-space title block, so that target writes a raster page instead.
+        var rasterDetails = Rhino.Runtime.HostUtils.RunningOnOSX;
         var names = new JArray();
         var captures = new List<ViewCaptureSettings>();
         try
@@ -244,6 +278,7 @@ public partial class RhinoMCPFunctions
             var pdf = FilePdf.Create();
             foreach (var page in pages)
             {
+                LeaveDetail(page);
                 var settings = new ViewCaptureSettings(page, PdfDpi)
                 {
                     RasterMode = false,
@@ -251,8 +286,11 @@ public partial class RhinoMCPFunctions
                     DrawGrid = false,
                     DrawAxis = false,
                     DrawMargins = false,
-                    DrawWallpaper = false
+                    DrawWallpaper = false,
+                    DefaultPrintWidthMillimeters = 0.18
                 };
+                if (rasterDetails)
+                    settings.RasterMode = true;
                 captures.Add(settings);
                 pdf.AddPage(settings);
                 names.Add(page.PageName ?? "");
@@ -464,6 +502,7 @@ public partial class RhinoMCPFunctions
         BoundingBox bbox,
         int scale,
         bool includeExisting,
+        List<RhinoObject> clay,
         out bool scaleLocked)
     {
         scaleLocked = false;
@@ -478,9 +517,69 @@ public partial class RhinoMCPFunctions
             DefinedViewportProjection.Top);
         if (detail == null) return null;
 
+        var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        if (mode != null)
+        {
+            if (page.MainViewport != null)
+                page.MainViewport.DisplayMode = mode;
+        }
+
+        // Frame while the detail is active, then leave it before the scale lock.
+        // CommitChanges on an active detail puts zoom-extents back.
         page.SetActiveDetail(detail.Id);
+        AimDetailCamera(detail, spec, bbox);
+        detail.CommitViewportChanges();
+        LeaveDetail(page);
+
+        scaleLocked = LockDetailScale(detail, scale);
+        detail.CommitChanges();
+
+        // That commit can leave the locked scale looking at empty space.
+        // Pan onto the clay. Do not CommitChanges again: it resets the frame.
+        detail = ReloadDetail(page, detail);
+        if (detail == null) return null;
+        page.SetActiveDetail(detail.Id);
+        PanDetailOntoClay(detail, spec, bbox);
+        detail.CommitViewportChanges();
+        LeaveDetail(page);
+
+        if (!DetailSeesClay(detail.Viewport, bbox))
+        {
+            page.SetActiveDetail(detail.Id);
+            var geom = detail.DetailGeometry;
+            if (geom != null)
+                geom.IsProjectionLocked = false;
+            AimDetailCamera(detail, spec, bbox);
+            detail.CommitViewportChanges();
+            LeaveDetail(page);
+            scaleLocked = LockDetailScale(detail, scale);
+            detail.CommitChanges();
+            detail = ReloadDetail(page, detail);
+            if (detail == null) return null;
+            page.SetActiveDetail(detail.Id);
+            PanDetailOntoClay(detail, spec, bbox);
+            detail.CommitViewportChanges();
+            LeaveDetail(page);
+        }
+
+        if (detail.Viewport == null || detail.Viewport.Id == Guid.Empty)
+            throw new InvalidOperationException(EmptyDetailMessage);
+        if (!DetailSeesClay(detail.Viewport, bbox))
+            throw new InvalidOperationException(EmptyDetailMessage);
+
+        SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting, clay);
+        LeaveDetail(page);
+        return detail;
+    }
+
+    /// <summary>
+    /// Parallel camera, Wireframe, zoomed to the clay. Technical filled the floor slab solid black.
+    /// </summary>
+    private static void AimDetailCamera(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
+    {
         var look = spec.Look;
-        look.Unitize();
+        if (!look.Unitize())
+            look = -Vector3d.ZAxis;
         var target = bbox.Center;
         var dist = Math.Max(bbox.Diagonal.Length * 2.0, 5000.0);
         var vp = detail.Viewport;
@@ -492,41 +591,265 @@ public partial class RhinoMCPFunctions
         var pad = Math.Max(500.0, framed.Diagonal.Length * 0.02);
         framed.Inflate(pad);
         vp.ZoomBoundingBox(framed);
-
-        // Wireframe of the clay. Technical filled the floor slab solid black.
         var mode = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
         if (mode != null)
             vp.DisplayMode = mode;
-        // Store the camera first. A later viewport commit puts zoom-extents back.
-        detail.CommitViewportChanges();
+    }
 
-        var geom = detail.DetailGeometry;
-        if (geom != null && scale > 0)
+    /// <summary>
+    /// Move the locked view onto the clay. ZoomBoundingBox would change the scale.
+    /// </summary>
+    private static void PanDetailOntoClay(DetailViewObject detail, LayoutViewSpec spec, BoundingBox bbox)
+    {
+        var look = spec.Look;
+        if (!look.Unitize())
+            look = -Vector3d.ZAxis;
+        var vp = detail.Viewport;
+        vp.ChangeToParallelProjection(true);
+        vp.CameraUp = spec.Up;
+        vp.SetCameraTarget(bbox.Center, true);
+        vp.SetCameraDirection(look, false);
+    }
+
+    private static bool LockDetailScale(DetailViewObject detail, int scale)
+    {
+        var geom = detail?.DetailGeometry;
+        if (geom == null || scale <= 0) return false;
+        var locked = geom.SetScale(scale, UnitSystem.Millimeters, 1.0, UnitSystem.Millimeters);
+        geom.IsProjectionLocked = locked;
+        return locked;
+    }
+
+    private static DetailViewObject ReloadDetail(RhinoPageView page, DetailViewObject detail)
+    {
+        if (page == null) return detail;
+        var all = page.GetDetailViews();
+        if (all == null || all.Length == 0) return detail;
+        var id = detail?.Id ?? Guid.Empty;
+        if (id == Guid.Empty) return all[0];
+        foreach (var item in all)
         {
-            scaleLocked = geom.SetScale(scale, UnitSystem.Millimeters, 1.0, UnitSystem.Millimeters);
-            if (scaleLocked)
-                geom.IsProjectionLocked = true;
+            if (item != null && item.Id == id) return item;
         }
+        return all[0];
+    }
 
-        detail.CommitChanges();
-        SetDetailLayerVisibility(doc, detail.Viewport.Id, includeExisting);
-        return detail;
+    /// <summary>
+    /// The page is active, not the nested detail. FilePdf skips clay while a detail is active.
+    /// </summary>
+    private static void LeaveDetail(RhinoPageView page)
+    {
+        if (page == null) return;
+        try
+        {
+            var details = page.GetDetailViews();
+            if (details != null)
+            {
+                foreach (var detail in details)
+                {
+                    if (detail != null && detail.IsActive)
+                        detail.IsActive = false;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // SetPageAsActive still exits the nested detail.
+        }
+        page.SetPageAsActive();
+    }
+
+    private static bool DetailSeesClay(RhinoViewport viewport, BoundingBox clay)
+    {
+        if (viewport == null || !clay.IsValid) return false;
+        var frustum = viewport.GetFrustumBoundingBox();
+        if (frustum.IsValid && BoxesIntersect(frustum, clay))
+            return true;
+        if (viewport.IsVisible(clay.Center)) return true;
+        foreach (var corner in clay.GetCorners())
+        {
+            if (viewport.IsVisible(corner)) return true;
+        }
+        return false;
+    }
+
+    private static bool BoxesIntersect(BoundingBox a, BoundingBox b)
+    {
+        if (!a.IsValid || !b.IsValid) return false;
+        return a.Max.X >= b.Min.X && a.Min.X <= b.Max.X
+            && a.Max.Y >= b.Min.Y && a.Min.Y <= b.Max.Y
+            && a.Max.Z >= b.Min.Z && a.Min.Z <= b.Max.Z;
+    }
+
+    private static bool ForskPagesShowClay(RhinoDoc doc, List<RhinoPageView> pages)
+    {
+        var clay = CollectLayoutClay(doc, true, out var hasWall);
+        if (!hasWall) return false;
+        var bbox = ClayBoundingBox(clay);
+        if (!bbox.IsValid) return false;
+        foreach (var page in pages)
+        {
+            var details = page?.GetDetailViews();
+            if (details == null || details.Length == 0) return false;
+            var seen = false;
+            foreach (var detail in details)
+            {
+                if (detail?.Viewport != null && DetailSeesClay(detail.Viewport, bbox))
+                    seen = true;
+            }
+            if (!seen) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// True only when a page preview's detail area is paper-white.
+    /// The sample stays above the title block and inside the detail border.
+    /// A failed preview is inconclusive and does not refuse the write.
+    /// Does not activate the detail, so the saved camera stays put.
+    /// </summary>
+    private static bool DetailCaptureIsBlank(RhinoPageView page)
+    {
+        if (page == null) return true;
+        Bitmap bmp = null;
+        try
+        {
+            page.SetPageAsActive();
+            page.Redraw();
+            // grayScale false: a color preview. The sample ignores the title block.
+            bmp = page.GetPreviewImage(new Size(640, 440), false);
+            if (bmp == null) return false;
+            return !DetailAreaHasInk(bmp);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        finally
+        {
+            if (bmp != null) bmp.Dispose();
+        }
+    }
+
+    private static bool DetailAreaHasInk(Bitmap source)
+    {
+        if (source == null || source.Width < 16 || source.Height < 16) return false;
+        // Interior of the detail: clear of the page edge and of the title block.
+        int x0 = source.Width * 20 / 100;
+        int x1 = source.Width * 80 / 100;
+        int y0 = source.Height * 12 / 100;
+        int y1 = source.Height * 58 / 100;
+        Bitmap copy = null;
+        var bmp = source;
+        if (source.PixelFormat != PixelFormat.Format32bppArgb)
+        {
+            copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+            using (var graphics = Graphics.FromImage(copy))
+                graphics.DrawImage(source, 0, 0, source.Width, source.Height);
+            bmp = copy;
+        }
+        try
+        {
+            var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+            var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int stride = data.Stride;
+                int absStride = Math.Abs(stride);
+                var origin = data.Scan0;
+                if (stride < 0)
+                {
+                    origin = IntPtr.Add(origin, stride * (bmp.Height - 1));
+                    stride = absStride;
+                }
+                int bytes = absStride * bmp.Height;
+                var raw = new byte[bytes];
+                Marshal.Copy(origin, raw, 0, bytes);
+                int dark = 0;
+                for (int y = y0; y < y1; y++)
+                {
+                    int row = y * stride;
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int i = row + (x * 4);
+                        int lum = (raw[i] + raw[i + 1] + raw[i + 2]) / 3;
+                        if (lum < 248) dark++;
+                        if (dark >= 8) return true;
+                    }
+                }
+                return false;
+            }
+            finally
+            {
+                bmp.UnlockBits(data);
+            }
+        }
+        finally
+        {
+            if (copy != null) copy.Dispose();
+        }
     }
 
     /// <summary>
     /// The detail shows clay only. Source layers such as label text fill the sheet.
+    /// Opening markers stay off. Walls, floor, and roof stay visible and printable
+    /// even when the bake layer is not the A-WALL / A-FLOR / A-ROOF name.
     /// </summary>
-    private void SetDetailLayerVisibility(RhinoDoc doc, Guid viewportId, bool includeExisting)
+    private void SetDetailLayerVisibility(
+        RhinoDoc doc, Guid viewportId, bool includeExisting, List<RhinoObject> clay)
     {
         if (viewportId == Guid.Empty) return;
+        var clayLayers = ClayLayerIndexes(doc, clay, includeExisting);
         for (int i = 0; i < doc.Layers.Count; i++)
         {
             var layer = doc.Layers[i];
             if (layer == null || layer.IsDeleted) continue;
-            var show = IsClayDetailLayer(layer.Name, includeExisting);
+            var show = ShowsInClayDetail(layer, includeExisting, clayLayers);
             layer.SetPerViewportVisible(viewportId, show);
+            if (show)
+            {
+                // PlotWeight -1 is "do not print". 0 is the default pen.
+                layer.SetPerViewportPlotColor(viewportId, Color.Black);
+                layer.SetPerViewportPlotWeight(viewportId, 0.18);
+                if (layer.PlotWeight < 0)
+                    layer.PlotWeight = 0;
+            }
             doc.Layers.Modify(layer, layer.Index, true);
         }
+    }
+
+    private static HashSet<int> ClayLayerIndexes(RhinoDoc doc, List<RhinoObject> clay, bool includeExisting)
+    {
+        var indexes = new HashSet<int>();
+        if (clay == null) return indexes;
+        foreach (var obj in clay)
+        {
+            if (obj?.Attributes == null) continue;
+            var kind = GetForskKind(obj) ?? "";
+            if (kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            if (kind.Equals("room", StringComparison.OrdinalIgnoreCase)) continue;
+            if (kind.Equals("drawing", StringComparison.OrdinalIgnoreCase)) continue;
+            if (kind.Equals("layout", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!includeExisting && IsExistingUnderlay(doc, obj)) continue;
+            var index = obj.Attributes.LayerIndex;
+            if (index < 0) continue;
+            var layer = doc.Layers[index];
+            if (layer == null || layer.IsDeleted) continue;
+            if (layer.Name != null &&
+                layer.Name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase))
+                continue;
+            indexes.Add(index);
+        }
+        return indexes;
+    }
+
+    private static bool ShowsInClayDetail(Layer layer, bool includeExisting, HashSet<int> clayLayers)
+    {
+        if (layer?.Name != null &&
+            layer.Name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (IsClayDetailLayer(layer?.Name, includeExisting)) return true;
+        return clayLayers != null && clayLayers.Contains(layer.Index);
     }
 
     private static bool IsClayDetailLayer(string name, bool includeExisting)

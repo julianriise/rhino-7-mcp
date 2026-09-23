@@ -8,6 +8,7 @@ from rhinomcp.server import get_rhino_connection, mcp, logger
 
 _NEEDS_PATH = "export_pdf requires a file path."
 _NEEDS_PDF = "export_pdf path must be an absolute .pdf file."
+_EMPTY_DETAIL = "PDF detail is empty. The sheet does not show the clay."
 
 
 @mcp.tool()
@@ -49,9 +50,10 @@ def export_pdf(
             "No layouts to print. Call layout_pack first.",
             "Unknown layout.",
             "PDF write failed.",
+            _EMPTY_DETAIL,
             _NEEDS_PATH,
             _NEEDS_PDF,
-        ):
+        ) or "does not show the clay" in str(message):
             ok = False
         return {
             "success": ok,

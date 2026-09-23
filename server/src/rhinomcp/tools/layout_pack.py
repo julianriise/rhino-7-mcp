@@ -64,12 +64,15 @@ def layout_pack(
             params["views"] = views
 
         result = rhino.send_command("layout_pack", params)
+        message = result.get("message", "")
+        # The plugin throws this. A result with the same text is still a failure.
+        empty_detail = "Layout detail is empty" in str(message)
         return {
-            "success": True,
+            "success": not empty_detail,
             "pages": result.get("pages", []),
             "count": result.get("count", 0),
             "scale": result.get("scale", scale),
-            "message": result.get("message", ""),
+            "message": message,
         }
     except Exception as e:
         logger.error(f"Error in layout_pack: {str(e)}")
