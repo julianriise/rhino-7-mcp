@@ -92,19 +92,23 @@ block. `GetPreviewImage` of the same Layout, taken after a redraw and a
 wait, has the lines and the title block, and `FilePdf.DrawBitmap` places
 that bitmap when width and height are the bitmap's pixel size. A redraw
 that is captured immediately photographs an unpainted white frame. Mac
-layout capture is asynchronous. The button resolves the save path first,
-then for each Forsk page sets that page active (detail not active), keeps
-the paper and the detail in Wireframe, shows only that `S-DRAW` child,
-redraws, calls `RhinoApp.Wait`, lets one idle pass, and only then calls
-`GetPreviewImage`. Off Mac the capture stays vector (`RasterMode` false,
-`OutputColor` BlackAndWhite). Do not put `ViewCaptureSettings` back on the
-Mac path until this preview has ink.
+layout capture is asynchronous. The first preview after the save dialog
+can be a white frame even when the layout has the drawing. The button
+resolves the save path first, focuses Rhino, then for each Forsk page sets
+that page active (detail not active), keeps the paper and the detail in
+Wireframe, shows only that `S-DRAW` child, redraws, calls `RhinoApp.Wait`,
+lets one idle pass, and calls `GetPreviewImage`. A blank frame is discarded
+and that sequence runs again, up to five times. Off Mac the capture stays
+vector (`RasterMode` false, `OutputColor` BlackAndWhite). Do not put
+`ViewCaptureSettings` back on the Mac path.
 
 Each export appends one line to `/tmp/forsk-print.log` and prints that path
 in the Rhino command line. The line includes `greyscale make2d`, curve
-counts, and ink. Ink 0 also writes `/tmp/forsk-print-page-N.png`. The write
-is refused only after that activate/Wait still has no ink, with
-`capture failed after activate/Wait` and those PNG paths. A frustum miss is
+counts, and the ink sample count. Ink 0 also writes
+`/tmp/forsk-print-page-N.png`. If every page is still blank after the
+retries, the write is refused with `capture failed after activate/Wait`
+and those PNG paths. If some pages have ink, those pages are written and
+the message names each blank page and its PNG. A frustum miss is
 `PDF detail is empty. The sheet does not show the drawing.`
 
 If the button log is still ink 0, the optional Mac fallback is `ExportAll`,

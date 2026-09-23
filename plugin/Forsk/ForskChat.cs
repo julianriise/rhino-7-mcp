@@ -1405,9 +1405,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var count = result?["count"]?.ToString();
             var written = result?["path"]?.ToString();
             if (string.IsNullOrWhiteSpace(written)) written = path;
+            var message = result?["message"]?.ToString() ?? "";
+            var blankAt = message.IndexOf("Blank preview:", StringComparison.Ordinal);
+            var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
             if (string.IsNullOrWhiteSpace(count))
-                return "Print PDF · ok · " + written;
-            return "Print PDF · ok · " + count + " · " + written;
+                return "Print PDF · ok · " + written + blank;
+            return "Print PDF · ok · " + count + " · " + written + blank;
         }
 
         public static string PickPathFromBackground()

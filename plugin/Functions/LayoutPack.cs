@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -24,7 +26,9 @@ namespace RhinoMCPPlugin.Functions;
 /// viewport keeps the clay. PDF is Rhino.FileIO.FilePdf. Vector output uses
 /// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
 /// wrote a white sheet, so Mac export activates each layout, redraws, waits,
-/// then draws GetPreviewImage into the PDF. Each export appends a line to
+/// then draws GetPreviewImage into the PDF. A blank frame is a paint race:
+/// that page is activated again, up to five times. Pages that have ink are
+/// still written. Each export appends a line to
 /// /tmp/forsk-print.log. AddPageView width and height are millimetres
 /// (A3 landscape 420 x 297). Detail corners and the title block are converted
 /// into the document page units.
@@ -52,6 +56,7 @@ public partial class RhinoMCPFunctions
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the drawing.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
+    private const int MacPreviewAttempts = 5;
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
     private const int PenEdgePx = 1;
@@ -395,9 +400,9 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Draw the layout preview onto the PDF page. The save dialog has already
-    /// closed. Activate each page, redraw, and wait before GetPreviewImage so
-    /// the capture is not the unpainted frame left by the modal.
+    /// Draw each layout preview onto the PDF. The save dialog has already
+    /// closed. A blank frame is retried. Pages that have ink are written
+    /// even when another page stays white.
     /// </summary>
     private JObject ExportMacPreviewPdf(RhinoDoc doc, List<RhinoPageView> pages, string full)
     {
@@ -407,6 +412,7 @@ public partial class RhinoMCPFunctions
         var names = new JArray();
         var notes = new List<string>();
         var blanks = new List<string>();
+        var blankLabels = new List<string>();
         var shots = new List<Bitmap>();
         try
         {
@@ -419,9 +425,10 @@ public partial class RhinoMCPFunctions
                 Bitmap bmp = null;
                 try
                 {
-                    bmp = CapturePageAfterWait(page, dotsW, dotsH, out var ink);
+                    bmp = CapturePageAfterWait(page, dotsW, dotsH, out var ink, out var attempt);
                     var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
-                    var note = (page.PageName ?? "") + " ink " + ink + " " + size;
+                    var note = (page.PageName ?? "") + " ink " + ink + " " + size
+                        + " attempt " + attempt.ToString(CultureInfo.InvariantCulture);
                     if (ink <= 0)
                     {
                         var debug = "/tmp/forsk-print-page-" + pageNumber.ToString(CultureInfo.InvariantCulture) + ".png";
@@ -430,6 +437,10 @@ public partial class RhinoMCPFunctions
                         else
                             note += " " + debug;
                         blanks.Add(debug);
+                        var pageName = string.IsNullOrEmpty(page.PageName)
+                            ? "page " + pageNumber.ToString(CultureInfo.InvariantCulture)
+                            : page.PageName;
+                        blankLabels.Add(pageName + " " + debug);
                         if (bmp != null)
                         {
                             bmp.Dispose();
@@ -450,9 +461,10 @@ public partial class RhinoMCPFunctions
                 }
             }
 
-            if (blanks.Count > 0)
+            var detail = GreyscaleMake2dNote(doc) + "; " + string.Join("; ", notes.ToArray());
+            if (shots.Count == 0)
             {
-                LogPrint(full, 0, GreyscaleMake2dNote(doc) + "; " + string.Join("; ", notes.ToArray()));
+                LogPrint(full, 0, detail);
                 var message = CaptureFailedPrefix + ". Debug images: " + string.Join(", ", blanks.ToArray());
                 return ExportPdfResult("", new JArray(), message);
             }
@@ -468,8 +480,11 @@ public partial class RhinoMCPFunctions
             }
 
             pdf.Write(full);
-            LogPrint(full, names.Count, GreyscaleMake2dNote(doc) + "; " + string.Join("; ", notes.ToArray()));
-            return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
+            LogPrint(full, names.Count, detail);
+            var wrote = $"Wrote {names.Count} page(s) to {full}.";
+            if (blankLabels.Count > 0)
+                wrote += " Blank preview: " + string.Join("; ", blankLabels.ToArray()) + ".";
+            return ExportPdfResult(full, names, wrote);
         }
         catch (Exception)
         {
@@ -569,18 +584,34 @@ public partial class RhinoMCPFunctions
         return null;
     }
 
-    private Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink)
+    private Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink, out int attempt)
     {
-        PrepareMacPage(page);
         var size = new Size(dotsW, dotsH);
-        var bmp = page.GetPreviewImage(size, false);
-        ink = CountDarkSamples(bmp);
-        if (ink > 0) return bmp;
-        if (bmp != null) bmp.Dispose();
-        // The first preview after a paint can still be empty. One more wait, then the same call.
-        RhinoApp.Wait();
-        bmp = page.GetPreviewImage(size, false);
-        ink = CountDarkSamples(bmp);
+        Bitmap bmp = null;
+        ink = 0;
+        attempt = 0;
+        for (attempt = 1; attempt <= MacPreviewAttempts; attempt++)
+        {
+            if (bmp != null)
+            {
+                bmp.Dispose();
+                bmp = null;
+            }
+            PrepareMacPage(page);
+            if (attempt > 1)
+            {
+                // The first frame after the modal can still be unpainted.
+                // Pause, then one more idle, before reading the preview again.
+                var start = Environment.TickCount;
+                while (unchecked(Environment.TickCount - start) < 150)
+                    RhinoApp.Wait();
+                WaitForOneIdle();
+            }
+            bmp = page.GetPreviewImage(size, false);
+            ink = CountDarkSamples(bmp);
+            if (ink > 0)
+                return bmp;
+        }
         return bmp;
     }
 
@@ -637,8 +668,81 @@ public partial class RhinoMCPFunctions
     private static int CountDarkSamples(Bitmap bmp)
     {
         if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return 0;
+        // Step 4 on the 2480-wide sheet hits wall poché a few pixels thick
+        // and a long hairline. A locked buffer keeps that grid cheap.
+        const int dense = 4;
+        var format = bmp.PixelFormat;
+        bool direct = format == PixelFormat.Format32bppArgb
+            || format == PixelFormat.Format32bppRgb
+            || format == PixelFormat.Format32bppPArgb
+            || format == PixelFormat.Format24bppRgb;
+        if (direct)
+        {
+            try
+            {
+                int locked = CountDarkLocked(bmp, dense);
+                if (locked >= 0) return locked;
+            }
+            catch (Exception)
+            {
+            }
+        }
+        int step = direct ? dense : Math.Max(8, bmp.Width / 80);
+        return CountDarkPixels(bmp, step);
+    }
+
+    private static int CountDarkLocked(Bitmap bmp, int step)
+    {
+        int bpp;
+        var format = bmp.PixelFormat;
+        if (format == PixelFormat.Format24bppRgb)
+            bpp = 3;
+        else if (format == PixelFormat.Format32bppArgb
+            || format == PixelFormat.Format32bppRgb
+            || format == PixelFormat.Format32bppPArgb)
+            bpp = 4;
+        else
+            return -1;
+
+        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        BitmapData data = null;
+        try
+        {
+            data = bmp.LockBits(rect, ImageLockMode.ReadOnly, format);
+            int stride = data.Stride;
+            int height = bmp.Height;
+            int width = bmp.Width;
+            int absStride = Math.Abs(stride);
+            var buffer = new byte[absStride * height];
+            IntPtr origin = stride >= 0
+                ? data.Scan0
+                : IntPtr.Add(data.Scan0, stride * (height - 1));
+            Marshal.Copy(origin, buffer, 0, buffer.Length);
+            int dark = 0;
+            for (int y = 0; y < height; y += step)
+            {
+                int row = y * absStride;
+                for (int x = 0; x < width; x += step)
+                {
+                    int i = row + (x * bpp);
+                    if (i + 2 >= buffer.Length) continue;
+                    int sum = buffer[i] + buffer[i + 1] + buffer[i + 2];
+                    if (sum / 3 < 248) dark++;
+                }
+            }
+            return dark;
+        }
+        finally
+        {
+            if (data != null)
+                bmp.UnlockBits(data);
+        }
+    }
+
+    private static int CountDarkPixels(Bitmap bmp, int step)
+    {
+        if (step < 1) step = 1;
         int dark = 0;
-        int step = Math.Max(8, bmp.Width / 40);
         for (int y = 0; y < bmp.Height; y += step)
         {
             for (int x = 0; x < bmp.Width; x += step)

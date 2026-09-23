@@ -3321,6 +3321,34 @@ class TestExportPdfTool:
         assert "capture failed after activate/Wait" in result["message"]
         assert "/tmp/forsk-print-page-1.png" in result["message"]
 
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    def test_partial_blank_still_writes(self, mock_get_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "/tmp/forsk-plan.pdf",
+            "count": 4,
+            "pages": [
+                "Forsk — North",
+                "Forsk — East",
+                "Forsk — South",
+                "Forsk — West",
+            ],
+            "message": (
+                "Wrote 4 page(s) to /tmp/forsk-plan.pdf. "
+                "Blank preview: Forsk — Plan /tmp/forsk-print-page-1.png."
+            ),
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_pdf(ctx=None, path="/tmp/forsk-plan.pdf")
+        assert result["success"] is True
+        assert result["count"] == 4
+        assert result["path"] == "/tmp/forsk-plan.pdf"
+        assert "Forsk — Plan" in result["message"]
+        assert "/tmp/forsk-print-page-1.png" in result["message"]
+
 
 class TestClearLayoutsTool:
     @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
@@ -3442,12 +3470,18 @@ class TestPrintGuards:
         assert "forsk-print.log" in src
         assert "capture failed after activate/Wait" in src
         assert "forsk-print-page-" in src
+        assert "MacPreviewAttempts" in src
+        assert "const int dense = 4" in src
+        assert "bmp.Width / 40" not in src
         assert "RhinoApp.Wait()" in src
         assert "RhinoApp.Idle" in src
         mac = src[src.index("private JObject ExportMacPreviewPdf"):src.index("private static int CountDarkSamples")]
         assert "ViewCaptureSettings" not in mac
         assert mac.index("Redraw") < mac.index("GetPreviewImage")
         assert "SetPageAsActive" in mac
+        assert mac.index("shots.Count == 0") < mac.index("pdf.Write")
+        assert mac.index("pdf.Write") < mac.index("Blank preview:")
+        assert "if (blanks.Count > 0)" not in mac
         assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src
