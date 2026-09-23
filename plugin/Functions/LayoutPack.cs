@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
-using System.Runtime.InteropServices;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -259,14 +257,10 @@ public partial class RhinoMCPFunctions
         foreach (var page in pages)
             LeaveDetail(page);
 
+        // The camera frustum is the refuse. A page preview taken right after
+        // Redraw is paper-white even when the detail already shows the clay.
         if (!ForskPagesShowClay(doc, pages))
             return ExportPdfResult("", new JArray(), EmptyPdfMessage);
-        foreach (var page in pages)
-        {
-            if (DetailCaptureIsBlank(page))
-                return ExportPdfResult("", new JArray(), EmptyPdfMessage);
-            LeaveDetail(page);
-        }
 
         // Vector first. Rhino 7 Mac FilePdf omits Detail vectors and keeps the
         // page-space title block, so that target writes a raster page instead.
@@ -700,94 +694,6 @@ public partial class RhinoMCPFunctions
             if (!seen) return false;
         }
         return true;
-    }
-
-    /// <summary>
-    /// True only when a page preview's detail area is paper-white.
-    /// The sample stays above the title block and inside the detail border.
-    /// A failed preview is inconclusive and does not refuse the write.
-    /// Does not activate the detail, so the saved camera stays put.
-    /// </summary>
-    private static bool DetailCaptureIsBlank(RhinoPageView page)
-    {
-        if (page == null) return true;
-        Bitmap bmp = null;
-        try
-        {
-            page.SetPageAsActive();
-            page.Redraw();
-            // grayScale false: a color preview. The sample ignores the title block.
-            bmp = page.GetPreviewImage(new Size(640, 440), false);
-            if (bmp == null) return false;
-            return !DetailAreaHasInk(bmp);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-        finally
-        {
-            if (bmp != null) bmp.Dispose();
-        }
-    }
-
-    private static bool DetailAreaHasInk(Bitmap source)
-    {
-        if (source == null || source.Width < 16 || source.Height < 16) return false;
-        // Interior of the detail: clear of the page edge and of the title block.
-        int x0 = source.Width * 20 / 100;
-        int x1 = source.Width * 80 / 100;
-        int y0 = source.Height * 12 / 100;
-        int y1 = source.Height * 58 / 100;
-        Bitmap copy = null;
-        var bmp = source;
-        if (source.PixelFormat != PixelFormat.Format32bppArgb)
-        {
-            copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-            using (var graphics = Graphics.FromImage(copy))
-                graphics.DrawImage(source, 0, 0, source.Width, source.Height);
-            bmp = copy;
-        }
-        try
-        {
-            var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
-            var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                int stride = data.Stride;
-                int absStride = Math.Abs(stride);
-                var origin = data.Scan0;
-                if (stride < 0)
-                {
-                    origin = IntPtr.Add(origin, stride * (bmp.Height - 1));
-                    stride = absStride;
-                }
-                int bytes = absStride * bmp.Height;
-                var raw = new byte[bytes];
-                Marshal.Copy(origin, raw, 0, bytes);
-                int dark = 0;
-                for (int y = y0; y < y1; y++)
-                {
-                    int row = y * stride;
-                    for (int x = x0; x < x1; x++)
-                    {
-                        int i = row + (x * 4);
-                        int lum = (raw[i] + raw[i + 1] + raw[i + 2]) / 3;
-                        if (lum < 248) dark++;
-                        if (dark >= 8) return true;
-                    }
-                }
-                return false;
-            }
-            finally
-            {
-                bmp.UnlockBits(data);
-            }
-        }
-        finally
-        {
-            if (copy != null) copy.Dispose();
-        }
     }
 
     /// <summary>

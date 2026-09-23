@@ -76,8 +76,10 @@ Vector `FilePdf` (`ViewCaptureSettings.RasterMode` false) on this Mac draws
 the page-space title block and drops Detail viewport ink. The Layout tab can
 still show the clay. `export_pdf` keeps Wireframe and black-and-white output.
 On Mac (`HostUtils.RunningOnOSX`) it sets `RasterMode` true so the clay is in
-the file. Off Mac the capture stays vector. A paper-white detail preview
-refuses with `PDF detail is empty. The sheet does not show the clay.`
+the file. Off Mac the capture stays vector. A page preview taken immediately
+after `Redraw` can be paper-white while the detail already shows the clay, so
+`export_pdf` does not refuse on that snapshot. It refuses when the detail
+frustum misses the clay: `PDF detail is empty. The sheet does not show the clay.`
 
 Live check, port 1999 was closed when this was written: reinstall, Generate
 3D, Print PDF, open the PDF. Plan and at least one elevation must show the
