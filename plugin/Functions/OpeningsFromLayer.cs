@@ -130,7 +130,7 @@ public partial class RhinoMCPFunctions
                     try
                     {
                         results = Brep.CreateBooleanDifference(
-                            new[] { wall.Brep },
+                            new[] { EnsureOutward(wall.Brep) },
                             new[] { cutter },
                             tol);
                     }

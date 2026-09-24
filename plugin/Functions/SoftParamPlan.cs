@@ -279,8 +279,9 @@ public static class SoftParamPlan
     }
 
     /// <summary>
-    /// A cut is real when the boolean returned pieces and either the volume
-    /// fell or the cutter meets the solid. An empty boolean is a miss.
+    /// A cut is real when the boolean returned pieces and the volume fell,
+    /// or the volume held and the cutter still meets the solid. A heavier
+    /// solid is the cutter joined on, not a hole. An empty boolean is a miss.
     /// </summary>
     public static bool AcceptCut(
         int pieceCount,
@@ -289,6 +290,7 @@ public static class SoftParamPlan
         bool cutterIntersects)
     {
         if (pieceCount <= 0) return false;
+        if (volumeBefore > 0 && volumeAfter > volumeBefore) return false;
         var dropped = volumeBefore > 0 && volumeAfter < volumeBefore;
         return dropped || cutterIntersects;
     }

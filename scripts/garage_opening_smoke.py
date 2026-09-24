@@ -46,9 +46,10 @@ def send_command(sock: socket.socket, cmd_type: str, params: dict | None = None)
 def layer(sock: socket.socket, name: str) -> None:
     try:
         send_command(sock, "create_layer", {"name": name})
-    except SmokeError as exc:
-        if "already" not in str(exc).lower() and "exist" not in str(exc).lower():
-            raise
+    except SmokeError:
+        # An existing layer comes back as a null-layer error. Setting it current
+        # is what the wall and window curves need.
+        pass
     send_command(sock, "get_or_set_current_layer", {"name": name})
 
 
@@ -67,12 +68,18 @@ def main() -> int:
         if count > 40:
             raise SmokeError("document is not a blank garage sheet")
 
-        print("==> 6×4 m wall and one window")
+        print("==> 6×4 m wall band and one window")
         layer(sock, "wall")
+        # A single filled rectangle is a room, not a wall. The band is 200 mm.
         send_command(sock, "create_object", {
             "type": "POLYLINE",
             "name": "garage-wall",
             "params": {"points": [[0, 0, 0], [6000, 0, 0], [6000, 4000, 0], [0, 4000, 0], [0, 0, 0]]},
+        })
+        send_command(sock, "create_object", {
+            "type": "POLYLINE",
+            "name": "garage-wall-inner",
+            "params": {"points": [[200, 200, 0], [5800, 200, 0], [5800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
         })
         walls = send_command(sock, "walls_from_layer", {})
         print(f"    {walls.get('message')}")
@@ -80,7 +87,7 @@ def main() -> int:
         send_command(sock, "create_object", {
             "type": "POLYLINE",
             "name": "garage-window",
-            "params": {"points": [[2000, -80, 0], [3200, -80, 0], [3200, 80, 0], [2000, 80, 0], [2000, -80, 0]]},
+            "params": {"points": [[2000, -50, 0], [3200, -50, 0], [3200, 250, 0], [2000, 250, 0], [2000, -50, 0]]},
         })
         windows = send_command(sock, "openings_from_layer", {"layer": "window"})
         print(f"    {windows.get('message')} cut={windows.get('cut_count')}")

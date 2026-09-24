@@ -655,6 +655,9 @@ public partial class RhinoMCPFunctions
         thickDir -= widthDir * (thickDir * widthDir);
         if (!thickDir.Unitize()) return false;
         plane = new Plane(new Point3d(center.X, center.Y, 0), widthDir, thickDir);
+        // width × thickness can point down. The frame's Z must stay upright.
+        if (plane.IsValid && plane.ZAxis * Vector3d.ZAxis < 0)
+            plane = new Plane(plane.Origin, plane.XAxis, -plane.YAxis);
         return plane.IsValid;
     }
 

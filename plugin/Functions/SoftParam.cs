@@ -880,6 +880,10 @@ public partial class RhinoMCPFunctions
             return null;
         }
 
+        // An inward wall unions the cutter (the opening band gets thicker)
+        // instead of leaving a hole.
+        wall = EnsureOutward(wall);
+
         Brep[] results = null;
         string threw = null;
         try
@@ -989,7 +993,7 @@ public partial class RhinoMCPFunctions
             return null;
         }
 
-        var current = TryClose(brep.DuplicateBrep() ?? brep, tol);
+        var current = EnsureOutward(TryClose(brep.DuplicateBrep() ?? brep, tol));
         var volume = BrepVolume(current);
         if (IsClosedSolid(current))
         {
@@ -1039,6 +1043,16 @@ public partial class RhinoMCPFunctions
     private static bool IsClosedSolid(Brep brep)
     {
         return brep != null && brep.IsValid && brep.IsSolid && brep.IsManifold;
+    }
+
+    private static Brep EnsureOutward(Brep brep)
+    {
+        if (brep == null || brep.SolidOrientation != BrepSolidOrientation.Inward)
+            return brep;
+        var copy = brep.DuplicateBrep();
+        if (copy == null) return brep;
+        copy.Flip();
+        return copy;
     }
 
     private static List<Brep> CollapseWallPieces(List<Brep> pieces, double tol)

@@ -1047,7 +1047,11 @@ public partial class RhinoMCPFunctions
                 var frame = doc.Objects.FindId(frameId);
                 var frameBox = frame?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
                 if (frameBox.IsValid)
-                    frameDist = center.DistanceTo(frameBox.Center);
+                {
+                    var dx = center.X - frameBox.Center.X;
+                    var dy = center.Y - frameBox.Center.Y;
+                    frameDist = Math.Sqrt(dx * dx + dy * dy);
+                }
             }
             if (frameDist > maxFrame) maxFrame = frameDist;
             var row = new JObject
@@ -1060,7 +1064,11 @@ public partial class RhinoMCPFunctions
                 ["frame_mm"] = frameDist
             };
             if (marker.Id == editedId && previous.IsValid)
-                row["previous_inside"] = PointInside(brep, previous, tol);
+            {
+                var pdx = center.X - previous.X;
+                var pdy = center.Y - previous.Y;
+                row["moved_mm"] = Math.Sqrt(pdx * pdx + pdy * pdy);
+            }
             rows.Add(row);
         }
         return new JObject

@@ -75,6 +75,7 @@ public class RebuildAtomicTests
     [InlineData(1, 1000, 1000, false, false)]
     [InlineData(0, 1000, 0, true, false)]
     [InlineData(1, 500, 900, false, false)]
+    [InlineData(1, 1000, 1200, true, false)]
     public void AcceptCut_UsesPiecesAndVolumeOrIntersection(
         int pieces,
         double before,

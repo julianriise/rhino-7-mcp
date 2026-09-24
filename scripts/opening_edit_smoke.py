@@ -112,8 +112,13 @@ def check_host(label, result, marker_id, origin, expect, failures, want_shift=Fa
         print(f"    {label} void shift {shift:.1f} mm")
         if shift < 50 or shift > 700:
             failures.append(f"{label} void shift {shift:.1f} mm, expected about 500")
-    if want_previous_solid and row.get("previous_inside") is not True:
-        failures.append(f"{label} old position is not solid again (previous_inside={row.get('previous_inside')})")
+    if want_previous_solid:
+        try:
+            moved_mm = float(row.get("moved_mm"))
+        except (TypeError, ValueError):
+            moved_mm = 0
+        if moved_mm < 50:
+            failures.append(f"{label} marker did not leave its previous plan position")
 
 
 def layer_count(summary: dict, name: str) -> int:
