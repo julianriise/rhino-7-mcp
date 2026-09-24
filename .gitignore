@@ -14,6 +14,8 @@ CLAUDE.md
 GRASSHOPPER_MCP_IMPLEMENTATION_PLAN.md
 plugin/bin/
 plugin/obj/
+tests/**/bin/
+tests/**/obj/
 *.macrhi
 server/.venv/
 server/.pytest_cache/

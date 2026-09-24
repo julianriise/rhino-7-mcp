@@ -740,6 +740,7 @@ def test_responses():
         "marker_ids": [guid],
         "block_ids": [guid],
         "warnings": [],
+        "solid_volume": 1200000000,
         "ok": True,
         "message": "Rebuilt wall w01 with 2 openings.",
     }

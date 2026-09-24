@@ -51,6 +51,7 @@ public partial class RhinoMCPFunctions
         public Vector3d Inward;
         public double Length;
         public double Thickness;
+        public bool FromOuter;
     }
 
     private sealed class Placement

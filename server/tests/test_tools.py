@@ -2723,6 +2723,7 @@ class TestRebuildHostWallTool:
             "path_points": 12,
             "opening_count": 2,
             "marker_ids": ["m1"],
+            "solid_volume": 1200000000,
             "ok": True,
             "message": "Rebuilt wall w01 with 2 openings.",
         }
@@ -2735,6 +2736,7 @@ class TestRebuildHostWallTool:
         assert result["host_id"] == "h1"
         assert result["forsk_id"] == "w01"
         assert result["opening_count"] == 2
+        assert result["solid_volume"] == 1200000000
         assert result["ok"] is True
 
     @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")

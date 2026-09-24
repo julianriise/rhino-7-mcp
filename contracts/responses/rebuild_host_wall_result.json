@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "rebuild_host_wall_result.json",
   "title": "RebuildHostWallResult",
-  "description": "One host wall re-extruded from its param record. The wall GUID is unchanged.",
+  "description": "One host wall re-extruded from its param record. The wall GUID is unchanged when the cut stays one solid. solid_volume is the closed extrusion before openings are cut.",
   "type": "object",
   "properties": {
     "host_id": { "type": "string" },
@@ -24,6 +24,7 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "solid_volume": { "type": "number" },
     "ok": { "type": "boolean" },
     "message": { "type": "string" }
   },

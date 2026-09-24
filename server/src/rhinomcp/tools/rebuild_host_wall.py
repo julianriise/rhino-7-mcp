@@ -14,7 +14,10 @@ def rebuild_host_wall(
     """
     Re-extrude one Forsk wall from forsk:path and recut that wall's openings.
 
-    The wall GUID stays. Floor, roof, rooms, other walls, drawings, and
+    Openings are placed from each marker's world position. Cuts stay in
+    memory until every one succeeds, then the host is replaced once. A
+    failure leaves the document unchanged. The wall GUID stays when the
+    result is one solid. Floor, roof, rooms, other walls, drawings, and
     layouts stay. This does not clear the model.
 
     Id may be a wall, an opening marker, or an opening frame. Omit it to
@@ -46,6 +49,7 @@ def rebuild_host_wall(
             "marker_ids": result.get("marker_ids", []),
             "block_ids": result.get("block_ids", []),
             "warnings": result.get("warnings", []),
+            "solid_volume": result.get("solid_volume"),
             "ok": result.get("ok", True),
             "message": result.get("message", "Host wall rebuilt"),
         }

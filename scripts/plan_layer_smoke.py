@@ -364,21 +364,48 @@ def main() -> int:
         host_before = send_command(sock, "get_object_info", {"id": host_wall})
         host_fid = attrs_of(host_before).get("forsk:id")
         rebuilt = send_command(sock, "rebuild_host_wall", {"id": host_wall})
+        expected_openings = (doors.get("cut_count") or 0) + (windows.get("cut_count") or 0)
         print(f"    {rebuilt.get('message')} openings={rebuilt.get('opening_count')} "
+              f"expected={expected_openings} "
               f"forsk_id={rebuilt.get('forsk_id')} thickness={rebuilt.get('thickness')} "
+              f"solid_volume={rebuilt.get('solid_volume')} "
               f"warnings={rebuilt.get('warnings')}")
         if rebuilt.get("ok") is not True:
             failures.append(f"rebuild_host_wall ok={rebuilt.get('ok')}")
-        if rebuilt.get("host_id") != host_wall:
-            failures.append(
-                f"rebuild host_id={rebuilt.get('host_id')} expected {host_wall}"
-            )
+        rebuilt_host = rebuilt.get("host_id")
+        if rebuilt_host != host_wall:
+            moved = send_command(sock, "get_object_info", {"id": rebuilt_host})
+            moved_attrs = attrs_of(moved)
+            if (moved_attrs.get("forsk:kind") != "wall"
+                    or moved_attrs.get("forsk:id") != host_fid):
+                failures.append(
+                    f"rebuild host_id={rebuilt_host} expected {host_wall}"
+                )
+            else:
+                print(f"    host retargeted {host_wall} -> {rebuilt_host}")
+                host_wall = rebuilt_host
         if rebuilt.get("forsk_id") != host_fid:
             failures.append(
                 f"rebuild forsk_id={rebuilt.get('forsk_id')} expected {host_fid}"
             )
-        if (rebuilt.get("opening_count") or 0) < 1:
-            failures.append("rebuild_host_wall cut no openings")
+        if (rebuilt.get("opening_count") or 0) != expected_openings or expected_openings < 1:
+            failures.append(
+                f"rebuild openings={rebuilt.get('opening_count')} expected {expected_openings}"
+            )
+        try:
+            rebuilt_thick = float(rebuilt.get("thickness") or 0)
+        except (TypeError, ValueError):
+            rebuilt_thick = 0
+        if abs(rebuilt_thick - 200) > 40:
+            failures.append(
+                f"rebuild thickness={rebuilt.get('thickness')} expected about 200"
+            )
+        try:
+            solid_volume = float(rebuilt.get("solid_volume") or 0)
+        except (TypeError, ValueError):
+            solid_volume = 0
+        if solid_volume <= 0:
+            failures.append(f"rebuild solid_volume={rebuilt.get('solid_volume')}")
         if rebuilt.get("warnings"):
             failures.append(f"rebuild warnings={rebuilt.get('warnings')}")
         if len(rebuilt.get("block_ids") or []) < (rebuilt.get("opening_count") or 0):

@@ -27,6 +27,7 @@ public partial class RhinoMCPFunctions
         public Placement Placement;
         public double T;
         public double Offset;
+        public double Distance;
     }
 
     [McpCommand("rebuild_host_wall")]
@@ -46,9 +47,15 @@ public partial class RhinoMCPFunctions
 
         var warnings = new JArray();
         var freshParts = ExtrudeFromPath(path, height.Value, tol, warnings);
-        if (freshParts.Count != 1)
-            throw new InvalidOperationException("Could not rebuild host wall as one solid.");
+        var solid = PrepareFreshSolid(freshParts, tol, out var solidDiag);
+        if (solid == null)
+        {
+            if (warnings.Count > 0)
+                solidDiag = solidDiag + " " + warnings[0];
+            throw new InvalidOperationException(solidDiag);
+        }
 
+        var solidVolume = BrepVolume(solid);
         var forskId = host.Attributes?.GetUserString("forsk:id");
         var level = host.Attributes?.GetUserString("forsk:level");
         if (string.IsNullOrEmpty(level)) level = "0";
@@ -68,33 +75,54 @@ public partial class RhinoMCPFunctions
                 Sill = rec.Sill,
                 Head = rec.Head
             };
-            var storedOffset = ParseMm(marker.Attributes?.GetUserString("forsk:offset"));
-            double offset;
-            if (storedOffset.HasValue)
-                offset = storedOffset.Value;
-            else if (!TryOffsetOnSegments(segs, rec.MarkerBbox.Center, out _, out _, out offset))
-                throw new InvalidOperationException("Could not place an opening on the host path.");
-
-            var placement = PlaceOpeningOnPath(segs, spec, offset);
+            var placement = PlaceFromWorld(segs, spec, rec, out var distance);
             planned.Add(new PlannedOpening
             {
                 Marker = marker,
                 Spec = spec,
                 Placement = placement,
                 T = placement.T,
-                Offset = OffsetAlong(segs, placement)
+                Offset = OffsetAlong(segs, placement),
+                Distance = distance
             });
         }
 
-        if (!TryReplaceWallBrep(doc, host, freshParts[0]))
-            throw new InvalidOperationException("Could not rebuild host wall as one solid.");
+        var seed = new List<Brep> { solid.DuplicateBrep() ?? solid };
+        var cutWhy = "";
+        var cutOk = SoftParamPlan.ApplyAtomic(
+            seed,
+            planned,
+            (state, item) =>
+            {
+                var next = new List<Brep>();
+                foreach (var brep in state)
+                {
+                    var dup = brep?.DuplicateBrep();
+                    if (dup != null) next.Add(dup);
+                }
 
-        foreach (var item in planned)
+                if (!TryCutOpeningIntoPieces(next, item, tol, out var why))
+                {
+                    cutWhy = why;
+                    return new SoftParamPlan.CutStep<List<Brep>>(false, state);
+                }
+
+                return new SoftParamPlan.CutStep<List<Brep>>(true, next);
+            },
+            out var cutPieces,
+            out var failed);
+        if (!cutOk)
         {
-            var name = string.IsNullOrEmpty(item.Marker.Name) ? "opening" : item.Marker.Name;
-            if (!TryCutPlannedOpening(doc, host, item, tol, out var why))
-                throw new InvalidOperationException("Could not cut opening " + name + ". " + why);
+            var name = failed?.Marker == null || string.IsNullOrEmpty(failed.Marker.Name)
+                ? "opening"
+                : failed.Marker.Name;
+            throw new InvalidOperationException("Could not cut opening " + name + ". " + cutWhy);
         }
+
+        var pieces = CollapseWallPieces(cutPieces, tol);
+        if (pieces == null || pieces.Count == 0
+            || !CommitWallPieces(doc, host, pieces))
+            throw new InvalidOperationException("Could not rebuild host wall as one solid.");
 
         var thickness = MedianThickness(segs);
         if (thickness <= 0)
@@ -179,6 +207,7 @@ public partial class RhinoMCPFunctions
             ["marker_ids"] = markerIds,
             ["block_ids"] = blockIds,
             ["warnings"] = warnings,
+            ["solid_volume"] = solidVolume,
             ["ok"] = true,
             ["message"] = $"Rebuilt wall {label} with {planned.Count} {noun}."
         };
@@ -428,9 +457,9 @@ public partial class RhinoMCPFunctions
 
         var result = new List<WallSegment>();
         // Interior doors sit on room outlines, about 2.5 m from the outside of this plan.
-        AppendPathEdges(result, outer, tol, minLength, nominal, holes, intoCurveIsWall: true);
+        AppendPathEdges(result, outer, tol, minLength, nominal, holes, intoCurveIsWall: true, fromOuter: true);
         foreach (var hole in holes)
-            AppendPathEdges(result, hole, tol, minLength, nominal, null, intoCurveIsWall: false);
+            AppendPathEdges(result, hole, tol, minLength, nominal, null, intoCurveIsWall: false, fromOuter: false);
         return result;
     }
 
@@ -441,7 +470,8 @@ public partial class RhinoMCPFunctions
         double minLength,
         double nominal,
         List<Curve> holes,
-        bool intoCurveIsWall)
+        bool intoCurveIsWall,
+        bool fromOuter)
     {
         if (curve == null) return;
         foreach (var raw in ExplodeLineSegments(curve, tol))
@@ -475,7 +505,8 @@ public partial class RhinoMCPFunctions
                 Tangent = tangent,
                 Inward = inward,
                 Length = length,
-                Thickness = thick
+                Thickness = thick,
+                FromOuter = fromOuter
             });
         }
     }
@@ -691,18 +722,97 @@ public partial class RhinoMCPFunctions
         return placement.T * placement.Segment.Length;
     }
 
-    private bool TryCutPlannedOpening(
-        RhinoDoc doc,
-        WallSolid host,
+    private const double PlaceMaxDist = 2000.0;
+
+    // Marker world box, on the nearest outer edge or room edge. Not forsk:offset.
+    private Placement PlaceFromWorld(
+        List<WallSegment> segs,
+        OpeningSpec spec,
+        OpeningRecord rec,
+        out double distance)
+    {
+        var world = rec.MarkerBbox.Center;
+        if (!TryNearestPlan(segs, world, PlaceMaxDist, out var index, out var rawT, out distance))
+        {
+            throw new InvalidOperationException(
+                "Could not place an opening on the host path. dist=" + Fmt(distance));
+        }
+
+        var segment = segs[index];
+        var placement = new Placement
+        {
+            Segment = segment,
+            T = ClampOrRaw(segment, spec.Width, rawT),
+            Foot = FootprintFromMarker(rec)
+        };
+        distance = FootDistance(segs, placement);
+        return placement;
+    }
+
+    private static double ClampOrRaw(WallSegment seg, double width, double rawT)
+    {
+        try
+        {
+            return ClampT(seg, width, rawT);
+        }
+        catch (InvalidOperationException)
+        {
+            if (rawT < 0) return 0;
+            if (rawT > 1) return 1;
+            return rawT;
+        }
+    }
+
+    private static bool TryNearestPlan(
+        List<WallSegment> segs,
+        Point3d world,
+        double maxDist,
+        out int index,
+        out double t,
+        out double distance)
+    {
+        index = -1;
+        t = 0;
+        distance = double.PositiveInfinity;
+        if (segs == null || segs.Count == 0) return false;
+        var plan = new List<SoftParamPlan.Seg>(segs.Count);
+        foreach (var seg in segs)
+        {
+            if (seg == null)
+            {
+                plan.Add(null);
+                continue;
+            }
+
+            plan.Add(new SoftParamPlan.Seg(
+                seg.Start.X, seg.Start.Y, seg.End.X, seg.End.Y, seg.FromOuter));
+        }
+
+        return SoftParamPlan.TryPlace(plan, world.X, world.Y, maxDist, out index, out t, out distance);
+    }
+
+    private static double FootDistance(List<WallSegment> segs, Placement placement)
+    {
+        if (placement?.Foot == null || !placement.Foot.Bbox.IsValid)
+            return double.PositiveInfinity;
+        var center = placement.Foot.Bbox.Center;
+        if (!TryNearestPlan(segs, center, double.PositiveInfinity, out _, out _, out var distance))
+            return double.PositiveInfinity;
+        return distance;
+    }
+
+    private bool TryCutOpeningIntoPieces(
+        List<Brep> pieces,
         PlannedOpening item,
         double tol,
         out string why)
     {
         why = "";
-        var oriented = CutterThroughSegment(item.Placement, item.Spec);
-        var pieces = oriented == null ? null : DifferencePieces(host.Brep, oriented, tol);
-        if (pieces != null && pieces.Count == 1 && CommitWallPieces(doc, host, pieces))
-            return true;
+        if (pieces == null || item?.Placement?.Foot == null)
+        {
+            why = "no footprint dist=" + Fmt(item == null ? double.PositiveInfinity : item.Distance);
+            return false;
+        }
 
         var cutter = BuildOpeningCutter(
             item.Placement.Foot,
@@ -711,57 +821,266 @@ public partial class RhinoMCPFunctions
             FacadeConst.Pad,
             FacadeConst.MinDepth,
             tol);
-        var baked = DifferencePieces(host.Brep, cutter, tol);
-        if (baked != null && CommitWallPieces(doc, host, baked))
-            return true;
-        if (pieces != null && pieces.Count > 1 && CommitWallPieces(doc, host, pieces))
-            return true;
+        if (cutter == null || !cutter.IsValid)
+        {
+            why = "no cutter dist=" + Fmt(item.Distance)
+                + " edge=" + EdgeName(item)
+                + " foot=" + FormatFoot(item.Placement);
+            return false;
+        }
 
-        var foot = item.Placement?.Foot?.Bbox;
-        why = "segment=" + DescribePieces(pieces)
-            + " bake=" + DescribePieces(baked)
-            + " foot=" + (foot.HasValue
-                ? foot.Value.Min.X.ToString("F0") + "," + foot.Value.Min.Y.ToString("F0")
-                  + " " + foot.Value.Max.X.ToString("F0") + "," + foot.Value.Max.Y.ToString("F0")
-                : "none");
-        return false;
+        var next = new List<Brep>();
+        var hit = false;
+        var refused = "";
+        var cutterBox = cutter.GetBoundingBox(true);
+        cutterBox.Inflate(tol);
+        for (var i = 0; i < pieces.Count; i++)
+        {
+            var wall = pieces[i];
+            if (wall == null) continue;
+            var wallBox = wall.GetBoundingBox(true);
+            if (!BboxesOverlapXY(wallBox, cutterBox))
+            {
+                next.Add(wall);
+                continue;
+            }
+
+            var diff = DifferencePieces(wall, cutter, tol, out var detail);
+            if (diff == null)
+            {
+                next.Add(wall);
+                refused = detail;
+                continue;
+            }
+
+            next.AddRange(diff);
+            hit = true;
+        }
+
+        if (!hit)
+        {
+            why = (string.IsNullOrEmpty(refused) ? "pieces=0 intersects=false" : refused)
+                + " dist=" + Fmt(item.Distance)
+                + " edge=" + EdgeName(item)
+                + " foot=" + FormatFoot(item.Placement);
+            return false;
+        }
+
+        pieces.Clear();
+        pieces.AddRange(next);
+        return true;
     }
 
-    private static string DescribePieces(List<Brep> pieces)
+    private static List<Brep> DifferencePieces(Brep wall, Brep cutter, double tol, out string detail)
     {
-        return pieces == null ? "none" : pieces.Count.ToString();
-    }
+        detail = "";
+        if (wall == null || cutter == null || !cutter.IsValid)
+        {
+            detail = "volume 0 -> 0 pieces=0 intersects=false";
+            return null;
+        }
 
-    private static List<Brep> DifferencePieces(Brep wall, Brep cutter, double tol)
-    {
-        if (wall == null || cutter == null || !cutter.IsValid) return null;
-        Brep[] results;
+        Brep[] results = null;
+        string threw = null;
         try
         {
             results = Brep.CreateBooleanDifference(new[] { wall }, new[] { cutter }, tol);
         }
+        catch (Exception ex)
+        {
+            threw = ex.Message;
+            results = null;
+        }
+
+        var valid = new List<Brep>();
+        if (results != null)
+        {
+            foreach (var brep in results)
+            {
+                if (brep != null && brep.IsValid)
+                    valid.Add(brep);
+            }
+        }
+
+        var before = BrepVolume(wall);
+        var after = 0.0;
+        foreach (var brep in valid)
+            after += BrepVolume(brep);
+        var dropped = before > 0 && valid.Count > 0 && after < before;
+        var intersects = false;
+        if (!dropped)
+            intersects = CutterHitsSolid(wall, cutter, tol);
+
+        detail = "volume " + Fmt(before) + " -> " + Fmt(after)
+            + " pieces=" + valid.Count
+            + " intersects=" + (intersects ? "true" : "false");
+        if (threw != null)
+            detail = detail + " boolean=" + threw;
+
+        if (!SoftParamPlan.AcceptCut(valid.Count, before, after, intersects))
+            return null;
+        return valid;
+    }
+
+    private static bool CutterHitsSolid(Brep wall, Brep cutter, double tol)
+    {
+        if (wall == null || cutter == null) return false;
+        Brep[] hit = null;
+        try
+        {
+            hit = Brep.CreateBooleanIntersection(new[] { wall }, new[] { cutter }, tol);
+        }
         catch
         {
+            hit = null;
+        }
+
+        if (hit == null) return false;
+        foreach (var brep in hit)
+        {
+            if (brep != null && brep.IsValid)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static Brep PrepareFreshSolid(List<Brep> parts, double tol, out string diagnostic)
+    {
+        diagnostic = "";
+        if (parts == null || parts.Count == 0)
+        {
+            diagnostic = "Could not rebuild host wall as one solid. volume=0.";
             return null;
         }
 
-        if (results == null || results.Length == 0) return null;
-        var valid = new List<Brep>();
-        foreach (var brep in results)
+        Brep fresh;
+        if (parts.Count == 1)
         {
-            if (brep != null && brep.IsValid)
-                valid.Add(brep);
+            fresh = parts[0];
         }
-        if (valid.Count == 0) return null;
-        var before = BrepVolume(wall);
-        if (before > 0)
+        else
         {
-            var sum = 0.0;
-            foreach (var brep in valid)
-                sum += BrepVolume(brep);
-            if (sum > before - 1.0) return null;
+            Brep[] joined = null;
+            try { joined = Brep.JoinBreps(parts, tol); }
+            catch { joined = null; }
+            if (joined == null || joined.Length != 1 || joined[0] == null || !joined[0].IsValid)
+            {
+                var vol = 0.0;
+                foreach (var part in parts)
+                    vol += BrepVolume(part);
+                diagnostic = "Could not rebuild host wall as one solid. pieces="
+                    + parts.Count + " volume=" + Fmt(vol) + ".";
+                return null;
+            }
+
+            fresh = joined[0];
         }
-        return valid;
+
+        return CloseWallSolid(fresh, tol, out diagnostic);
+    }
+
+    private static Brep CloseWallSolid(Brep brep, double tol, out string diagnostic)
+    {
+        diagnostic = "";
+        if (brep == null)
+        {
+            diagnostic = "Fresh wall is not a closed solid. IsSolid=false IsManifold=false volume=0.";
+            return null;
+        }
+
+        var current = TryClose(brep.DuplicateBrep() ?? brep, tol);
+        var volume = BrepVolume(current);
+        if (IsClosedSolid(current))
+        {
+            diagnostic = "volume=" + Fmt(volume);
+            return current;
+        }
+
+        diagnostic = "Fresh wall is not a closed solid."
+            + " IsSolid=" + (current != null && current.IsSolid)
+            + " IsManifold=" + (current != null && current.IsManifold)
+            + " volume=" + Fmt(volume) + ".";
+        return null;
+    }
+
+    private static Brep TryClose(Brep brep, double tol)
+    {
+        var current = brep;
+        if (IsClosedSolid(current)) return current;
+        current = Cap(current, tol);
+        if (IsClosedSolid(current)) return current;
+
+        Brep[] joined = null;
+        try { joined = Brep.JoinBreps(new[] { current }, tol); }
+        catch { joined = null; }
+        if (joined != null && joined.Length == 1 && joined[0] != null && joined[0].IsValid)
+            current = joined[0];
+        if (IsClosedSolid(current)) return current;
+        return Cap(current, tol);
+    }
+
+    private static Brep Cap(Brep brep, double tol)
+    {
+        if (brep == null) return null;
+        try
+        {
+            var capped = brep.CapPlanarHoles(tol);
+            if (capped != null && capped.IsValid) return capped;
+        }
+        catch
+        {
+            return brep;
+        }
+
+        return brep;
+    }
+
+    private static bool IsClosedSolid(Brep brep)
+    {
+        return brep != null && brep.IsValid && brep.IsSolid && brep.IsManifold;
+    }
+
+    private static List<Brep> CollapseWallPieces(List<Brep> pieces, double tol)
+    {
+        if (pieces == null) return null;
+        var kept = new List<Brep>();
+        foreach (var brep in pieces)
+        {
+            if (brep != null && brep.IsValid) kept.Add(brep);
+        }
+
+        if (kept.Count <= 1) return kept;
+        Brep[] joined = null;
+        try { joined = Brep.JoinBreps(kept, tol); }
+        catch { joined = null; }
+        if (joined != null && joined.Length == 1 && joined[0] != null
+            && joined[0].IsValid && joined[0].IsSolid)
+            return new List<Brep> { joined[0] };
+        return kept;
+    }
+
+    private static string EdgeName(PlannedOpening item)
+    {
+        return item?.Placement?.Segment != null && item.Placement.Segment.FromOuter
+            ? "outer"
+            : "room";
+    }
+
+    private static string FormatFoot(Placement placement)
+    {
+        if (placement?.Foot == null || !placement.Foot.Bbox.IsValid) return "none";
+        var box = placement.Foot.Bbox;
+        return box.Min.X.ToString("F0", CultureInfo.InvariantCulture) + ","
+            + box.Min.Y.ToString("F0", CultureInfo.InvariantCulture) + " "
+            + box.Max.X.ToString("F0", CultureInfo.InvariantCulture) + ","
+            + box.Max.Y.ToString("F0", CultureInfo.InvariantCulture);
+    }
+
+    private static string Fmt(double value)
+    {
+        if (double.IsPositiveInfinity(value) || double.IsNaN(value)) return "none";
+        return value.ToString("F0", CultureInfo.InvariantCulture);
     }
 
     // N==1 keeps the host GUID. N>1 follows OpeningsFromLayer / TryBooleanReplaceWall.
@@ -800,36 +1119,6 @@ public partial class RhinoMCPFunctions
         host.Brep = first.Brep;
         host.Attributes = first.Attributes;
         return true;
-    }
-
-    private static Brep CutterThroughSegment(Placement placement, OpeningSpec spec)
-    {
-        var seg = placement?.Segment;
-        if (seg == null || spec == null || seg.Length <= 1e-6) return null;
-        var x = seg.Tangent;
-        var y = seg.Inward;
-        x.Z = 0;
-        y.Z = 0;
-        if (!x.Unitize() || !y.Unitize()) return null;
-        if (Vector3d.CrossProduct(x, y).Z < 0)
-            y = -y;
-        var t = placement.T;
-        if (t < 0) t = 0;
-        if (t > 1) t = 1;
-        var center = seg.Start + (t * seg.Length) * x + y * (seg.Thickness * 0.5);
-        center.Z = 0;
-        var plane = new Plane(center, x, y);
-        var halfW = spec.Width * 0.5 + FacadeConst.Pad;
-        var depth = Math.Max(seg.Thickness, FacadeConst.MinDepth) + 2.0 * FacadeConst.Pad;
-        var z0 = spec.Sill - 50.0;
-        var z1 = spec.Head + 50.0;
-        if (halfW <= 1 || depth <= 1 || z1 <= z0) return null;
-        var box = new Box(
-            plane,
-            new Interval(-halfW, halfW),
-            new Interval(-depth * 0.5, depth * 0.5),
-            new Interval(z0, z1));
-        return box.IsValid ? Brep.CreateFromBox(box) : null;
     }
 
     private static double BrepVolume(Brep brep)
