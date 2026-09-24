@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using Rhino;
+using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 using Rhino.Geometry.Intersect;
+using Rhino.Render;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -13,16 +15,29 @@ namespace RhinoMCPPlugin.Functions;
 /// Simple door and window frames in the opening void.
 /// forsk:kind=opening so clear, sheets, and print already treat them as clay
 /// and skip them when hatching wall poché. Markers stay opening_marker on A-OPEN.
+/// Glass and the door leaf stay separate from the wood frame so each can
+/// carry its own material. Wood members may still union with each other.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
     private const string OpeningBlockLayerPath = "A-OPEN::Block";
     private const string OpeningBlockDefDescription = "forsk opening";
+    private const string ForskWoodName = "Forsk Wood";
+    private const string ForskGlassName = "Forsk Glass";
+    private const double ForskGlassTransparency = 0.8;
     private const double OpeningFrameFaceMm = 50.0;
     private const double OpeningFrameInsetMm = 1.0;
     private const double OpeningLeafMm = 40.0;
     private const double OpeningGlazeMm = 8.0;
     private const double OpeningSillNoseMm = 16.0;
+    private const double OpeningThresholdMm = 15.0;
+
+    private sealed class OpeningPart
+    {
+        public Brep Geometry;
+        public string Part;
+        public bool Glass;
+    }
 
     /// <summary>
     /// Visible child of hidden A-OPEN. Parent off does not hide a child in Rhino 7,
@@ -112,8 +127,7 @@ public partial class RhinoMCPFunctions
             MarkerId = markerId.ToString()
         });
 
-        var boolTol = Math.Max(tol, 0.1);
-        var id = CommitOpeningBlock(doc, name, attr, parts, boolTol);
+        var id = CommitOpeningBlock(doc, name, attr, parts);
         return id;
     }
 
@@ -182,63 +196,216 @@ public partial class RhinoMCPFunctions
         return inst.InstanceDefinition.Index;
     }
 
-    private static Guid CommitOpeningBlock(
-        RhinoDoc doc, string name, ObjectAttributes attr, List<Brep> parts, double tol)
-    {
-        var solids = parts.Where(p => p != null && p.IsValid).ToList();
-        if (solids.Count == 0) return Guid.Empty;
-
-        Brep one = null;
-        if (solids.Count == 1)
-        {
-            one = solids[0];
-        }
-        else
-        {
-            Brep[] united = null;
-            try { united = Brep.CreateBooleanUnion(solids, tol); }
-            catch (Exception) { united = null; }
-            if (united != null)
-            {
-                var valid = united.Where(b => b != null && b.IsValid).ToList();
-                if (valid.Count == 1)
-                    one = valid[0];
-                else if (valid.Count > 1)
-                    return AddOpeningInstance(doc, name, attr, valid);
-            }
-        }
-
-        if (one != null && one.IsValid)
-        {
-            var id = doc.Objects.AddBrep(one, attr);
-            if (id != Guid.Empty) return id;
-        }
-        return AddOpeningInstance(doc, name, attr, solids);
-    }
-
-    private static Guid AddOpeningInstance(
-        RhinoDoc doc, string name, ObjectAttributes attr, IList<Brep> parts)
+    private Guid CommitOpeningBlock(
+        RhinoDoc doc, string name, ObjectAttributes attr, List<OpeningPart> parts)
     {
         var geom = new List<GeometryBase>();
+        var attrs = new List<ObjectAttributes>();
         foreach (var part in parts)
         {
-            if (part != null && part.IsValid)
-                geom.Add(part);
+            if (part?.Geometry == null || !part.Geometry.IsValid) continue;
+            if (string.IsNullOrEmpty(part.Part)) continue;
+            var partAttr = attr.Duplicate();
+            partAttr.Name = name;
+            partAttr.SetUserString("forsk:part", part.Part);
+            ApplyOpeningPartMaterial(doc, partAttr, part.Glass);
+            geom.Add(part.Geometry);
+            attrs.Add(partAttr);
         }
         if (geom.Count == 0) return Guid.Empty;
 
-        var index = doc.InstanceDefinitions.Add(name, OpeningBlockDefDescription, Point3d.Origin, geom);
+        // The instance keeps the opening identity. It does not carry one
+        // material, so definition objects keep wood and glass.
+        attr.MaterialSource = ObjectMaterialSource.MaterialFromLayer;
+        attr.MaterialIndex = -1;
+        attr.ColorSource = ObjectColorSource.ColorFromLayer;
+
+        var index = doc.InstanceDefinitions.Add(
+            name, OpeningBlockDefDescription, Point3d.Origin, geom, attrs);
         if (index < 0)
         {
             var suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
             index = doc.InstanceDefinitions.Add(
-                name + "-" + suffix, OpeningBlockDefDescription, Point3d.Origin, geom);
+                name + "-" + suffix, OpeningBlockDefDescription, Point3d.Origin, geom, attrs);
         }
-        if (index < 0) return Guid.Empty;
-        return doc.Objects.AddInstanceObject(index, Transform.Identity, attr);
+        if (index < 0)
+            return AddLooseOpeningParts(doc, geom, attrs);
+
+        BindOpeningPartAttributes(doc, index, attrs);
+        var id = doc.Objects.AddInstanceObject(index, Transform.Identity, attr);
+        if (id != Guid.Empty) return id;
+        doc.InstanceDefinitions.Delete(index, true, true);
+        return AddLooseOpeningParts(doc, geom, attrs);
     }
 
-    private static List<Brep> BuildOpeningBlockParts(
+    private static void BindOpeningPartAttributes(
+        RhinoDoc doc, int defIndex, IList<ObjectAttributes> attrs)
+    {
+        var idef = doc.InstanceDefinitions[defIndex];
+        var members = idef?.GetObjects();
+        if (members == null) return;
+        var count = Math.Min(members.Length, attrs.Count);
+        for (var i = 0; i < count; i++)
+        {
+            if (members[i] == null || attrs[i] == null) continue;
+            try { doc.Objects.ModifyAttributes(members[i], attrs[i], true); }
+            catch (Exception) { }
+        }
+    }
+
+    private static Guid AddLooseOpeningParts(
+        RhinoDoc doc, IList<GeometryBase> geom, IList<ObjectAttributes> attrs)
+    {
+        Guid first = Guid.Empty;
+        for (var i = 0; i < geom.Count && i < attrs.Count; i++)
+        {
+            if (!(geom[i] is Brep brep) || attrs[i] == null) continue;
+            var id = doc.Objects.AddBrep(brep, attrs[i]);
+            if (first == Guid.Empty) first = id;
+        }
+        return first;
+    }
+
+    private void ApplyOpeningPartMaterial(RhinoDoc doc, ObjectAttributes attr, bool glass)
+    {
+        var rm = glass ? EnsureForskGlass(doc) : EnsureForskWood(doc);
+        if (rm != null)
+        {
+            try
+            {
+                attr.RenderMaterial = rm;
+            }
+            catch (Exception)
+            {
+                var index = doc.Materials.Find(glass ? ForskGlassName : ForskWoodName, true);
+                if (index >= 0)
+                {
+                    attr.MaterialIndex = index;
+                    attr.MaterialSource = ObjectMaterialSource.MaterialFromObject;
+                }
+            }
+        }
+
+        if (glass)
+        {
+            attr.ColorSource = ObjectColorSource.ColorFromObject;
+            attr.ObjectColor = Color.FromArgb(180, 196, 216, 220);
+        }
+        else
+        {
+            attr.ColorSource = ObjectColorSource.ColorFromLayer;
+        }
+    }
+
+    /// <summary>
+    /// Create once, then reuse by name. Rendered, Arctic, and Raytraced read
+    /// the render material. Legacy transparency covers Rendered if PBR is absent.
+    /// </summary>
+    private static RenderMaterial EnsureForskWood(RhinoDoc doc)
+    {
+        return EnsureOpeningRenderMaterial(doc, ForskWoodName, glass: false);
+    }
+
+    private static RenderMaterial EnsureForskGlass(RhinoDoc doc)
+    {
+        return EnsureOpeningRenderMaterial(doc, ForskGlassName, glass: true);
+    }
+
+    private static RenderMaterial EnsureOpeningRenderMaterial(RhinoDoc doc, string name, bool glass)
+    {
+        var existing = FindRenderMaterialByName(doc, name);
+        if (existing != null) return existing;
+
+        var index = doc.Materials.Find(name, true);
+        if (index >= 0)
+        {
+            var linked = doc.Materials[index]?.RenderMaterial;
+            if (linked != null)
+            {
+                if (FindRenderMaterialByName(doc, name) == null)
+                    doc.RenderMaterials.Add(linked);
+                return FindRenderMaterialByName(doc, name) ?? linked;
+            }
+        }
+
+        var mat = glass ? NewForskGlass() : NewForskWood();
+        index = doc.Materials.Add(mat);
+        if (index < 0) return null;
+        var created = doc.Materials[index]?.RenderMaterial;
+        if (created == null) return null;
+        if (!string.Equals(created.Name, name, StringComparison.OrdinalIgnoreCase))
+        {
+            created.BeginChange(RenderContent.ChangeContexts.Program);
+            created.Name = name;
+            created.EndChange();
+        }
+        if (FindRenderMaterialByName(doc, name) == null)
+            doc.RenderMaterials.Add(created);
+        return FindRenderMaterialByName(doc, name) ?? created;
+    }
+
+    private static Material NewForskWood()
+    {
+        var color = Color.FromArgb(150, 98, 58);
+        var mat = new Material
+        {
+            Name = ForskWoodName,
+            DiffuseColor = color,
+            AmbientColor = Color.Black,
+            SpecularColor = Color.FromArgb(40, 28, 18),
+            EmissionColor = Color.Black,
+            Reflectivity = 0.03,
+            Shine = 6,
+            Transparency = 0.0,
+            ReflectionGlossiness = 0.12,
+            FresnelReflections = false
+        };
+        TryApplyPbr(mat, color, 1.0, 0.72, 1.5);
+        return mat;
+    }
+
+    private static Material NewForskGlass()
+    {
+        var tint = Color.FromArgb(198, 216, 220);
+        var mat = new Material
+        {
+            Name = ForskGlassName,
+            DiffuseColor = tint,
+            AmbientColor = Color.FromArgb(16, 20, 22),
+            SpecularColor = Color.FromArgb(210, 210, 210),
+            EmissionColor = Color.Black,
+            Reflectivity = 0.12,
+            Shine = 140,
+            Transparency = ForskGlassTransparency,
+            IndexOfRefraction = 1.52,
+            ReflectionGlossiness = 0.95,
+            FresnelReflections = true
+        };
+        TryApplyPbr(mat, tint, 1.0 - ForskGlassTransparency, 0.04, 1.52);
+        return mat;
+    }
+
+    private static void TryApplyPbr(
+        Material mat, Color color, double opacity, double roughness, double ior)
+    {
+        try
+        {
+            mat.ToPhysicallyBased();
+            var pbr = mat.PhysicallyBased;
+            if (pbr == null) return;
+            pbr.BaseColor = new Color4f(color);
+            pbr.Opacity = opacity;
+            pbr.Roughness = roughness;
+            pbr.Metallic = 0.0;
+            pbr.OpacityIOR = ior;
+            pbr.SynchronizeLegacyMaterial();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static List<OpeningPart> BuildOpeningBlockParts(
         Point3d center,
         Vector3d widthDir,
         Vector3d thickDir,
@@ -250,7 +417,7 @@ public partial class RhinoMCPFunctions
         bool window,
         double tol)
     {
-        var parts = new List<Brep>();
+        var parts = new List<OpeningPart>();
         if (!TryOpeningPlane(center, widthDir, thickDir, out var plane))
             return parts;
 
@@ -269,20 +436,77 @@ public partial class RhinoMCPFunctions
             return parts;
 
         var boolTol = Math.Max(tol, 0.1);
-        var frame = BuildFrameSolid(plane, outerHalf, innerHalf, halfThick, face, z0, z1, window, boolTol);
-        if (frame == null)
-            frame = BuildFrameFromMembers(plane, outerHalf, innerHalf, halfThick, face, z0, z1, window, boolTol);
-        if (frame == null) return parts;
-        parts.Add(frame);
+        // Window jambs start on the sill. The sill itself is a separate part.
+        var frameZ0 = window ? z0 + face - 0.2 : z0;
+        var frame = BuildFrameSolid(
+            plane, outerHalf, innerHalf, halfThick, face, frameZ0, z1, boolTol);
+        if (frame != null)
+            parts.Add(new OpeningPart { Geometry = frame, Part = "frame", Glass = false });
+        else
+            AddWoodParts(parts, FrameMembers(
+                plane, outerHalf, innerHalf, halfThick, face, frameZ0, z1), "frame", boolTol);
+        if (parts.Count == 0) return parts;
 
-        var panel = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, window);
-        if (panel != null) parts.Add(panel);
         if (window)
         {
+            var sillParts = new List<Brep>();
+            var rail = BuildSillRail(plane, outerHalf, halfThick, face, z0);
             var nose = BuildSillNose(plane, outerHalf, halfThick, face, z0);
-            if (nose != null) parts.Add(nose);
+            if (rail != null) sillParts.Add(rail);
+            if (nose != null) sillParts.Add(nose);
+            AddWoodParts(parts, sillParts, "sill", boolTol);
+
+            var glass = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, true, 0);
+            if (glass != null)
+                parts.Add(new OpeningPart { Geometry = glass, Part = "glass", Glass = true });
+        }
+        else
+        {
+            var threshold = BuildThreshold(plane, innerHalf, halfThick, z0);
+            var leafClear = threshold != null ? OpeningThresholdMm + 0.5 : 0.5;
+            var leaf = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, false, leafClear);
+            if (leaf != null)
+                parts.Add(new OpeningPart { Geometry = leaf, Part = "leaf", Glass = false });
+            if (threshold != null)
+                parts.Add(new OpeningPart { Geometry = threshold, Part = "threshold", Glass = false });
         }
         return parts;
+    }
+
+    private static void AddWoodParts(
+        List<OpeningPart> parts, IList<Brep> members, string part, double tol)
+    {
+        foreach (var brep in UnionWood(members, tol))
+            parts.Add(new OpeningPart { Geometry = brep, Part = part, Glass = false });
+    }
+
+    /// <summary>
+    /// Union wood with wood. On failure, keep the separate members.
+    /// Never pass glass or a door leaf into this.
+    /// </summary>
+    private static List<Brep> UnionWood(IList<Brep> members, double tol)
+    {
+        var valid = new List<Brep>();
+        if (members != null)
+        {
+            foreach (var brep in members)
+            {
+                if (brep != null && brep.IsValid)
+                    valid.Add(brep);
+            }
+        }
+        if (valid.Count <= 1) return valid;
+        try
+        {
+            var united = Brep.CreateBooleanUnion(valid, tol);
+            if (united == null) return valid;
+            var ok = united.Where(b => b != null && b.IsValid).ToList();
+            return ok.Count == 0 ? valid : ok;
+        }
+        catch (Exception)
+        {
+            return valid;
+        }
     }
 
     private static Brep BuildFrameSolid(
@@ -293,13 +517,13 @@ public partial class RhinoMCPFunctions
         double face,
         double z0,
         double z1,
-        bool window,
         double tol)
     {
         var outer = FrameBox(plane, -outerHalf, outerHalf, -halfThick, halfThick, z0, z1);
         if (outer == null) return null;
 
-        var innerZ0 = window ? z0 + face : z0 - 8;
+        // Cut through the bottom so the sill or threshold is not part of this solid.
+        var innerZ0 = z0 - 8;
         var innerZ1 = z1 - face;
         var inner = FrameBox(
             plane, -innerHalf, innerHalf, -(halfThick + 8), halfThick + 8, innerZ0, innerZ1);
@@ -329,16 +553,14 @@ public partial class RhinoMCPFunctions
     /// Jambs and head overlap in volume. The head is slightly shallower so the
     /// shared faces are not coplanar, which is where box unions fail.
     /// </summary>
-    private static Brep BuildFrameFromMembers(
+    private static List<Brep> FrameMembers(
         Plane plane,
         double outerHalf,
         double innerHalf,
         double halfThick,
         double face,
         double z0,
-        double z1,
-        bool window,
-        double tol)
+        double z1)
     {
         var members = new List<Brep>();
         var jambY0 = -halfThick;
@@ -352,34 +574,23 @@ public partial class RhinoMCPFunctions
         if (left != null) members.Add(left);
         if (right != null) members.Add(right);
         if (head != null) members.Add(head);
-        if (window)
-        {
-            var sill = FrameBox(plane, -outerHalf, outerHalf, railY0, railY1, z0, z0 + face);
-            if (sill != null) members.Add(sill);
-        }
-        if (members.Count == 0) return null;
-        if (members.Count == 1) return members[0];
-        try
-        {
-            var united = Brep.CreateBooleanUnion(members, tol);
-            if (united == null) return members[0];
-            var valid = united.Where(b => b != null && b.IsValid).ToList();
-            if (valid.Count == 1) return valid[0];
-            return null;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
+        return members;
     }
 
     private static Brep BuildPanel(
-        Plane plane, double innerHalf, double halfThick, double face, double z0, double z1, bool window)
+        Plane plane,
+        double innerHalf,
+        double halfThick,
+        double face,
+        double z0,
+        double z1,
+        bool window,
+        double floorClear)
     {
         var thick = window ? OpeningGlazeMm : OpeningLeafMm;
         var half = Math.Min(thick * 0.5, Math.Max(3, halfThick * 0.45));
         var bite = 2.0;
-        var panelZ0 = window ? z0 + face - bite : z0 + 0.5;
+        var panelZ0 = window ? z0 + face - bite : z0 + floorClear;
         var panelZ1 = z1 - face + bite;
         if (panelZ1 - panelZ0 < 10) return null;
         return FrameBox(
@@ -392,6 +603,16 @@ public partial class RhinoMCPFunctions
             panelZ1);
     }
 
+    private static Brep BuildSillRail(
+        Plane plane, double outerHalf, double halfThick, double face, double z0)
+    {
+        var y0 = -(halfThick - 0.4);
+        var y1 = halfThick - 0.4;
+        var z1 = z0 + face;
+        if (z1 - z0 < 8) return null;
+        return FrameBox(plane, -(outerHalf - 0.5), outerHalf - 0.5, y0, y1, z0, z1);
+    }
+
     private static Brep BuildSillNose(Plane plane, double outerHalf, double halfThick, double face, double z0)
     {
         var y0 = halfThick - 2;
@@ -400,6 +621,14 @@ public partial class RhinoMCPFunctions
         var zNose1 = z0 + face - 1;
         if (zNose1 - zNose0 < 4) return null;
         return FrameBox(plane, -(outerHalf - 1), outerHalf - 1, y0, y1, zNose0, zNose1);
+    }
+
+    private static Brep BuildThreshold(Plane plane, double innerHalf, double halfThick, double z0)
+    {
+        if (innerHalf < 20 || halfThick < 10) return null;
+        var x = Math.Max(8.0, innerHalf - 2.0);
+        var y = Math.Max(6.0, halfThick - 3.0);
+        return FrameBox(plane, -x, x, -y, y, z0, z0 + OpeningThresholdMm);
     }
 
     private static Brep FrameBox(

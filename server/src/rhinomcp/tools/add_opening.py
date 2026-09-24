@@ -19,7 +19,8 @@ def add_opening(
 ) -> Dict[str, Any]:
     """
     Cut a door or window into a vertical Forsk wall, add an A-OPEN marker,
-    and a simple frame (door leaf or window sill) linked to that marker.
+    and a simple frame linked to that marker. Glass and the door leaf stay
+    separate from the wood (Forsk Wood / Forsk Glass).
 
     Defaults match plan bake: door 900×0–2100, window 1200×900–2100, t=0.5
     on the longest facade segment. Refuses a host with forsk:kind=existing

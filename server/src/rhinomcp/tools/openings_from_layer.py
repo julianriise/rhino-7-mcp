@@ -25,8 +25,11 @@ def openings_from_layer(
     Window: sill 900, head 2100 (height 1200). Uses window-layer curves
     or block-instance bounding boxes. Creates selectable opening_marker
     boxes on A-OPEN (named door-NN / window-NN) and a simple frame on
-    A-OPEN::Block (forsk:kind=opening, door-NN-block / window-NN-block):
-    a door leaf or a window frame and sill. Layer X-EXIST returns count 0:
+    A-OPEN::Block (forsk:kind=opening, door-NN-block / window-NN-block).
+    Glass and the door leaf stay separate from the wood frame. Wood uses
+    the document material Forsk Wood; glazing uses Forsk Glass. Each part
+    is stamped forsk:part (frame, leaf, glass, sill, or threshold).
+    Layer X-EXIST returns count 0:
     existing underlay is not a bake source.
 
     Parameters:
