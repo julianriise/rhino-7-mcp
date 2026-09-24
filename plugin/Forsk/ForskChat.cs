@@ -86,7 +86,15 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (t.Contains("move opening") || t.Contains("add opening") || t.Contains("delete opening"))
                 return true;
-            var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove");
+            if (t.Contains("set opening") || t.Contains("set window") || t.Contains("set door"))
+                return true;
+            if (t.Contains("toward the corner") || t.Contains("along the wall"))
+                return true;
+            if (HasWord(t, "set") && (HasWord(t, "width") || HasWord(t, "sill") || HasWord(t, "head")))
+                return true;
+            var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove")
+                || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")
+                || HasWord(t, "narrow") || HasWord(t, "narrower");
             var noun = HasWord(t, "window") || HasWord(t, "windows")
                 || HasWord(t, "door") || HasWord(t, "doors")
                 || HasWord(t, "opening") || HasWord(t, "openings");
@@ -191,6 +199,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             "add_opening",
             "move_opening",
+            "set_opening",
             "delete_opening"
         };
 
@@ -502,12 +511,21 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "opening_kind"),
                 Fn("move_opening",
-                    "Slide one opening and its frame along its host. delta_mm is signed millimetres. Id omitted uses the selected marker or frame. Refuses X-EXIST.",
+                    "Slide one selected opening along its host, then rebuild that wall only. delta_mm is signed millimetres. Id omitted uses the selected marker or frame. Does not clear the model. Refuses X-EXIST.",
                     new JObject
                     {
-                        ["id"] = Str("Opening marker GUID. Omit to use the selection."),
-                        ["delta_mm"] = Num("Signed distance along the wall, mm."),
+                        ["id"] = Str("Opening marker or frame GUID. Omit to use the selection."),
+                        ["delta_mm"] = Num("Signed distance along the wall, mm. Positive follows the segment."),
                         ["t"] = Num("Absolute 0–1 position. Exclusive with delta_mm.")
+                    }),
+                Fn("set_opening",
+                    "Set width, sill, or head on one selected opening, then rebuild that wall only. Pass only the fields the user named. Id omitted uses the selected marker or frame. Does not clear the model. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["id"] = Str("Opening marker or frame GUID. Omit to use the selection."),
+                        ["width"] = Num("Opening width in mm."),
+                        ["sill"] = Num("Bottom Z in mm."),
+                        ["head"] = Num("Top Z in mm.")
                     }),
                 Fn("delete_opening",
                     "Close one opening and delete its marker and frame. Id omitted uses the selected marker or frame. Refuses X-EXIST.",
@@ -617,7 +635,7 @@ Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake 
 Never edit an opening on X-EXIST or forsk:kind=existing. Refuse: Existing underlay is not a Forsk host wall.
 Roof or openings before walls: Walls first. Call walls_from_layer before roof_flat_from_walls. Or the openings / add_opening line with the same shape.
 
-Delete this door or window is delete_opening. Add is add_opening. Move millimetres along the wall is move_opening delta_mm.
+Delete this door or window is delete_opening. Add is add_opening. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. Both rebuild that host only. Do not call clear_generated. Do not use the last opening created.
 
 Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
@@ -695,7 +713,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Edit)
             {
                 return "Turn bias: Edit. At most two sentences. No Target block on success. "
-                    + "Prefer add_opening, move_opening, delete_opening. "
+                    + "Prefer add_opening, move_opening, set_opening, delete_opening. "
+                    + "Move and set rebuild that host only. Do not call clear_generated. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
                     + "Bake, sheets, and print stay available when the user asks.";
             }

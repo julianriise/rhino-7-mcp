@@ -2008,6 +2008,7 @@ class TestPackageApi:
             "delete_opening",
             "add_opening",
             "move_opening",
+            "set_opening",
             "rebuild_host_wall",
             "clear_generated",
             "set_layer_material",
@@ -2705,6 +2706,83 @@ class TestMoveOpeningTool:
         result = move_opening(ctx=None)
         assert result["success"] is False
         assert "Specify delta_mm or t." in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestSetOpeningTool:
+    @patch("rhinomcp.tools.set_opening.get_rhino_connection")
+    def test_width_only(self, mock_get_conn):
+        from rhinomcp.tools.set_opening import set_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "width": 1400,
+            "sill": 900,
+            "head": 2100,
+            "t": 0.4,
+            "ok": True,
+            "message": "Set the opening to width 1400 mm, sill 900 mm, head 2100 mm.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_opening(ctx=None, width=1400)
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_opening", {"width": 1400}
+        )
+        assert result["success"] is True
+        assert result["width"] == 1400
+        assert result["host_id"] == "h1"
+
+    @patch("rhinomcp.tools.set_opening.get_rhino_connection")
+    def test_sill_and_head_with_id(self, mock_get_conn):
+        from rhinomcp.tools.set_opening import set_opening
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "width": 1200,
+            "sill": 1000,
+            "head": 2200,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        set_opening(ctx=None, id=guid, sill=1000, head=2200)
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_opening", {"id": guid, "sill": 1000, "head": 2200}
+        )
+
+    @patch("rhinomcp.tools.set_opening.get_rhino_connection")
+    def test_rejects_empty(self, mock_get_conn):
+        from rhinomcp.tools.set_opening import set_opening
+
+        result = set_opening(ctx=None)
+        assert result["success"] is False
+        assert "Specify width, sill, or head." in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_opening.get_rhino_connection")
+    def test_rejects_bad_width(self, mock_get_conn):
+        from rhinomcp.tools.set_opening import set_opening
+
+        result = set_opening(ctx=None, width=0)
+        assert result["success"] is False
+        assert "width must be positive." in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_opening.get_rhino_connection")
+    def test_rejects_head_below_sill(self, mock_get_conn):
+        from rhinomcp.tools.set_opening import set_opening
+
+        result = set_opening(ctx=None, sill=2200, head=1000)
+        assert result["success"] is False
+        assert "head must be greater than sill." in result["message"]
         mock_get_conn.assert_not_called()
 
 

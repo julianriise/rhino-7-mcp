@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_opening.json",
+  "title": "SetOpening Command",
+  "description": "Set width, sill, and/or head on one opening, update that record, then rebuild its host wall only. Does not clear the model. Pass at least one of width, sill, head. Id omitted uses the current selection (exactly one opening_marker or opening frame). Refuses a marker or host with forsk:kind=existing or on layer X-EXIST. A refused rebuild leaves the document unchanged.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Opening marker or frame GUID. Omit to use the current selection."
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Opening width in mm. Omit to keep the stored width."
+    },
+    "sill": {
+      "type": "number",
+      "description": "Opening bottom Z in mm. Omit to keep the stored sill."
+    },
+    "head": {
+      "type": "number",
+      "description": "Opening top Z in mm. Omit to keep the stored head."
+    }
+  },
+  "additionalProperties": false
+}

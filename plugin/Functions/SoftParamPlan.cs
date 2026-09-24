@@ -157,6 +157,127 @@ public static class SoftParamPlan
         return forward || back;
     }
 
+    public readonly struct Slide
+    {
+        public readonly int Index;
+        public readonly double T;
+        public readonly bool Moved;
+
+        public Slide(int index, double t, bool moved)
+        {
+            Index = index;
+            T = t;
+            Moved = moved;
+        }
+    }
+
+    public readonly struct OpeningSize
+    {
+        public readonly double Width;
+        public readonly double Sill;
+        public readonly double Head;
+        public readonly bool Changed;
+
+        public OpeningSize(double width, double sill, double head, bool changed)
+        {
+            Width = width;
+            Sill = sill;
+            Head = head;
+            Changed = changed;
+        }
+    }
+
+    /// <summary>
+    /// The opening fits a segment when both edge margins and half the width
+    /// leave a legal t. A miss here must not write the record.
+    /// </summary>
+    public static bool Fits(Seg seg, double width, double edgeMargin)
+    {
+        if (seg == null || width <= 0) return false;
+        var len = seg.Length;
+        if (len <= 1e-6) return false;
+        var minT = (edgeMargin + width * 0.5) / len;
+        return (1.0 - minT) >= minT;
+    }
+
+    /// <summary>
+    /// Slide one opening along its current segment. deltaMm and absoluteT are
+    /// exclusive. A segment that cannot hold the width returns false and the
+    /// caller keeps the previous t. Siblings are not arguments.
+    /// </summary>
+    public static bool TrySlide(
+        IList<Seg> segs,
+        int index,
+        double t,
+        double width,
+        double? deltaMm,
+        double? absoluteT,
+        double edgeMargin,
+        double tol,
+        out Slide slide)
+    {
+        slide = new Slide(-1, t, false);
+        if (deltaMm.HasValue == absoluteT.HasValue) return false;
+        if (segs == null || index < 0 || index >= segs.Count) return false;
+        var seg = segs[index];
+        if (!Fits(seg, width, edgeMargin)) return false;
+        var len = seg.Length;
+        var minT = (edgeMargin + width * 0.5) / len;
+        var maxT = 1.0 - minT;
+        var raw = absoluteT ?? (t + deltaMm.Value / len);
+        var next = raw;
+        if (next < minT) next = minT;
+        if (next > maxT) next = maxT;
+        var moved = Math.Abs(next - t) * len >= tol;
+        slide = new Slide(index, next, moved);
+        return true;
+    }
+
+    /// <summary>
+    /// Merge a size edit onto the stored width, sill, and head. Omitted fields
+    /// stay. Nothing named, a non-positive width, or head at or below sill
+    /// returns false and must not rebuild.
+    /// </summary>
+    public static bool TrySetSize(
+        double width,
+        double sill,
+        double head,
+        double? newWidth,
+        double? newSill,
+        double? newHead,
+        out OpeningSize size,
+        out string why)
+    {
+        size = new OpeningSize(width, sill, head, false);
+        why = "";
+        if (!newWidth.HasValue && !newSill.HasValue && !newHead.HasValue)
+        {
+            why = "Specify width, sill, or head.";
+            return false;
+        }
+
+        var nextWidth = newWidth ?? width;
+        var nextSill = newSill ?? sill;
+        var nextHead = newHead ?? head;
+        if (nextWidth <= 0)
+        {
+            why = "width must be positive.";
+            return false;
+        }
+
+        if (nextHead <= nextSill)
+        {
+            why = "head must be greater than sill.";
+            return false;
+        }
+
+        var changed = Math.Abs(nextWidth - width) > 1e-6
+            || Math.Abs(nextSill - sill) > 1e-6
+            || Math.Abs(nextHead - head) > 1e-6;
+        size = new OpeningSize(nextWidth, nextSill, nextHead, changed);
+        return true;
+    }
+
     /// <summary>
     /// A cut is real when the boolean returned pieces and either the volume
     /// fell or the cutter meets the solid. An empty boolean is a miss.

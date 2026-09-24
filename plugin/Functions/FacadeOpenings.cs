@@ -11,8 +11,9 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Edit facade openings on vertical host walls: delete / add / move.
-/// Local fill-box recut reuses BuildOpeningCutter; markers stay the handle.
+/// Edit facade openings on vertical host walls: delete, add, move, and set size.
+/// Move and set write the opening record, then rebuild that host only.
+/// Delete still closes its hole locally. Markers stay the handle.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -174,6 +175,32 @@ public partial class RhinoMCPFunctions
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
         ParseMove(parameters, out var deltaMm, out var tAbs);
 
+        var pathSegs = HostPathSegments(host, tol);
+        if (!TryOpeningOnPath(pathSegs, rec.MarkerBbox.Center, out var index, out var tNow))
+            throw new InvalidOperationException("Could not place an opening on the host path.");
+
+        if (!SoftParamPlan.TrySlide(
+                PlanSegs(pathSegs),
+                index,
+                tNow,
+                rec.Width,
+                deltaMm,
+                tAbs,
+                FacadeConst.EdgeMargin,
+                tol,
+                out var slide))
+            throw new InvalidOperationException("Wall is too short for this opening.");
+
+        if (!slide.Moved)
+        {
+            StampOpeningHostId(doc, rec.MarkerId, host.Id);
+            StampOpeningOnHost(
+                doc, host, rec.MarkerId, Guid.Empty, rec.MarkerBbox.Center, null, tol);
+            return OpeningEditResult(
+                doc, rec, host.Id, rec.Width, rec.Sill, rec.Head, tNow,
+                "Opening already at that position.");
+        }
+
         var spec = new OpeningSpec
         {
             Kind = rec.Kind,
@@ -181,78 +208,83 @@ public partial class RhinoMCPFunctions
             Sill = rec.Sill,
             Head = rec.Head
         };
-        var segs = ExtractWallSegments(host, tol);
-        if (segs.Count == 0)
-            throw new InvalidOperationException("Wall is too short for this opening.");
-        var segment = PickSegmentNearest(segs, rec.MarkerBbox.Center);
-        var tNow = ProjectT(segment, rec.MarkerBbox.Center);
-        var rawT = tAbs ?? (tNow + deltaMm.Value / segment.Length);
-        var tNew = ClampT(segment, spec.Width, rawT);
-
-        if (Math.Abs(tNew - tNow) * segment.Length < tol)
-        {
-            StampOpeningHostId(doc, rec.MarkerId, host.Id);
-            StampOpeningOnHost(
-                doc, host, rec.MarkerId, Guid.Empty, rec.MarkerBbox.Center, null, tol);
-            return new JObject
-            {
-                ["marker_id"] = rec.MarkerId.ToString(),
-                ["host_id"] = host.Id.ToString(),
-                ["t"] = tNow,
-                ["ok"] = true,
-                ["message"] = "Opening already at that position."
-            };
-        }
-
-        if (!TryFillOpening(doc, host, rec, tol))
-            throw new InvalidOperationException("Could not close opening.");
-
-        var placement = FootprintAtT(segment, spec, tNew);
-        if (!TryCutOpening(doc, host, spec, placement.Foot, tol, out var hostId))
-        {
-            var oldFoot = FootprintFromMarker(rec);
-            if (!TryCutOpening(doc, host, spec, oldFoot, tol, out hostId))
-                throw new InvalidOperationException("Could not cut opening. Undo.");
-            throw new InvalidOperationException("Could not cut opening.");
-        }
-
+        var placement = FootprintAtT(pathSegs[slide.Index], spec, slide.T);
         var markerBrep = BuildOpeningMarkerBox(
             placement.Foot, spec.Sill, spec.Head, FacadeConst.MarkerSelectDepth);
         if (markerBrep == null || !markerBrep.IsValid)
             throw new InvalidOperationException("Could not cut opening.");
-        if (!doc.Objects.Replace(rec.MarkerId, markerBrep))
-            throw new InvalidOperationException("Opening marker not found.");
-        StampOpeningHostId(doc, rec.MarkerId, hostId);
-        DeleteOpeningBlocks(doc, rec.MarkerId);
-        var movedBlock = AddOpeningBlock(
-            doc,
-            rec.MarkerId,
-            markerObj.Name,
-            hostId,
-            KindToTag(spec.Kind),
-            placement.Foot,
-            spec.Sill,
-            spec.Head,
-            spec.Width,
-            FacadeConst.Pad,
-            markerObj.Attributes?.GetUserString("forsk:source_layer"),
-            host.Brep,
-            placement.Segment);
 
-        doc.Views.Redraw();
-        var moved = new JObject
+        var message = deltaMm.HasValue
+            ? "Moved the opening " + FormatMm(Math.Abs(deltaMm.Value)) + " mm along the wall."
+            : "Moved the opening along the wall.";
+        return CommitOpeningThenRebuild(
+            doc, rec, host, markerBrep, rec.Width, rec.Sill, rec.Head, slide.T, message);
+    }
+
+    [McpCommand("set_opening")]
+    public JObject SetOpening(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
+        var markerObj = ResolveOpeningHandle(
+            ResolveFacadeTarget(parameters, "id", expectMarker: true));
+        RefuseExistingUnderlay(doc, markerObj);
+        var rec = ReadOpeningRecord(markerObj);
+        var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
+
+        double? width = ReadOptionalDouble(parameters, "width");
+        double? sill = ReadOptionalDouble(parameters, "sill");
+        double? head = ReadOptionalDouble(parameters, "head");
+        if (!SoftParamPlan.TrySetSize(
+                rec.Width, rec.Sill, rec.Head, width, sill, head, out var size, out var why))
+            throw new ArgumentException(why);
+
+        if (!size.Changed)
         {
-            ["marker_id"] = rec.MarkerId.ToString(),
-            ["host_id"] = hostId.ToString(),
-            ["t"] = tNew,
-            ["ok"] = true,
-            ["message"] = "Moved opening along wall."
-        };
-        StampOpeningOnHost(
-            doc, host, rec.MarkerId, movedBlock, placement.Foot.Bbox.Center, placement, tol);
-        if (movedBlock != Guid.Empty)
-            moved["block_id"] = movedBlock.ToString();
-        return moved;
+            return OpeningEditResult(
+                doc, rec, host.Id, rec.Width, rec.Sill, rec.Head, ProjectRecordedT(doc, rec),
+                "Opening already at that size.");
+        }
+
+        Brep markerBrep = null;
+        var widthChanged = Math.Abs(size.Width - rec.Width) > 1e-6;
+        if (widthChanged)
+        {
+            var pathSegs = HostPathSegments(host, tol);
+            if (!TryOpeningOnPath(pathSegs, rec.MarkerBbox.Center, out var index, out var tNow))
+                throw new InvalidOperationException("Could not place an opening on the host path.");
+            if (!SoftParamPlan.TrySlide(
+                    PlanSegs(pathSegs),
+                    index,
+                    tNow,
+                    size.Width,
+                    null,
+                    tNow,
+                    FacadeConst.EdgeMargin,
+                    tol,
+                    out var slide))
+                throw new InvalidOperationException("Wall is too short for this opening.");
+
+            var spec = new OpeningSpec
+            {
+                Kind = rec.Kind,
+                Width = size.Width,
+                Sill = size.Sill,
+                Head = size.Head
+            };
+            var placement = FootprintAtT(pathSegs[slide.Index], spec, slide.T);
+            markerBrep = BuildOpeningMarkerBox(
+                placement.Foot, size.Sill, size.Head, FacadeConst.MarkerSelectDepth);
+            if (markerBrep == null || !markerBrep.IsValid)
+                throw new InvalidOperationException("Could not cut opening.");
+        }
+
+        var message = "Set the opening to width " + FormatMm(size.Width)
+            + " mm, sill " + FormatMm(size.Sill)
+            + " mm, head " + FormatMm(size.Head) + " mm.";
+        return CommitOpeningThenRebuild(
+            doc, rec, host, markerBrep, size.Width, size.Sill, size.Head,
+            ProjectRecordedT(doc, rec), message);
     }
 
     private RhinoObject ResolveFacadeTarget(JObject parameters, string idKey, bool expectMarker)
@@ -280,14 +312,14 @@ public partial class RhinoMCPFunctions
         {
             throw new InvalidOperationException(
                 expectMarker
-                    ? "Click one opening marker, then say it again."
+                    ? "Click one opening marker or frame, then say it again."
                     : "Click one wall, then say it again.");
         }
         if (selected.Count != 1)
         {
             throw new InvalidOperationException(
                 expectMarker
-                    ? "Select exactly one opening marker."
+                    ? "Select exactly one opening marker or frame."
                     : "Select exactly one wall.");
         }
         return selected[0];
@@ -903,5 +935,178 @@ public partial class RhinoMCPFunctions
                 Bbox = bbox
             }
         };
+    }
+
+    private List<WallSegment> HostPathSegments(WallSolid host, double tol)
+    {
+        var path = host?.Attributes?.GetUserString("forsk:path");
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException(MissingWallPathMessage);
+        var segs = SegmentsFromPath(path, tol);
+        if (segs.Count == 0)
+            throw new InvalidOperationException("Wall is too short for this opening.");
+        return segs;
+    }
+
+    private static List<SoftParamPlan.Seg> PlanSegs(List<WallSegment> segs)
+    {
+        var plan = new List<SoftParamPlan.Seg>(segs?.Count ?? 0);
+        if (segs == null) return plan;
+        foreach (var seg in segs)
+        {
+            if (seg == null)
+            {
+                plan.Add(null);
+                continue;
+            }
+
+            plan.Add(new SoftParamPlan.Seg(
+                seg.Start.X, seg.Start.Y, seg.End.X, seg.End.Y, seg.FromOuter));
+        }
+
+        return plan;
+    }
+
+    private bool TryOpeningOnPath(
+        List<WallSegment> segs,
+        Point3d center,
+        out int index,
+        out double t)
+    {
+        index = -1;
+        t = 0;
+        if (!TryOffsetOnSegments(segs, center, out var segment, out t, out _))
+            return false;
+        index = segs.IndexOf(segment);
+        return index >= 0;
+    }
+
+    private JObject CommitOpeningThenRebuild(
+        RhinoDoc doc,
+        OpeningRecord rec,
+        WallSolid host,
+        Brep newMarker,
+        double width,
+        double sill,
+        double head,
+        double t,
+        string message)
+    {
+        var snap = CaptureMarker(doc, rec.MarkerId);
+        try
+        {
+            if (newMarker != null && !doc.Objects.Replace(rec.MarkerId, newMarker))
+                throw new InvalidOperationException("Opening marker not found.");
+            WriteOpeningSize(doc, rec.MarkerId, width, sill, head);
+            var rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
+            var hostId = host.Id;
+            var rebuiltId = rebuilt?["host_id"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
+                hostId = parsed;
+            return OpeningEditResult(doc, rec, hostId, width, sill, head, t, message);
+        }
+        catch
+        {
+            RestoreMarker(doc, rec.MarkerId, snap);
+            throw;
+        }
+    }
+
+    private JObject OpeningEditResult(
+        RhinoDoc doc,
+        OpeningRecord rec,
+        Guid hostId,
+        double width,
+        double sill,
+        double head,
+        double t,
+        string message)
+    {
+        var marker = doc?.Objects.FindId(rec.MarkerId);
+        var recorded = TryParseUserDouble(marker, "forsk:t") ?? t;
+        var result = new JObject
+        {
+            ["marker_id"] = rec.MarkerId.ToString(),
+            ["host_id"] = hostId.ToString(),
+            ["width"] = width,
+            ["sill"] = sill,
+            ["head"] = head,
+            ["t"] = recorded,
+            ["ok"] = true,
+            ["message"] = message
+        };
+        var blockId = FindOpeningBlock(doc, rec.MarkerId);
+        if (blockId != Guid.Empty)
+            result["block_id"] = blockId.ToString();
+        return result;
+    }
+
+    private static double ProjectRecordedT(RhinoDoc doc, OpeningRecord rec)
+    {
+        var marker = doc?.Objects.FindId(rec.MarkerId);
+        return TryParseUserDouble(marker, "forsk:t") ?? 0;
+    }
+
+    private static double? ReadOptionalDouble(JObject parameters, string key)
+    {
+        var token = parameters?[key];
+        if (token == null || token.Type == JTokenType.Null) return null;
+        return token.ToObject<double?>();
+    }
+
+    private sealed class MarkerSnapshot
+    {
+        public Brep Geometry;
+        public string Width;
+        public string Sill;
+        public string Head;
+        public string T;
+        public string Offset;
+    }
+
+    private MarkerSnapshot CaptureMarker(RhinoDoc doc, Guid id)
+    {
+        var obj = doc?.Objects.FindId(id);
+        var brep = GetBrepFromObject(obj);
+        return new MarkerSnapshot
+        {
+            Geometry = brep?.DuplicateBrep(),
+            Width = obj?.Attributes?.GetUserString("forsk:width"),
+            Sill = obj?.Attributes?.GetUserString("forsk:sill"),
+            Head = obj?.Attributes?.GetUserString("forsk:head"),
+            T = obj?.Attributes?.GetUserString("forsk:t"),
+            Offset = obj?.Attributes?.GetUserString("forsk:offset")
+        };
+    }
+
+    private static void RestoreMarker(RhinoDoc doc, Guid id, MarkerSnapshot snap)
+    {
+        if (doc == null || snap == null || id == Guid.Empty) return;
+        if (snap.Geometry != null)
+        {
+            var copy = snap.Geometry.DuplicateBrep();
+            if (copy != null)
+                doc.Objects.Replace(id, copy);
+        }
+
+        var obj = doc.Objects.FindId(id);
+        if (obj?.Attributes == null) return;
+        obj.Attributes.SetUserString("forsk:width", snap.Width);
+        obj.Attributes.SetUserString("forsk:sill", snap.Sill);
+        obj.Attributes.SetUserString("forsk:head", snap.Head);
+        obj.Attributes.SetUserString("forsk:t", snap.T);
+        obj.Attributes.SetUserString("forsk:offset", snap.Offset);
+        obj.CommitChanges();
+    }
+
+    private static void WriteOpeningSize(RhinoDoc doc, Guid id, double width, double sill, double head)
+    {
+        if (doc == null || id == Guid.Empty) return;
+        var obj = doc.Objects.FindId(id);
+        if (obj?.Attributes == null) return;
+        obj.Attributes.SetUserString("forsk:width", FormatMm(width));
+        obj.Attributes.SetUserString("forsk:sill", FormatMm(sill));
+        obj.Attributes.SetUserString("forsk:head", FormatMm(head));
+        obj.CommitChanges();
     }
 }

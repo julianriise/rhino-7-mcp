@@ -14,11 +14,14 @@ def move_opening(
     t: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Slide an opening along the same host facade segment.
+    Slide one opening along its host, then rebuild that host wall only.
 
     Provide delta_mm or absolute t, not both. Marker GUID is preserved.
-    The frame moves with the marker. Id may be the marker or the opening block.
+    The frame moves with the marker. This does not clear the model.
+    Id may be the marker or the opening frame. Omit it to use the selection.
+    Do not guess the last opening created.
     Refuses a marker or host with forsk:kind=existing or on layer X-EXIST.
+    A refused rebuild leaves the document unchanged.
 
     Parameters:
     - id: Optional marker or opening-block GUID. Omit to use the current selection

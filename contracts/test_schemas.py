@@ -260,6 +260,8 @@ def test_new_commands():
         ("commands/add_opening.json", {"opening_kind": "door", "distance_mm": 1000}),
         ("commands/move_opening.json", {"delta_mm": 500}),
         ("commands/move_opening.json", {"id": GUID, "t": 0.3}),
+        ("commands/set_opening.json", {"width": 1400}),
+        ("commands/set_opening.json", {"id": GUID, "sill": 1000, "head": 2200}),
         ("commands/rebuild_host_wall.json", {}),
         ("commands/rebuild_host_wall.json", {"id": GUID}),
         ("commands/clear_generated.json", {}),
@@ -747,6 +749,21 @@ def test_responses():
     if not validate("responses/rebuild_host_wall_result.json", rebuild_host):
         all_passed = False
 
+    print("  set_opening_result:")
+    set_opening = {
+        "marker_id": guid,
+        "host_id": guid,
+        "width": 1400,
+        "sill": 1000,
+        "head": 2200,
+        "t": 0.4,
+        "ok": True,
+        "message": "Set the opening to width 1400 mm, sill 1000 mm, head 2200 mm.",
+        "block_id": guid,
+    }
+    if not validate("responses/set_opening_result.json", set_opening):
+        all_passed = False
+
     return all_passed
 
 
@@ -865,6 +882,9 @@ def test_invalid_examples():
         ("commands/add_opening.json", {"opening_kind": "door", "width": 0}, "add_opening width 0"),
         ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
+        ("commands/set_opening.json", {"bogus": 1}, "set_opening unknown field"),
+        ("commands/set_opening.json", {"width": 0}, "set_opening width 0"),
+        ("commands/set_opening.json", {"id": "not-a-guid", "sill": 900}, "set_opening bad guid"),
         ("commands/rebuild_host_wall.json", {"bogus": 1}, "rebuild_host_wall unknown field"),
         ("commands/rebuild_host_wall.json", {"id": "not-a-guid"}, "rebuild_host_wall bad guid"),
         ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
@@ -1037,7 +1057,7 @@ def test_protocol_envelope():
         "walls_from_layer", "floor_from_layer", "roof_flat_from_walls", "openings_from_layer",
         "rooms_from_layer",
         "mark_as_existing",
-        "delete_opening", "add_opening", "move_opening",
+        "delete_opening", "add_opening", "move_opening", "set_opening",
         "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
