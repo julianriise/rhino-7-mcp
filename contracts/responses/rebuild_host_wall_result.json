@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rebuild_host_wall_result.json",
+  "title": "RebuildHostWallResult",
+  "description": "One host wall re-extruded from its param record. The wall GUID is unchanged.",
+  "type": "object",
+  "properties": {
+    "host_id": { "type": "string" },
+    "forsk_id": { "type": "string" },
+    "level": { "type": "string" },
+    "height": { "type": "number" },
+    "thickness": { "type": "number" },
+    "path_points": { "type": "integer" },
+    "opening_count": { "type": "integer" },
+    "marker_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "block_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["host_id", "forsk_id", "height", "thickness", "opening_count", "ok", "message"]
+}

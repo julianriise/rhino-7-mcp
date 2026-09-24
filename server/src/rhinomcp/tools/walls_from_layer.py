@@ -32,8 +32,10 @@ def walls_from_layer(
     Parameters:
     - layer: Source layer name, case-insensitive (default "wall")
     - height: Extrusion height in document units, default 3000.
-      Stamped on each wall as forsk:height. Bake order also stamps
-      forsk:id w01, w02, … matching wall-01, wall-02.
+      Stamped on each wall as forsk:height, with forsk:level 0,
+      forsk:thickness (measured band thickness, mm), and forsk:path
+      (uncut plan outline). Bake order also stamps forsk:id w01, w02, …
+      matching wall-01, wall-02. rebuild_host_wall reads that record.
     - target_layer: Layer for new solids, created if missing (default "A-WALL")
     - name_prefix: Name prefix, default "wall-" → wall-01, wall-02, …
     - join_tolerance: Optional join tolerance for open segments

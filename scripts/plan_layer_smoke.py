@@ -190,6 +190,20 @@ def main() -> int:
             failures.append(f"wall forsk:height={wall_attrs.get('forsk:height')} expected 3000")
         if (wall_attrs.get("forsk:id") or "") not in wall_forsk_ids:
             failures.append(f"wall forsk:id={wall_attrs.get('forsk:id')}")
+        if wall_attrs.get("forsk:level") != "0":
+            failures.append(f"wall forsk:level={wall_attrs.get('forsk:level')!r} expected 0")
+        path = wall_attrs.get("forsk:path") or ""
+        print(f"    wall param path_chars={len(path)} "
+              f"thickness={wall_attrs.get('forsk:thickness')} "
+              f"level={wall_attrs.get('forsk:level')}")
+        if not path.startswith('{"outer":'):
+            failures.append("wall forsk:path missing outer outline")
+        try:
+            thick = float(wall_attrs.get("forsk:thickness") or 0)
+        except (TypeError, ValueError):
+            thick = 0
+        if thick <= 0:
+            failures.append(f"wall forsk:thickness={wall_attrs.get('forsk:thickness')!r}")
 
         print("==> default wall material (By Layer plaster)")
         wall_attrs_mat = send_command(sock, "get_object_attributes", {"id": ids[0]})
@@ -309,8 +323,8 @@ def main() -> int:
             okind = (marker_attrs.get("forsk:opening_kind") or "").lower()
             if okind not in ("door", "window"):
                 failures.append(f"marker forsk:opening_kind={marker_attrs.get('forsk:opening_kind')}")
-            for key in ("forsk:sill", "forsk:head", "forsk:width"):
-                if not marker_attrs.get(key):
+            for key in ("forsk:sill", "forsk:head", "forsk:width", "forsk:t", "forsk:offset"):
+                if marker_attrs.get(key) in (None, ""):
                     failures.append(f"marker {key} missing")
 
         block_ids = list(doors.get("block_ids") or []) + list(windows.get("block_ids") or [])
@@ -339,6 +353,67 @@ def main() -> int:
                 failures.append("block forsk:marker_id missing")
             if block_attrs.get("forsk:generated") != "1":
                 failures.append(f"block forsk:generated={block_attrs.get('forsk:generated')}")
+            for key in ("forsk:t", "forsk:offset", "forsk:host_id"):
+                if block_attrs.get(key) in (None, ""):
+                    failures.append(f"block {key} missing")
+
+        print("==> rebuild_host_wall (one host, rest of the model stays)")
+        host_wall = ids[0]
+        host_before = send_command(sock, "get_object_info", {"id": host_wall})
+        host_fid = attrs_of(host_before).get("forsk:id")
+        rebuilt = send_command(sock, "rebuild_host_wall", {"id": host_wall})
+        print(f"    {rebuilt.get('message')} openings={rebuilt.get('opening_count')} "
+              f"forsk_id={rebuilt.get('forsk_id')} thickness={rebuilt.get('thickness')} "
+              f"warnings={rebuilt.get('warnings')}")
+        if rebuilt.get("ok") is not True:
+            failures.append(f"rebuild_host_wall ok={rebuilt.get('ok')}")
+        if rebuilt.get("host_id") != host_wall:
+            failures.append(
+                f"rebuild host_id={rebuilt.get('host_id')} expected {host_wall}"
+            )
+        if rebuilt.get("forsk_id") != host_fid:
+            failures.append(
+                f"rebuild forsk_id={rebuilt.get('forsk_id')} expected {host_fid}"
+            )
+        if (rebuilt.get("opening_count") or 0) < 1:
+            failures.append("rebuild_host_wall cut no openings")
+        if rebuilt.get("warnings"):
+            failures.append(f"rebuild warnings={rebuilt.get('warnings')}")
+        if len(rebuilt.get("block_ids") or []) < (rebuilt.get("opening_count") or 0):
+            failures.append("rebuild frames fewer than openings")
+        floor_still = send_command(sock, "get_object_info", {"id": floor_ids[0]})
+        if attrs_of(floor_still).get("forsk:kind") != "floor":
+            failures.append("floor missing after host rebuild")
+        if roof_ids:
+            roof_still = send_command(sock, "get_object_info", {"id": roof_ids[0]})
+            if attrs_of(roof_still).get("forsk:kind") != "roof":
+                failures.append("roof missing after host rebuild")
+        for wid in ids[1:]:
+            other = send_command(sock, "get_object_info", {"id": wid})
+            if attrs_of(other).get("forsk:kind") != "wall":
+                failures.append(f"other wall {wid} missing after host rebuild")
+        host_after = send_command(sock, "get_object_info", {"id": host_wall})
+        host_after_attrs = attrs_of(host_after)
+        if not (host_after_attrs.get("forsk:path") or "").startswith('{"outer":'):
+            failures.append("rebuilt wall lost forsk:path")
+        if host_after_attrs.get("forsk:id") != host_fid:
+            failures.append("rebuilt wall forsk:id changed")
+        if host_after_attrs.get("forsk:level") != "0":
+            failures.append(
+                f"rebuilt wall forsk:level={host_after_attrs.get('forsk:level')!r}"
+            )
+        rebuilt_markers = rebuilt.get("marker_ids") or []
+        if rebuilt_markers:
+            rebuilt_marker = send_command(sock, "get_object_info", {"id": rebuilt_markers[0]})
+            rebuilt_attrs = attrs_of(rebuilt_marker)
+            if rebuilt_attrs.get("forsk:host_id") != host_fid:
+                failures.append(
+                    f"rebuilt marker host_id={rebuilt_attrs.get('forsk:host_id')!r}"
+                )
+            if rebuilt_attrs.get("forsk:t") in (None, ""):
+                failures.append("rebuilt marker forsk:t missing")
+            if rebuilt_attrs.get("forsk:offset") in (None, ""):
+                failures.append("rebuilt marker forsk:offset missing")
 
         print("==> rooms_from_layer (skip when A-ROOM has no closed curves)")
         rooms = send_command(sock, "rooms_from_layer", {})

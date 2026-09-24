@@ -34,6 +34,8 @@ public partial class RhinoMCPFunctions
         public double? Head;
         public double? Width;
         public double? Height;
+        public double? Thickness;
+        public string Path;
         public double? Area;
         public string SourceLayer;
         public string View;
@@ -65,6 +67,10 @@ public partial class RhinoMCPFunctions
             attr.SetUserString("forsk:width", FormatMm(stamp.Width.Value));
         if (stamp.Height.HasValue)
             attr.SetUserString("forsk:height", FormatMm(stamp.Height.Value));
+        if (stamp.Thickness.HasValue)
+            attr.SetUserString("forsk:thickness", FormatMm(stamp.Thickness.Value));
+        if (!string.IsNullOrEmpty(stamp.Path))
+            attr.SetUserString("forsk:path", stamp.Path);
         if (stamp.Area.HasValue)
             attr.SetUserString("forsk:area", FormatMm(stamp.Area.Value));
         if (!string.IsNullOrEmpty(stamp.SourceLayer))
@@ -116,6 +122,12 @@ public partial class RhinoMCPFunctions
         if (Math.Abs(mm - rounded) < 1e-9)
             return ((long)rounded).ToString(CultureInfo.InvariantCulture);
         return mm.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Segment parameter 0–1, up to six decimal places.</summary>
+    private static string FormatParamT(double t)
+    {
+        return t.ToString("0.######", CultureInfo.InvariantCulture);
     }
 
     private const string ExistingLayerName = "X-EXIST";

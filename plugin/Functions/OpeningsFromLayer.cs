@@ -223,10 +223,12 @@ public partial class RhinoMCPFunctions
                         {
                             markerIds.Add(markerId.ToString());
                             Brep hostBrep = null;
+                            WallSolid hostSolid = null;
                             for (var w = 0; w < walls.Count; w++)
                             {
                                 if (walls[w].Id != hostId) continue;
                                 hostBrep = walls[w].Brep;
+                                hostSolid = walls[w];
                                 break;
                             }
                             var blockId = AddOpeningBlock(
@@ -245,6 +247,17 @@ public partial class RhinoMCPFunctions
                                 null);
                             if (blockId != Guid.Empty)
                                 blockIds.Add(blockId.ToString());
+                            if (hostSolid != null)
+                            {
+                                StampOpeningOnHost(
+                                    doc,
+                                    hostSolid,
+                                    markerId,
+                                    blockId,
+                                    foot.Bbox.Center,
+                                    null,
+                                    tol);
+                            }
                             markerIndex++;
                         }
                     }

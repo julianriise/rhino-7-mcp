@@ -59,17 +59,20 @@ public partial class RhinoMCPFunctions
         var skipped = profiles.Skipped;
         var warnings = profiles.Warnings;
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(180, 180, 180));
-        var solids = BuildWallSolidsFromClosed(profiles.Closed, height, profiles.Tol, warnings);
+        var bakes = BuildWallBakes(profiles.Closed, height, profiles.Tol, warnings);
         var ids = new JArray();
         var forskIds = new JArray();
         var index = 1;
 
-        foreach (var profile in solids)
+        foreach (var bake in bakes)
         {
             try
             {
-                var breps = profile;
+                var breps = bake.Breps;
                 if (breps == null || breps.Count == 0) continue;
+                var solePath = breps.Count == 1
+                    ? EncodeWallPath(bake.Outer, bake.Holes, profiles.Tol)
+                    : null;
                 foreach (var brep in breps)
                 {
                     if (brep == null || !brep.IsValid) continue;
@@ -79,6 +82,12 @@ public partial class RhinoMCPFunctions
                         skipped++;
                         continue;
                     }
+                    var path = !string.IsNullOrEmpty(solePath)
+                        ? solePath
+                        : EncodePathFromBrep(brep, profiles.Tol);
+                    if (string.IsNullOrEmpty(path))
+                        warnings.Add("Could not store a param path on " + namePrefix + index.ToString("D2") + ".");
+                    var thickness = MeasureRecordedThickness(path, brep, profiles.Tol);
                     var attr = new ObjectAttributes
                     {
                         Name = $"{namePrefix}{index:D2}",
@@ -92,6 +101,8 @@ public partial class RhinoMCPFunctions
                         Level = "0",
                         Id = forskId,
                         Height = height,
+                        Thickness = thickness > 0 ? (double?)thickness : null,
+                        Path = path,
                         SourceLayer = profiles.SourceLayer.Name
                     });
                     var id = doc.Objects.AddBrep(brep, attr);
@@ -129,7 +140,14 @@ public partial class RhinoMCPFunctions
         return result;
     }
 
-    private List<List<Brep>> BuildWallSolidsFromClosed(
+    private sealed class WallBake
+    {
+        public List<Brep> Breps = new List<Brep>();
+        public Curve Outer;
+        public List<Curve> Holes = new List<Curve>();
+    }
+
+    private List<WallBake> BuildWallBakes(
         List<Curve> closed,
         double height,
         double tol,
@@ -171,7 +189,7 @@ public partial class RhinoMCPFunctions
             hasNesting = true;
         }
 
-        var result = new List<List<Brep>>();
+        var result = new List<WallBake>();
 
         if (!hasNesting)
         {
@@ -188,7 +206,12 @@ public partial class RhinoMCPFunctions
                     warnings.Add("Skipped a capped room outline (would become a roof/ceiling).");
                     continue;
                 }
-                result.Add(new List<Brep> { brep });
+                result.Add(new WallBake
+                {
+                    Breps = new List<Brep> { brep },
+                    Outer = curve,
+                    Holes = new List<Curve>()
+                });
             }
             return result;
         }
@@ -205,7 +228,12 @@ public partial class RhinoMCPFunctions
                     else if (LooksLikeRoofOrRoomFill(brep, height))
                         warnings.Add("Skipped a disjoint capped room outline (would become a roof/ceiling).");
                     else
-                        result.Add(new List<Brep> { brep });
+                        result.Add(new WallBake
+                        {
+                            Breps = new List<Brep> { brep },
+                            Outer = closed[i],
+                            Holes = new List<Curve>()
+                        });
                 }
                 continue;
             }
@@ -213,7 +241,12 @@ public partial class RhinoMCPFunctions
             var holes = children[i].Select(idx => closed[idx]).ToList();
             var band = WallBandFromParentAndHoles(closed[i], holes, height, tol, warnings);
             if (band.Count > 0)
-                result.Add(band);
+                result.Add(new WallBake
+                {
+                    Breps = band,
+                    Outer = closed[i],
+                    Holes = holes
+                });
         }
 
         return result;

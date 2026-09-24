@@ -154,6 +154,8 @@ public partial class RhinoMCPFunctions
             ["ok"] = true,
             ["message"] = $"Added {kindStr} opening on wall."
         };
+        StampOpeningOnHost(
+            doc, host, markerId, blockId, placement.Foot.Bbox.Center, placement, tol);
         if (blockId != Guid.Empty)
             added["block_id"] = blockId.ToString();
         return added;
@@ -189,6 +191,8 @@ public partial class RhinoMCPFunctions
         if (Math.Abs(tNew - tNow) * segment.Length < tol)
         {
             StampOpeningHostId(doc, rec.MarkerId, host.Id);
+            StampOpeningOnHost(
+                doc, host, rec.MarkerId, Guid.Empty, rec.MarkerBbox.Center, null, tol);
             return new JObject
             {
                 ["marker_id"] = rec.MarkerId.ToString(),
@@ -243,6 +247,8 @@ public partial class RhinoMCPFunctions
             ["ok"] = true,
             ["message"] = "Moved opening along wall."
         };
+        StampOpeningOnHost(
+            doc, host, rec.MarkerId, movedBlock, placement.Foot.Bbox.Center, placement, tol);
         if (movedBlock != Guid.Empty)
             moved["block_id"] = movedBlock.ToString();
         return moved;

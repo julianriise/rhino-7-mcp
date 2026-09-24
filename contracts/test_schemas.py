@@ -260,6 +260,8 @@ def test_new_commands():
         ("commands/add_opening.json", {"opening_kind": "door", "distance_mm": 1000}),
         ("commands/move_opening.json", {"delta_mm": 500}),
         ("commands/move_opening.json", {"id": GUID, "t": 0.3}),
+        ("commands/rebuild_host_wall.json", {}),
+        ("commands/rebuild_host_wall.json", {"id": GUID}),
         ("commands/clear_generated.json", {}),
         ("commands/clear_generated.json", {"dry_run": True}),
         ("commands/clear_generated.json", {
@@ -726,6 +728,24 @@ def test_responses():
     if not validate("responses/clear_layouts_result.json", clear_layouts):
         all_passed = False
 
+    print("  rebuild_host_wall_result:")
+    rebuild_host = {
+        "host_id": guid,
+        "forsk_id": "w01",
+        "level": "0",
+        "height": 3000,
+        "thickness": 200,
+        "path_points": 16,
+        "opening_count": 2,
+        "marker_ids": [guid],
+        "block_ids": [guid],
+        "warnings": [],
+        "ok": True,
+        "message": "Rebuilt wall w01 with 2 openings.",
+    }
+    if not validate("responses/rebuild_host_wall_result.json", rebuild_host):
+        all_passed = False
+
     return all_passed
 
 
@@ -844,6 +864,8 @@ def test_invalid_examples():
         ("commands/add_opening.json", {"opening_kind": "door", "width": 0}, "add_opening width 0"),
         ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
+        ("commands/rebuild_host_wall.json", {"bogus": 1}, "rebuild_host_wall unknown field"),
+        ("commands/rebuild_host_wall.json", {"id": "not-a-guid"}, "rebuild_host_wall bad guid"),
         ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
         ("commands/clear_generated.json", {"bogus": 1}, "clear_generated unknown field"),
         ("commands/make2d_view.json", {}, "make2d_view missing view"),
@@ -1015,6 +1037,7 @@ def test_protocol_envelope():
         "rooms_from_layer",
         "mark_as_existing",
         "delete_opening", "add_opening", "move_opening",
+        "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
         "set_project_meta", "layout_pack", "export_pdf", "clear_layouts",

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rebuild_host_wall.json",
+  "title": "RebuildHostWall Command",
+  "description": "Re-extrude one Forsk wall from its forsk:path record and recut that wall's openings from forsk:t, forsk:offset, width, sill, head, and kind. The wall GUID stays. Floor, roof, rooms, other walls, drawings, and layouts stay. Id omitted uses the current selection: one wall, or one opening marker or frame. A wall with no forsk:path refuses. An X-EXIST host refuses.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID, or an opening marker or frame GUID. Omit to use the current selection."
+    }
+  },
+  "additionalProperties": false
+}

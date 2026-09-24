@@ -2008,6 +2008,7 @@ class TestPackageApi:
             "delete_opening",
             "add_opening",
             "move_opening",
+            "rebuild_host_wall",
             "clear_generated",
             "set_layer_material",
             "set_display_mode",
@@ -2705,6 +2706,78 @@ class TestMoveOpeningTool:
         assert result["success"] is False
         assert "Specify delta_mm or t." in result["message"]
         mock_get_conn.assert_not_called()
+
+
+class TestRebuildHostWallTool:
+    @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
+    def test_selection_omits_id(self, mock_get_conn):
+        from rhinomcp.tools.rebuild_host_wall import rebuild_host_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "forsk_id": "w01",
+            "level": "0",
+            "height": 3000,
+            "thickness": 200,
+            "path_points": 12,
+            "opening_count": 2,
+            "marker_ids": ["m1"],
+            "ok": True,
+            "message": "Rebuilt wall w01 with 2 openings.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = rebuild_host_wall(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with("rebuild_host_wall", {})
+        assert result["success"] is True
+        assert result["host_id"] == "h1"
+        assert result["forsk_id"] == "w01"
+        assert result["opening_count"] == 2
+        assert result["ok"] is True
+
+    @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
+    def test_forwards_id(self, mock_get_conn):
+        from rhinomcp.tools.rebuild_host_wall import rebuild_host_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "forsk_id": "w01",
+            "height": 3000,
+            "thickness": 180,
+            "opening_count": 0,
+            "ok": True,
+            "message": "Rebuilt wall w01 with 0 openings.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        rebuild_host_wall(ctx=None, id=guid)
+
+        mock_conn.send_command.assert_called_once_with(
+            "rebuild_host_wall", {"id": guid}
+        )
+
+    @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
+    def test_blank_id_omitted(self, mock_get_conn):
+        from rhinomcp.tools.rebuild_host_wall import rebuild_host_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "forsk_id": "w01",
+            "height": 3000,
+            "thickness": 180,
+            "opening_count": 0,
+            "ok": True,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        rebuild_host_wall(ctx=None, id="")
+
+        mock_conn.send_command.assert_called_once_with("rebuild_host_wall", {})
 
 
 class TestClearGeneratedTool:

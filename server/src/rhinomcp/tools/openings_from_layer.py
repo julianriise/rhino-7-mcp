@@ -29,6 +29,8 @@ def openings_from_layer(
     Glass and the door leaf stay separate from the wood frame. Wood uses
     the document material Forsk Wood; glazing uses Forsk Glass. Each part
     is stamped forsk:part (frame, leaf, glass, sill, or threshold).
+    Each marker and frame stores forsk:host_id, forsk:t, and forsk:offset
+    so rebuild_host_wall can recut that host.
     Layer X-EXIST returns count 0:
     existing underlay is not a bake source.
 
