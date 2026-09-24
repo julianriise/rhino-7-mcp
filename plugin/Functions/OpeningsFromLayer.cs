@@ -455,7 +455,7 @@ public partial class RhinoMCPFunctions
     private static int NextNameIndex(RhinoDoc doc, string prefix)
     {
         var max = 0;
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
             var name = obj?.Name;
             if (string.IsNullOrEmpty(name)) continue;

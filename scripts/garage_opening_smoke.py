@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Short F2 smoke for a blank millimetre file: one 6×4 m garage, one window.
+"""Short F2 smoke for a blank millimetre file: one 6×4 m garage, two windows.
 
 Refuses a document that already has a plan. Does not save.
 
@@ -89,18 +89,31 @@ def main() -> int:
             "name": "garage-window",
             "params": {"points": [[2000, -50, 0], [3200, -50, 0], [3200, 250, 0], [2000, 250, 0], [2000, -50, 0]]},
         })
+        send_command(sock, "create_object", {
+            "type": "POLYLINE",
+            "name": "garage-window-b",
+            "params": {"points": [[4200, -50, 0], [5400, -50, 0], [5400, 250, 0], [4200, 250, 0], [4200, -50, 0]]},
+        })
         windows = send_command(sock, "openings_from_layer", {"layer": "window"})
         print(f"    {windows.get('message')} cut={windows.get('cut_count')}")
-        if (windows.get("cut_count") or 0) != 1:
+        if (windows.get("cut_count") or 0) != 2:
             failures.append(f"cut_count={windows.get('cut_count')}")
         blocks = windows.get("block_ids") or []
         markers = windows.get("marker_ids") or []
-        if not blocks or not markers:
-            raise SmokeError("no window frame")
+        if len(blocks) < 2 or len(markers) < 2:
+            raise SmokeError("need two window frames")
         frame = send_command(sock, "get_object_info", {"id": blocks[0]})
+        frame_b = send_command(sock, "get_object_info", {"id": blocks[1]})
         marker = send_command(sock, "get_object_info", {"id": markers[0]})
+        send_command(sock, "get_object_info", {"id": markers[1]})
         box = marker.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
         origin = ((box[0][0] + box[1][0]) / 2, (box[0][1] + box[1][1]) / 2)
+        host_id = (marker.get("attributes") or {}).get("forsk:host")
+        wall = send_command(sock, "get_object_info", {"id": host_id})
+        wall_attr = wall.get("attributes") or {}
+        wall_fid = wall_attr.get("forsk:id")
+        wall_thick = wall_attr.get("forsk:thickness")
+        back_t = (marker.get("attributes") or {}).get("forsk:t")
 
         name = frame.get("name")
         print(f"==> select {name} and move 500 mm")
@@ -110,7 +123,7 @@ def main() -> int:
             failures.append(f"select count={selected.get('count')}")
         moved = send_command(sock, "move_opening", {"delta_mm": 500})
         print(f"    {moved.get('message')} openings={moved.get('host_openings')} voids={moved.get('host_voids')}")
-        if moved.get("host_openings") != 1 or moved.get("host_voids") != 1:
+        if moved.get("host_openings") != 2 or moved.get("host_voids") != 2:
             failures.append(f"move openings={moved.get('host_openings')} voids={moved.get('host_voids')}")
         row = (moved.get("markers") or [{}])[0]
         if row.get("inside") is not False:
@@ -127,8 +140,58 @@ def main() -> int:
             send_command(sock, "select_objects", {"filters": {"name": [new_frame.get("name")]}})
         sized = send_command(sock, "set_opening", {"width": 1600, "sill": 800, "head": 2200})
         print(f"    {sized.get('message')} openings={sized.get('host_openings')} voids={sized.get('host_voids')}")
-        if sized.get("host_openings") != 1 or sized.get("host_voids") != 1:
+        if sized.get("host_openings") != 2 or sized.get("host_voids") != 2:
             failures.append(f"set openings={sized.get('host_openings')} voids={sized.get('host_voids')}")
+
+        print("==> select both windows and delete them")
+        names = [frame.get("name"), frame_b.get("name")]
+        selected = send_command(sock, "select_objects", {"filters": {"name": names}})
+        print(f"    selected {names} count={selected.get('count')}")
+        if selected.get("count") != 2:
+            failures.append(f"delete select count={selected.get('count')}")
+        removed = send_command(sock, "delete_opening", {})
+        print(f"    {removed.get('message')} openings={removed.get('host_openings')} voids={removed.get('host_voids')} plates={removed.get('plate_count')}")
+        if removed.get("message") != f"Removed 2 windows from {wall_fid}":
+            failures.append(f"delete message={removed.get('message')!r}")
+        if removed.get("host_openings") != 0 or removed.get("host_voids") != 0:
+            failures.append(f"delete openings={removed.get('host_openings')} voids={removed.get('host_voids')}")
+        if removed.get("plate_count") != 0:
+            failures.append(f"plate_count={removed.get('plate_count')}")
+        if removed.get("host_id") != host_id:
+            failures.append(f"delete host {removed.get('host_id')} != {host_id}")
+        for row in removed.get("deleted") or []:
+            if row.get("inside") is not True:
+                failures.append(f"deleted center is air id={row.get('id')}")
+        wall_after = send_command(sock, "get_object_info", {"id": host_id})
+        after_attr = wall_after.get("attributes") or {}
+        if after_attr.get("forsk:id") != wall_fid:
+            failures.append("delete changed wall id")
+        if after_attr.get("forsk:thickness") != wall_thick:
+            failures.append(f"delete thickness {after_attr.get('forsk:thickness')} != {wall_thick}")
+
+        print("==> add one window back")
+        try:
+            t_value = float(back_t)
+        except (TypeError, ValueError):
+            t_value = 0.4
+        added = send_command(sock, "add_opening", {
+            "opening_kind": "window",
+            "host_id": host_id,
+            "t": t_value,
+        })
+        print(f"    {added.get('message')} openings={added.get('host_openings')} voids={added.get('host_voids')}")
+        if added.get("host_openings") != 1 or added.get("host_voids") != 1:
+            failures.append(f"add openings={added.get('host_openings')} voids={added.get('host_voids')}")
+        new_id = str(added.get("marker_id") or "").lower()
+        new_row = None
+        for item in added.get("markers") or []:
+            if str(item.get("id") or "").lower() == new_id:
+                new_row = item
+                break
+        if new_row is None or new_row.get("inside") is not False:
+            failures.append("added opening is not a void")
+        if added.get("host_id") != host_id:
+            failures.append("add changed host id")
     finally:
         sock.close()
 

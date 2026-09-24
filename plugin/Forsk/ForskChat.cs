@@ -493,7 +493,7 @@ namespace RhinoMCPPlugin.Forsk
                     "Move the selection onto X-EXIST and stamp forsk:kind=existing. Empty selection is refused.",
                     new JObject()),
                 Fn("add_opening",
-                    "Cut a door or window into one Forsk wall, add a marker, and a simple frame. host_id omitted uses the selection. Refuses X-EXIST hosts.",
+                    "Write a door or window on one Forsk wall and rebuild that host from its path. Does not boolean the old solid. host_id omitted uses the selected wall. Refuses X-EXIST hosts.",
                     new JObject
                     {
                         ["opening_kind"] = new JObject
@@ -528,7 +528,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["head"] = Num("Top Z in mm.")
                     }),
                 Fn("delete_opening",
-                    "Close one opening and delete its marker and frame. Id omitted uses the selected marker or frame. Refuses X-EXIST.",
+                    "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the selection, including two or more openings. One id removes that opening. Refuses X-EXIST. If the rebuild fails, the openings return and the wall stays.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")
@@ -635,7 +635,7 @@ Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake 
 Never edit an opening on X-EXIST or forsk:kind=existing. Refuse: Existing underlay is not a Forsk host wall.
 Roof or openings before walls: Walls first. Call walls_from_layer before roof_flat_from_walls. Or the openings / add_opening line with the same shape.
 
-Delete this door or window is delete_opening. Add is add_opening. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. Both rebuild that host only. Do not call clear_generated. Do not use the last opening created.
+Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed 2 windows from w01.
 
 Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
@@ -714,7 +714,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             {
                 return "Turn bias: Edit. At most two sentences. No Target block on success. "
                     + "Prefer add_opening, move_opening, set_opening, delete_opening. "
-                    + "Move and set rebuild that host only. Do not call clear_generated. "
+                    + "Delete, add, move, and set rebuild that host only. "
+                    + "Two or more selected windows are one delete_opening with no id. "
+                    + "Status line for that call: Removed 2 windows from w01. "
+                    + "Do not call clear_generated. Do not call delete_object for an opening. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
                     + "Bake, sheets, and print stay available when the user asks.";
             }

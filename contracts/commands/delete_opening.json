@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "delete_opening.json",
   "title": "DeleteOpening Command",
-  "description": "Close one facade opening on its host wall and delete the A-OPEN marker and its frame. Id omitted uses the current selection (exactly one opening_marker or opening block). Refuses a marker or host with forsk:kind=existing or on layer X-EXIST.",
+  "description": "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the current selection, including two or more opening markers or frames. One id removes that opening. Refuses forsk:kind=existing or layer X-EXIST. A failed rebuild restores the openings and leaves the wall.",
   "type": "object",
   "properties": {
     "id": {

@@ -101,6 +101,23 @@ public class OpeningEditTests
         Assert.Equal(9000, above.Head);
     }
 
+    [Fact]
+    public void RemovalLine_NamesTheHostAndTheKind()
+    {
+        Assert.Equal(
+            "Removed 2 windows from w01",
+            SoftParamPlan.RemovalLine(2, 0, new[] { "w01" }));
+        Assert.Equal(
+            "Removed 1 door from w01",
+            SoftParamPlan.RemovalLine(0, 1, new[] { "w01" }));
+        Assert.Equal(
+            "Removed 3 openings from w01, w02",
+            SoftParamPlan.RemovalLine(2, 1, new[] { "w01", "w01", "w02" }));
+        Assert.Equal(
+            "Removed 0 openings from the wall",
+            SoftParamPlan.RemovalLine(0, 0, null));
+    }
+
     // South wall 8 m, east wall 6 m. The edited opening is on the south run.
     private static List<SoftParamPlan.Seg> Garage()
     {

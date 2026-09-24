@@ -279,6 +279,51 @@ public static class SoftParamPlan
     }
 
     /// <summary>
+    /// Status line for a host rebuild that dropped openings.
+    /// "Removed 2 windows from w01".
+    /// </summary>
+    public static string RemovalLine(int windows, int doors, IList<string> hosts)
+    {
+        if (windows < 0) windows = 0;
+        if (doors < 0) doors = 0;
+        var count = windows + doors;
+        string noun;
+        if (doors == 0 && windows > 0)
+            noun = windows == 1 ? "window" : "windows";
+        else if (windows == 0 && doors > 0)
+            noun = doors == 1 ? "door" : "doors";
+        else
+            noun = count == 1 ? "opening" : "openings";
+
+        var where = "the wall";
+        if (hosts != null)
+        {
+            var labels = new List<string>();
+            for (var i = 0; i < hosts.Count; i++)
+            {
+                var label = hosts[i];
+                if (string.IsNullOrWhiteSpace(label)) continue;
+                label = label.Trim();
+                var seen = false;
+                for (var j = 0; j < labels.Count; j++)
+                {
+                    if (string.Equals(labels[j], label, StringComparison.Ordinal))
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen) labels.Add(label);
+            }
+            if (labels.Count > 0)
+                where = string.Join(", ", labels.ToArray());
+        }
+
+        return "Removed " + count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + " " + noun + " from " + where;
+    }
+
+    /// <summary>
     /// A cut is real when the boolean returned pieces and the volume fell,
     /// or the volume held and the cutter still meets the solid. A heavier
     /// solid is the cutter joined on, not a hole. An empty boolean is a miss.

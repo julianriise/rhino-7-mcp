@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "add_opening.json",
   "title": "AddOpening Command",
-  "description": "Cut a door or window opening into a vertical Forsk wall, add an A-OPEN marker, and a simple frame on A-OPEN::Block. Host omitted uses the current selection (exactly one wall). Refuses forsk:kind=existing or layer X-EXIST: existing underlay is not a Forsk host wall.",
+  "description": "Write a door or window record on a vertical Forsk wall and rebuild that host from its path. Does not boolean the old solid. Host omitted uses the current selection (exactly one wall). Refuses forsk:kind=existing or layer X-EXIST: existing underlay is not a Forsk host wall.",
   "type": "object",
   "properties": {
     "opening_kind": {

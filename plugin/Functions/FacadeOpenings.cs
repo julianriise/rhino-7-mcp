@@ -12,8 +12,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Edit facade openings on vertical host walls: delete, add, move, and set size.
-/// Move and set write the opening record, then rebuild that host only.
-/// Delete still closes its hole locally. Markers stay the handle.
+/// Each edit writes the opening record, then rebuilds that host from its path.
+/// Markers stay the handle. A failed rebuild puts the record back.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -78,37 +78,63 @@ public partial class RhinoMCPFunctions
     public JObject DeleteOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
-        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
-        var markerObj = ResolveOpeningHandle(
-            ResolveFacadeTarget(parameters, "id", expectMarker: true));
-        RefuseExistingUnderlay(doc, markerObj);
-        var rec = ReadOpeningRecord(markerObj);
-        var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
-        if (!TryFillOpening(doc, host, rec, tol))
-            throw new InvalidOperationException("Could not close opening.");
-        DeleteOpeningBlocks(doc, rec.MarkerId);
-        if (!doc.Objects.Delete(rec.MarkerId, true))
-            throw new InvalidOperationException("Opening marker not found.");
-        doc.Views.Redraw();
-        return new JObject
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var removals = ReadRemovals(ResolveDeleteTargets(parameters));
+        var before = SnapshotObjectIds(doc);
+        var groups = GroupRemovals(removals);
+        var commits = new List<HostUndo>();
+        try
         {
-            ["deleted_marker_id"] = rec.MarkerId.ToString(),
-            ["host_id"] = host.Id.ToString(),
-            ["ok"] = true
-        };
+            foreach (var group in groups)
+            {
+                var undo = PrepareHostUndo(doc, group);
+                commits.Add(undo);
+                try
+                {
+                    foreach (var item in group)
+                        RemoveOpeningPieces(doc, item.Record.MarkerId, undo.Removed);
+                    var rebuilt = RebuildHostWall(new JObject
+                    {
+                        ["id"] = group[0].HostId.ToString()
+                    });
+                    undo.Committed = true;
+                    var rebuiltId = rebuilt?["host_id"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
+                        undo.HostAfter = parsed;
+                    else
+                        undo.HostAfter = group[0].HostId;
+                    undo.NewBlocks = GuidList(rebuilt?["block_ids"] as JArray);
+                }
+                catch
+                {
+                    if (!undo.Committed)
+                        UndeletePieces(doc, undo.Removed);
+                    throw;
+                }
+            }
+        }
+        catch
+        {
+            for (var i = commits.Count - 1; i >= 0; i--)
+            {
+                if (!commits[i].Committed) continue;
+                try { RollbackCommittedHost(doc, commits[i]); }
+                catch (Exception) { }
+            }
+            throw;
+        }
+
+        doc.Views.Redraw();
+        return DeleteOpeningResult(doc, removals, commits, before, tol);
     }
 
     [McpCommand("add_opening")]
     public JObject AddOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
-        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
         var spec = ParseOpeningSpec(parameters);
         var host = ResolveHostWall(parameters);
         var placement = PlaceOnHost(host, spec);
-        if (!TryCutOpening(doc, host, spec, placement.Foot, tol, out var hostId))
-            throw new InvalidOperationException("Could not cut opening.");
-
         var openLayer = EnsureLayer(doc, "A-OPEN", Color.FromArgb(120, 160, 200));
         var kindStr = KindToTag(spec.Kind);
         var prefix = spec.Kind == OpeningKind.Window ? "window-" : "door-";
@@ -118,7 +144,7 @@ public partial class RhinoMCPFunctions
             doc,
             openLayer,
             placement.Foot,
-            hostId,
+            host.Id,
             kindStr,
             prefix,
             index,
@@ -128,22 +154,27 @@ public partial class RhinoMCPFunctions
         if (markerId == Guid.Empty)
             throw new InvalidOperationException("Could not cut opening.");
 
-        var blockId = AddOpeningBlock(
-            doc,
-            markerId,
-            $"{prefix}{index:D2}",
-            hostId,
-            kindStr,
-            placement.Foot,
-            spec.Sill,
-            spec.Head,
-            spec.Width,
-            FacadeConst.Pad,
-            sourceLayer,
-            host.Brep,
-            placement.Segment);
+        JObject rebuilt;
+        try
+        {
+            rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
+        }
+        catch
+        {
+            DeleteOpeningBlocks(doc, markerId);
+            if (doc.Objects.FindId(markerId) != null)
+                doc.Objects.Delete(markerId, true);
+            throw;
+        }
 
-        doc.Views.Redraw();
+        var hostId = host.Id;
+        var rebuiltId = rebuilt?["host_id"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
+            hostId = parsed;
+        var blockId = FindOpeningBlock(doc, markerId);
+        var label = host.Attributes?.GetUserString("forsk:id");
+        if (string.IsNullOrWhiteSpace(label)) label = "the wall";
+        var noun = spec.Kind == OpeningKind.Window ? "window" : "door";
         var added = new JObject
         {
             ["marker_id"] = markerId.ToString(),
@@ -154,12 +185,15 @@ public partial class RhinoMCPFunctions
             ["head"] = spec.Head,
             ["t"] = placement.T,
             ["ok"] = true,
-            ["message"] = $"Added {kindStr} opening on wall."
+            ["message"] = "Added a " + noun + " on " + label
         };
-        StampOpeningOnHost(
-            doc, host, markerId, blockId, placement.Foot.Bbox.Center, placement, tol);
         if (blockId != Guid.Empty)
             added["block_id"] = blockId.ToString();
+        var report = HostOpeningReport(doc, hostId, markerId, Point3d.Unset);
+        if (report != null) added.Merge(report);
+        var recorded = TryParseUserDouble(doc.Objects.FindId(markerId), "forsk:t");
+        if (recorded.HasValue) added["t"] = recorded.Value;
+        doc.Views.Redraw();
         return added;
     }
 
@@ -325,6 +359,28 @@ public partial class RhinoMCPFunctions
         return selected[0];
     }
 
+    private List<RhinoObject> ResolveDeleteTargets(JObject parameters)
+    {
+        var idToken = parameters?["id"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(idToken))
+            return new List<RhinoObject> { ResolveFacadeTarget(parameters, "id", expectMarker: true) };
+
+        var selected = ListSelected(RhinoDoc.ActiveDoc);
+        if (selected.Count == 0)
+            throw new InvalidOperationException(
+                "Click one opening marker or frame, then say it again.");
+
+        var openings = new List<RhinoObject>();
+        foreach (var obj in selected)
+        {
+            var handle = ResolveOpeningHandle(obj);
+            if (!string.Equals(GetForskKind(handle), "opening_marker", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Not an opening marker.");
+            openings.Add(obj);
+        }
+        return openings;
+    }
+
     private static OpeningSpec ParseOpeningSpec(JObject parameters)
     {
         var kindRaw = parameters?["opening_kind"]?.ToString();
@@ -475,94 +531,6 @@ public partial class RhinoMCPFunctions
     {
         var obj = ResolveFacadeTarget(parameters, "host_id", expectMarker: false);
         return ReadHostWall(RhinoDoc.ActiveDoc, obj.Id, requireVertical: true);
-    }
-
-    // Fill uses BooleanUnion of the same AABB cutter that cut the hole.
-    private bool TryFillOpening(RhinoDoc doc, WallSolid host, OpeningRecord rec, double tol)
-    {
-        var foot = FootprintFromMarker(rec);
-        var cutter = BuildOpeningCutter(
-            foot, rec.Sill, rec.Head, FacadeConst.Pad, FacadeConst.MinDepth, tol);
-        if (cutter == null || !cutter.IsValid) return false;
-        return TryBooleanReplaceWall(doc, host, cutter, difference: false, tol);
-    }
-
-    private bool TryCutOpening(
-        RhinoDoc doc,
-        WallSolid host,
-        OpeningSpec spec,
-        OpeningFootprint foot,
-        double tol,
-        out Guid hostId)
-    {
-        hostId = host.Id;
-        var cutter = BuildOpeningCutter(
-            foot, spec.Sill, spec.Head, FacadeConst.Pad, FacadeConst.MinDepth, tol);
-        if (cutter == null || !cutter.IsValid) return false;
-        if (!TryBooleanReplaceWall(doc, host, cutter, difference: true, tol))
-            return false;
-        hostId = host.Id;
-        return true;
-    }
-
-    // Single-host boolean + GUID-preserving replace. Not extracted from bake:
-    // OpeningsFromLayer continues across walls and records per-footprint failures.
-    private bool TryBooleanReplaceWall(
-        RhinoDoc doc,
-        WallSolid host,
-        Brep tool,
-        bool difference,
-        double tol)
-    {
-        Brep[] results;
-        try
-        {
-            results = difference
-                ? Brep.CreateBooleanDifference(new[] { host.Brep }, new[] { tool }, tol)
-                : Brep.CreateBooleanUnion(new[] { host.Brep, tool }, tol);
-        }
-        catch
-        {
-            return false;
-        }
-
-        if (results == null || results.Length == 0) return false;
-        var valid = results.Where(b => b != null && b.IsValid).ToList();
-        if (valid.Count == 0) return false;
-
-        if (valid.Count == 1)
-            return TryReplaceWallBrep(doc, host, valid[0]);
-
-        var oldId = host.Id;
-        if (!doc.Objects.Delete(host.Id, true)) return false;
-
-        WallSolid first = null;
-        for (var p = 0; p < valid.Count; p++)
-        {
-            var attr = host.Attributes.Duplicate();
-            if (p > 0 && !string.IsNullOrEmpty(attr.Name))
-                attr.Name = $"{attr.Name}-{p + 1}";
-            attr.MaterialSource = ObjectMaterialSource.MaterialFromLayer;
-            attr.MaterialIndex = -1;
-            var newId = doc.Objects.AddBrep(valid[p], attr);
-            if (newId == Guid.Empty) continue;
-            if (p == 0)
-            {
-                first = new WallSolid
-                {
-                    Id = newId,
-                    Brep = valid[p],
-                    Attributes = attr
-                };
-            }
-        }
-
-        if (first == null) return false;
-        RetargetOpeningMarkers(doc, oldId, first.Id);
-        host.Id = first.Id;
-        host.Brep = first.Brep;
-        host.Attributes = first.Attributes;
-        return true;
     }
 
     private static bool IsVerticalWall(Brep brep)
@@ -864,16 +832,22 @@ public partial class RhinoMCPFunctions
     private Placement PlaceOnHost(WallSolid host, OpeningSpec spec)
     {
         var tol = Math.Max(RhinoDoc.ActiveDoc.ModelAbsoluteTolerance, 1e-6);
-        var segs = ExtractWallSegments(host, tol);
-        if (segs.Count == 0)
+        var segs = HostPathSegments(host, tol);
+        var pool = new List<WallSegment>();
+        foreach (var seg in segs)
+        {
+            if (seg != null && seg.FromOuter) pool.Add(seg);
+        }
+        if (pool.Count == 0) pool = segs;
+        var chosen = PickLongestSegment(pool);
+        if (chosen == null)
             throw new InvalidOperationException("Wall is too short for this opening.");
-        var seg = PickLongestSegment(segs);
         double rawT;
         if (spec.T.HasValue) rawT = spec.T.Value;
-        else if (spec.DistanceMm.HasValue) rawT = spec.DistanceMm.Value / seg.Length;
+        else if (spec.DistanceMm.HasValue) rawT = spec.DistanceMm.Value / chosen.Length;
         else rawT = 0.5;
-        var t = ClampT(seg, spec.Width, rawT);
-        return FootprintAtT(seg, spec, t);
+        var t = ClampT(chosen, spec.Width, rawT);
+        return FootprintAtT(chosen, spec, t);
     }
 
     private static double ClampT(WallSegment seg, double width, double rawT)
@@ -1189,5 +1163,363 @@ public partial class RhinoMCPFunctions
         obj.Attributes.SetUserString("forsk:sill", FormatMm(sill));
         obj.Attributes.SetUserString("forsk:head", FormatMm(head));
         obj.CommitChanges();
+    }
+
+    private sealed class OpeningRemoval
+    {
+        public OpeningRecord Record;
+        public Guid HostId;
+        public string HostLabel;
+        public Point3d Center;
+    }
+
+    private sealed class RemovedPiece
+    {
+        public RhinoObject Object;
+        public int DefinitionIndex;
+    }
+
+    private sealed class KeptMarker
+    {
+        public Guid Id;
+        public MarkerSnapshot Snap;
+    }
+
+    private sealed class HostUndo
+    {
+        public RhinoObject Wall;
+        public Brep Brep;
+        public ObjectAttributes Attr;
+        public Guid HostBefore;
+        public Guid HostAfter;
+        public bool Committed;
+        public List<RemovedPiece> Removed = new List<RemovedPiece>();
+        public List<RemovedPiece> KeptFrames = new List<RemovedPiece>();
+        public List<KeptMarker> KeptMarkers = new List<KeptMarker>();
+        public List<Guid> NewBlocks = new List<Guid>();
+    }
+
+    private List<OpeningRemoval> ReadRemovals(List<RhinoObject> targets)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var removals = new List<OpeningRemoval>();
+        var seen = new HashSet<Guid>();
+        foreach (var target in targets)
+        {
+            var marker = ResolveOpeningHandle(target);
+            RefuseExistingUnderlay(doc, marker);
+            var rec = ReadOpeningRecord(marker);
+            if (!seen.Add(rec.MarkerId)) continue;
+            var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
+            var label = host.Attributes?.GetUserString("forsk:id");
+            if (string.IsNullOrWhiteSpace(label)) label = host.Attributes?.Name;
+            if (string.IsNullOrWhiteSpace(label)) label = "the wall";
+            removals.Add(new OpeningRemoval
+            {
+                Record = rec,
+                HostId = host.Id,
+                HostLabel = label,
+                Center = rec.MarkerBbox.Center
+            });
+        }
+        if (removals.Count == 0)
+            throw new InvalidOperationException("Opening marker not found.");
+        return removals;
+    }
+
+    private static List<List<OpeningRemoval>> GroupRemovals(List<OpeningRemoval> removals)
+    {
+        var groups = new List<List<OpeningRemoval>>();
+        foreach (var item in removals)
+        {
+            List<OpeningRemoval> found = null;
+            foreach (var group in groups)
+            {
+                if (group[0].HostId == item.HostId)
+                {
+                    found = group;
+                    break;
+                }
+            }
+            if (found == null)
+            {
+                found = new List<OpeningRemoval>();
+                groups.Add(found);
+            }
+            found.Add(item);
+        }
+        return groups;
+    }
+
+    private HostUndo PrepareHostUndo(RhinoDoc doc, List<OpeningRemoval> group)
+    {
+        var hostId = group[0].HostId;
+        var wall = doc.Objects.FindId(hostId);
+        var undo = new HostUndo
+        {
+            Wall = wall,
+            Brep = GetBrepFromObject(wall)?.DuplicateBrep(),
+            Attr = wall?.Attributes?.Duplicate(),
+            HostBefore = hostId
+        };
+        var removing = new HashSet<Guid>();
+        foreach (var item in group)
+            removing.Add(item.Record.MarkerId);
+        var forskId = wall?.Attributes?.GetUserString("forsk:id");
+        foreach (var marker in MarkersOnHost(doc, hostId, forskId))
+        {
+            if (marker == null || removing.Contains(marker.Id)) continue;
+            undo.KeptMarkers.Add(new KeptMarker
+            {
+                Id = marker.Id,
+                Snap = CaptureMarker(doc, marker.Id)
+            });
+            var frameId = FindOpeningBlock(doc, marker.Id);
+            if (frameId == Guid.Empty) continue;
+            var frame = doc.Objects.FindId(frameId);
+            if (frame == null) continue;
+            undo.KeptFrames.Add(new RemovedPiece
+            {
+                Object = frame,
+                DefinitionIndex = OpeningBlockDefIndex(frame)
+            });
+        }
+        return undo;
+    }
+
+    private void RemoveOpeningPieces(RhinoDoc doc, Guid markerId, List<RemovedPiece> bag)
+    {
+        var key = markerId.ToString();
+        var frames = new List<RhinoObject>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (obj?.Attributes == null) continue;
+            if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var mid = obj.Attributes.GetUserString("forsk:marker_id");
+            if (!string.Equals(mid, key, StringComparison.OrdinalIgnoreCase)) continue;
+            frames.Add(obj);
+        }
+        foreach (var frame in frames)
+        {
+            if (!TrackDelete(doc, frame, bag))
+                throw new InvalidOperationException("Opening marker not found.");
+        }
+        var marker = doc.Objects.FindId(markerId);
+        if (marker == null || !TrackDelete(doc, marker, bag))
+            throw new InvalidOperationException("Opening marker not found.");
+    }
+
+    private static bool TrackDelete(RhinoDoc doc, RhinoObject obj, List<RemovedPiece> bag)
+    {
+        if (doc == null || obj == null) return false;
+        var def = OpeningBlockDefIndex(obj);
+        bag.Add(new RemovedPiece { Object = obj, DefinitionIndex = def });
+        if (!doc.Objects.Delete(obj.Id, true)) return false;
+        if (def >= 0)
+            doc.InstanceDefinitions.Delete(def, true, true);
+        return true;
+    }
+
+    private static void UndeletePieces(RhinoDoc doc, List<RemovedPiece> pieces)
+    {
+        if (doc == null || pieces == null) return;
+        for (var i = pieces.Count - 1; i >= 0; i--)
+        {
+            var piece = pieces[i];
+            if (piece == null || piece.DefinitionIndex < 0) continue;
+            try { doc.InstanceDefinitions.Undelete(piece.DefinitionIndex); }
+            catch (Exception) { }
+        }
+        for (var i = pieces.Count - 1; i >= 0; i--)
+        {
+            var piece = pieces[i];
+            if (piece?.Object == null) continue;
+            if (doc.Objects.FindId(piece.Object.Id) != null) continue;
+            try { doc.Objects.Undelete(piece.Object); }
+            catch (Exception) { }
+        }
+    }
+
+    private void RollbackCommittedHost(RhinoDoc doc, HostUndo undo)
+    {
+        if (doc == null || undo == null) return;
+        if (undo.NewBlocks != null)
+        {
+            foreach (var id in undo.NewBlocks)
+            {
+                var obj = doc.Objects.FindId(id);
+                if (obj == null) continue;
+                var def = OpeningBlockDefIndex(obj);
+                doc.Objects.Delete(obj.Id, true);
+                if (def >= 0)
+                    doc.InstanceDefinitions.Delete(def, true, true);
+            }
+        }
+
+        if (undo.Wall != null)
+        {
+            if (doc.Objects.FindId(undo.HostBefore) == null)
+            {
+                try { doc.Objects.Undelete(undo.Wall); }
+                catch (Exception) { }
+            }
+            else if (undo.Brep != null)
+            {
+                var copy = undo.Brep.DuplicateBrep();
+                if (copy != null)
+                    doc.Objects.Replace(undo.HostBefore, copy);
+            }
+            if (undo.Attr != null && doc.Objects.FindId(undo.HostBefore) != null)
+                doc.Objects.ModifyAttributes(undo.HostBefore, undo.Attr.Duplicate(), true);
+        }
+        if (undo.HostAfter != Guid.Empty && undo.HostAfter != undo.HostBefore)
+        {
+            var extra = doc.Objects.FindId(undo.HostAfter);
+            if (extra != null)
+                doc.Objects.Delete(undo.HostAfter, true);
+        }
+
+        if (undo.KeptMarkers != null)
+        {
+            foreach (var kept in undo.KeptMarkers)
+                RestoreMarker(doc, kept.Id, kept.Snap);
+        }
+        UndeletePieces(doc, undo.KeptFrames);
+        UndeletePieces(doc, undo.Removed);
+    }
+
+    private JObject DeleteOpeningResult(
+        RhinoDoc doc,
+        List<OpeningRemoval> removals,
+        List<HostUndo> commits,
+        HashSet<Guid> before,
+        double tol)
+    {
+        var windows = 0;
+        var doors = 0;
+        var labels = new List<string>();
+        foreach (var item in removals)
+        {
+            if (item.Record.Kind == OpeningKind.Window) windows++;
+            else doors++;
+            var seen = false;
+            foreach (var label in labels)
+            {
+                if (string.Equals(label, item.HostLabel, StringComparison.Ordinal))
+                {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) labels.Add(item.HostLabel);
+        }
+
+        var hostIds = new HashSet<Guid>();
+        var deleted = new JArray();
+        var ids = new JArray();
+        foreach (var item in removals)
+        {
+            var hostId = item.HostId;
+            foreach (var undo in commits)
+            {
+                if (undo.HostBefore != item.HostId || undo.HostAfter == Guid.Empty) continue;
+                hostId = undo.HostAfter;
+                break;
+            }
+            hostIds.Add(hostId);
+            var inside = PointInside(GetBrepFromObject(doc.Objects.FindId(hostId)), item.Center, tol);
+            deleted.Add(new JObject
+            {
+                ["id"] = item.Record.MarkerId.ToString(),
+                ["host_id"] = hostId.ToString(),
+                ["x"] = item.Center.X,
+                ["y"] = item.Center.Y,
+                ["z"] = item.Center.Z,
+                ["inside"] = inside
+            });
+            ids.Add(item.Record.MarkerId.ToString());
+        }
+
+        var openings = 0;
+        var voids = 0;
+        var maxFrame = 0.0;
+        var markers = new JArray();
+        foreach (var undo in commits)
+        {
+            var report = HostOpeningReport(doc, undo.HostAfter, Guid.Empty, Point3d.Unset);
+            if (report == null) continue;
+            openings += report["host_openings"]?.ToObject<int>() ?? 0;
+            voids += report["host_voids"]?.ToObject<int>() ?? 0;
+            var frame = report["max_frame_mm"]?.ToObject<double>() ?? 0;
+            if (frame > maxFrame) maxFrame = frame;
+            if (report["markers"] is JArray rows)
+            {
+                foreach (var row in rows)
+                    markers.Add(row.DeepClone());
+            }
+        }
+
+        var firstHost = removals[0].HostId;
+        foreach (var undo in commits)
+        {
+            if (undo.HostBefore != removals[0].HostId || undo.HostAfter == Guid.Empty) continue;
+            firstHost = undo.HostAfter;
+            break;
+        }
+
+        return new JObject
+        {
+            ["deleted_marker_id"] = removals[0].Record.MarkerId.ToString(),
+            ["deleted_marker_ids"] = ids,
+            ["deleted"] = deleted,
+            ["host_id"] = firstHost.ToString(),
+            ["host_openings"] = openings,
+            ["host_voids"] = voids,
+            ["max_frame_mm"] = maxFrame,
+            ["markers"] = markers,
+            ["plate_count"] = CountStrayObjects(doc, before, hostIds),
+            ["ok"] = true,
+            ["message"] = SoftParamPlan.RemovalLine(windows, doors, labels)
+        };
+    }
+
+    private static HashSet<Guid> SnapshotObjectIds(RhinoDoc doc)
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (obj != null) ids.Add(obj.Id);
+        }
+        return ids;
+    }
+
+    private static int CountStrayObjects(RhinoDoc doc, HashSet<Guid> before, HashSet<Guid> hostIds)
+    {
+        var plates = 0;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (obj == null || before.Contains(obj.Id)) continue;
+            var kind = GetForskKind(obj);
+            if (string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase)
+                && hostIds != null && hostIds.Contains(obj.Id))
+                continue;
+            plates++;
+        }
+        return plates;
+    }
+
+    private static List<Guid> GuidList(JArray array)
+    {
+        var list = new List<Guid>();
+        if (array == null) return list;
+        foreach (var token in array)
+        {
+            if (Guid.TryParse(token?.ToString(), out var id))
+                list.Add(id);
+        }
+        return list;
     }
 }

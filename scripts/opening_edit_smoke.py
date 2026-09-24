@@ -178,6 +178,86 @@ def pick_window(sock: socket.socket, marker_ids: list, block_ids: list):
     return chosen or fallback
 
 
+def longest_edge(path_json: str):
+    try:
+        outer = (json.loads(path_json) or {}).get("outer") or []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    best = None
+    best_len = 0.0
+    count = len(outer)
+    for i in range(count):
+        a = outer[i]
+        b = outer[(i + 1) % count]
+        if len(a) < 2 or len(b) < 2:
+            continue
+        dx = float(b[0]) - float(a[0])
+        dy = float(b[1]) - float(a[1])
+        length = (dx * dx + dy * dy) ** 0.5
+        if length < 350 or length <= best_len:
+            continue
+        best_len = length
+        best = (float(a[0]), float(a[1]), float(b[0]), float(b[1]), length)
+    return best
+
+
+def distance_to_edge(edge, x: float, y: float) -> float:
+    x0, y0, x1, y1, length = edge
+    if length < 1e-6:
+        return ((x - x0) ** 2 + (y - y0) ** 2) ** 0.5
+    t = ((x - x0) * (x1 - x0) + (y - y0) * (y1 - y0)) / (length * length)
+    t = 0.0 if t < 0 else 1.0 if t > 1 else t
+    px = x0 + t * (x1 - x0)
+    py = y0 + t * (y1 - y0)
+    return ((x - px) ** 2 + (y - py) ** 2) ** 0.5
+
+
+def frame_name(marker_name: str) -> str:
+    name = marker_name or ""
+    if name.endswith("-block"):
+        return name
+    return name + "-block"
+
+
+def wall_ids(sock: socket.socket) -> list:
+    listed = send_command(sock, "get_objects", {
+        "layer_filter": "A-WALL",
+        "include_geometry": False,
+        "limit": 50,
+    })
+    return sorted(str(obj.get("id") or "").lower() for obj in (listed.get("objects") or []))
+
+
+def pick_delete_pair(sock: socket.socket, marker_ids: list, host_id: str, path: str, skip_id: str):
+    edge = longest_edge(path)
+    rows = []
+    for mid in marker_ids:
+        info = send_command(sock, "get_object_info", {"id": mid})
+        raw = attrs_of(info)
+        if raw.get("forsk:host") != host_id:
+            continue
+        if (raw.get("forsk:opening_kind") or "").lower() != "window":
+            continue
+        point = center(info.get("bounding_box"))
+        if point is None:
+            continue
+        if edge is not None and distance_to_edge(edge, point[0], point[1]) > 400:
+            continue
+        rows.append({
+            "id": mid,
+            "name": info.get("name") or "",
+            "center": point,
+            "t": raw.get("forsk:t"),
+            "width": raw.get("forsk:width"),
+            "sill": raw.get("forsk:sill"),
+            "head": raw.get("forsk:head"),
+            "skip": mid == skip_id,
+        })
+    preferred = [row for row in rows if not row["skip"]]
+    chosen = preferred if len(preferred) >= 2 else rows
+    return chosen[:2]
+
+
 def fingerprint(sock: socket.socket, marker_id: str, wall_id: str, sibling_id: str | None):
     marker = send_command(sock, "get_object_info", {"id": marker_id})
     wall = send_command(sock, "get_object_info", {"id": wall_id})
@@ -377,6 +457,102 @@ def main() -> int:
             s1 = center(back_sibling.get("bounding_box"))
             if s0 and s1 and dist_xy(s0, s1) > 1:
                 failures.append("miss moved a sibling")
+
+        print("==> select 2 windows and delete_opening")
+        doc_name = str(meta.get("name") or "")
+        if "office" in doc_name.lower() and expected != 77:
+            failures.append(f"office openings before delete={expected}, expected 77")
+        pair = pick_delete_pair(sock, marker_ids, host_id, wall_path, marker_id)
+        if len(pair) != 2:
+            failures.append(f"delete pair={len(pair)}")
+        else:
+            names = [frame_name(row["name"]) for row in pair]
+            walls_before = wall_ids(sock)
+            summary_before = send_command(sock, "get_document_summary", {})
+            count_before = int(summary_before.get("object_count") or 0)
+            selected = send_command(sock, "select_objects", {"filters": {"name": names}})
+            print(f"    selected {names} count={selected.get('count')}")
+            if selected.get("count") != 2:
+                failures.append(f"delete select count={selected.get('count')} names={names}")
+            removed = send_command(sock, "delete_opening", {})
+            print(f"    {removed.get('message')} openings={removed.get('host_openings')} voids={removed.get('host_voids')} plates={removed.get('plate_count')}")
+            message = str(removed.get("message") or "")
+            if message != f"Removed 2 windows from {wall_fid}":
+                failures.append(f"delete message={message!r}")
+            if removed.get("host_id") != host_id:
+                failures.append(f"delete host {removed.get('host_id')} != {host_id}")
+            if removed.get("plate_count") != 0:
+                failures.append(f"plate_count={removed.get('plate_count')}")
+            if removed.get("host_openings") != expected - 2 or removed.get("host_voids") != expected - 2:
+                failures.append(
+                    f"delete openings={removed.get('host_openings')} voids={removed.get('host_voids')} expected {expected - 2}"
+                )
+            if "office" in doc_name.lower() and (
+                removed.get("host_openings") != 75 or removed.get("host_voids") != 75
+            ):
+                failures.append(
+                    f"office delete openings={removed.get('host_openings')} voids={removed.get('host_voids')} expected 75"
+                )
+            deleted_rows = removed.get("deleted") or []
+            if len(deleted_rows) != 2:
+                failures.append(f"deleted rows={len(deleted_rows)}")
+            for row in deleted_rows:
+                if row.get("inside") is not True:
+                    failures.append(f"deleted center is air id={row.get('id')}")
+            for row in pair:
+                gone = send_raw(sock, "get_object_info", {"id": row["id"]})
+                if gone.get("status") != "error":
+                    failures.append(f"marker {row['id']} still exists")
+            wall_deleted = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
+            if wall_deleted.get("forsk:id") != wall_fid:
+                failures.append("delete changed wall id")
+            if wall_deleted.get("forsk:thickness") != wall_thick:
+                failures.append(
+                    f"delete thickness {wall_deleted.get('forsk:thickness')} != {wall_thick}"
+                )
+            if wall_ids(sock) != walls_before:
+                failures.append(f"A-WALL ids changed on delete: {wall_ids(sock)}")
+            count_after = int((send_command(sock, "get_document_summary", {}) or {}).get("object_count") or 0)
+            if count_before - count_after != 4:
+                failures.append(f"object_count {count_before} -> {count_after}, expected -4")
+
+            print("==> add one window back on the same wall")
+            try:
+                back_t = float(pair[0]["t"])
+            except (TypeError, ValueError):
+                back_t = 0.5
+            added = send_command(sock, "add_opening", {
+                "opening_kind": "window",
+                "host_id": host_id,
+                "t": back_t,
+                "width": float(pair[0]["width"] or 1200),
+                "sill": float(pair[0]["sill"] or 900),
+                "head": float(pair[0]["head"] or 2100),
+            })
+            print(f"    {added.get('message')} openings={added.get('host_openings')} voids={added.get('host_voids')}")
+            if added.get("host_id") != host_id:
+                failures.append(f"add host {added.get('host_id')} != {host_id}")
+            if added.get("host_openings") != expected - 1 or added.get("host_voids") != expected - 1:
+                failures.append(
+                    f"add openings={added.get('host_openings')} voids={added.get('host_voids')} expected {expected - 1}"
+                )
+            new_id = str(added.get("marker_id") or "").lower()
+            new_row = None
+            for item in added.get("markers") or []:
+                if str(item.get("id") or "").lower() == new_id:
+                    new_row = item
+                    break
+            if new_row is None:
+                failures.append("added marker missing from host report")
+            elif new_row.get("inside") is not False:
+                failures.append("added opening is not a void")
+            wall_added = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
+            if wall_added.get("forsk:thickness") != wall_thick:
+                failures.append("add changed thickness")
+            if wall_added.get("forsk:id") != wall_fid:
+                failures.append("add changed wall id")
+            if wall_ids(sock) != walls_before:
+                failures.append("A-WALL ids changed on add")
 
         if baked and baked["floor_ids"]:
             floor = send_command(sock, "get_object_info", {"id": baked["floor_ids"][0]})

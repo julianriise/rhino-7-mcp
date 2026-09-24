@@ -1097,7 +1097,7 @@ public partial class RhinoMCPFunctions
         return value.ToString("F0", CultureInfo.InvariantCulture);
     }
 
-    // N==1 keeps the host GUID. N>1 follows OpeningsFromLayer / TryBooleanReplaceWall.
+    // N==1 keeps the host GUID. N>1 follows OpeningsFromLayer.
     private bool CommitWallPieces(RhinoDoc doc, WallSolid host, List<Brep> valid)
     {
         if (doc == null || host == null || valid == null || valid.Count == 0) return false;
