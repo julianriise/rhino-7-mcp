@@ -12,12 +12,13 @@ def delete_opening(
     id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Close one facade opening on its host wall and delete the A-OPEN marker.
+    Close one facade opening on its host wall and delete the A-OPEN marker
+    and its frame. Id may be the marker or the opening block.
     Refuses a marker or host with forsk:kind=existing or on layer X-EXIST.
 
     Parameters:
-    - id: Optional opening marker GUID. Omit to use the current selection
-      (exactly one forsk:kind=opening_marker).
+    - id: Optional marker or opening-block GUID. Omit to use the current
+      selection (exactly one opening_marker or opening block).
 
     Returns:
     Dictionary with deleted_marker_id, host_id, ok, or success=False on refuse.

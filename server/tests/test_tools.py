@@ -2450,6 +2450,7 @@ class TestOpeningsFromLayerTool:
             "wall_ids": ["wall-1"],
             "opening_count": 14,
             "marker_ids": ["marker-1", "marker-2"],
+            "block_ids": ["block-1", "block-2"],
             "sill": 0,
             "head": 2100,
             "message": "Cut 14 opening(s) from layer 'door' (0 failure(s), 2 marker(s)).",
@@ -2471,6 +2472,7 @@ class TestOpeningsFromLayerTool:
         assert result["cut_count"] == 14
         assert result["failed_count"] == 0
         assert result["marker_ids"] == ["marker-1", "marker-2"]
+        assert result["block_ids"] == ["block-1", "block-2"]
 
     @patch("rhinomcp.tools.openings_from_layer.get_rhino_connection")
     def test_window_limit_and_ids(self, mock_get_conn):

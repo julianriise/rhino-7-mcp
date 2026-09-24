@@ -18,7 +18,8 @@ def add_opening(
     distance_mm: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Cut a door or window into a vertical Forsk wall and add an A-OPEN marker.
+    Cut a door or window into a vertical Forsk wall, add an A-OPEN marker,
+    and a simple frame (door leaf or window sill) linked to that marker.
 
     Defaults match plan bake: door 900×0–2100, window 1200×900–2100, t=0.5
     on the longest facade segment. Refuses a host with forsk:kind=existing
@@ -72,6 +73,7 @@ def add_opening(
             "t": result.get("t"),
             "ok": result.get("ok", True),
             "message": result.get("message", "Opening added"),
+            "block_id": result.get("block_id"),
         }
     except Exception as e:
         logger.error(f"Error in add_opening: {str(e)}")

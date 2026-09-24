@@ -9,7 +9,8 @@
     "host_id": { "type": "string" },
     "t": { "type": "number" },
     "ok": { "type": "boolean" },
-    "message": { "type": "string" }
+    "message": { "type": "string" },
+    "block_id": { "type": "string", "description": "GUID of the frame after the move, when rebuilt." }
   },
   "required": ["marker_id", "host_id", "t", "ok"]
 }

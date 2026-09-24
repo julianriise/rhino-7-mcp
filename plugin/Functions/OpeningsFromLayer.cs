@@ -10,8 +10,9 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Cut door/window openings through wall solids and create selectable
-/// opening_marker boxes on A-OPEN. Source DXF geometry is never modified.
+/// Cut door/window openings through wall solids, leave a selectable
+/// opening_marker on A-OPEN, and place a simple frame on A-OPEN::Block.
+/// Source DXF geometry is never modified.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -94,6 +95,7 @@ public partial class RhinoMCPFunctions
 
         var failures = new JArray();
         var markerIds = new JArray();
+        var blockIds = new JArray();
         var cutCount = 0;
 
         foreach (var foot in footprints)
@@ -220,6 +222,29 @@ public partial class RhinoMCPFunctions
                         if (markerId != Guid.Empty)
                         {
                             markerIds.Add(markerId.ToString());
+                            Brep hostBrep = null;
+                            for (var w = 0; w < walls.Count; w++)
+                            {
+                                if (walls[w].Id != hostId) continue;
+                                hostBrep = walls[w].Brep;
+                                break;
+                            }
+                            var blockId = AddOpeningBlock(
+                                doc,
+                                markerId,
+                                $"{markerPrefix}{markerIndex:D2}",
+                                hostId,
+                                openingKind,
+                                foot,
+                                sill,
+                                head,
+                                LongerXySide(foot.Bbox),
+                                pad,
+                                sourceLayer.Name,
+                                hostBrep,
+                                null);
+                            if (blockId != Guid.Empty)
+                                blockIds.Add(blockId.ToString());
                             markerIndex++;
                         }
                     }
@@ -254,10 +279,11 @@ public partial class RhinoMCPFunctions
             ["wall_ids"] = wallIds,
             ["opening_count"] = footprints.Count,
             ["marker_ids"] = markerIds,
+            ["block_ids"] = blockIds,
             ["sill"] = sill,
             ["head"] = head,
             ["message"] = $"Cut {cutCount} opening(s) from layer '{sourceLayer.Name}' " +
-                          $"({failures.Count} failure(s), {markerIds.Count} marker(s))."
+                          $"({failures.Count} failure(s), {markerIds.Count} marker(s), {blockIds.Count} block(s))."
         };
     }
 
@@ -308,7 +334,9 @@ public partial class RhinoMCPFunctions
         foreach (var obj in doc.Objects)
         {
             if (obj == null) continue;
-            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.Ordinal))
+            var kind = GetForskKind(obj);
+            if (!string.Equals(kind, "opening_marker", StringComparison.Ordinal)
+                && !string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (obj.Attributes.GetUserString("forsk:host") != oldStr)
                 continue;

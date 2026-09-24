@@ -466,7 +466,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["thickness"] = Num("Slab thickness in mm. Default 200.")
                     }),
                 Fn("openings_from_layer",
-                    "Cut doors or windows from wall solids and add A-OPEN markers. layer is door or window. Requires walls first.",
+                    "Cut doors or windows from wall solids, add A-OPEN markers, and a simple frame with a door leaf or window sill. layer is door or window. Requires walls first.",
                     new JObject
                     {
                         ["layer"] = Str("door or window."),
@@ -484,7 +484,7 @@ namespace RhinoMCPPlugin.Forsk
                     "Move the selection onto X-EXIST and stamp forsk:kind=existing. Empty selection is refused.",
                     new JObject()),
                 Fn("add_opening",
-                    "Cut a door or window into one Forsk wall and add a marker. host_id omitted uses the selection. Refuses X-EXIST hosts.",
+                    "Cut a door or window into one Forsk wall, add a marker, and a simple frame. host_id omitted uses the selection. Refuses X-EXIST hosts.",
                     new JObject
                     {
                         ["opening_kind"] = new JObject
@@ -502,7 +502,7 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "opening_kind"),
                 Fn("move_opening",
-                    "Slide one opening along its host. delta_mm is signed millimetres. Id omitted uses the selected marker. Refuses X-EXIST.",
+                    "Slide one opening and its frame along its host. delta_mm is signed millimetres. Id omitted uses the selected marker or frame. Refuses X-EXIST.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker GUID. Omit to use the selection."),
@@ -510,7 +510,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["t"] = Num("Absolute 0–1 position. Exclusive with delta_mm.")
                     }),
                 Fn("delete_opening",
-                    "Close one opening and delete its marker. Id omitted uses the selected marker. Refuses X-EXIST.",
+                    "Close one opening and delete its marker and frame. Id omitted uses the selected marker or frame. Refuses X-EXIST.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")
@@ -1720,7 +1720,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var layer = "";
             var index = obj.Attributes.LayerIndex;
             if (index >= 0 && index < doc.Layers.Count)
-                layer = doc.Layers[index].Name ?? "";
+            {
+                var layerObj = doc.Layers[index];
+                layer = layerObj.ParentLayerId == Guid.Empty
+                    ? (layerObj.Name ?? "")
+                    : (layerObj.FullPath ?? layerObj.Name ?? "");
+            }
 
             var attrs = Serializer.RhinoObjectAttributes(obj);
             var id = attrs?["forsk:id"]?.ToString();
@@ -1734,6 +1739,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (!string.IsNullOrEmpty(head)) parts.Add(head);
             if (!string.IsNullOrEmpty(layer)) parts.Add(layer);
             if (!string.IsNullOrEmpty(kind)) parts.Add("forsk:" + kind);
+            if (string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase))
+            {
+                var openingKind = attrs?["forsk:opening_kind"]?.ToString();
+                var hostId = attrs?["forsk:host_id"]?.ToString();
+                if (!string.IsNullOrEmpty(openingKind)) parts.Add(openingKind);
+                if (!string.IsNullOrEmpty(hostId)) parts.Add(hostId);
+            }
             if (parts.Count == 0) return obj.Id.ToString();
             return string.Join(" · ", parts);
         }

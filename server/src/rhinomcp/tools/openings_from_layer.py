@@ -24,9 +24,10 @@ def openings_from_layer(
     door swing blocks/arcs are ignored when gap polylines exist.
     Window: sill 900, head 2100 (height 1200). Uses window-layer curves
     or block-instance bounding boxes. Creates selectable opening_marker
-    boxes on A-OPEN (named door-NN / window-NN). Door/window blocks are
-    not created. Layer X-EXIST returns count 0: existing underlay is not
-    a bake source.
+    boxes on A-OPEN (named door-NN / window-NN) and a simple frame on
+    A-OPEN::Block (forsk:kind=opening, door-NN-block / window-NN-block):
+    a door leaf or a window frame and sill. Layer X-EXIST returns count 0:
+    existing underlay is not a bake source.
 
     Parameters:
     - layer: Source layer, typically "door" or "window" (case-insensitive)
@@ -39,7 +40,8 @@ def openings_from_layer(
     - min_depth: Minimum cutter depth through the wall (default 250)
 
     Returns:
-    Dictionary with cut_count, failed_count, failures, wall_ids, marker_ids, message.
+    Dictionary with cut_count, failed_count, failures, wall_ids, marker_ids,
+    block_ids, message.
     """
     try:
         if not layer:
@@ -79,6 +81,8 @@ def openings_from_layer(
             out["count"] = result["count"]
         if "marker_ids" in result:
             out["marker_ids"] = result.get("marker_ids") or []
+        if "block_ids" in result:
+            out["block_ids"] = result.get("block_ids") or []
         return out
     except Exception as e:
         logger.error(f"Error in openings_from_layer: {str(e)}")

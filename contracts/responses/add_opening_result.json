@@ -13,7 +13,8 @@
     "head": { "type": "number" },
     "t": { "type": "number" },
     "ok": { "type": "boolean" },
-    "message": { "type": "string" }
+    "message": { "type": "string" },
+    "block_id": { "type": "string", "description": "GUID of the forsk:kind=opening frame, when built." }
   },
   "required": ["marker_id", "host_id", "opening_kind", "ok"]
 }

@@ -17,10 +17,11 @@ def move_opening(
     Slide an opening along the same host facade segment.
 
     Provide delta_mm or absolute t, not both. Marker GUID is preserved.
+    The frame moves with the marker. Id may be the marker or the opening block.
     Refuses a marker or host with forsk:kind=existing or on layer X-EXIST.
 
     Parameters:
-    - id: Optional opening marker GUID. Omit to use the current selection
+    - id: Optional marker or opening-block GUID. Omit to use the current selection
     - delta_mm: Signed distance along the segment (mm)
     - t: Absolute 0–1 along the segment
 
@@ -50,6 +51,7 @@ def move_opening(
             "t": result.get("t"),
             "ok": result.get("ok", True),
             "message": result.get("message", "Opening moved"),
+            "block_id": result.get("block_id"),
         }
     except Exception as e:
         logger.error(f"Error in move_opening: {str(e)}")

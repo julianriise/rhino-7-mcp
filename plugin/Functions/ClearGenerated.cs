@@ -72,6 +72,7 @@ public partial class RhinoMCPFunctions
             }
             if (deleted.Count > 0)
                 doc.Views.Redraw();
+            PurgeOpeningBlockDefinitions(doc);
         }
 
         return new JObject

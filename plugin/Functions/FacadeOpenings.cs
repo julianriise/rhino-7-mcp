@@ -77,12 +77,14 @@ public partial class RhinoMCPFunctions
     {
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
-        var markerObj = ResolveFacadeTarget(parameters, "id", expectMarker: true);
+        var markerObj = ResolveOpeningHandle(
+            ResolveFacadeTarget(parameters, "id", expectMarker: true));
         RefuseExistingUnderlay(doc, markerObj);
         var rec = ReadOpeningRecord(markerObj);
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
         if (!TryFillOpening(doc, host, rec, tol))
             throw new InvalidOperationException("Could not close opening.");
+        DeleteOpeningBlocks(doc, rec.MarkerId);
         if (!doc.Objects.Delete(rec.MarkerId, true))
             throw new InvalidOperationException("Opening marker not found.");
         doc.Views.Redraw();
@@ -124,8 +126,23 @@ public partial class RhinoMCPFunctions
         if (markerId == Guid.Empty)
             throw new InvalidOperationException("Could not cut opening.");
 
+        var blockId = AddOpeningBlock(
+            doc,
+            markerId,
+            $"{prefix}{index:D2}",
+            hostId,
+            kindStr,
+            placement.Foot,
+            spec.Sill,
+            spec.Head,
+            spec.Width,
+            FacadeConst.Pad,
+            sourceLayer,
+            host.Brep,
+            placement.Segment);
+
         doc.Views.Redraw();
-        return new JObject
+        var added = new JObject
         {
             ["marker_id"] = markerId.ToString(),
             ["host_id"] = hostId.ToString(),
@@ -137,6 +154,9 @@ public partial class RhinoMCPFunctions
             ["ok"] = true,
             ["message"] = $"Added {kindStr} opening on wall."
         };
+        if (blockId != Guid.Empty)
+            added["block_id"] = blockId.ToString();
+        return added;
     }
 
     [McpCommand("move_opening")]
@@ -144,7 +164,8 @@ public partial class RhinoMCPFunctions
     {
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
-        var markerObj = ResolveFacadeTarget(parameters, "id", expectMarker: true);
+        var markerObj = ResolveOpeningHandle(
+            ResolveFacadeTarget(parameters, "id", expectMarker: true));
         RefuseExistingUnderlay(doc, markerObj);
         var rec = ReadOpeningRecord(markerObj);
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
@@ -197,9 +218,24 @@ public partial class RhinoMCPFunctions
         if (!doc.Objects.Replace(rec.MarkerId, markerBrep))
             throw new InvalidOperationException("Opening marker not found.");
         StampOpeningHostId(doc, rec.MarkerId, hostId);
+        DeleteOpeningBlocks(doc, rec.MarkerId);
+        var movedBlock = AddOpeningBlock(
+            doc,
+            rec.MarkerId,
+            markerObj.Name,
+            hostId,
+            KindToTag(spec.Kind),
+            placement.Foot,
+            spec.Sill,
+            spec.Head,
+            spec.Width,
+            FacadeConst.Pad,
+            markerObj.Attributes?.GetUserString("forsk:source_layer"),
+            host.Brep,
+            placement.Segment);
 
         doc.Views.Redraw();
-        return new JObject
+        var moved = new JObject
         {
             ["marker_id"] = rec.MarkerId.ToString(),
             ["host_id"] = hostId.ToString(),
@@ -207,6 +243,9 @@ public partial class RhinoMCPFunctions
             ["ok"] = true,
             ["message"] = "Moved opening along wall."
         };
+        if (movedBlock != Guid.Empty)
+            moved["block_id"] = movedBlock.ToString();
+        return moved;
     }
 
     private RhinoObject ResolveFacadeTarget(JObject parameters, string idKey, bool expectMarker)

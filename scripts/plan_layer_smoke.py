@@ -313,6 +313,33 @@ def main() -> int:
                 if not marker_attrs.get(key):
                     failures.append(f"marker {key} missing")
 
+        block_ids = list(doors.get("block_ids") or []) + list(windows.get("block_ids") or [])
+        if len(block_ids) < len(marker_ids):
+            failures.append(
+                f"opening blocks {len(block_ids)} < markers {len(marker_ids)}"
+            )
+        elif block_ids:
+            block_info = send_command(sock, "get_object_info", {"id": block_ids[0]})
+            block_attrs = attrs_of(block_info)
+            block_name = block_info.get("name") or ""
+            print(f"    block {block_name} layer={block_info.get('layer')} "
+                  f"kind={block_attrs.get('forsk:kind')} "
+                  f"opening_kind={block_attrs.get('forsk:opening_kind')} "
+                  f"marker={block_attrs.get('forsk:marker_id')}")
+            if block_attrs.get("forsk:kind") != "opening":
+                failures.append(f"block forsk:kind={block_attrs.get('forsk:kind')}")
+            if not block_name.endswith("-block"):
+                failures.append(f"block name={block_name}")
+            if block_info.get("layer") not in ("Block", "A-OPEN::Block"):
+                failures.append(f"block layer={block_info.get('layer')}")
+            okind_b = (block_attrs.get("forsk:opening_kind") or "").lower()
+            if okind_b not in ("door", "window"):
+                failures.append(f"block forsk:opening_kind={block_attrs.get('forsk:opening_kind')}")
+            if not block_attrs.get("forsk:marker_id"):
+                failures.append("block forsk:marker_id missing")
+            if block_attrs.get("forsk:generated") != "1":
+                failures.append(f"block forsk:generated={block_attrs.get('forsk:generated')}")
+
         print("==> rooms_from_layer (skip when A-ROOM has no closed curves)")
         rooms = send_command(sock, "rooms_from_layer", {})
         room_ids = rooms.get("ids") or []
@@ -389,6 +416,7 @@ def main() -> int:
             (floor_ids[0], "floor"),
             (roof_ids[0] if roof_ids else None, "roof"),
             (marker_ids[0] if marker_ids else None, "marker"),
+            (block_ids[0] if block_ids else None, "block"),
             (room_ids[0] if room_ids else None, "room"),
         ]:
             if not oid:

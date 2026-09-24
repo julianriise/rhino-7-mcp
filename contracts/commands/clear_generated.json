@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "clear_generated.json",
   "title": "ClearGenerated Command",
-  "description": "Delete Forsk-generated solids and opening markers by forsk:* tags. Optional untagged name-prefix fallback for pre-tag leftovers. Skips layer X-EXIST and forsk:kind=existing even if forsk:generated=1, including when include_untagged_prefixes is true. Default kinds omit drawing and layout, so sheet curves and title-block objects stay unless kinds explicitly includes them. Layout pages are views; clear_layouts removes those.",
+  "description": "Delete Forsk-generated solids, opening frames (forsk:kind=opening), and opening markers by forsk:* tags. Optional untagged name-prefix fallback for pre-tag leftovers. Skips layer X-EXIST and forsk:kind=existing even if forsk:generated=1, including when include_untagged_prefixes is true. Default kinds omit drawing and layout, so sheet curves and title-block objects stay unless kinds explicitly includes them. Layout pages are views; clear_layouts removes those.",
   "type": "object",
   "properties": {
     "kinds": {
