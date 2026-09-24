@@ -136,9 +136,8 @@ public partial class RhinoMCPFunctions
         if (doc == null || markerId == Guid.Empty) return;
         var key = markerId.ToString();
         var doomed = new List<RhinoObject>();
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (obj == null) continue;
             if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
             var mid = obj.Attributes?.GetUserString("forsk:marker_id");

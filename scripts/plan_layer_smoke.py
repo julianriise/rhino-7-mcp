@@ -202,8 +202,10 @@ def main() -> int:
             thick = float(wall_attrs.get("forsk:thickness") or 0)
         except (TypeError, ValueError):
             thick = 0
-        if thick <= 0:
-            failures.append(f"wall forsk:thickness={wall_attrs.get('forsk:thickness')!r}")
+        if thick <= 0 or thick > 2000:
+            failures.append(
+                f"wall forsk:thickness={wall_attrs.get('forsk:thickness')!r} expected a wall, not the building width"
+            )
 
         print("==> default wall material (By Layer plaster)")
         wall_attrs_mat = send_command(sock, "get_object_attributes", {"id": ids[0]})
@@ -469,19 +471,23 @@ def main() -> int:
 
         print("==> capture_viewport perspective")
         import base64
-        cap = send_command(sock, "capture_viewport", {
-            "viewport": "perspective",
-            "width": 800,
-            "height": 600,
-            "zoom_to_fit": True,
-        })
-        path = OUT_DIR / "plan_layer_perspective.png"
-        png = cap.get("image_data") or ""
-        if png:
-            path.write_bytes(base64.b64decode(png))
-            print(f"    wrote {path}")
-        else:
-            print(f"    capture keys={list(cap.keys())}")
+        try:
+            cap = send_command(sock, "capture_viewport", {
+                "viewport": "perspective",
+                "width": 800,
+                "height": 600,
+                "zoom_to_fit": True,
+            })
+            path = OUT_DIR / "plan_layer_perspective.png"
+            png = cap.get("image_data") or ""
+            if png:
+                path.write_bytes(base64.b64decode(png))
+                print(f"    wrote {path}")
+            else:
+                print(f"    capture keys={list(cap.keys())}")
+        except SmokeError as exc:
+            failures.append(str(exc))
+            print(f"    {exc}")
 
         print("==> clear_generated defaults")
         cleared2 = send_command(sock, "clear_generated", {})

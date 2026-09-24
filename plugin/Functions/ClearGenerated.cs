@@ -27,7 +27,7 @@ public partial class RhinoMCPFunctions
             ?? new List<string> { "wall-", "floor-", "roof-", "door-", "window-", "room-" };
 
         var matched = new List<Guid>();
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj == null) continue;
             // X-EXIST / forsk:kind=existing stays even if generated=1 or a name prefix matches.

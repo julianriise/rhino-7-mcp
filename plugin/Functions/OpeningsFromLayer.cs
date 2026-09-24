@@ -344,9 +344,8 @@ public partial class RhinoMCPFunctions
             return;
         var oldStr = oldHost.ToString();
         var newStr = newHost.ToString();
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (obj == null) continue;
             var kind = GetForskKind(obj);
             if (!string.Equals(kind, "opening_marker", StringComparison.Ordinal)
                 && !string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase))

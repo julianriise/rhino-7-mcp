@@ -86,26 +86,15 @@ public partial class RhinoMCPFunctions
             });
         }
 
-        var cutters = new List<Brep>();
+        if (!TryReplaceWallBrep(doc, host, freshParts[0]))
+            throw new InvalidOperationException("Could not rebuild host wall as one solid.");
+
         foreach (var item in planned)
         {
-            var cutter = BuildOpeningCutter(
-                item.Placement.Foot,
-                item.Spec.Sill,
-                item.Spec.Head,
-                FacadeConst.Pad,
-                FacadeConst.MinDepth,
-                tol);
-            if (cutter == null || !cutter.IsValid)
-                throw new InvalidOperationException("Could not cut opening.");
-            cutters.Add(cutter);
+            var name = string.IsNullOrEmpty(item.Marker.Name) ? "opening" : item.Marker.Name;
+            if (!TryCutPlannedOpening(doc, host, item, tol, out var why))
+                throw new InvalidOperationException("Could not cut opening " + name + ". " + why);
         }
-
-        var rebuilt = CutOpeningsFromFresh(freshParts[0], cutters, tol);
-        if (rebuilt == null)
-            throw new InvalidOperationException("Could not cut opening.");
-        if (!TryReplaceWallBrep(doc, host, rebuilt))
-            throw new InvalidOperationException("Could not rebuild host wall as one solid.");
 
         var thickness = MedianThickness(segs);
         if (thickness <= 0)
@@ -217,9 +206,9 @@ public partial class RhinoMCPFunctions
         var list = new List<RhinoObject>();
         if (doc == null || hostId == Guid.Empty) return list;
         var hostStr = hostId.ToString();
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (obj?.Attributes == null) continue;
+            if (obj.Attributes == null) continue;
             if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
                 continue;
             var byGuid = string.Equals(
@@ -254,7 +243,10 @@ public partial class RhinoMCPFunctions
         double tol)
     {
         if (doc == null || markerId == Guid.Empty) return;
-        var segs = SegmentsFromPath(host?.Attributes?.GetUserString("forsk:path"), tol);
+        var path = host?.Attributes?.GetUserString("forsk:path");
+        if (string.IsNullOrWhiteSpace(path) && host != null)
+            path = ReadForskUserString(doc, host.Id, "forsk:path");
+        var segs = SegmentsFromPath(path, tol);
         if (segs.Count == 0 && host != null)
             segs = ExtractWallSegments(host, tol);
 
@@ -315,7 +307,7 @@ public partial class RhinoMCPFunctions
     {
         if (doc == null || markerId == Guid.Empty) return Guid.Empty;
         var key = markerId.ToString();
-        foreach (var obj in doc.Objects)
+        foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj?.Attributes == null) continue;
             if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
@@ -418,28 +410,136 @@ public partial class RhinoMCPFunctions
     {
         if (!TryDecodeWallPath(path, out var outer, out var holes))
             return new List<WallSegment>();
-        if (holes.Count > 0)
+
+        if (holes.Count == 0)
         {
-            var inner = holes[0];
-            var best = Math.Abs(AreaMassProperties.Compute(inner)?.Area ?? 0);
-            for (var i = 1; i < holes.Count; i++)
-            {
-                var area = Math.Abs(AreaMassProperties.Compute(holes[i])?.Area ?? 0);
-                if (area > best)
-                {
-                    best = area;
-                    inner = holes[i];
-                }
-            }
-            return SegmentsFromBand(outer, inner, tol);
+            var box = outer.GetBoundingBox(true);
+            var dx = box.Max.X - box.Min.X;
+            var dy = box.Max.Y - box.Min.Y;
+            if (Math.Min(dx, dy) <= 2.0 * FacadeConst.MinDepth)
+                return SegmentsFromLinear(box);
         }
 
-        var box = outer.GetBoundingBox(true);
-        var dx = box.Max.X - box.Min.X;
-        var dy = box.Max.Y - box.Min.Y;
-        if (Math.Min(dx, dy) <= 2.0 * FacadeConst.MinDepth)
-            return SegmentsFromLinear(box);
-        return SegmentsFromOuterOnly(outer, tol);
+        // Short jogs in the outline are the wall thickness, not facade runs.
+        var nominal = NominalThickness(outer, tol);
+        var minLength = 2.0 * FacadeConst.EdgeMargin;
+        if (nominal > 0)
+            minLength = Math.Max(minLength, nominal * 1.75);
+
+        var result = new List<WallSegment>();
+        // Interior doors sit on room outlines, about 2.5 m from the outside of this plan.
+        AppendPathEdges(result, outer, tol, minLength, nominal, holes, intoCurveIsWall: true);
+        foreach (var hole in holes)
+            AppendPathEdges(result, hole, tol, minLength, nominal, null, intoCurveIsWall: false);
+        return result;
+    }
+
+    private static void AppendPathEdges(
+        List<WallSegment> result,
+        Curve curve,
+        double tol,
+        double minLength,
+        double nominal,
+        List<Curve> holes,
+        bool intoCurveIsWall)
+    {
+        if (curve == null) return;
+        foreach (var raw in ExplodeLineSegments(curve, tol))
+        {
+            var length = raw.From.DistanceTo(raw.To);
+            if (length < minLength) continue;
+            var line = raw;
+            OrientSegmentEnds(ref line, out var start, out var end);
+            var tangent = end - start;
+            tangent.Z = 0;
+            if (!tangent.Unitize()) continue;
+            var mid = new Point3d(
+                0.5 * (start.X + end.X),
+                0.5 * (start.Y + end.Y),
+                0);
+            var thick = nominal > 0 ? nominal : FacadeConst.MinDepth;
+            var inward = InwardIntoCurve(curve, mid, tangent, 20.0);
+            if (!intoCurveIsWall)
+                inward.Reverse();
+            else if (TryNearestHole(holes, mid, out var holeDist, out var holeDir)
+                && holeDist >= 40.0 && holeDist <= 800.0)
+            {
+                thick = holeDist;
+                inward = holeDir;
+            }
+            if (!inward.Unitize()) continue;
+            result.Add(new WallSegment
+            {
+                Start = new Point3d(start.X, start.Y, 0),
+                End = new Point3d(end.X, end.Y, 0),
+                Tangent = tangent,
+                Inward = inward,
+                Length = length,
+                Thickness = thick
+            });
+        }
+    }
+
+    private static double NominalThickness(Curve outer, double tol)
+    {
+        var lengths = new List<double>();
+        foreach (var raw in ExplodeLineSegments(outer, tol))
+        {
+            var length = raw.From.DistanceTo(raw.To);
+            if (length >= 50.0 && length <= 600.0)
+                lengths.Add(length);
+        }
+        if (lengths.Count < 2) return 0;
+        lengths.Sort();
+        return lengths[lengths.Count / 2];
+    }
+
+    private static bool TryNearestHole(
+        List<Curve> holes,
+        Point3d mid,
+        out double dist,
+        out Vector3d dir)
+    {
+        dist = 0;
+        dir = Vector3d.Zero;
+        if (holes == null || holes.Count == 0) return false;
+        var best = double.MaxValue;
+        var at = Point3d.Unset;
+        foreach (var hole in holes)
+        {
+            if (hole == null) continue;
+            if (!hole.ClosestPoint(mid, out var t)) continue;
+            var point = hole.PointAt(t);
+            var d = mid.DistanceTo(new Point3d(point.X, point.Y, mid.Z));
+            if (d < best)
+            {
+                best = d;
+                at = point;
+            }
+        }
+        if (at == Point3d.Unset) return false;
+        dir = new Vector3d(at.X - mid.X, at.Y - mid.Y, 0);
+        if (!dir.Unitize()) return false;
+        dist = best;
+        return true;
+    }
+
+    private static Vector3d InwardIntoCurve(Curve outer, Point3d mid, Vector3d tangent, double probe)
+    {
+        var left = new Vector3d(-tangent.Y, tangent.X, 0);
+        if (!left.Unitize()) return left;
+        if (probe < 1.0) probe = 20.0;
+        try
+        {
+            if (outer.Contains(mid + left * probe, Plane.WorldXY, 1.0) == PointContainment.Inside)
+                return left;
+        }
+        catch
+        {
+            return left;
+        }
+        left.Reverse();
+        return left;
     }
 
     private double MeasureRecordedThickness(string path, Brep brep, double tol)
@@ -591,45 +691,145 @@ public partial class RhinoMCPFunctions
         return placement.T * placement.Segment.Length;
     }
 
-    private static Brep CutOpeningsFromFresh(Brep wall, List<Brep> cutters, double tol)
+    private bool TryCutPlannedOpening(
+        RhinoDoc doc,
+        WallSolid host,
+        PlannedOpening item,
+        double tol,
+        out string why)
     {
-        if (wall == null) return null;
-        if (cutters == null || cutters.Count == 0) return wall;
+        why = "";
+        var oriented = CutterThroughSegment(item.Placement, item.Spec);
+        var pieces = oriented == null ? null : DifferencePieces(host.Brep, oriented, tol);
+        if (pieces != null && pieces.Count == 1 && CommitWallPieces(doc, host, pieces))
+            return true;
 
-        // Each cutter has to remove volume. A miss fails before the wall is replaced.
-        var current = wall;
-        foreach (var cutter in cutters)
-        {
-            var next = TryDifference(current, new List<Brep> { cutter }, tol);
-            if (next == null) return null;
-            if (BrepVolume(next) > BrepVolume(current) - 1.0) return null;
-            current = next;
-        }
-        return current;
+        var cutter = BuildOpeningCutter(
+            item.Placement.Foot,
+            item.Spec.Sill,
+            item.Spec.Head,
+            FacadeConst.Pad,
+            FacadeConst.MinDepth,
+            tol);
+        var baked = DifferencePieces(host.Brep, cutter, tol);
+        if (baked != null && CommitWallPieces(doc, host, baked))
+            return true;
+        if (pieces != null && pieces.Count > 1 && CommitWallPieces(doc, host, pieces))
+            return true;
+
+        var foot = item.Placement?.Foot?.Bbox;
+        why = "segment=" + DescribePieces(pieces)
+            + " bake=" + DescribePieces(baked)
+            + " foot=" + (foot.HasValue
+                ? foot.Value.Min.X.ToString("F0") + "," + foot.Value.Min.Y.ToString("F0")
+                  + " " + foot.Value.Max.X.ToString("F0") + "," + foot.Value.Max.Y.ToString("F0")
+                : "none");
+        return false;
     }
 
-    private static Brep TryDifference(Brep wall, List<Brep> cutters, double tol)
+    private static string DescribePieces(List<Brep> pieces)
     {
-        if (wall == null || cutters == null || cutters.Count == 0) return null;
-        Brep[] diff;
+        return pieces == null ? "none" : pieces.Count.ToString();
+    }
+
+    private static List<Brep> DifferencePieces(Brep wall, Brep cutter, double tol)
+    {
+        if (wall == null || cutter == null || !cutter.IsValid) return null;
+        Brep[] results;
         try
         {
-            diff = Brep.CreateBooleanDifference(new[] { wall }, cutters.ToArray(), tol);
+            results = Brep.CreateBooleanDifference(new[] { wall }, new[] { cutter }, tol);
         }
         catch
         {
             return null;
         }
 
-        if (diff == null) return null;
-        Brep only = null;
-        foreach (var brep in diff)
+        if (results == null || results.Length == 0) return null;
+        var valid = new List<Brep>();
+        foreach (var brep in results)
         {
-            if (brep == null || !brep.IsValid) continue;
-            if (only != null) return null;
-            only = brep;
+            if (brep != null && brep.IsValid)
+                valid.Add(brep);
         }
-        return only;
+        if (valid.Count == 0) return null;
+        var before = BrepVolume(wall);
+        if (before > 0)
+        {
+            var sum = 0.0;
+            foreach (var brep in valid)
+                sum += BrepVolume(brep);
+            if (sum > before - 1.0) return null;
+        }
+        return valid;
+    }
+
+    // N==1 keeps the host GUID. N>1 follows OpeningsFromLayer / TryBooleanReplaceWall.
+    private bool CommitWallPieces(RhinoDoc doc, WallSolid host, List<Brep> valid)
+    {
+        if (doc == null || host == null || valid == null || valid.Count == 0) return false;
+        if (valid.Count == 1)
+            return TryReplaceWallBrep(doc, host, valid[0]);
+
+        var oldId = host.Id;
+        if (!doc.Objects.Delete(host.Id, true)) return false;
+        WallSolid first = null;
+        for (var p = 0; p < valid.Count; p++)
+        {
+            var attr = host.Attributes.Duplicate();
+            if (p > 0 && !string.IsNullOrEmpty(attr.Name))
+                attr.Name = attr.Name + "-" + (p + 1);
+            attr.MaterialSource = ObjectMaterialSource.MaterialFromLayer;
+            attr.MaterialIndex = -1;
+            var newId = doc.Objects.AddBrep(valid[p], attr);
+            if (newId == Guid.Empty) continue;
+            if (p == 0)
+            {
+                first = new WallSolid
+                {
+                    Id = newId,
+                    Brep = valid[p],
+                    Attributes = attr
+                };
+            }
+        }
+
+        if (first == null) return false;
+        RetargetOpeningMarkers(doc, oldId, first.Id);
+        host.Id = first.Id;
+        host.Brep = first.Brep;
+        host.Attributes = first.Attributes;
+        return true;
+    }
+
+    private static Brep CutterThroughSegment(Placement placement, OpeningSpec spec)
+    {
+        var seg = placement?.Segment;
+        if (seg == null || spec == null || seg.Length <= 1e-6) return null;
+        var x = seg.Tangent;
+        var y = seg.Inward;
+        x.Z = 0;
+        y.Z = 0;
+        if (!x.Unitize() || !y.Unitize()) return null;
+        if (Vector3d.CrossProduct(x, y).Z < 0)
+            y = -y;
+        var t = placement.T;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        var center = seg.Start + (t * seg.Length) * x + y * (seg.Thickness * 0.5);
+        center.Z = 0;
+        var plane = new Plane(center, x, y);
+        var halfW = spec.Width * 0.5 + FacadeConst.Pad;
+        var depth = Math.Max(seg.Thickness, FacadeConst.MinDepth) + 2.0 * FacadeConst.Pad;
+        var z0 = spec.Sill - 50.0;
+        var z1 = spec.Head + 50.0;
+        if (halfW <= 1 || depth <= 1 || z1 <= z0) return null;
+        var box = new Box(
+            plane,
+            new Interval(-halfW, halfW),
+            new Interval(-depth * 0.5, depth * 0.5),
+            new Interval(z0, z1));
+        return box.IsValid ? Brep.CreateFromBox(box) : null;
     }
 
     private static double BrepVolume(Brep brep)

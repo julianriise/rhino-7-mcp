@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -103,6 +104,30 @@ public partial class RhinoMCPFunctions
         if (marker?.Attributes == null) return;
         marker.Attributes.SetUserString("forsk:host_id", stable);
         marker.CommitChanges();
+    }
+
+    /// <summary>
+    /// Default object iteration skips hidden layers. A-OPEN and A-ROOF are hidden.
+    /// </summary>
+    private static IEnumerable<RhinoObject> EnumerateDocObjects(RhinoDoc doc)
+    {
+        if (doc == null) yield break;
+        var settings = new ObjectEnumeratorSettings
+        {
+            NormalObjects = true,
+            LockedObjects = true,
+            HiddenObjects = true,
+            ActiveObjects = true,
+            ReferenceObjects = false,
+            DeletedObjects = false,
+            IncludeLights = false,
+            IncludeGrips = false,
+            IdefObjects = false
+        };
+        foreach (var obj in doc.Objects.GetObjectList(settings))
+        {
+            if (obj != null) yield return obj;
+        }
     }
 
     private static bool IsForskGenerated(RhinoObject obj)
