@@ -1720,9 +1720,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
             RhinoObject first = null;
             var count = 0;
-            foreach (var obj in doc.Objects.GetSelectedObjects(false, false))
+            foreach (var obj in global::RhinoMCPPlugin.Functions.RhinoMCPFunctions.ListSelected(doc))
             {
-                if (obj == null) continue;
+                if (obj?.Attributes == null) continue;
                 count++;
                 if (first == null) first = obj;
             }
@@ -1735,7 +1735,16 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         static string FormatOne(RhinoDoc doc, RhinoObject obj)
         {
-            var name = string.IsNullOrWhiteSpace(obj.Name) ? "" : obj.Name;
+            if (obj?.Attributes == null) return obj == null ? "" : obj.Id.ToString();
+            var name = "";
+            try
+            {
+                name = string.IsNullOrWhiteSpace(obj.Name) ? "" : obj.Name;
+            }
+            catch (NullReferenceException)
+            {
+                name = "";
+            }
             var layer = "";
             var index = obj.Attributes.LayerIndex;
             if (index >= 0 && index < doc.Layers.Count)

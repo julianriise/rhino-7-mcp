@@ -208,12 +208,14 @@ namespace RhinoMCPPlugin.Forsk
 
         void OnSelection(object sender, RhinoObjectSelectionEventArgs e)
         {
-            RefreshTarget();
+            try { RefreshTarget(); }
+            catch (Exception ex) { RhinoApp.WriteLine("Forsk selection: " + ex.Message); }
         }
 
         void OnDeselectAll(object sender, RhinoDeselectAllObjectsEventArgs e)
         {
-            RefreshTarget();
+            try { RefreshTarget(); }
+            catch (Exception ex) { RhinoApp.WriteLine("Forsk selection: " + ex.Message); }
         }
 
         void RefreshChrome()

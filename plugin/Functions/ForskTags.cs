@@ -130,6 +130,31 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    internal static List<RhinoObject> ListSelected(RhinoDoc doc)
+    {
+        var list = new List<RhinoObject>();
+        if (doc == null) return list;
+        var settings = new ObjectEnumeratorSettings
+        {
+            NormalObjects = true,
+            LockedObjects = true,
+            HiddenObjects = true,
+            ActiveObjects = true,
+            ReferenceObjects = false,
+            DeletedObjects = false,
+            IncludeLights = false,
+            IncludeGrips = false,
+            IdefObjects = false,
+            SelectedObjectsFilter = true
+        };
+        foreach (var obj in doc.Objects.GetObjectList(settings))
+        {
+            if (obj?.Attributes == null) continue;
+            list.Add(obj);
+        }
+        return list;
+    }
+
     private static bool IsForskGenerated(RhinoObject obj)
     {
         if (obj?.Attributes == null) return false;

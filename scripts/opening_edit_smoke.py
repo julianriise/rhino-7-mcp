@@ -76,6 +76,46 @@ def dist_xy(a, b) -> float:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
 
+def check_host(label, result, marker_id, origin, expect, failures, want_shift=False, want_previous_solid=False):
+    openings = result.get("host_openings")
+    voids = result.get("host_voids")
+    max_frame = result.get("max_frame_mm")
+    print(f"    {label}: openings={openings} voids={voids} max_frame_mm={max_frame}")
+    if openings != expect:
+        failures.append(f"{label} openings={openings} expected {expect}")
+    if voids != expect:
+        failures.append(f"{label} voids={voids} expected {expect}")
+    try:
+        frame = float(max_frame)
+    except (TypeError, ValueError):
+        frame = -1
+    if frame < 0 or frame > 25:
+        failures.append(f"{label} max_frame_mm={max_frame} expected 0–25")
+    row = None
+    for item in result.get("markers") or []:
+        if str(item.get("id")).lower() == str(marker_id).lower():
+            row = item
+            break
+    if row is None:
+        failures.append(f"{label} missing marker {marker_id}")
+        return
+    if row.get("inside") is not False:
+        failures.append(f"{label} marker is still inside the wall")
+    try:
+        frame_mm = float(row.get("frame_mm"))
+    except (TypeError, ValueError):
+        frame_mm = -1
+    if frame_mm < 0 or frame_mm > 25:
+        failures.append(f"{label} frame_mm={row.get('frame_mm')}")
+    if want_shift and origin is not None:
+        shift = dist_xy(origin, (float(row["x"]), float(row["y"]), float(row["z"])))
+        print(f"    {label} void shift {shift:.1f} mm")
+        if shift < 50 or shift > 700:
+            failures.append(f"{label} void shift {shift:.1f} mm, expected about 500")
+    if want_previous_solid and row.get("previous_inside") is not True:
+        failures.append(f"{label} old position is not solid again (previous_inside={row.get('previous_inside')})")
+
+
 def layer_count(summary: dict, name: str) -> int:
     by_layer = summary.get("objects_by_layer") or {}
     for key, value in by_layer.items():
@@ -106,6 +146,8 @@ def bake(sock: socket.socket) -> dict:
         "roof_ids": roof.get("ids") or [],
         "window_markers": windows.get("marker_ids") or [],
         "window_blocks": windows.get("block_ids") or [],
+        "door_cuts": doors.get("cut_count") or 0,
+        "window_cuts": windows.get("cut_count") or 0,
     }
 
 
@@ -221,7 +263,10 @@ def main() -> int:
         if not frame_name:
             frame_name = window["info"].get("name")
 
-        print(f"==> select {frame_name} then move_opening 500 mm")
+        expected = 77
+        if baked:
+            expected = int(baked.get("door_cuts") or 0) + int(baked.get("window_cuts") or 0)
+        print(f"==> select {frame_name} then move this window 500 mm")
         selected = send_command(sock, "select_objects", {"filters": {"name": [frame_name]}})
         print(f"    selected {selected.get('count')}")
         if selected.get("count") != 1:
@@ -256,6 +301,7 @@ def main() -> int:
             )
         if (wall_after_attrs.get("forsk:path") or "") != wall_path:
             failures.append("forsk:path changed on move")
+        check_host("move", moved, marker_id, origin, expected, failures, want_shift=True, want_previous_solid=True)
         if sibling_id and sibling_origin:
             sibling_after = send_command(sock, "get_object_info", {"id": sibling_id})
             sibling_center = center(sibling_after.get("bounding_box"))
@@ -265,9 +311,15 @@ def main() -> int:
                 failures.append("sibling left the host")
 
         print("==> set_opening width 1400 sill 1000 head 2200")
-        set_id = moved.get("block_id") or marker_id
+        new_block = moved.get("block_id")
+        if new_block:
+            new_frame = send_command(sock, "get_object_info", {"id": new_block})
+            new_name = new_frame.get("name") or frame_name
+            selected = send_command(sock, "select_objects", {"filters": {"name": [new_name]}})
+            print(f"    reselected {new_name} count={selected.get('count')}")
+            if selected.get("count") != 1:
+                failures.append(f"reselect count={selected.get('count')} name={new_name}")
         sized = send_command(sock, "set_opening", {
-            "id": set_id,
             "width": 1400,
             "sill": 1000,
             "head": 2200,
@@ -287,6 +339,7 @@ def main() -> int:
             failures.append("thickness changed on set")
         if wall_sized.get("forsk:id") != wall_fid:
             failures.append("forsk:id changed on set")
+        check_host("set", sized, marker_id, origin, expected, failures, want_shift=True)
 
         shot_marker, shot_wall, shot_sibling = fingerprint(sock, marker_id, host_id, sibling_id)
 
@@ -328,6 +381,21 @@ def main() -> int:
             roof = send_command(sock, "get_object_info", {"id": baked["roof_ids"][0]})
             if attrs_of(roof).get("forsk:kind") != "roof":
                 failures.append("roof missing after edits")
+
+        print("==> layout_pack plan + export_pdf")
+        packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True})
+        print(f"    {packed.get('message')} count={packed.get('count')}")
+        if (packed.get("count") or 0) < 1:
+            failures.append(f"layout_pack count={packed.get('count')} message={packed.get('message')}")
+            print("FAIL print; stopping")
+        else:
+            pdf_path = "/tmp/forsk-f2-plan.pdf"
+            pdf = send_command(sock, "export_pdf", {"path": pdf_path, "layout": "plan"})
+            print(f"    {pdf.get('message')} count={pdf.get('count')} path={pdf.get('path')}")
+            message = str(pdf.get("message") or "")
+            if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
+                failures.append(f"export_pdf count={pdf.get('count')} message={message}")
+                print("FAIL print; stopping")
     finally:
         sock.close()
 

@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\plugin\Functions\SoftParamPlan.cs" Link="SoftParamPlan.cs" />
+    <Compile Include="..\..\plugin\Functions\SelectPlan.cs" Link="SelectPlan.cs" />
   </ItemGroup>
 
 </Project>

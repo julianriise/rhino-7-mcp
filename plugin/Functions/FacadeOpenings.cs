@@ -307,7 +307,7 @@ public partial class RhinoMCPFunctions
             return found;
         }
 
-        var selected = doc.Objects.GetSelectedObjects(false, false).ToList();
+        var selected = ListSelected(doc);
         if (selected.Count == 0)
         {
             throw new InvalidOperationException(
@@ -1003,12 +1003,85 @@ public partial class RhinoMCPFunctions
             var rebuiltId = rebuilt?["host_id"]?.ToString();
             if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
                 hostId = parsed;
-            return OpeningEditResult(doc, rec, hostId, width, sill, head, t, message);
+            var result = OpeningEditResult(doc, rec, hostId, width, sill, head, t, message);
+            var previous = Point3d.Unset;
+            if (snap.Geometry != null)
+            {
+                var oldBox = snap.Geometry.GetBoundingBox(true);
+                if (oldBox.IsValid) previous = oldBox.Center;
+            }
+            var report = HostOpeningReport(doc, hostId, rec.MarkerId, previous);
+            if (report != null) result.Merge(report);
+            return result;
         }
         catch
         {
             RestoreMarker(doc, rec.MarkerId, snap);
             throw;
+        }
+    }
+
+    private JObject HostOpeningReport(RhinoDoc doc, Guid hostId, Guid editedId, Point3d previous)
+    {
+        if (doc == null || hostId == Guid.Empty) return null;
+        var wall = doc.Objects.FindId(hostId);
+        var brep = GetBrepFromObject(wall);
+        var forskId = wall?.Attributes?.GetUserString("forsk:id");
+        var markers = MarkersOnHost(doc, hostId, forskId);
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var rows = new JArray();
+        var voids = 0;
+        var maxFrame = 0.0;
+        foreach (var marker in markers)
+        {
+            if (marker?.Geometry == null) continue;
+            var box = marker.Geometry.GetBoundingBox(true);
+            if (!box.IsValid) continue;
+            var center = box.Center;
+            var inside = PointInside(brep, center, tol);
+            if (!inside) voids++;
+            var frameDist = -1.0;
+            var frameId = FindOpeningBlock(doc, marker.Id);
+            if (frameId != Guid.Empty)
+            {
+                var frame = doc.Objects.FindId(frameId);
+                var frameBox = frame?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+                if (frameBox.IsValid)
+                    frameDist = center.DistanceTo(frameBox.Center);
+            }
+            if (frameDist > maxFrame) maxFrame = frameDist;
+            var row = new JObject
+            {
+                ["id"] = marker.Id.ToString(),
+                ["x"] = center.X,
+                ["y"] = center.Y,
+                ["z"] = center.Z,
+                ["inside"] = inside,
+                ["frame_mm"] = frameDist
+            };
+            if (marker.Id == editedId && previous.IsValid)
+                row["previous_inside"] = PointInside(brep, previous, tol);
+            rows.Add(row);
+        }
+        return new JObject
+        {
+            ["host_openings"] = rows.Count,
+            ["host_voids"] = voids,
+            ["max_frame_mm"] = maxFrame,
+            ["markers"] = rows
+        };
+    }
+
+    private static bool PointInside(Brep brep, Point3d point, double tol)
+    {
+        if (brep == null || !brep.IsSolid || !point.IsValid) return false;
+        try
+        {
+            return brep.IsPointInside(point, tol, false);
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

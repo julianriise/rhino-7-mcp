@@ -1,9 +1,8 @@
 using System;
-using System.Drawing;
-using System.Linq;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using Rhino;
-using System.Collections.Generic;
+using Rhino.DocObjects;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -13,95 +12,130 @@ public partial class RhinoMCPFunctions
     public JObject SelectObjects(JObject parameters)
     {
         JObject filters = (JObject)parameters["filters"];
+        if (filters == null)
+            throw new InvalidOperationException("filters are required.");
 
         var doc = RhinoDoc.ActiveDoc;
-        var objects = doc.Objects.ToList();
-        var selectedObjects = new List<Guid>();
         var filtersType = (string)parameters["filters_type"] ?? "and";
-
         if (filtersType != "and" && filtersType != "or")
             throw new InvalidOperationException($"Invalid filters_type '{filtersType}': expected 'and' or 'or'.");
 
-        // no filter means all are selected
-        if (filters.Count == 0)
-        {
-            doc.Objects.UnselectAll();
-            doc.Objects.Select(objects.Select(o => o.Id));
-            doc.Views.Redraw();
-
-            return new JObject() { ["count"] = objects.Count };
-        }
-
-        // filters.name is documented as a list of strings; custom attributes are also lists.
-        // color stays a single RGB triplet (see contracts/commands/select_objects.json).
         List<string> nameValues = null;
         int[] color = null;
-        var customAttributes = new Dictionary<string, List<string>>();
-
-        foreach (JProperty f in filters.Properties())
+        var customAttributes = new Dictionary<string, IList<string>>();
+        foreach (JProperty field in filters.Properties())
         {
-            if (f.Name == "name") nameValues = castToStringList(f.Value);
-            else if (f.Name == "color") color = castToIntArray(f.Value);
-            else customAttributes[f.Name] = castToStringList(f.Value);
+            if (field.Name == "name") nameValues = castToStringList(field.Value);
+            else if (field.Name == "color") color = castToIntArray(field.Value);
+            else customAttributes[field.Name] = castToStringList(field.Value);
         }
 
-        bool hasName = nameValues != null;
-        bool hasColor = color != null;
-
-        bool ColorMatches(Rhino.DocObjects.RhinoObject obj) =>
-            obj.Attributes.ObjectColor.R == color[0] &&
-            obj.Attributes.ObjectColor.G == color[1] &&
-            obj.Attributes.ObjectColor.B == color[2];
-
-        foreach (var obj in objects)
+        var rows = new List<SelectPlan.Row>();
+        foreach (var obj in EnumerateDocObjects(doc))
         {
-            bool selected;
-            if (filtersType == "and")
-            {
-                // Each present filter key must match at least one of its listed values.
-                selected = true;
-                if (hasName && !nameValues.Contains(obj.Name)) selected = false;
-                if (selected && hasColor && !ColorMatches(obj)) selected = false;
-                if (selected)
-                {
-                    foreach (var customAttribute in customAttributes)
-                    {
-                        var userValue = obj.Attributes.GetUserString(customAttribute.Key);
-                        if (userValue == null || !customAttribute.Value.Contains(userValue))
-                        {
-                            selected = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Any present filter key matching any listed value wins.
-                selected = false;
-                if (hasName && nameValues.Contains(obj.Name)) selected = true;
-                if (!selected && hasColor && ColorMatches(obj)) selected = true;
-                if (!selected)
-                {
-                    foreach (var customAttribute in customAttributes)
-                    {
-                        var userValue = obj.Attributes.GetUserString(customAttribute.Key);
-                        if (userValue != null && customAttribute.Value.Contains(userValue))
-                        {
-                            selected = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (selected) selectedObjects.Add(obj.Id);
+            rows.Add(RowFor(obj));
         }
 
-        doc.Objects.UnselectAll();
-        doc.Objects.Select(selectedObjects);
-        doc.Views.Redraw();
+        var hits = SelectPlan.Match(
+            rows,
+            nameValues,
+            color != null && color.Length >= 3,
+            color != null && color.Length >= 3 ? color[0] : 0,
+            color != null && color.Length >= 3 ? color[1] : 0,
+            color != null && color.Length >= 3 ? color[2] : 0,
+            customAttributes,
+            filtersType == "or");
 
-        return new JObject() { ["count"] = selectedObjects.Count };
+        try
+        {
+            doc.Objects.UnselectAll();
+        }
+        catch (Exception ex)
+        {
+            RhinoApp.WriteLine("UnselectAll: " + ex.Message);
+        }
+
+        var count = 0;
+        foreach (var id in hits)
+        {
+            if (!Guid.TryParse(id, out var guid)) continue;
+            var obj = doc.Objects.FindId(guid);
+            if (obj == null) continue;
+            try
+            {
+                // Persistent, and ignore a hidden layer, so a frame on A-OPEN
+                // stays selected for the next command.
+                if (obj.Select(true, true, true, true, true, true) > 0)
+                    count++;
+            }
+            catch (Exception ex)
+            {
+                RhinoApp.WriteLine("Select " + id + ": " + ex.Message);
+            }
+        }
+
+        try { doc.Views.Redraw(); }
+        catch (Exception ex) { RhinoApp.WriteLine("Redraw: " + ex.Message); }
+
+        return new JObject { ["count"] = count };
+    }
+
+    private static SelectPlan.Row RowFor(RhinoObject obj)
+    {
+        if (obj == null || obj.Attributes == null)
+        {
+            return new SelectPlan.Row
+            {
+                Id = obj == null ? null : obj.Id.ToString(),
+                HasAttributes = false
+            };
+        }
+
+        string name = null;
+        var red = 0;
+        var green = 0;
+        var blue = 0;
+        Dictionary<string, string> strings = null;
+        try { name = obj.Name; }
+        catch (NullReferenceException) { name = null; }
+        try
+        {
+            var color = obj.Attributes.ObjectColor;
+            red = color.R;
+            green = color.G;
+            blue = color.B;
+        }
+        catch (NullReferenceException)
+        {
+            // A block instance can report color before its attributes exist.
+        }
+        try
+        {
+            var user = obj.Attributes.GetUserStrings();
+            if (user != null)
+            {
+                strings = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (string key in user.AllKeys)
+                {
+                    if (!string.IsNullOrEmpty(key))
+                        strings[key] = user[key];
+                }
+            }
+        }
+        catch (NullReferenceException)
+        {
+            strings = null;
+        }
+
+        return new SelectPlan.Row
+        {
+            Id = obj.Id.ToString(),
+            Name = name,
+            HasAttributes = true,
+            R = red,
+            G = green,
+            B = blue,
+            Strings = strings
+        };
     }
 }
