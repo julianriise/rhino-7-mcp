@@ -233,7 +233,7 @@ def bake(sock: socket.socket) -> dict:
     walls = send_command(sock, "walls_from_layer", {})
     print(f"    {walls.get('message')} count={walls.get('count')}")
     print("==> roof_flat_from_walls")
-    roof = send_command(sock, "roof_flat_from_walls", {})
+    roof = send_command(sock, "roof_flat_from_walls", {"overhang": 500})
     print(f"    {roof.get('message')} count={roof.get('count')}")
     print("==> openings_from_layer door")
     doors = send_command(sock, "openings_from_layer", {"layer": "door"})
@@ -823,20 +823,110 @@ def main() -> int:
             if attrs_of(roof).get("forsk:kind") != "roof":
                 failures.append("roof missing after edits")
 
-        print("==> layout_pack plan + export_pdf")
-        packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True})
-        print(f"    {packed.get('message')} count={packed.get('count')}")
-        if (packed.get("count") or 0) < 1:
-            failures.append(f"layout_pack count={packed.get('count')} message={packed.get('message')}")
-            print("FAIL print; stopping")
-        else:
-            pdf_path = "/tmp/forsk-f2-plan.pdf"
-            pdf = send_command(sock, "export_pdf", {"path": pdf_path, "layout": "plan"})
-            print(f"    {pdf.get('message')} count={pdf.get('count')} path={pdf.get('path')}")
+        print("==> plan symbols")
+        rooms = send_command(sock, "rooms_from_layer", {})
+        print(f"    rooms {rooms.get('count')}")
+        if (rooms.get("count") or 0) < 1 and baked and baked.get("wall_ids"):
+            wall = send_command(sock, "get_object_info", {"id": baked["wall_ids"][0]})
+            box = wall.get("bounding_box") or [[0, 0, 0], [10000, 10000, 0]]
+            x0 = float(box[0][0]) + 1500
+            y0 = float(box[0][1]) + 1500
+            layer_room = send_command(sock, "create_layer", {"name": "A-ROOM"})
+            print(f"    room layer {layer_room.get('name') or layer_room.get('message')}")
+            send_command(sock, "get_or_set_current_layer", {"name": "A-ROOM"})
+            send_command(sock, "create_object", {
+                "type": "POLYLINE",
+                "name": "office-room",
+                "params": {"points": [
+                    [x0, y0, 0],
+                    [x0 + 4000, y0, 0],
+                    [x0 + 4000, y0 + 5000, 0],
+                    [x0, y0 + 5000, 0],
+                    [x0, y0, 0],
+                ]},
+            })
+            rooms = send_command(sock, "rooms_from_layer", {})
+            print(f"    rooms after curve {rooms.get('count')} {rooms.get('message')}")
+        if (rooms.get("count") or 0) < 1:
+            failures.append("office room tag has no room")
+
+        def plan_objects() -> list:
+            rows = []
+            offset = 0
+            while True:
+                found = send_command(sock, "get_objects", {
+                    "layer_filter": "S-DRAW::Plan",
+                    "limit": 200,
+                    "offset": offset,
+                    "include_geometry": False,
+                    "include_attributes": True,
+                })
+                batch = found.get("objects") or []
+                rows.extend(batch)
+                if not found.get("has_more"):
+                    break
+                offset += len(batch)
+                if offset > 5000:
+                    break
+            return rows
+
+        def check_plan(label: str, scale: int, pdf_name: str, openings: int) -> dict:
+            packed = send_command(sock, "layout_pack", {
+                "views": ["plan"],
+                "scale": scale,
+                "replace": True,
+            })
+            print(f"    {label} {packed.get('message')}")
+            pages = packed.get("pages") or []
+            page = pages[0] if pages else {}
+            if page.get("scale") != 200 and scale == 100:
+                failures.append(f"{label} scale={page.get('scale')} expected 200")
+            if scale == 200 and page.get("scale") != 200:
+                failures.append(f"{label} scale={page.get('scale')}")
+            if page.get("symbols") != openings:
+                failures.append(f"{label} symbols={page.get('symbols')} openings={openings}")
+            if page.get("fills") != 61:
+                failures.append(f"{label} fills={page.get('fills')}")
+            if page.get("symbol_arcs") != int(baked.get("door_cuts") or 0):
+                failures.append(
+                    f"{label} arcs={page.get('symbol_arcs')} doors={baked.get('door_cuts')}"
+                )
+            title = str(page.get("view_title") or "")
+            if f"1:{page.get('scale')}" not in title:
+                failures.append(f"{label} title={title!r}")
+            if page.get("north_arrow") is not True:
+                failures.append(f"{label} north arrow missing")
+            tag = str(page.get("room_tag_text") or "")
+            if "ca." not in tag or "m²" not in tag:
+                failures.append(f"{label} room tag={tag!r}")
+            if (page.get("roof_outline") or 0) < 1:
+                failures.append(f"{label} roof={page.get('roof_outline')}")
+            rows = plan_objects()
+            sills = [
+                obj for obj in rows
+                if (obj.get("attributes") or {}).get("forsk:symbol") == "sill"
+            ]
+            windows = int(baked.get("window_cuts") or 0) - 1
+            if len(sills) != windows * 2:
+                failures.append(f"{label} sills={len(sills)} windows={windows}")
+            frames = [
+                obj for obj in rows
+                if (obj.get("attributes") or {}).get("forsk:kind") == "opening"
+            ]
+            if frames:
+                failures.append(f"{label} frame curves in the plan pack")
+            pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
+            print(f"    {pdf.get('message')}")
             message = str(pdf.get("message") or "")
             if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
-                failures.append(f"export_pdf count={pdf.get('count')} message={message}")
-                print("FAIL print; stopping")
+                failures.append(f"{label} pdf {message}")
+            if f"Symbols {openings}" not in message:
+                failures.append(f"{label} export symbols {message}")
+            return page
+
+        openings_now = expected - 1 if baked else 0
+        check_plan("office 1:100", 100, "/tmp/forsk-f5-office-100.pdf", openings_now)
+        check_plan("office 1:200", 200, "/tmp/forsk-f5-office-200.pdf", openings_now)
     finally:
         sock.close()
 

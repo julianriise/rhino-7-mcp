@@ -6,7 +6,7 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Opening type registry. No Rhino document. Lookup is by string id so a
-/// later kit can add an entry. plan_symbol draws nothing until F5.0.
+/// later kit can add an entry. Plan symbols are generated from the record.
 /// </summary>
 public static class OpeningTypes
 {
@@ -329,10 +329,211 @@ public static class OpeningTypes
         return string.Join(" ", lines.ToArray());
     }
 
-    /// <summary>F5.0 draws the plan symbol. This slice returns nothing.</summary>
-    public static object PlanSymbol(Record record, string detail)
+    /// <summary>
+    /// +1 when hand is L and xLeft is +1. R mirrors it. Park side uses the same sign.
+    /// </summary>
+    public static int HandSign(string hand, int xLeft)
     {
-        return null;
+        var left = xLeft < 0 ? -1 : 1;
+        return string.Equals(hand, "R", StringComparison.OrdinalIgnoreCase) ? -left : left;
+    }
+
+    public static int HandSign(Record record, int xLeft)
+    {
+        return HandSign(record == null ? null : record.Hand, xLeft);
+    }
+
+    /// <summary>In swings toward +yInward. Out mirrors it.</summary>
+    public static int SwingSign(Record record, int yInward)
+    {
+        var inward = yInward < 0 ? -1 : 1;
+        var outward = record != null && string.Equals(record.Swing, "out", StringComparison.OrdinalIgnoreCase);
+        return (outward ? -1 : 1) * inward;
+    }
+
+    /// <summary>Sliding track sits on the face opposite Inward.</summary>
+    public static int TrackSign(int yInward)
+    {
+        return yInward < 0 ? 1 : -1;
+    }
+
+    /// <summary>
+    /// Sill &lt; cut &lt; head is solid. Fully above the cut is dashed.
+    /// Fully below the cut is solid. Doors are always solid.
+    /// </summary>
+    public static bool AboveCut(Record record, double sill, double head, double cutZ)
+    {
+        if (record == null) return false;
+        if (string.Equals(record.Kind, "door", StringComparison.OrdinalIgnoreCase)) return false;
+        if (sill < cutZ && cutZ < head) return false;
+        if (head <= cutZ) return false;
+        return sill >= cutZ;
+    }
+
+    public sealed class PlanFrame
+    {
+        public double OuterHalf;
+        public double InnerHalf;
+        public double HalfThick;
+        public double Sill;
+        public double Head;
+        public double CutZ;
+        public int YInward;
+        public int XLeft;
+    }
+
+    public sealed class PlanMark
+    {
+        public string Shape;
+        public string Part;
+        public double X0;
+        public double Y0;
+        public double X1;
+        public double Y1;
+        public double Cx;
+        public double Cy;
+        public double Radius;
+        public bool Dashed;
+        public string Tier;
+    }
+
+    /// <summary>
+    /// Plan symbol in the opening frame. X runs along the wall, Y along the
+    /// frame plane. detail other than 1:100 still returns this 1:100 set.
+    /// </summary>
+    public static List<PlanMark> PlanSymbol(Record record, string detail, PlanFrame frame)
+    {
+        var marks = new List<PlanMark>();
+        if (record == null || frame == null || string.IsNullOrEmpty(record.TypeId))
+            return marks;
+        if (frame.InnerHalf < 2 || frame.HalfThick <= 0)
+            return marks;
+
+        var dashed = AboveCut(record, frame.Sill, frame.Head, frame.CutZ);
+        var id = record.TypeId;
+        if (id == "door.hinged_single")
+            AddHingedLeaf(marks, frame, HandSign(record, frame.XLeft), SwingSign(record, frame.YInward), LeafSpan(frame), false);
+        else if (id == "door.hinged_double")
+        {
+            var span = DoubleLeafSpan(frame);
+            AddHingedLeaf(marks, frame, -1, SwingSign(record, frame.YInward), span, false);
+            AddHingedLeaf(marks, frame, 1, SwingSign(record, frame.YInward), span, false);
+        }
+        else if (id == "door.sliding")
+            AddSliding(marks, frame, HandSign(record, frame.XLeft));
+        else if (id == "door.pocket")
+            AddPocket(marks, frame, HandSign(record, frame.XLeft));
+        else if (id == "window.fixed" || id == "window.side_hung" || id == "window.top_hung")
+            AddWindow(marks, frame, record, dashed);
+        return marks;
+    }
+
+    static double LeafSpan(PlanFrame frame)
+    {
+        return 2.0 * (frame.InnerHalf - 1.0);
+    }
+
+    static double DoubleLeafSpan(PlanFrame frame)
+    {
+        return (frame.InnerHalf - 1.0) - 3.0;
+    }
+
+    static void AddHingedLeaf(List<PlanMark> marks, PlanFrame frame, int hingeSign, int swingSign, double radius, bool dashed)
+    {
+        if (radius <= 1 || hingeSign == 0 || swingSign == 0) return;
+        var hingeX = hingeSign * (frame.InnerHalf - 1.0);
+        var openY = swingSign * radius;
+        marks.Add(Line(hingeX, 0, hingeX, openY, "leaf", dashed));
+        marks.Add(new PlanMark
+        {
+            Shape = "arc",
+            Part = "arc",
+            X0 = hingeX - (hingeSign * radius),
+            Y0 = 0,
+            X1 = hingeX,
+            Y1 = openY,
+            Cx = hingeX,
+            Cy = 0,
+            Radius = radius,
+            Dashed = dashed,
+            Tier = "thin"
+        });
+    }
+
+    static void AddSliding(List<PlanMark> marks, PlanFrame frame, int parkSign)
+    {
+        if (parkSign == 0) return;
+        var y = TrackSign(frame.YInward) * frame.HalfThick * 0.55;
+        var jamb = frame.InnerHalf - 1.0;
+        var past = jamb + (jamb * 0.45);
+        var x0 = -parkSign * jamb;
+        var x1 = parkSign * past;
+        marks.Add(Line(x0, y, x1, y, "leaf", false));
+        var arrow = Math.Max(40.0, jamb * 0.18);
+        var back = x1 - (parkSign * arrow);
+        marks.Add(Line(x1, y, back, y + arrow * 0.55, "arrow", false));
+        marks.Add(Line(x1, y, back, y - arrow * 0.55, "arrow", false));
+    }
+
+    static void AddPocket(List<PlanMark> marks, PlanFrame frame, int parkSign)
+    {
+        if (parkSign == 0) return;
+        var span = LeafSpan(frame);
+        var x0 = parkSign * (frame.InnerHalf + 2.0);
+        var x1 = parkSign * (frame.InnerHalf + 2.0 + span);
+        marks.Add(Line(x0, 0, x1, 0, "leaf", true));
+    }
+
+    static void AddWindow(List<PlanMark> marks, PlanFrame frame, Record record, bool dashed)
+    {
+        var x0 = -frame.InnerHalf;
+        var x1 = frame.InnerHalf;
+        marks.Add(Line(x0, frame.HalfThick, x1, frame.HalfThick, "sill", dashed));
+        marks.Add(Line(x0, -frame.HalfThick, x1, -frame.HalfThick, "sill", dashed));
+        marks.Add(Line(x0, 0, x1, 0, "glass", dashed));
+        if (record.TypeId == "window.fixed") return;
+        var y = SwingSign(record, frame.YInward) * frame.HalfThick * 0.45;
+        marks.Add(Line(x0, y, x1, y, "glass", dashed));
+    }
+
+    static PlanMark Line(double x0, double y0, double x1, double y1, string part, bool dashed)
+    {
+        return new PlanMark
+        {
+            Shape = "line",
+            Part = part,
+            X0 = x0,
+            Y0 = y0,
+            X1 = x1,
+            Y1 = y1,
+            Dashed = dashed,
+            Tier = "thin"
+        };
+    }
+
+    public static string RoomTag(double areaMm2)
+    {
+        var m2 = Math.Round(areaMm2 / 1000000.0, 1, MidpointRounding.AwayFromZero);
+        var text = m2.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',');
+        return "ca. " + text + " m²";
+    }
+
+    public static string ViewTitle(string view, int level, int scale, bool locked)
+    {
+        var key = string.IsNullOrWhiteSpace(view) ? "" : view.Trim().ToLowerInvariant();
+        if (key == "plan")
+        {
+            var etg = (level < 0 ? 0 : level) + 1;
+            var sc = locked && scale > 0
+                ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
+                : "fit";
+            return "Plan " + etg.ToString(CultureInfo.InvariantCulture) + ". etg " + sc;
+        }
+        if (key == "north") return "Fasade mot nord";
+        if (key == "east") return "Fasade mot øst";
+        if (key == "south") return "Fasade mot sør";
+        if (key == "west") return "Fasade mot vest";
+        return "";
     }
 
     static void AppendGrouped(List<string> lines, IList<ReceiptRow> rows, string mode)

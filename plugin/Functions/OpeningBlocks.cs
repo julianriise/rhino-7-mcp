@@ -567,8 +567,8 @@ public partial class RhinoMCPFunctions
         }
 
         var topHung = string.Equals(style.TypeId, "window.top_hung", StringComparison.Ordinal);
-        var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
-        var hingeX = topHung ? 0 : (style.Hand == "R" ? -xLeft : xLeft);
+        var swingY = OpeningTypes.SwingSign(style, yInward);
+        var hingeX = topHung ? 0 : OpeningTypes.HandSign(style, xLeft);
         AddHungSash(parts, plane, innerHalf, halfThick, face, z0, z1, swingY, hingeX, topHung, tol);
     }
 
@@ -661,7 +661,7 @@ public partial class RhinoMCPFunctions
         }
         else if (string.Equals(id, "door.hinged_double", StringComparison.Ordinal))
         {
-            var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
+            var swingY = OpeningTypes.SwingSign(style, yInward);
             const double gap = 3.0;
             AddFacedLeaf(
                 parts, plane, -(innerHalf - 1), -gap, swingY, halfThick, zLeaf0, zLeaf1,
@@ -678,8 +678,8 @@ public partial class RhinoMCPFunctions
         }
         else
         {
-            var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
-            var hingeSign = style.Hand == "R" ? -xLeft : xLeft;
+            var swingY = OpeningTypes.SwingSign(style, yInward);
+            var hingeSign = OpeningTypes.HandSign(style, xLeft);
             var hingeAt = hingeSign > 0 ? innerHalf - 1 : -(innerHalf - 1);
             AddFacedLeaf(
                 parts, plane, -(innerHalf - 1), innerHalf - 1, swingY, halfThick, zLeaf0, zLeaf1,
@@ -780,7 +780,7 @@ public partial class RhinoMCPFunctions
         int xLeft,
         string hand)
     {
-        var faceY = -yInward;
+        var faceY = OpeningTypes.TrackSign(yInward);
         var leafThick = Math.Min(OpeningLeafMm, Math.Max(16.0, halfThick * 0.45));
         FaceSpan(faceY, halfThick, leafThick, 1.2, out var y0, out var y1);
         var zLeaf1 = z1 - face - 6;
@@ -789,7 +789,7 @@ public partial class RhinoMCPFunctions
         if (leaf != null)
             parts.Add(new OpeningPart { Geometry = leaf, Part = "leaf", Glass = false });
 
-        var park = (hand == "R" ? -1 : 1) * xLeft;
+        var park = OpeningTypes.HandSign(hand, xLeft);
         const double stile = 28.0;
         double sx0;
         double sx1;

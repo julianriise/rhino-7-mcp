@@ -81,6 +81,8 @@ public partial class RhinoMCPFunctions
     private static int _penSamplePass = -2;
     private static bool _penKeysStarted;
     private static bool _drawIncludeExisting = true;
+    private static PlanStats _lastPlanStats;
+    private static bool _lastPlanStatsSet;
 
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
@@ -215,9 +217,19 @@ public partial class RhinoMCPFunctions
                 RemoveLayoutPages(doc, spec.View, false);
 
             Plane? clip = null;
-            if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
+            var plan = string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
+            if (plan)
                 clip = planClip;
-            var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip);
+            var strokeScale = 0;
+            if (plan)
+                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH);
+            var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
+            if (plan)
+            {
+                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
+                if (fitted != strokeScale)
+                    drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
+            }
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
             {
                 var why = string.IsNullOrEmpty(drawn.Error)
@@ -260,7 +272,9 @@ public partial class RhinoMCPFunctions
             var scaleLabel = scaleLocked
                 ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
                 : "fit";
-            var ids = AddTitleBlock(doc, page, spec, stableId, scaleLabel);
+            var level = WallLevel(doc);
+            var viewTitle = OpeningTypes.ViewTitle(spec.View, level, scale, scaleLocked);
+            var ids = AddTitleBlock(doc, page, spec, stableId, scaleLabel, viewTitle, plan);
             var pageRecord = new JObject
             {
                 ["view"] = spec.View,
@@ -279,13 +293,44 @@ public partial class RhinoMCPFunctions
                 pageRecord["cut_z"] = planCutZ;
                 pageRecord["cut_height_mm"] = ForskDefaults.PlanCutHeightMm;
                 pageRecord["fills"] = drawn.Fills;
+                pageRecord["symbols"] = drawn.Symbols;
+                pageRecord["symbol_arcs"] = drawn.SymbolArcs;
+                pageRecord["symbol_dashed"] = drawn.SymbolDashed;
+                pageRecord["roof_outline"] = drawn.RoofOutline;
+                pageRecord["room_tags"] = drawn.RoomTags;
+                pageRecord["view_title"] = viewTitle;
+                pageRecord["north_arrow"] = true;
+                if (!string.IsNullOrEmpty(drawn.RoomText))
+                    pageRecord["room_tag_text"] = drawn.RoomText;
+                _lastPlanStats = new PlanStats
+                {
+                    Symbols = drawn.Symbols,
+                    Arcs = drawn.SymbolArcs,
+                    Dashed = drawn.SymbolDashed,
+                    Roof = drawn.RoofOutline,
+                    Rooms = drawn.RoomTags,
+                    Note = drawn.SymbolNote,
+                    RoomText = drawn.RoomText
+                };
+                _lastPlanStatsSet = true;
                 cutNote = " Plan cut "
                     + ForskDefaults.PlanCutHeightMm.ToString("0", CultureInfo.InvariantCulture)
                     + " mm above the floor (Z "
                     + planCutZ.ToString("0.###", CultureInfo.InvariantCulture)
                     + "). Section fill "
                     + drawn.Fills.ToString(CultureInfo.InvariantCulture)
-                    + ".";
+                    + ". Symbols "
+                    + drawn.Symbols.ToString(CultureInfo.InvariantCulture)
+                    + ", arcs "
+                    + drawn.SymbolArcs.ToString(CultureInfo.InvariantCulture)
+                    + ", dashed "
+                    + drawn.SymbolDashed.ToString(CultureInfo.InvariantCulture)
+                    + ", roof outline "
+                    + drawn.RoofOutline.ToString(CultureInfo.InvariantCulture)
+                    + ", room tags "
+                    + drawn.RoomTags.ToString(CultureInfo.InvariantCulture)
+                    + "."
+                    + (string.IsNullOrEmpty(drawn.SymbolNote) ? "" : " " + drawn.SymbolNote);
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
             }
             pages.Add(pageRecord);
@@ -482,6 +527,18 @@ public partial class RhinoMCPFunctions
             pdf.Write(full);
             LogPrint(full, names.Count, detail);
             var wrote = $"Wrote {names.Count} page(s) to {full}.";
+            if (_lastPlanStatsSet)
+            {
+                wrote += " Symbols "
+                    + _lastPlanStats.Symbols.ToString(CultureInfo.InvariantCulture)
+                    + ", arcs "
+                    + _lastPlanStats.Arcs.ToString(CultureInfo.InvariantCulture)
+                    + ", dashed "
+                    + _lastPlanStats.Dashed.ToString(CultureInfo.InvariantCulture)
+                    + ".";
+                if (!string.IsNullOrEmpty(_lastPlanStats.Note))
+                    wrote += " " + _lastPlanStats.Note;
+            }
             if (blankLabels.Count > 0)
                 wrote += " Blank preview: " + string.Join("; ", blankLabels.ToArray()) + ".";
             return ExportPdfResult(full, names, wrote);
@@ -520,8 +577,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Rebuild a view when its S-DRAW curves are missing. layout_pack always
-    /// refreshes them; export only fills gaps.
+    /// Elevations rebuild only when their curves are missing. The plan pack
+    /// rebuilds on every export so a type swap changes the symbol.
     /// </summary>
     private string EnsureGreyscaleDrawings(RhinoDoc doc, List<RhinoPageView> pages)
     {
@@ -532,16 +589,23 @@ public partial class RhinoMCPFunctions
         {
             var view = ViewKeyForPage(page);
             if (string.IsNullOrEmpty(view)) continue;
-            if (CountPrintDrawings(doc, view) > 0) continue;
+            var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
+            // A type swap must show on the next export without a new layout_pack.
+            if (!plan && CountPrintDrawings(doc, view) > 0) continue;
             if (clay == null)
                 clay = CollectLayoutClay(doc, _drawIncludeExisting, out _);
             Plane? clip = null;
-            if (view.Equals("plan", StringComparison.OrdinalIgnoreCase))
+            var strokeScale = 0;
+            if (plan)
             {
                 var cutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
                 clip = new Plane(new Point3d(0, 0, cutZ), -Vector3d.ZAxis);
+                strokeScale = DetailModelScale(page);
+                if (strokeScale < 1) strokeScale = 100;
             }
-            var drawn = BakeGreyscaleDrawing(doc, view, _drawIncludeExisting, clip);
+            var drawn = BakeGreyscaleDrawing(doc, view, _drawIncludeExisting, clip, strokeScale);
+            // The locked detail already frames this pack. Panning again after a
+            // rebuild left the Mac preview black, so the camera stays.
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1)
             {
                 return string.IsNullOrEmpty(drawn.Error)
@@ -1991,7 +2055,8 @@ public partial class RhinoMCPFunctions
     }
 
     private JArray AddTitleBlock(
-        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string scaleLabel)
+        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string scaleLabel,
+        string viewTitle, bool northArrow)
     {
         var ids = new JArray();
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
@@ -2043,7 +2108,85 @@ public partial class RhinoMCPFunctions
                 ids.Add(id.ToString());
             y -= textH + gap;
         }
+
+        if (!string.IsNullOrEmpty(viewTitle))
+        {
+            var titlePlane = Plane.WorldXY;
+            titlePlane.Origin = new Point3d(
+                MmToPage(doc, LayoutMarginMm),
+                MmToPage(doc, LayoutMarginMm + TitleHeightMm + 1.2),
+                0);
+            var titleAttr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
+            titleAttr.Name = "forsk-view-title";
+            titleAttr.SetUserString("forsk:role", "view_title");
+            var titleId = doc.Objects.AddText(
+                viewTitle, titlePlane, MmToPage(doc, 2.5), "Arial", false, false, titleAttr);
+            if (titleId != Guid.Empty)
+                ids.Add(titleId.ToString());
+        }
+
+        if (northArrow)
+        {
+            var ax = x0 - MmToPage(doc, 16);
+            var ay = y0 + MmToPage(doc, 6);
+            var ah = MmToPage(doc, 12);
+            var head = MmToPage(doc, 3.2);
+            var northAttr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
+            northAttr.Name = "forsk-north";
+            northAttr.SetUserString("forsk:role", "north");
+            var shaft = new LineCurve(new Point3d(ax, ay, 0), new Point3d(ax, ay + ah, 0));
+            var left = new LineCurve(new Point3d(ax, ay + ah, 0), new Point3d(ax - head, ay + ah - head, 0));
+            var right = new LineCurve(new Point3d(ax, ay + ah, 0), new Point3d(ax + head, ay + ah - head, 0));
+            foreach (var stroke in new[] { shaft, left, right })
+            {
+                var strokeId = doc.Objects.AddCurve(stroke, northAttr);
+                stroke.Dispose();
+                if (strokeId != Guid.Empty)
+                    ids.Add(strokeId.ToString());
+            }
+            var letter = Plane.WorldXY;
+            letter.Origin = new Point3d(ax - MmToPage(doc, 1.6), ay + ah + MmToPage(doc, 1.2), 0);
+            var letterId = doc.Objects.AddText(
+                "N", letter, MmToPage(doc, 3.2), "Arial", false, false, northAttr);
+            if (letterId != Guid.Empty)
+                ids.Add(letterId.ToString());
+        }
         return ids;
+    }
+
+    private static int WallLevel(RhinoDoc doc)
+    {
+        if (doc == null) return 0;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var raw = obj.Attributes?.GetUserString("forsk:level");
+            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var level))
+                return level;
+        }
+        return 0;
+    }
+
+    private static int DetailModelScale(RhinoPageView page)
+    {
+        var details = page?.GetDetailViews();
+        if (details == null) return 0;
+        foreach (var detail in details)
+        {
+            var ratio = detail?.DetailGeometry?.PageToModelRatio ?? 0;
+            if (ratio > 1e-6 && ratio < 1)
+            {
+                var scale = (int)Math.Round(1.0 / ratio);
+                if (scale >= 1) return scale;
+            }
+            if (ratio >= 1)
+            {
+                var scale = (int)Math.Round(ratio);
+                if (scale >= 1) return scale;
+            }
+        }
+        return 0;
     }
 
     private static ObjectAttributes LayoutAttr(int layerIndex, Guid pageViewportId, string view, string stableId)

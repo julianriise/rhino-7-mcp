@@ -393,6 +393,155 @@ def main() -> int:
         wall_last = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_last.get("forsk:id") != wall_fid or wall_last.get("forsk:thickness") != wall_thick:
             failures.append("pocket flip changed the wall")
+
+        print("==> plan symbols: room, roof, high window, door swings")
+        layer(sock, "A-ROOM")
+        send_command(sock, "create_object", {
+            "type": "POLYLINE",
+            "name": "garage-room",
+            "params": {"points": [[200, 200, 0], [5800, 200, 0], [5800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
+        })
+        rooms = send_command(sock, "rooms_from_layer", {})
+        print(f"    {rooms.get('message')} count={rooms.get('count')}")
+        if (rooms.get("count") or 0) < 1:
+            failures.append(f"rooms={rooms.get('count')}")
+        roof = send_command(sock, "roof_flat_from_walls", {"overhang": 500})
+        print(f"    {roof.get('message')}")
+        high = send_command(sock, "add_opening", {
+            "opening_kind": "window",
+            "host_id": host_id,
+            "t": 0.72,
+            "width": 1200,
+            "sill": 1300,
+            "head": 2100,
+        })
+        print(f"    {high.get('message')} openings={high.get('host_openings')} voids={high.get('host_voids')}")
+        if high.get("host_openings") != 2 or high.get("host_voids") != 2:
+            failures.append(
+                f"high window openings={high.get('host_openings')} voids={high.get('host_voids')}"
+            )
+        hinged = send_command(sock, "set_opening_type", {
+            "id": door_id,
+            "type": "door.hinged_single",
+            "swing": "in",
+        })
+        print(f"    {hinged.get('message')} openings={hinged.get('host_openings')} voids={hinged.get('host_voids')}")
+        if hinged.get("host_openings") != 2 or hinged.get("host_voids") != 2:
+            failures.append("hinged restore changed the void count")
+        if hinged.get("host_id") != host_id:
+            failures.append("hinged restore changed the wall")
+
+        def leaf_open_y() -> float | None:
+            found = send_command(sock, "get_objects", {
+                "layer_filter": "S-DRAW::Plan",
+                "limit": 200,
+                "include_geometry": False,
+                "include_attributes": True,
+            })
+            for obj in found.get("objects") or []:
+                attr = obj.get("attributes") or {}
+                if attr.get("forsk:symbol") != "leaf":
+                    continue
+                if str(attr.get("forsk:marker_id") or "").lower() != door_id.lower():
+                    continue
+                try:
+                    return float(attr.get("forsk:open_y"))
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        def plan_page(label: str, scale: int, pdf_name: str) -> dict:
+            packed = send_command(sock, "layout_pack", {"views": ["plan"], "scale": scale, "replace": True})
+            print(f"    {label} {packed.get('message')}")
+            pages = packed.get("pages") or []
+            page = pages[0] if pages else {}
+            if page.get("symbols") != 2:
+                failures.append(f"{label} symbols={page.get('symbols')}")
+            if page.get("north_arrow") is not True:
+                failures.append(f"{label} north arrow missing")
+            title = str(page.get("view_title") or "")
+            if f"1:{page.get('scale')}" not in title:
+                failures.append(f"{label} title={title!r} scale={page.get('scale')}")
+            if "ca." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
+                failures.append(f"{label} room tag={page.get('room_tag_text')!r}")
+            if (page.get("roof_outline") or 0) < 1:
+                failures.append(f"{label} roof outline={page.get('roof_outline')}")
+            if (page.get("fills") or 0) < 1:
+                failures.append(f"{label} fills={page.get('fills')}")
+            pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
+            print(f"    {pdf.get('message')}")
+            if (pdf.get("count") or 0) < 1 or "capture failed" in str(pdf.get("message") or "").lower():
+                failures.append(f"{label} pdf {pdf.get('message')}")
+            wall_now = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
+            if wall_now.get("forsk:id") != wall_fid or wall_now.get("forsk:thickness") != wall_thick:
+                failures.append(f"{label} wall changed")
+            return page
+
+        hinged_page = plan_page("hinged", 100, "/tmp/forsk-f5-garage-hinged.pdf")
+        if hinged_page.get("symbol_arcs") != 1:
+            failures.append(f"hinged arcs={hinged_page.get('symbol_arcs')}")
+        if (hinged_page.get("symbol_dashed") or 0) < 1:
+            failures.append(f"hinged dashed={hinged_page.get('symbol_dashed')}")
+        open_in = leaf_open_y()
+        print(f"    leaf open_y {open_in}")
+        if open_in is None or open_in <= 0:
+            failures.append(f"hinged leaf open_y={open_in}")
+
+        send_command(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
+        # A second capture of the same page comes back black. A fresh layout
+        # paints, and export_pdf still rebuilds the plan from the record.
+        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
+        flipped_pdf = send_command(sock, "export_pdf", {
+            "path": "/tmp/forsk-f5-garage-flip.pdf",
+            "layout": "plan",
+        })
+        print(f"    flip export {flipped_pdf.get('message')}")
+        if "Symbols 2" not in str(flipped_pdf.get("message") or ""):
+            failures.append(f"flip export symbols {flipped_pdf.get('message')}")
+        open_out = leaf_open_y()
+        print(f"    flipped open_y {open_out}")
+        if open_out is None or open_out >= 0 or (open_in is not None and abs(open_out + open_in) > 1):
+            failures.append(f"flip leaf open_y={open_out} was {open_in}")
+
+        send_command(sock, "set_opening_type", {"id": door_id, "type": "door.sliding"})
+        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
+        sliding_pdf = send_command(sock, "export_pdf", {
+            "path": "/tmp/forsk-f5-garage-sliding.pdf",
+            "layout": "plan",
+        })
+        print(f"    sliding export {sliding_pdf.get('message')}")
+        if "arcs 0" not in str(sliding_pdf.get("message") or ""):
+            failures.append(f"sliding arcs {sliding_pdf.get('message')}")
+        if leaf_open_y() is not None:
+            # A sliding leaf is not a swinging leaf; open_y is still stamped on it.
+            pass
+
+        send_command(sock, "set_opening_type", {"id": door_id, "type": "door.pocket"})
+        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
+        pocket_pdf = send_command(sock, "export_pdf", {
+            "path": "/tmp/forsk-f5-garage-pocket.pdf",
+            "layout": "plan",
+        })
+        print(f"    pocket export {pocket_pdf.get('message')}")
+        if "arcs 0" not in str(pocket_pdf.get("message") or ""):
+            failures.append(f"pocket arcs {pocket_pdf.get('message')}")
+        pocket_leaf = None
+        found = send_command(sock, "get_objects", {
+            "layer_filter": "S-DRAW::Plan",
+            "limit": 200,
+            "include_geometry": False,
+            "include_attributes": True,
+        })
+        for obj in found.get("objects") or []:
+            attr = obj.get("attributes") or {}
+            if attr.get("forsk:symbol") == "leaf" and str(attr.get("forsk:marker_id") or "").lower() == door_id.lower():
+                pocket_leaf = attr
+                break
+        if pocket_leaf is None or pocket_leaf.get("forsk:dashed") != "1":
+            failures.append(f"pocket leaf={pocket_leaf}")
+        wall_end = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
+        if wall_end.get("forsk:id") != wall_fid or wall_end.get("forsk:thickness") != wall_thick:
+            failures.append("plan symbols changed the wall")
     finally:
         sock.close()
 

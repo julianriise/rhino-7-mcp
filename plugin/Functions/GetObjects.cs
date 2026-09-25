@@ -29,6 +29,7 @@ public partial class RhinoMCPFunctions
         string typeFilter = parameters["type_filter"]?.ToString()?.ToUpper();
         JToken bboxFilter = parameters["bbox_filter"];
         bool includeGeometry = parameters["include_geometry"]?.ToObject<bool>() ?? true;
+        bool includeAttributes = parameters["include_attributes"]?.ToObject<bool>() ?? false;
 
         // Parse bbox filter if provided
         BoundingBox? filterBbox = null;
@@ -107,23 +108,27 @@ public partial class RhinoMCPFunctions
         var objectsArray = new JArray();
         foreach (var obj in pagedObjects)
         {
+            JObject row;
             if (includeGeometry)
             {
-                objectsArray.Add(Serializer.RhinoObject(obj));
+                row = Serializer.RhinoObject(obj);
             }
             else
             {
                 // Lightweight version without geometry details
                 var objDoc = obj.Document ?? RhinoDoc.ActiveDoc;
-                objectsArray.Add(new JObject
+                row = new JObject
                 {
                     ["id"] = obj.Id.ToString(),
                     ["name"] = obj.Name ?? "(unnamed)",
                     ["type"] = GetNormalizedType(obj),
                     ["layer"] = objDoc.Layers[obj.Attributes.LayerIndex].Name,
                     ["bounding_box"] = Serializer.SerializeBBox(obj.Geometry.GetBoundingBox(true))
-                });
+                };
             }
+            if (includeAttributes)
+                row["attributes"] = Serializer.RhinoObjectAttributes(obj);
+            objectsArray.Add(row);
         }
 
         var result = new JObject

@@ -1104,6 +1104,13 @@ public partial class RhinoMCPFunctions
         public int Fills;
         public BoundingBox Box;
         public string Error;
+        public int Symbols;
+        public int SymbolArcs;
+        public int SymbolDashed;
+        public int RoofOutline;
+        public int RoomTags;
+        public string SymbolNote;
+        public string RoomText;
     }
 
     private struct WeightedCurve
@@ -1131,7 +1138,7 @@ public partial class RhinoMCPFunctions
     }
 
     private GreyscaleDrawing BakeGreyscaleDrawing(
-        RhinoDoc doc, string view, bool includeExisting, Plane? clip)
+        RhinoDoc doc, string view, bool includeExisting, Plane? clip, int strokeScale)
     {
         var result = new GreyscaleDrawing
         {
@@ -1158,7 +1165,13 @@ public partial class RhinoMCPFunctions
 
         var geometries = new List<GeometryBase>();
         foreach (var obj in sources)
+        {
+            // Plan symbols replace the frame. Elevations keep the 3D block.
+            if (clip.HasValue
+                && string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
+                continue;
             AppendDrawable(obj, Transform.Identity, geometries, 0);
+        }
         if (geometries.Count == 0)
         {
             result.Error = NothingToDrawMessage;
@@ -1311,6 +1324,36 @@ public partial class RhinoMCPFunctions
                     TranslateCurves(group, delta);
             }
 
+            var planRuled = false;
+            if (clip.HasValue && strokeScale > 0)
+            {
+                try
+                {
+                    planRuled = TryBakePlanLinework(
+                        doc, layer, strokeScale, clip.Value.Origin.Z, worldToHld, delta,
+                        visible, fillGroups, tolerance, ref box, ref index, ref count, out var planStats);
+                    result.Symbols = planStats.Symbols;
+                    result.SymbolArcs = planStats.Arcs;
+                    result.SymbolDashed = planStats.Dashed;
+                    result.RoofOutline = planStats.Roof;
+                    result.RoomTags = planStats.Rooms;
+                    result.SymbolNote = planStats.Note;
+                    result.RoomText = planStats.RoomText;
+                }
+                catch (Exception ex)
+                {
+                    planRuled = false;
+                    result.SymbolNote = "Symbols were skipped.";
+                    RhinoApp.WriteLine("Forsk symbols skipped: " + ex.Message);
+                }
+            }
+
+            if (planRuled)
+            {
+                foreach (var item in visible)
+                    item.Curve?.Dispose();
+            }
+            else
             foreach (var item in visible)
             {
                 var curve = item.Curve;
@@ -1361,6 +1404,7 @@ public partial class RhinoMCPFunctions
                     fills = 0;
                 }
             }
+
         }
         finally
         {
@@ -1374,6 +1418,20 @@ public partial class RhinoMCPFunctions
         result.Box = box;
         if (count == 0)
             result.Error = "No visible curves for " + spec.View + ".";
+        if (clip.HasValue && strokeScale > 0)
+        {
+            _lastPlanStats = new PlanStats
+            {
+                Symbols = result.Symbols,
+                Arcs = result.SymbolArcs,
+                Dashed = result.SymbolDashed,
+                Roof = result.RoofOutline,
+                Rooms = result.RoomTags,
+                Note = result.SymbolNote,
+                RoomText = result.RoomText
+            };
+            _lastPlanStatsSet = true;
+        }
         return result;
     }
 

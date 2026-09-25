@@ -24,7 +24,8 @@ public class OpeningTypeTests
             Assert.Equal(def.Id, record.TypeId);
             Assert.Equal(def.Kind, record.Kind);
             Assert.Equal(def.Label, record.Def.Label);
-            Assert.Null(OpeningTypes.PlanSymbol(record, "plan"));
+            var marks = OpeningTypes.PlanSymbol(record, "plan", Frame());
+            Assert.NotEmpty(marks);
         }
 
         Assert.Equal("Sliding door", OpeningTypes.All[2].Label);
@@ -209,6 +210,21 @@ public class OpeningTypeTests
             {
                 Row("door", "hinged", "w01", hand: true, swing: true)
             }));
+    }
+
+    static OpeningTypes.PlanFrame Frame()
+    {
+        return new OpeningTypes.PlanFrame
+        {
+            OuterHalf = 500,
+            InnerHalf = 450,
+            HalfThick = 100,
+            Sill = 0,
+            Head = 2100,
+            CutZ = 1200,
+            YInward = 1,
+            XLeft = 1
+        };
     }
 
     static OpeningTypes.Record Read(string kind, string type, string hand, string swing)
