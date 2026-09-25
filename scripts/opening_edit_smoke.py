@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Live F2 smoke: bake, move one window ~500 mm, set its size, force a miss.
+"""Live office smoke: import the pinned DXF into a blank millimetre copy, then edit.
 
-Talks framed TCP to mcpstart. Leaves the bake in the document. Do not save.
+Build opens a fresh copy of Large Objects - Millimeters.3dm, for example
+/tmp/forsk-office-blank.3dm, and runs mcpstart. This script checks the DXF
+SHA-256, imports it, bakes, and runs the opening checks. It does not save.
+It refuses a changed or writable fixture, and it refuses the Downloads .3dm files.
 
 Usage:
   RHINO_MCP_TIMEOUT=900 python3 scripts/opening_edit_smoke.py
@@ -9,16 +12,29 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import socket
 import sys
+from pathlib import Path
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "900"))
 FRAME_HEADER_SIZE = 4
 MAX_FRAME_SIZE = 64 * 1024 * 1024
+# tests/fixtures/office_2D.dxf in julianriise/forsk
+OFFICE_DXF_SHA256 = "53a6791c04b7602327ccce28653944ad206a0f3eaa7c1629aa7655b754066f93"
+OFFICE_SOURCE_LAYERS = (
+    ("wall", 16),
+    ("structural", 51),
+    ("door", 28),
+    ("window", 63),
+    ("label", 16),
+    ("furniture", 10),
+    ("space_divider", 1),
+)
 
 
 class SmokeError(RuntimeError):
@@ -127,6 +143,53 @@ def layer_count(summary: dict, name: str) -> int:
         if str(key).lower() == name.lower():
             return int(value)
     return 0
+
+
+def office_dxf_path() -> Path:
+    override = os.getenv("FORSK_OFFICE_DXF")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[2] / "forsk" / "tests" / "fixtures" / "office_2D.dxf"
+
+
+def assert_office_dxf(path: Path) -> None:
+    if not path.is_file():
+        raise SmokeError(f"office fixture missing: {path}")
+    if path.stat().st_mode & 0o222:
+        raise SmokeError(f"office fixture is writable ({path}). chmod a-w it before the smoke")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    print(f"==> office DXF {path}")
+    print(f"    sha256 {digest}")
+    if digest != OFFICE_DXF_SHA256:
+        raise SmokeError(f"office DXF hash changed: {digest}")
+
+
+def require_fresh_copy(summary: dict) -> None:
+    meta = summary.get("meta_data") or {}
+    units = str(meta.get("units") or "")
+    if units.lower() not in ("millimeters", "millimetres"):
+        raise SmokeError(f"units={units!r}")
+    path = str(meta.get("path") or "")
+    name = str(meta.get("name") or "")
+    lowered = path.replace("\\", "/").lower()
+    banned = {"office_2d.3dm", "office_3d.3dm", "office_2d.dxf"}
+    if name.lower() in banned or "downloads/forsk-rhino" in lowered:
+        raise SmokeError(f"refusing fixture file {path or name}")
+    if "/tmp/" not in lowered and "/private/tmp/" not in lowered:
+        raise SmokeError(f"open a temp copy of the millimetre template, not {path or name}")
+    if "template files" in lowered:
+        raise SmokeError("refusing to open the millimetre template in place")
+    count = int(summary.get("object_count") or 0)
+    if count != 0:
+        raise SmokeError(f"document is not a fresh template copy (objects={count})")
+
+
+def import_office_dxf(sock: socket.socket, path: Path) -> None:
+    command = f'_-Import "{path}" _Enter'
+    result = send_command(sock, "run_command", {"command": command, "echo": False})
+    if result.get("success") is not True:
+        output = str(result.get("output") or "").strip()
+        raise SmokeError(f"DXF import failed: {output or result!r}")
 
 
 def bake(sock: socket.socket) -> dict:
@@ -268,6 +331,8 @@ def fingerprint(sock: socket.socket, marker_id: str, wall_id: str, sibling_id: s
 
 
 def main() -> int:
+    dxf = office_dxf_path()
+    assert_office_dxf(dxf)
     failures = []
     sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
     sock.settimeout(TIMEOUT)
@@ -275,53 +340,27 @@ def main() -> int:
         summary = send_command(sock, "get_document_summary", {})
         meta = summary.get("meta_data") or {}
         units = str(meta.get("units") or "")
-        print(f"==> document {meta.get('name')} units={units} objects={summary.get('object_count')}")
-        if units.lower() not in ("millimeters", "millimetres"):
-            failures.append(f"units={units!r}")
-            raise SmokeError("document is not millimetres")
+        doc_name = str(meta.get("name") or "")
+        print(f"==> document {doc_name} units={units} objects={summary.get('object_count')}")
+        require_fresh_copy(summary)
+        if "office" not in doc_name.lower():
+            raise SmokeError(
+                f"temp copy name {doc_name!r} must contain 'office' so the 77-opening check runs"
+            )
 
-        walls_now = layer_count(summary, "A-WALL")
-        baked = None
-        if walls_now < 1:
-            baked = bake(sock)
-            marker_ids = baked["window_markers"]
-            block_ids = baked["window_blocks"]
-        else:
-            print(f"==> A-WALL already has {walls_now} objects; editing the open bake")
-            listed = send_command(sock, "get_objects", {
-                "layer_filter": "A-OPEN::Block",
-                "include_geometry": False,
-                "limit": 200,
-            })
-            marker_ids = []
-            block_ids = []
-            for obj in listed.get("objects") or []:
-                info = send_command(sock, "get_object_info", {"id": obj.get("id")})
-                raw = attrs_of(info)
-                if (raw.get("forsk:opening_kind") or "").lower() != "window":
-                    continue
-                mid = raw.get("forsk:marker_id")
-                if not mid:
-                    continue
-                block_ids.append(obj.get("id"))
-                marker_ids.append(mid)
+        print(f"==> import {dxf.name}")
+        import_office_dxf(sock, dxf)
+        summary = send_command(sock, "get_document_summary", {})
+        print(f"    objects={summary.get('object_count')}")
+        for name, expect in OFFICE_SOURCE_LAYERS:
+            got = layer_count(summary, name)
+            print(f"    {name}={got}")
+            if got != expect:
+                raise SmokeError(f"{name}={got} expected {expect}")
 
-            if not marker_ids:
-                # Frames sit on A-OPEN::Block under a hidden parent. get_objects
-                # skips those. A zero move reads the selected frame and does not rebuild.
-                print("==> frames are hidden from get_objects; reading them by name")
-                for index in range(1, 100):
-                    frame = f"window-{index:02d}-block"
-                    selected = send_command(sock, "select_objects", {"filters": {"name": [frame]}})
-                    if selected.get("count") != 1:
-                        continue
-                    probed = send_command(sock, "move_opening", {"delta_mm": 0})
-                    mid = probed.get("marker_id")
-                    if not mid:
-                        continue
-                    marker_ids.append(mid)
-                    block_ids.append("")
-                print(f"    found {len(marker_ids)} windows")
+        baked = bake(sock)
+        marker_ids = baked["window_markers"]
+        block_ids = baked["window_blocks"]
 
         window = pick_window(sock, marker_ids, block_ids)
         if window is None:
