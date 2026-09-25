@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +36,9 @@ OFFICE_SOURCE_LAYERS = (
     ("furniture", 10),
     ("space_divider", 1),
 )
+# import_ACAD model_units. 2 brings this millimetre DXF in 1:1. 3 scales it by 10.
+ACAD_UNITS_KEY = "User.Plug-Ins.6cd8563b-7bb0-4777-93f6-4dd10b3406a5.Settings.model_units"
+ACAD_UNITS_MM = 2
 
 
 class SmokeError(RuntimeError):
@@ -184,12 +188,41 @@ def require_fresh_copy(summary: dict) -> None:
         raise SmokeError(f"document is not a fresh template copy (objects={count})")
 
 
+def read_acad_model_units() -> int:
+    try:
+        out = subprocess.check_output(
+            ["defaults", "read", "com.mcneel.rhinoceros.7", ACAD_UNITS_KEY],
+            text=True,
+        )
+    except (subprocess.CalledProcessError, ValueError) as exc:
+        raise SmokeError(f"could not read ACAD model_units: {exc}") from exc
+    return int(out.strip())
+
+
+def write_acad_model_units(value: int) -> None:
+    subprocess.check_call(
+        ["defaults", "write", "com.mcneel.rhinoceros.7", ACAD_UNITS_KEY, "-int", str(value)],
+    )
+
+
 def import_office_dxf(sock: socket.socket, path: Path) -> None:
     command = f'_-Import "{path}" _Enter'
     result = send_command(sock, "run_command", {"command": command, "echo": False})
     if result.get("success") is not True:
         output = str(result.get("output") or "").strip()
         raise SmokeError(f"DXF import failed: {output or result!r}")
+
+
+def assert_import_span(summary: dict) -> None:
+    box = summary.get("model_bounding_box") or []
+    if len(box) != 2:
+        raise SmokeError("import has no bounding box")
+    span_x = float(box[1][0]) - float(box[0][0])
+    span_y = float(box[1][1]) - float(box[0][1])
+    print(f"    span {span_x:.0f} x {span_y:.0f} mm")
+    # The DXF wall extent is 30243 x 22510 mm. Other layers reach about 23500 in Y.
+    if not (25000 <= span_x <= 40000 and 20000 <= span_y <= 30000):
+        raise SmokeError(f"import scale is wrong: span {span_x:.0f} x {span_y:.0f} mm")
 
 
 def bake(sock: socket.socket) -> dict:
@@ -349,14 +382,23 @@ def main() -> int:
             )
 
         print(f"==> import {dxf.name}")
-        import_office_dxf(sock, dxf)
-        summary = send_command(sock, "get_document_summary", {})
-        print(f"    objects={summary.get('object_count')}")
-        for name, expect in OFFICE_SOURCE_LAYERS:
-            got = layer_count(summary, name)
-            print(f"    {name}={got}")
-            if got != expect:
-                raise SmokeError(f"{name}={got} expected {expect}")
+        previous_units = read_acad_model_units()
+        try:
+            if previous_units != ACAD_UNITS_MM:
+                print(f"    ACAD model_units {previous_units} -> {ACAD_UNITS_MM}")
+                write_acad_model_units(ACAD_UNITS_MM)
+            import_office_dxf(sock, dxf)
+            summary = send_command(sock, "get_document_summary", {})
+            print(f"    objects={summary.get('object_count')}")
+            assert_import_span(summary)
+            for name, expect in OFFICE_SOURCE_LAYERS:
+                got = layer_count(summary, name)
+                print(f"    {name}={got}")
+                if got != expect:
+                    raise SmokeError(f"{name}={got} expected {expect}")
+        finally:
+            if read_acad_model_units() != previous_units:
+                write_acad_model_units(previous_units)
 
         baked = bake(sock)
         marker_ids = baked["window_markers"]
