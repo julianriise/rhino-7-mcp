@@ -43,6 +43,46 @@ def send_command(sock: socket.socket, cmd_type: str, params: dict | None = None)
     return response.get("result") or {}
 
 
+def near_mm(value, expect: float) -> bool:
+    try:
+        return abs(float(value) - expect) < 0.5
+    except (TypeError, ValueError):
+        return False
+
+
+def center_of(info: dict) -> tuple[float, float]:
+    box = info.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
+    return (
+        (float(box[0][0]) + float(box[1][0])) / 2,
+        (float(box[0][1]) + float(box[1][1])) / 2,
+    )
+
+
+def marker_for_frame(sock: socket.socket, frame: dict, markers: list) -> str:
+    mid = str((frame.get("attributes") or {}).get("forsk:marker_id") or "")
+    if mid:
+        return mid
+    fx, fy = center_of(frame)
+    best = str(markers[0])
+    best_d = float("inf")
+    for candidate in markers:
+        info = send_command(sock, "get_object_info", {"id": candidate})
+        x, y = center_of(info)
+        dist = ((x - fx) ** 2 + (y - fy) ** 2) ** 0.5
+        if dist < best_d:
+            best = str(candidate)
+            best_d = dist
+    return best
+
+
+def marker_row(rows, marker_id: str) -> dict | None:
+    want = str(marker_id).lower()
+    for item in rows or []:
+        if str(item.get("id") or "").lower() == want:
+            return item
+    return None
+
+
 def layer(sock: socket.socket, name: str) -> None:
     try:
         send_command(sock, "create_layer", {"name": name})
@@ -104,8 +144,8 @@ def main() -> int:
             raise SmokeError("need two window frames")
         frame = send_command(sock, "get_object_info", {"id": blocks[0]})
         frame_b = send_command(sock, "get_object_info", {"id": blocks[1]})
-        marker = send_command(sock, "get_object_info", {"id": markers[0]})
-        send_command(sock, "get_object_info", {"id": markers[1]})
+        moved_id = marker_for_frame(sock, frame, markers)
+        marker = send_command(sock, "get_object_info", {"id": moved_id})
         box = marker.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
         origin = ((box[0][0] + box[1][0]) / 2, (box[0][1] + box[1][1]) / 2)
         host_id = (marker.get("attributes") or {}).get("forsk:host")
@@ -113,6 +153,9 @@ def main() -> int:
         wall_attr = wall.get("attributes") or {}
         wall_fid = wall_attr.get("forsk:id")
         wall_thick = wall_attr.get("forsk:thickness")
+        print(f"    wall {wall_fid} thickness={wall_thick}")
+        if not near_mm(wall_thick, 200):
+            failures.append(f"thickness {wall_thick} != 200")
         back_t = (marker.get("attributes") or {}).get("forsk:t")
 
         name = frame.get("name")
@@ -125,12 +168,17 @@ def main() -> int:
         print(f"    {moved.get('message')} openings={moved.get('host_openings')} voids={moved.get('host_voids')}")
         if moved.get("host_openings") != 2 or moved.get("host_voids") != 2:
             failures.append(f"move openings={moved.get('host_openings')} voids={moved.get('host_voids')}")
-        row = (moved.get("markers") or [{}])[0]
-        if row.get("inside") is not False:
-            failures.append("garage void missing after move")
-        if origin:
+        returned = str(moved.get("marker_id") or "")
+        if returned and returned.lower() != str(moved_id).lower():
+            failures.append(f"moved id {returned} != {moved_id}")
+        row = marker_row(moved.get("markers"), returned or moved_id)
+        if row is None:
+            failures.append(f"moved opening {moved_id} missing from the report")
+        else:
+            if row.get("inside") is not False:
+                failures.append("garage void missing after move")
             shift = ((float(row.get("x", 0)) - origin[0]) ** 2 + (float(row.get("y", 0)) - origin[1]) ** 2) ** 0.5
-            print(f"    shift {shift:.1f} mm")
+            print(f"    shift {shift:.1f} mm id={returned or moved_id}")
             if shift < 50 or shift > 700:
                 failures.append(f"shift {shift:.1f}")
 

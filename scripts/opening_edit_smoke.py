@@ -341,6 +341,13 @@ def main() -> int:
         wall_fid = wall_attrs.get("forsk:id")
         wall_thick = wall_attrs.get("forsk:thickness")
         wall_path = wall_attrs.get("forsk:path") or ""
+        print(f"    wall {wall_fid} thickness={wall_thick}")
+        try:
+            thick_mm = float(wall_thick)
+        except (TypeError, ValueError):
+            thick_mm = -1.0
+        if abs(thick_mm - 200.0) > 0.5:
+            failures.append(f"thickness {wall_thick} != 200")
         origin = center(window["info"].get("bounding_box"))
         if origin is None:
             failures.append("window bbox missing")

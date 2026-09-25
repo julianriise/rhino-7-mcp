@@ -124,9 +124,10 @@ public partial class RhinoMCPFunctions
             || !CommitWallPieces(doc, host, pieces))
             throw new InvalidOperationException("Could not rebuild host wall as one solid.");
 
-        var thickness = MedianThickness(segs);
-        if (thickness <= 0)
-            thickness = ParseMm(host.Attributes?.GetUserString("forsk:thickness")) ?? 0;
+        var read = MeasureWallThickness(path, null, tol);
+        var thickness = read.Measured
+            ? read.Millimetres
+            : ParseMm(host.Attributes?.GetUserString("forsk:thickness")) ?? read.Millimetres;
         SyncWallRecord(doc, host.Id, new ForskStamp
         {
             Kind = "wall",
@@ -573,32 +574,79 @@ public partial class RhinoMCPFunctions
         return left;
     }
 
-    private double MeasureRecordedThickness(string path, Brep brep, double tol)
+    private SoftParamPlan.ThicknessRead MeasureWallThickness(string path, Brep brep, double tol)
     {
-        var segs = SegmentsFromPath(path, tol);
-        if (segs.Count == 0 && brep != null)
+        if (TrySegsFromPath(path, out var outer, out var inner))
+            return SoftParamPlan.ReadThickness(outer, inner, true, FacadeConst.MinDepth);
+        if (brep != null)
         {
-            segs = ExtractWallSegments(new WallSolid
-            {
-                Id = Guid.Empty,
-                Brep = brep,
-                Attributes = new ObjectAttributes()
-            }, tol);
+            var encoded = EncodePathFromBrep(brep, tol);
+            if (TrySegsFromPath(encoded, out outer, out inner))
+                return SoftParamPlan.ReadThickness(outer, inner, true, FacadeConst.MinDepth);
         }
-        return MedianThickness(segs);
+        return SoftParamPlan.ReadThickness(null, null, false, FacadeConst.MinDepth);
     }
 
-    private static double MedianThickness(List<WallSegment> segs)
+    private static bool TrySegsFromPath(
+        string json,
+        out List<SoftParamPlan.Seg> outer,
+        out List<SoftParamPlan.Seg> inner)
     {
-        if (segs == null || segs.Count == 0) return 0;
-        var vals = new List<double>();
-        foreach (var seg in segs)
+        outer = new List<SoftParamPlan.Seg>();
+        inner = new List<SoftParamPlan.Seg>();
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        JObject obj;
+        try { obj = JObject.Parse(json); }
+        catch { return false; }
+        if (!(obj["outer"] is JArray outerArr)) return false;
+        outer = SegsFromPointArray(outerArr);
+        if (outer.Count == 0) return false;
+        if (obj["holes"] is JArray holes)
         {
-            if (seg != null && seg.Thickness > 0) vals.Add(seg.Thickness);
+            foreach (var hole in holes)
+            {
+                if (hole is JArray pts)
+                    inner.AddRange(SegsFromPointArray(pts));
+            }
         }
-        if (vals.Count == 0) return 0;
-        vals.Sort();
-        return vals[vals.Count / 2];
+        return true;
+    }
+
+    private static List<SoftParamPlan.Seg> SegsFromPointArray(JArray arr)
+    {
+        var pts = new List<Point3d>();
+        if (arr == null) return new List<SoftParamPlan.Seg>();
+        foreach (var item in arr)
+        {
+            if (!(item is JArray xy) || xy.Count < 2) return new List<SoftParamPlan.Seg>();
+            double x;
+            double y;
+            try
+            {
+                x = xy[0].Value<double>();
+                y = xy[1].Value<double>();
+            }
+            catch
+            {
+                return new List<SoftParamPlan.Seg>();
+            }
+            pts.Add(new Point3d(x, y, 0));
+        }
+        if (pts.Count >= 2 && pts[0].DistanceTo(pts[pts.Count - 1]) <= 1e-6)
+            pts.RemoveAt(pts.Count - 1);
+        var segs = new List<SoftParamPlan.Seg>();
+        if (pts.Count < 2) return segs;
+        for (var i = 1; i < pts.Count; i++)
+        {
+            segs.Add(new SoftParamPlan.Seg(
+                pts[i - 1].X, pts[i - 1].Y, pts[i].X, pts[i].Y, true));
+        }
+        if (pts.Count >= 3)
+        {
+            segs.Add(new SoftParamPlan.Seg(
+                pts[pts.Count - 1].X, pts[pts.Count - 1].Y, pts[0].X, pts[0].Y, true));
+        }
+        return segs;
     }
 
     private bool TryOffsetOnSegments(

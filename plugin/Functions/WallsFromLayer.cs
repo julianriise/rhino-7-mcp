@@ -63,6 +63,7 @@ public partial class RhinoMCPFunctions
         var ids = new JArray();
         var forskIds = new JArray();
         var index = 1;
+        string thicknessNote = null;
 
         foreach (var bake in bakes)
         {
@@ -87,7 +88,10 @@ public partial class RhinoMCPFunctions
                         : EncodePathFromBrep(brep, profiles.Tol);
                     if (string.IsNullOrEmpty(path))
                         warnings.Add("Could not store a param path on " + namePrefix + index.ToString("D2") + ".");
-                    var thickness = MeasureRecordedThickness(path, brep, profiles.Tol);
+                    var read = MeasureWallThickness(path, brep, profiles.Tol);
+                    if (!read.Measured && string.IsNullOrEmpty(thicknessNote))
+                        thicknessNote = read.Receipt;
+                    var thickness = read.Millimetres;
                     var attr = new ObjectAttributes
                     {
                         Name = $"{namePrefix}{index:D2}",
@@ -120,6 +124,12 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        var message = $"Created {ids.Count} wall solid(s) on {targetLayer.Name} from layer '{profiles.SourceLayer.Name}'.";
+        if (ids.Count > 0 && !string.IsNullOrEmpty(thicknessNote))
+        {
+            warnings.Add(thicknessNote);
+            message = message + " " + thicknessNote;
+        }
         var result = new JObject
         {
             ["ids"] = ids,
@@ -130,7 +140,7 @@ public partial class RhinoMCPFunctions
             ["closed"] = profiles.Closed.Count,
             ["skipped"] = skipped,
             ["warnings"] = warnings,
-            ["message"] = $"Created {ids.Count} wall solid(s) on {targetLayer.Name} from layer '{profiles.SourceLayer.Name}'."
+            ["message"] = message
         };
 
         if (applyDefaultMaterials && ids.Count > 0)

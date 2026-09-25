@@ -270,11 +270,23 @@ namespace RhinoMCPPlugin.Forsk
                 var count = countTok.ToString();
                 if (count == "0" && !string.IsNullOrEmpty(message))
                     return name + " · ok · 0 · " + Short(message);
+                var note = ThicknessNote(message);
+                if (!string.IsNullOrEmpty(note))
+                    return name + " · ok · " + count + " · " + Short(note);
                 return name + " · ok · " + count;
             }
             if (!string.IsNullOrEmpty(message))
                 return name + " · ok · " + Short(message);
             return name + " · ok";
+        }
+
+        static string ThicknessNote(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return "";
+            const string key = "Could not measure wall thickness.";
+            var at = message.IndexOf(key, StringComparison.Ordinal);
+            if (at < 0) return "";
+            return message.Substring(at).Trim();
         }
 
         static string Short(string text)

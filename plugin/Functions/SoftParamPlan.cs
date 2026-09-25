@@ -341,6 +341,54 @@ public static class SoftParamPlan
     }
 
     /// <summary>
+    /// Band thickness, or the named fallback when the loops cannot be measured.
+    /// </summary>
+    public readonly struct ThicknessRead
+    {
+        public readonly double Millimetres;
+        public readonly bool Measured;
+        public readonly string Receipt;
+
+        public ThicknessRead(double millimetres, bool measured, string receipt)
+        {
+            Millimetres = millimetres;
+            Measured = measured;
+            Receipt = receipt ?? "";
+        }
+    }
+
+    /// <summary>
+    /// A closed band is the median perpendicular gap between each outer edge
+    /// and its nearest parallel, overlapping inner edge. The short-edge
+    /// heuristic stays for an open chain or a single wall line. Anything else
+    /// that cannot be measured keeps fallbackMm and says so.
+    /// </summary>
+    public static ThicknessRead ReadThickness(
+        IList<Seg> outer,
+        IList<Seg> inner,
+        bool closed,
+        double fallbackMm)
+    {
+        if (fallbackMm <= 0) fallbackMm = 250.0;
+        if (HasSegments(inner))
+        {
+            var gaps = new List<double>();
+            CollectBandGaps(outer, inner, gaps);
+            if (gaps.Count > 0)
+                return MeasuredRead(Median(gaps));
+            return UnmeasuredRead(fallbackMm);
+        }
+
+        if (!closed || IsThinStroke(outer))
+        {
+            var edge = EdgeHeuristic(outer);
+            if (edge > 0) return MeasuredRead(edge);
+        }
+
+        return UnmeasuredRead(fallbackMm);
+    }
+
+    /// <summary>
     /// Cuts every item against a copy of the seed. On the first failure the
     /// result is the seed and nothing from the working copy is returned.
     /// </summary>
@@ -372,6 +420,141 @@ public static class SoftParamPlan
 
         result = working;
         return true;
+    }
+
+    private static bool HasSegments(IList<Seg> segs)
+    {
+        if (segs == null) return false;
+        for (var i = 0; i < segs.Count; i++)
+        {
+            var seg = segs[i];
+            if (seg != null && seg.Length > 1.0) return true;
+        }
+        return false;
+    }
+
+    private static void CollectBandGaps(IList<Seg> outer, IList<Seg> inner, List<double> gaps)
+    {
+        if (outer == null || inner == null) return;
+        for (var i = 0; i < outer.Count; i++)
+        {
+            var edge = outer[i];
+            if (!TryUnit(edge, out var ux, out var uy, out var length)) continue;
+            var best = double.PositiveInfinity;
+            for (var j = 0; j < inner.Count; j++)
+            {
+                var other = inner[j];
+                if (!TryUnit(other, out var vx, out var vy, out _)) continue;
+                if (Math.Abs(ux * vy - uy * vx) > 0.02) continue;
+                var dist = PerpDistance(edge, ux, uy, other);
+                if (dist < 1.0 || !(dist < length)) continue;
+                if (OverlapAlong(edge, ux, uy, length, other) < 1.0) continue;
+                if (dist < best) best = dist;
+            }
+            if (best < double.PositiveInfinity) gaps.Add(best);
+        }
+    }
+
+    private static bool TryUnit(Seg seg, out double ux, out double uy, out double length)
+    {
+        ux = 0;
+        uy = 0;
+        length = 0;
+        if (seg == null) return false;
+        var dx = seg.X1 - seg.X0;
+        var dy = seg.Y1 - seg.Y0;
+        length = Math.Sqrt(dx * dx + dy * dy);
+        if (length <= 1e-6) return false;
+        ux = dx / length;
+        uy = dy / length;
+        return true;
+    }
+
+    private static double PerpDistance(Seg line, double ux, double uy, Seg other)
+    {
+        var mx = 0.5 * (other.X0 + other.X1);
+        var my = 0.5 * (other.Y0 + other.Y1);
+        var vx = mx - line.X0;
+        var vy = my - line.Y0;
+        return Math.Abs(vx * uy - vy * ux);
+    }
+
+    private static double OverlapAlong(Seg line, double ux, double uy, double length, Seg other)
+    {
+        var b0 = (other.X0 - line.X0) * ux + (other.Y0 - line.Y0) * uy;
+        var b1 = (other.X1 - line.X0) * ux + (other.Y1 - line.Y0) * uy;
+        if (b0 > b1)
+        {
+            var swap = b0;
+            b0 = b1;
+            b1 = swap;
+        }
+        var lo = b0 > 0 ? b0 : 0;
+        var hi = b1 < length ? b1 : length;
+        return hi - lo;
+    }
+
+    private static bool IsThinStroke(IList<Seg> segs)
+    {
+        if (!HasSegments(segs)) return false;
+        var minX = double.PositiveInfinity;
+        var minY = double.PositiveInfinity;
+        var maxX = double.NegativeInfinity;
+        var maxY = double.NegativeInfinity;
+        for (var i = 0; i < segs.Count; i++)
+        {
+            var seg = segs[i];
+            if (seg == null) continue;
+            if (seg.X0 < minX) minX = seg.X0;
+            if (seg.X1 < minX) minX = seg.X1;
+            if (seg.Y0 < minY) minY = seg.Y0;
+            if (seg.Y1 < minY) minY = seg.Y1;
+            if (seg.X0 > maxX) maxX = seg.X0;
+            if (seg.X1 > maxX) maxX = seg.X1;
+            if (seg.Y0 > maxY) maxY = seg.Y0;
+            if (seg.Y1 > maxY) maxY = seg.Y1;
+        }
+        var side = Math.Min(maxX - minX, maxY - minY);
+        return side > 1.0 && side <= 600.0;
+    }
+
+    // Short edges of an open chain or a single wall line. Not used for a band.
+    private static double EdgeHeuristic(IList<Seg> segs)
+    {
+        if (segs == null) return 0;
+        var lengths = new List<double>();
+        for (var i = 0; i < segs.Count; i++)
+        {
+            var seg = segs[i];
+            if (seg == null) continue;
+            var length = seg.Length;
+            if (length >= 50.0 && length <= 600.0) lengths.Add(length);
+        }
+        if (lengths.Count < 2) return 0;
+        return Median(lengths);
+    }
+
+    private static double Median(List<double> values)
+    {
+        values.Sort();
+        var mid = Math.Round(values[values.Count / 2], 3, MidpointRounding.AwayFromZero);
+        var whole = Math.Round(mid, MidpointRounding.AwayFromZero);
+        if (Math.Abs(mid - whole) < 0.05) return whole;
+        return mid;
+    }
+
+    private static ThicknessRead MeasuredRead(double millimetres)
+    {
+        return new ThicknessRead(millimetres, true, "");
+    }
+
+    private static ThicknessRead UnmeasuredRead(double fallbackMm)
+    {
+        var text = fallbackMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        return new ThicknessRead(
+            fallbackMm,
+            false,
+            "Could not measure wall thickness. Used " + text + " mm.");
     }
 
     private static double DistanceToSegment(Seg seg, double x, double y, out double t)
