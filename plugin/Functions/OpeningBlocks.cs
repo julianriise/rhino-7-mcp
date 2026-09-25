@@ -99,9 +99,14 @@ public partial class RhinoMCPFunctions
                 out var center, out var widthDir, out var thickDir, out var thickness))
             return Guid.Empty;
 
-        var window = string.Equals(openingKind, "window", StringComparison.OrdinalIgnoreCase);
+        var kindTag = string.Equals(openingKind, "window", StringComparison.OrdinalIgnoreCase)
+            ? "window"
+            : "door";
+        var style = ResolvedOpeningStyle(doc, markerId, kindTag);
+        WriteOpeningStyle(doc, markerId, style);
+        var inward = segment != null ? segment.Inward : thickDir;
         var parts = BuildOpeningBlockParts(
-            center, widthDir, thickDir, width, thickness, sill, head, pad, window, tol);
+            center, widthDir, thickDir, inward, width, thickness, sill, head, pad, style, tol);
         if (parts.Count == 0) return Guid.Empty;
 
         var layer = EnsureOpeningBlockLayer(doc);
@@ -119,13 +124,15 @@ public partial class RhinoMCPFunctions
             Level = "0",
             Host = hostId.ToString(),
             HostId = ReadForskUserString(doc, hostId, "forsk:id"),
-            OpeningKind = window ? "window" : "door",
+            OpeningKind = kindTag,
             Sill = sill,
             Head = head,
             Width = width,
             SourceLayer = sourceLayer,
             MarkerId = markerId.ToString()
         });
+        StampOpeningStyle(attr, style);
+        attr.SetUserString("forsk:parts", FormatOpeningParts(parts));
 
         var id = CommitOpeningBlock(doc, name, attr, parts);
         return id;
@@ -404,25 +411,63 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    private static OpeningTypes.Record ResolvedOpeningStyle(RhinoDoc doc, Guid markerId, string kind)
+    {
+        var marker = doc?.Objects.FindId(markerId);
+        var type = marker?.Attributes?.GetUserString(OpeningTypes.TypeKey);
+        var hand = marker?.Attributes?.GetUserString(OpeningTypes.HandKey);
+        var swing = marker?.Attributes?.GetUserString(OpeningTypes.SwingKey);
+        if (OpeningTypes.TryRead(kind, type, hand, swing, out var record, out _))
+            return record;
+        return OpeningTypes.DefaultRecord(kind);
+    }
+
+    private static void WriteOpeningStyle(RhinoDoc doc, Guid id, OpeningTypes.Record style)
+    {
+        if (doc == null || id == Guid.Empty || style == null) return;
+        var obj = doc.Objects.FindId(id);
+        if (obj?.Attributes == null) return;
+        StampOpeningStyle(obj.Attributes, style);
+        obj.CommitChanges();
+    }
+
+    private static string FormatOpeningParts(List<OpeningPart> parts)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        if (parts != null)
+        {
+            foreach (var part in parts)
+            {
+                if (part == null || string.IsNullOrEmpty(part.Part)) continue;
+                names.Add(part.Part);
+            }
+        }
+        return string.Join(",", names);
+    }
+
     private static List<OpeningPart> BuildOpeningBlockParts(
         Point3d center,
         Vector3d widthDir,
         Vector3d thickDir,
+        Vector3d inward,
         double width,
         double thickness,
         double sill,
         double head,
         double pad,
-        bool window,
+        OpeningTypes.Record style,
         double tol)
     {
         var parts = new List<OpeningPart>();
+        if (style == null) return parts;
         if (!TryOpeningPlane(center, widthDir, thickDir, out var plane))
             return parts;
 
+        var window = string.Equals(style.Kind, "window", StringComparison.OrdinalIgnoreCase);
         var z0 = sill + OpeningFrameInsetMm;
         var z1 = head - OpeningFrameInsetMm;
         var outerHalf = width * 0.5 + Math.Max(pad, 0) - OpeningFrameInsetMm;
+        // Depth is the host thickness, 1 mm clear of each face. Leaves stay inside it.
         var halfThick = thickness * 0.5 - OpeningFrameInsetMm;
         if (z1 - z0 < 80 || outerHalf < 30 || halfThick < 8)
             return parts;
@@ -446,30 +491,327 @@ public partial class RhinoMCPFunctions
                 plane, outerHalf, innerHalf, halfThick, face, frameZ0, z1), "frame", boolTol);
         if (parts.Count == 0) return parts;
 
+        OpeningFacing(plane, inward, out var yInward, out var xLeft);
         if (window)
-        {
-            var sillParts = new List<Brep>();
-            var rail = BuildSillRail(plane, outerHalf, halfThick, face, z0);
-            var nose = BuildSillNose(plane, outerHalf, halfThick, face, z0);
-            if (rail != null) sillParts.Add(rail);
-            if (nose != null) sillParts.Add(nose);
-            AddWoodParts(parts, sillParts, "sill", boolTol);
+            AddWindowContents(
+                parts, plane, style, innerHalf, outerHalf, halfThick, face, z0, z1,
+                yInward, xLeft, boolTol);
+        else
+            AddDoorContents(
+                parts, plane, style, innerHalf, outerHalf, halfThick, face, z0, z1,
+                yInward, xLeft, boolTol);
+        return parts;
+    }
 
-            var glass = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, true, 0);
-            if (glass != null)
-                parts.Add(new OpeningPart { Geometry = glass, Part = "glass", Glass = true });
+    /// <summary>
+    /// Interior left is Inward × Z. +Y of the frame plane may be flipped so Z stays up.
+    /// </summary>
+    private static void OpeningFacing(Plane plane, Vector3d inward, out int yInward, out int xLeft)
+    {
+        var inn = inward;
+        inn.Z = 0;
+        if (!inn.Unitize())
+            inn = plane.YAxis;
+        yInward = plane.YAxis * inn >= 0 ? 1 : -1;
+        var left = Vector3d.CrossProduct(inn, Vector3d.ZAxis);
+        left.Z = 0;
+        if (!left.Unitize())
+            left = plane.XAxis;
+        xLeft = plane.XAxis * left >= 0 ? 1 : -1;
+    }
+
+    private static void FaceSpan(
+        int sign, double halfThick, double thick, double inset, out double y0, out double y1)
+    {
+        var outer = Math.Max(4.0, halfThick - inset);
+        var depth = Math.Min(Math.Max(4.0, thick), outer);
+        if (sign >= 0)
+        {
+            y1 = outer;
+            y0 = outer - depth;
         }
         else
         {
-            var threshold = BuildThreshold(plane, innerHalf, halfThick, z0);
-            var leafClear = threshold != null ? OpeningThresholdMm + 0.5 : 0.5;
+            y0 = -outer;
+            y1 = -outer + depth;
+        }
+    }
+
+    private static void AddWindowContents(
+        List<OpeningPart> parts,
+        Plane plane,
+        OpeningTypes.Record style,
+        double innerHalf,
+        double outerHalf,
+        double halfThick,
+        double face,
+        double z0,
+        double z1,
+        int yInward,
+        int xLeft,
+        double tol)
+    {
+        var sillParts = new List<Brep>();
+        var rail = BuildSillRail(plane, outerHalf, halfThick, face, z0);
+        var nose = BuildSillNose(plane, outerHalf, halfThick, face, z0);
+        if (rail != null) sillParts.Add(rail);
+        if (nose != null) sillParts.Add(nose);
+        AddWoodParts(parts, sillParts, "sill", tol);
+
+        if (string.Equals(style.TypeId, "window.fixed", StringComparison.Ordinal))
+        {
+            var glass = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, true, 0);
+            if (glass != null)
+                parts.Add(new OpeningPart { Geometry = glass, Part = "glass", Glass = true });
+            return;
+        }
+
+        var topHung = string.Equals(style.TypeId, "window.top_hung", StringComparison.Ordinal);
+        var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
+        var hingeX = topHung ? 0 : (style.Hand == "R" ? -xLeft : xLeft);
+        AddHungSash(parts, plane, innerHalf, halfThick, face, z0, z1, swingY, hingeX, topHung, tol);
+    }
+
+    private static void AddHungSash(
+        List<OpeningPart> parts,
+        Plane plane,
+        double innerHalf,
+        double halfThick,
+        double face,
+        double z0,
+        double z1,
+        int swingY,
+        int hingeX,
+        bool topHung,
+        double tol)
+    {
+        var sashThick = Math.Min(26.0, Math.Max(12.0, halfThick * 0.34));
+        FaceSpan(swingY, halfThick, sashThick, 1.0, out var y0, out var y1);
+        var sashFace = Math.Min(30.0, Math.Max(16.0, face * 0.6));
+        var outer = Math.Max(24.0, innerHalf - 8);
+        var inner = outer - sashFace;
+        if (inner < 12) return;
+
+        var sz0 = z0 + Math.Max(8.0, face * 0.4);
+        var sz1 = z1 - Math.Max(8.0, face * 0.35);
+        if (topHung) sz0 += 12.0;
+        if (sz1 - sz0 < sashFace * 2 + 20) return;
+
+        var leftInner = -inner;
+        var rightInner = inner;
+        if (!topHung && hingeX != 0)
+        {
+            var extra = Math.Min(8.0, sashFace * 0.35);
+            if (hingeX > 0) rightInner = inner - extra;
+            else leftInner = -(inner - extra);
+        }
+
+        var members = new List<Brep>();
+        var left = FrameBox(plane, -outer, leftInner, y0, y1, sz0, sz1);
+        var right = FrameBox(plane, rightInner, outer, y0, y1, sz0, sz1);
+        var head = FrameBox(plane, -outer, outer, y0, y1, sz1 - sashFace, sz1);
+        var bottomH = topHung ? sashFace * 0.65 : sashFace;
+        var bottom = FrameBox(plane, -outer, outer, y0, y1, sz0, sz0 + bottomH);
+        if (left != null) members.Add(left);
+        if (right != null) members.Add(right);
+        if (head != null) members.Add(head);
+        if (bottom != null) members.Add(bottom);
+        AddWoodParts(parts, members, "sash", tol);
+
+        var gThick = Math.Min(OpeningGlazeMm, Math.Max(4.0, (y1 - y0) * 0.45));
+        var mid = (y0 + y1) * 0.5;
+        var glass = FrameBox(
+            plane,
+            leftInner + 1,
+            rightInner - 1,
+            mid - gThick * 0.5,
+            mid + gThick * 0.5,
+            sz0 + bottomH,
+            sz1 - sashFace);
+        if (glass != null)
+            parts.Add(new OpeningPart { Geometry = glass, Part = "glass", Glass = true });
+    }
+
+    private static void AddDoorContents(
+        List<OpeningPart> parts,
+        Plane plane,
+        OpeningTypes.Record style,
+        double innerHalf,
+        double outerHalf,
+        double halfThick,
+        double face,
+        double z0,
+        double z1,
+        int yInward,
+        int xLeft,
+        double tol)
+    {
+        var threshold = BuildThreshold(plane, innerHalf, halfThick, z0);
+        var leafClear = threshold != null ? OpeningThresholdMm + 0.5 : 0.5;
+        var zLeaf0 = z0 + leafClear;
+        var zLeaf1 = z1 - face + 2;
+        if (zLeaf1 - zLeaf0 < 20) zLeaf1 = z1 - 4;
+        var id = style.TypeId ?? "";
+
+        if (string.Equals(id, "door.sliding", StringComparison.Ordinal))
+        {
+            AddSlidingDoor(
+                parts, plane, innerHalf, outerHalf, halfThick, face, zLeaf0, z1,
+                yInward, xLeft, style.Hand);
+        }
+        else if (string.Equals(id, "door.hinged_double", StringComparison.Ordinal))
+        {
+            var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
+            const double gap = 3.0;
+            AddFacedLeaf(
+                parts, plane, -(innerHalf - 1), -gap, swingY, halfThick, zLeaf0, zLeaf1,
+                -1, -(innerHalf - 1));
+            AddFacedLeaf(
+                parts, plane, gap, innerHalf - 1, swingY, halfThick, zLeaf0, zLeaf1,
+                1, innerHalf - 1);
+        }
+        else if (string.Equals(id, "door.pocket", StringComparison.Ordinal))
+        {
             var leaf = BuildPanel(plane, innerHalf, halfThick, face, z0, z1, false, leafClear);
             if (leaf != null)
                 parts.Add(new OpeningPart { Geometry = leaf, Part = "leaf", Glass = false });
-            if (threshold != null)
-                parts.Add(new OpeningPart { Geometry = threshold, Part = "threshold", Glass = false });
         }
-        return parts;
+        else
+        {
+            var swingY = (style.Swing == "out" ? -1 : 1) * yInward;
+            var hingeSign = style.Hand == "R" ? -xLeft : xLeft;
+            var hingeAt = hingeSign > 0 ? innerHalf - 1 : -(innerHalf - 1);
+            AddFacedLeaf(
+                parts, plane, -(innerHalf - 1), innerHalf - 1, swingY, halfThick, zLeaf0, zLeaf1,
+                hingeSign, hingeAt);
+        }
+
+        if (threshold != null)
+            parts.Add(new OpeningPart { Geometry = threshold, Part = "threshold", Glass = false });
+    }
+
+    private static void AddFacedLeaf(
+        List<OpeningPart> parts,
+        Plane plane,
+        double x0,
+        double x1,
+        int swingY,
+        double halfThick,
+        double z0,
+        double z1,
+        int hingeSign,
+        double hingeAt)
+    {
+        var leafThick = Math.Min(OpeningLeafMm, Math.Max(16.0, halfThick * 0.5));
+        FaceSpan(swingY, halfThick, leafThick, 0.8, out var y0, out var y1);
+        var leaf = FrameBox(plane, x0, x1, y0, y1, z0, z1);
+        if (leaf != null)
+            parts.Add(new OpeningPart { Geometry = leaf, Part = "leaf", Glass = false });
+        AddHingeLeaves(parts, plane, hingeSign, hingeAt, y0, y1, z0, z1, halfThick);
+    }
+
+    private static void AddHingeLeaves(
+        List<OpeningPart> parts,
+        Plane plane,
+        int hingeSign,
+        double hingeAt,
+        double y0,
+        double y1,
+        double z0,
+        double z1,
+        double halfThick)
+    {
+        if (hingeSign == 0 || z1 - z0 < 80) return;
+        const double bulge = 8.0;
+        double ky0;
+        double ky1;
+        if (y0 >= 0)
+        {
+            ky1 = y0;
+            ky0 = y0 - bulge;
+        }
+        else
+        {
+            ky0 = y1;
+            ky1 = y1 + bulge;
+        }
+        if (ky0 < -halfThick + 0.5 || ky1 > halfThick - 0.5) return;
+
+        const double width = 22.0;
+        double x0;
+        double x1;
+        if (hingeSign > 0)
+        {
+            x1 = hingeAt;
+            x0 = hingeAt - width;
+        }
+        else
+        {
+            x0 = hingeAt;
+            x1 = hingeAt + width;
+        }
+
+        var span = z1 - z0;
+        var h = Math.Min(40.0, span * 0.12);
+        double[] at =
+        {
+            z0 + span * 0.18,
+            (z0 + z1) * 0.5 - h * 0.5,
+            z1 - span * 0.18 - h
+        };
+        foreach (var z in at)
+        {
+            var box = FrameBox(plane, x0, x1, ky0, ky1, z, z + h);
+            if (box == null) continue;
+            parts.Add(new OpeningPart { Geometry = box, Part = "leaf", Glass = false });
+        }
+    }
+
+    private static void AddSlidingDoor(
+        List<OpeningPart> parts,
+        Plane plane,
+        double innerHalf,
+        double outerHalf,
+        double halfThick,
+        double face,
+        double zLeaf0,
+        double z1,
+        int yInward,
+        int xLeft,
+        string hand)
+    {
+        var faceY = -yInward;
+        var leafThick = Math.Min(OpeningLeafMm, Math.Max(16.0, halfThick * 0.45));
+        FaceSpan(faceY, halfThick, leafThick, 1.2, out var y0, out var y1);
+        var zLeaf1 = z1 - face - 6;
+        if (zLeaf1 - zLeaf0 < 20) zLeaf1 = z1 - 8;
+        var leaf = FrameBox(plane, -(innerHalf - 1), innerHalf - 1, y0, y1, zLeaf0, zLeaf1);
+        if (leaf != null)
+            parts.Add(new OpeningPart { Geometry = leaf, Part = "leaf", Glass = false });
+
+        var park = (hand == "R" ? -1 : 1) * xLeft;
+        const double stile = 28.0;
+        double sx0;
+        double sx1;
+        if (park > 0)
+        {
+            sx1 = innerHalf - 1;
+            sx0 = sx1 - stile;
+        }
+        else
+        {
+            sx0 = -(innerHalf - 1);
+            sx1 = sx0 + stile;
+        }
+        var parkStile = FrameBox(plane, sx0, sx1, y0, y1, zLeaf0, zLeaf1);
+        if (parkStile != null)
+            parts.Add(new OpeningPart { Geometry = parkStile, Part = "leaf", Glass = false });
+
+        var trackThick = Math.Min(12.0, leafThick);
+        FaceSpan(faceY, halfThick, trackThick, 0.6, out var ty0, out var ty1);
+        var track = FrameBox(plane, -(outerHalf - 2), outerHalf - 2, ty0, ty1, z1 - face, z1 - 2);
+        if (track != null)
+            parts.Add(new OpeningPart { Geometry = track, Part = "track", Glass = false });
     }
 
     private static void AddWoodParts(

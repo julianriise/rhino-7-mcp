@@ -2009,6 +2009,7 @@ class TestPackageApi:
             "add_opening",
             "move_opening",
             "set_opening",
+            "set_opening_type",
             "rebuild_host_wall",
             "clear_generated",
             "set_layer_material",
@@ -2783,6 +2784,85 @@ class TestSetOpeningTool:
         result = set_opening(ctx=None, sill=2200, head=1000)
         assert result["success"] is False
         assert "head must be greater than sill." in result["message"]
+        mock_get_conn.assert_not_called()
+
+
+class TestSetOpeningTypeTool:
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_type_only(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_type": "door.sliding",
+            "hand": "L",
+            "ok": True,
+            "message": "Changed 1 door to sliding on w01",
+            "host_openings": 1,
+            "host_voids": 1,
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_opening_type(ctx=None, type="door.sliding")
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_opening_type", {"type": "door.sliding"}
+        )
+        assert result["success"] is True
+        assert result["opening_type"] == "door.sliding"
+        assert result["message"] == "Changed 1 door to sliding on w01"
+        assert result["host_openings"] == 1
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_flip_with_id(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_type": "door.hinged_single",
+            "hand": "L",
+            "swing": "out",
+            "ok": True,
+            "message": "Flipped swing on 1 door on w01",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        guid = "12345678-1234-1234-1234-123456789012"
+        set_opening_type(ctx=None, id=guid, swing="flip")
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_opening_type", {"id": guid, "swing": "flip"}
+        )
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_rejects_empty(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        result = set_opening_type(ctx=None)
+        assert result["success"] is False
+        assert "Specify type, hand, or swing." in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_rejects_bad_type(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        result = set_opening_type(ctx=None, type="door.portal")
+        assert result["success"] is False
+        assert "Unknown opening type." in result["message"]
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_rejects_bad_hand(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        result = set_opening_type(ctx=None, hand="left")
+        assert result["success"] is False
+        assert "hand must be L, R, or flip." in result["message"]
         mock_get_conn.assert_not_called()
 
 

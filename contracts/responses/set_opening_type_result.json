@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_opening_type_result.json",
+  "title": "SetOpeningTypeResult",
+  "description": "Opening type, hand, or swing updated and each host rebuilt once. Width, sill, head, and position stay. Marker GUID preserved.",
+  "type": "object",
+  "properties": {
+    "marker_id": { "type": "string" },
+    "marker_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "host_id": { "type": "string" },
+    "opening_type": { "type": "string" },
+    "hand": { "type": "string", "enum": ["L", "R"] },
+    "swing": { "type": "string", "enum": ["in", "out"] },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" },
+    "block_id": { "type": "string" },
+    "host_openings": { "type": "integer" },
+    "host_voids": { "type": "integer" },
+    "max_frame_mm": { "type": "number" },
+    "markers": { "type": "array" }
+  },
+  "required": ["marker_id", "host_id", "opening_type", "ok", "message"],
+  "additionalProperties": true
+}

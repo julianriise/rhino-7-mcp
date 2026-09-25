@@ -11,7 +11,7 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Edit facade openings on vertical host walls: delete, add, move, and set size.
+/// Edit facade openings on vertical host walls: delete, add, move, set size, and set type.
 /// Each edit writes the opening record, then rebuilds that host from its path.
 /// Markers stay the handle. A failed rebuild puts the record back.
 /// </summary>
@@ -319,6 +319,283 @@ public partial class RhinoMCPFunctions
         return CommitOpeningThenRebuild(
             doc, rec, host, markerBrep, size.Width, size.Sill, size.Head,
             ProjectRecordedT(doc, rec), message);
+    }
+
+    [McpCommand("set_opening_type")]
+    public JObject SetOpeningType(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var typeRaw = parameters?["type"]?.Type == JTokenType.Null ? null : parameters?["type"]?.ToString();
+        var handRaw = parameters?["hand"]?.Type == JTokenType.Null ? null : parameters?["hand"]?.ToString();
+        var swingRaw = parameters?["swing"]?.Type == JTokenType.Null ? null : parameters?["swing"]?.ToString();
+        if (string.IsNullOrWhiteSpace(typeRaw)
+            && string.IsNullOrWhiteSpace(handRaw)
+            && string.IsNullOrWhiteSpace(swingRaw))
+            throw new ArgumentException("Specify type, hand, or swing.");
+
+        var edits = new List<StyleEdit>();
+        var seen = new HashSet<Guid>();
+        foreach (var target in ResolveDeleteTargets(parameters))
+        {
+            var marker = ResolveOpeningHandle(target);
+            RefuseExistingUnderlay(doc, marker);
+            var rec = ReadOpeningRecord(marker);
+            if (!seen.Add(rec.MarkerId)) continue;
+            var before = ReadOpeningStyle(marker, rec.Kind);
+            if (!OpeningTypes.TryApply(before, typeRaw, handRaw, swingRaw, out var edit, out var error))
+                throw new ArgumentException(error);
+            var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
+            var label = host.Attributes?.GetUserString("forsk:id");
+            if (string.IsNullOrWhiteSpace(label)) label = host.Attributes?.Name;
+            if (string.IsNullOrWhiteSpace(label)) label = "the wall";
+            edits.Add(new StyleEdit
+            {
+                Record = rec,
+                Edit = edit,
+                HostId = host.Id,
+                HostLabel = label
+            });
+        }
+        if (edits.Count == 0)
+            throw new InvalidOperationException("Opening marker not found.");
+
+        var changed = new List<StyleEdit>();
+        foreach (var item in edits)
+        {
+            if (item.Edit.Changed) changed.Add(item);
+        }
+        if (changed.Count == 0)
+            return AlreadyOpeningType(edits[0], typeRaw, handRaw, swingRaw);
+
+        var groups = GroupStyleEdits(changed);
+        var commits = new List<HostUndo>();
+        try
+        {
+            foreach (var group in groups)
+            {
+                var undo = SnapshotWholeHost(doc, group[0].HostId);
+                commits.Add(undo);
+                try
+                {
+                    foreach (var item in group)
+                        WriteOpeningStyle(doc, item.Record.MarkerId, item.Edit.After);
+                    var rebuilt = RebuildHostWall(new JObject
+                    {
+                        ["id"] = group[0].HostId.ToString()
+                    });
+                    undo.Committed = true;
+                    var rebuiltId = rebuilt?["host_id"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
+                        undo.HostAfter = parsed;
+                    else
+                        undo.HostAfter = group[0].HostId;
+                    undo.NewBlocks = GuidList(rebuilt?["block_ids"] as JArray);
+                }
+                catch
+                {
+                    foreach (var item in group)
+                        RestoreKeptMarker(doc, undo, item.Record.MarkerId);
+                    throw;
+                }
+            }
+        }
+        catch
+        {
+            for (var i = commits.Count - 1; i >= 0; i--)
+            {
+                if (!commits[i].Committed) continue;
+                try { RollbackCommittedHost(doc, commits[i]); }
+                catch (Exception) { }
+            }
+            throw;
+        }
+
+        doc.Views.Redraw();
+        return OpeningTypeResult(doc, changed, commits);
+    }
+
+    private sealed class StyleEdit
+    {
+        public OpeningRecord Record;
+        public OpeningTypes.Edit Edit;
+        public Guid HostId;
+        public string HostLabel;
+    }
+
+    private static OpeningTypes.Record ReadOpeningStyle(RhinoObject marker, OpeningKind kind)
+    {
+        if (!OpeningTypes.TryRead(
+                KindToTag(kind),
+                marker?.Attributes?.GetUserString(OpeningTypes.TypeKey),
+                marker?.Attributes?.GetUserString(OpeningTypes.HandKey),
+                marker?.Attributes?.GetUserString(OpeningTypes.SwingKey),
+                out var record,
+                out var error))
+            throw new InvalidOperationException(error);
+        return record;
+    }
+
+    private static JObject AlreadyOpeningType(
+        StyleEdit item, string typeRaw, string handRaw, string swingRaw)
+    {
+        var after = item.Edit.After;
+        string message;
+        if (!string.IsNullOrWhiteSpace(typeRaw))
+            message = OpeningTypes.AlreadyLine(after.Def.ShortName);
+        else if (!string.IsNullOrWhiteSpace(swingRaw) && string.IsNullOrWhiteSpace(handRaw))
+            message = OpeningTypes.AlreadySwing(after.Swing);
+        else if (!string.IsNullOrWhiteSpace(handRaw) && string.IsNullOrWhiteSpace(swingRaw))
+            message = OpeningTypes.AlreadyHand(after.Hand);
+        else
+            message = OpeningTypes.AlreadyLine(after.Def.ShortName);
+        return OpeningTypeBody(item.Record.MarkerId, item.HostId, after, message);
+    }
+
+    private static List<List<StyleEdit>> GroupStyleEdits(List<StyleEdit> edits)
+    {
+        var groups = new List<List<StyleEdit>>();
+        foreach (var item in edits)
+        {
+            List<StyleEdit> found = null;
+            foreach (var group in groups)
+            {
+                if (group[0].HostId == item.HostId)
+                {
+                    found = group;
+                    break;
+                }
+            }
+            if (found == null)
+            {
+                found = new List<StyleEdit>();
+                groups.Add(found);
+            }
+            found.Add(item);
+        }
+        return groups;
+    }
+
+    private HostUndo SnapshotWholeHost(RhinoDoc doc, Guid hostId)
+    {
+        var wall = doc.Objects.FindId(hostId);
+        var undo = new HostUndo
+        {
+            Wall = wall,
+            Brep = GetBrepFromObject(wall)?.DuplicateBrep(),
+            Attr = wall?.Attributes?.Duplicate(),
+            HostBefore = hostId
+        };
+        var forskId = wall?.Attributes?.GetUserString("forsk:id");
+        foreach (var marker in MarkersOnHost(doc, hostId, forskId))
+        {
+            if (marker == null) continue;
+            undo.KeptMarkers.Add(new KeptMarker
+            {
+                Id = marker.Id,
+                Snap = CaptureMarker(doc, marker.Id)
+            });
+            var frameId = FindOpeningBlock(doc, marker.Id);
+            if (frameId == Guid.Empty) continue;
+            var frame = doc.Objects.FindId(frameId);
+            if (frame == null) continue;
+            undo.KeptFrames.Add(new RemovedPiece
+            {
+                Object = frame,
+                DefinitionIndex = OpeningBlockDefIndex(frame)
+            });
+        }
+        return undo;
+    }
+
+    private static void RestoreKeptMarker(RhinoDoc doc, HostUndo undo, Guid markerId)
+    {
+        if (undo?.KeptMarkers == null) return;
+        foreach (var kept in undo.KeptMarkers)
+        {
+            if (kept.Id != markerId) continue;
+            RestoreMarker(doc, kept.Id, kept.Snap);
+            return;
+        }
+    }
+
+    private JObject OpeningTypeResult(RhinoDoc doc, List<StyleEdit> changed, List<HostUndo> commits)
+    {
+        var rows = new List<OpeningTypes.ReceiptRow>();
+        var ids = new JArray();
+        foreach (var item in changed)
+        {
+            ids.Add(item.Record.MarkerId.ToString());
+            rows.Add(new OpeningTypes.ReceiptRow
+            {
+                Kind = item.Edit.After.Kind,
+                ShortName = item.Edit.After.Def.ShortName,
+                Host = item.HostLabel,
+                TypeChanged = item.Edit.TypeChanged,
+                HandChanged = item.Edit.HandChanged,
+                SwingChanged = item.Edit.SwingChanged
+            });
+        }
+
+        var first = changed[0];
+        var hostId = first.HostId;
+        foreach (var undo in commits)
+        {
+            if (undo.HostBefore != first.HostId || undo.HostAfter == Guid.Empty) continue;
+            hostId = undo.HostAfter;
+            break;
+        }
+
+        var result = OpeningTypeBody(
+            first.Record.MarkerId, hostId, first.Edit.After, OpeningTypes.Receipt(rows));
+        result["marker_ids"] = ids;
+        var blockId = FindOpeningBlock(doc, first.Record.MarkerId);
+        if (blockId != Guid.Empty)
+            result["block_id"] = blockId.ToString();
+
+        var openings = 0;
+        var voids = 0;
+        var maxFrame = 0.0;
+        var markers = new JArray();
+        var reported = new HashSet<Guid>();
+        foreach (var undo in commits)
+        {
+            var reportId = undo.HostAfter != Guid.Empty ? undo.HostAfter : undo.HostBefore;
+            if (!reported.Add(reportId)) continue;
+            var report = HostOpeningReport(doc, reportId, Guid.Empty, Point3d.Unset);
+            if (report == null) continue;
+            openings += report["host_openings"]?.ToObject<int>() ?? 0;
+            voids += report["host_voids"]?.ToObject<int>() ?? 0;
+            var frame = report["max_frame_mm"]?.ToObject<double>() ?? 0;
+            if (frame > maxFrame) maxFrame = frame;
+            if (report["markers"] is JArray markerRows)
+            {
+                foreach (var row in markerRows)
+                    markers.Add(row.DeepClone());
+            }
+        }
+        result["host_openings"] = openings;
+        result["host_voids"] = voids;
+        result["max_frame_mm"] = maxFrame;
+        result["markers"] = markers;
+        return result;
+    }
+
+    private static JObject OpeningTypeBody(
+        Guid markerId, Guid hostId, OpeningTypes.Record style, string message)
+    {
+        var result = new JObject
+        {
+            ["marker_id"] = markerId.ToString(),
+            ["host_id"] = hostId.ToString(),
+            ["opening_type"] = style.TypeId,
+            ["ok"] = true,
+            ["message"] = message
+        };
+        if (!string.IsNullOrEmpty(style.Hand))
+            result["hand"] = style.Hand;
+        if (!string.IsNullOrEmpty(style.Swing))
+            result["swing"] = style.Swing;
+        return result;
     }
 
     private RhinoObject ResolveFacadeTarget(JObject parameters, string idKey, bool expectMarker)
@@ -1117,6 +1394,9 @@ public partial class RhinoMCPFunctions
         public string Head;
         public string T;
         public string Offset;
+        public string OpeningType;
+        public string Hand;
+        public string Swing;
     }
 
     private MarkerSnapshot CaptureMarker(RhinoDoc doc, Guid id)
@@ -1130,7 +1410,10 @@ public partial class RhinoMCPFunctions
             Sill = obj?.Attributes?.GetUserString("forsk:sill"),
             Head = obj?.Attributes?.GetUserString("forsk:head"),
             T = obj?.Attributes?.GetUserString("forsk:t"),
-            Offset = obj?.Attributes?.GetUserString("forsk:offset")
+            Offset = obj?.Attributes?.GetUserString("forsk:offset"),
+            OpeningType = obj?.Attributes?.GetUserString(OpeningTypes.TypeKey),
+            Hand = obj?.Attributes?.GetUserString(OpeningTypes.HandKey),
+            Swing = obj?.Attributes?.GetUserString(OpeningTypes.SwingKey)
         };
     }
 
@@ -1151,6 +1434,9 @@ public partial class RhinoMCPFunctions
         obj.Attributes.SetUserString("forsk:head", snap.Head);
         obj.Attributes.SetUserString("forsk:t", snap.T);
         obj.Attributes.SetUserString("forsk:offset", snap.Offset);
+        obj.Attributes.SetUserString(OpeningTypes.TypeKey, snap.OpeningType);
+        obj.Attributes.SetUserString(OpeningTypes.HandKey, snap.Hand);
+        obj.Attributes.SetUserString(OpeningTypes.SwingKey, snap.Swing);
         obj.CommitChanges();
     }
 

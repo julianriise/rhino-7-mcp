@@ -262,6 +262,9 @@ def test_new_commands():
         ("commands/move_opening.json", {"id": GUID, "t": 0.3}),
         ("commands/set_opening.json", {"width": 1400}),
         ("commands/set_opening.json", {"id": GUID, "sill": 1000, "head": 2200}),
+        ("commands/set_opening_type.json", {"type": "door.sliding"}),
+        ("commands/set_opening_type.json", {"id": GUID, "hand": "flip"}),
+        ("commands/set_opening_type.json", {"swing": "out", "type": "window.top_hung"}),
         ("commands/rebuild_host_wall.json", {}),
         ("commands/rebuild_host_wall.json", {"id": GUID}),
         ("commands/clear_generated.json", {}),
@@ -764,6 +767,22 @@ def test_responses():
     if not validate("responses/set_opening_result.json", set_opening):
         all_passed = False
 
+    print("  set_opening_type_result:")
+    set_opening_type = {
+        "marker_id": guid,
+        "host_id": guid,
+        "opening_type": "door.sliding",
+        "hand": "L",
+        "ok": True,
+        "message": "Changed 1 door to sliding on w01",
+        "block_id": guid,
+        "host_openings": 1,
+        "host_voids": 1,
+        "max_frame_mm": 8,
+    }
+    if not validate("responses/set_opening_type_result.json", set_opening_type):
+        all_passed = False
+
     return all_passed
 
 
@@ -885,6 +904,12 @@ def test_invalid_examples():
         ("commands/set_opening.json", {"bogus": 1}, "set_opening unknown field"),
         ("commands/set_opening.json", {"width": 0}, "set_opening width 0"),
         ("commands/set_opening.json", {"id": "not-a-guid", "sill": 900}, "set_opening bad guid"),
+        ("commands/set_opening_type.json", {}, "set_opening_type missing change"),
+        ("commands/set_opening_type.json", {"type": "door.portal"}, "set_opening_type bad type"),
+        ("commands/set_opening_type.json", {"hand": "left"}, "set_opening_type bad hand"),
+        ("commands/set_opening_type.json", {"swing": "sideways"}, "set_opening_type bad swing"),
+        ("commands/set_opening_type.json", {"type": "door.sliding", "bogus": 1}, "set_opening_type unknown field"),
+        ("commands/set_opening_type.json", {"id": "not-a-guid", "type": "door.sliding"}, "set_opening_type bad guid"),
         ("commands/rebuild_host_wall.json", {"bogus": 1}, "rebuild_host_wall unknown field"),
         ("commands/rebuild_host_wall.json", {"id": "not-a-guid"}, "rebuild_host_wall bad guid"),
         ("commands/clear_generated.json", {"dry_run": "yes"}, "clear_generated dry_run not bool"),
@@ -1057,7 +1082,7 @@ def test_protocol_envelope():
         "walls_from_layer", "floor_from_layer", "roof_flat_from_walls", "openings_from_layer",
         "rooms_from_layer",
         "mark_as_existing",
-        "delete_opening", "add_opening", "move_opening", "set_opening",
+        "delete_opening", "add_opening", "move_opening", "set_opening", "set_opening_type",
         "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",

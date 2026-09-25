@@ -395,6 +395,10 @@ public partial class RhinoMCPFunctions
             Width = width,
             SourceLayer = sourceLayerName
         });
+        var kindTag = string.Equals(openingKind, "window", StringComparison.OrdinalIgnoreCase)
+            ? "window"
+            : "door";
+        StampOpeningStyle(attr, OpeningTypes.DefaultRecord(kindTag));
         return doc.Objects.AddBrep(markerBrep, attr);
     }
 

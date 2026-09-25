@@ -82,6 +82,19 @@ public partial class RhinoMCPFunctions
             attr.SetUserString("forsk:marker_id", stamp.MarkerId);
     }
 
+    /// <summary>
+    /// Writes the resolved type, and only the hand or swing that type uses.
+    /// A null value removes a key the previous type had.
+    /// </summary>
+    private static void StampOpeningStyle(ObjectAttributes attr, OpeningTypes.Record style)
+    {
+        if (attr == null || style == null || string.IsNullOrEmpty(style.TypeId))
+            return;
+        attr.SetUserString(OpeningTypes.TypeKey, style.TypeId);
+        attr.SetUserString(OpeningTypes.HandKey, style.Hand);
+        attr.SetUserString(OpeningTypes.SwingKey, style.Swing);
+    }
+
     /// <summary>Bake-order id: w01 matches wall-01, r01 matches room-01.</summary>
     private static string FormatStableId(string prefix, int index)
     {

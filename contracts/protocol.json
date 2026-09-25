@@ -55,6 +55,7 @@
             "add_opening",
             "move_opening",
             "set_opening",
+            "set_opening_type",
             "rebuild_host_wall",
             "clear_generated",
             "make2d_view",

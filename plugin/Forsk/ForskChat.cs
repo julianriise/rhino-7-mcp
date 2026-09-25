@@ -200,6 +200,7 @@ namespace RhinoMCPPlugin.Forsk
             "add_opening",
             "move_opening",
             "set_opening",
+            "set_opening_type",
             "delete_opening"
         };
 
@@ -539,6 +540,15 @@ namespace RhinoMCPPlugin.Forsk
                         ["sill"] = Num("Bottom Z in mm."),
                         ["head"] = Num("Top Z in mm.")
                     }),
+                Fn("set_opening_type",
+                    "Set type, hand, or swing on the selected openings, then rebuild each host once. Pass at least one of type, hand, swing. Id omitted uses the selection, including two or more. Does not clear the model. Refuses X-EXIST. A refused change leaves the document unchanged.",
+                    new JObject
+                    {
+                        ["id"] = Str("Opening marker or frame GUID. Omit to use the selection."),
+                        ["type"] = Str("door.hinged_single, door.hinged_double, door.sliding, door.pocket, window.fixed, window.side_hung, or window.top_hung."),
+                        ["hand"] = Str("L, R, or flip."),
+                        ["swing"] = Str("in, out, or flip.")
+                    }),
                 Fn("delete_opening",
                     "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the selection, including two or more openings. One id removes that opening. Refuses X-EXIST. If the rebuild fails, the openings return and the wall stays.",
                     new JObject
@@ -647,7 +657,7 @@ Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake 
 Never edit an opening on X-EXIST or forsk:kind=existing. Refuse: Existing underlay is not a Forsk host wall.
 Roof or openings before walls: Walls first. Call walls_from_layer before roof_flat_from_walls. Or the openings / add_opening line with the same shape.
 
-Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed 2 windows from w01.
+Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. make this a sliding door, top-hung window, flip swing, and change hand are one set_opening_type. Two or more selected openings are one call and no id. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed 2 windows from w01.
 
 Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
@@ -725,8 +735,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Edit)
             {
                 return "Turn bias: Edit. At most two sentences. No Target block on success. "
-                    + "Prefer add_opening, move_opening, set_opening, delete_opening. "
-                    + "Delete, add, move, and set rebuild that host only. "
+                    + "Prefer add_opening, move_opening, set_opening, set_opening_type, delete_opening. "
+                    + "Delete, add, move, set, and set type rebuild that host only. "
+                    + "make this a sliding door, top-hung window, flip swing, and change hand are one set_opening_type. "
+                    + "Two or more selected openings are one set_opening_type with no id. "
                     + "Two or more selected windows are one delete_opening with no id. "
                     + "Status line for that call: Removed 2 windows from w01. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "

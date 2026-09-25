@@ -33,11 +33,15 @@ def recv_exact(sock: socket.socket, n: int) -> bytes:
     return bytes(buf)
 
 
-def send_command(sock: socket.socket, cmd_type: str, params: dict | None = None) -> dict:
+def send_raw(sock: socket.socket, cmd_type: str, params: dict | None = None) -> dict:
     payload = json.dumps({"type": cmd_type, "params": params or {}}).encode()
     sock.sendall(len(payload).to_bytes(4, "big") + payload)
     length = int.from_bytes(recv_exact(sock, 4), "big")
-    response = json.loads(recv_exact(sock, length).decode())
+    return json.loads(recv_exact(sock, length).decode())
+
+
+def send_command(sock: socket.socket, cmd_type: str, params: dict | None = None) -> dict:
+    response = send_raw(sock, cmd_type, params)
     if response.get("status") == "error":
         raise SmokeError(f"{cmd_type}: {response.get('message')}")
     return response.get("result") or {}
@@ -73,6 +77,18 @@ def marker_for_frame(sock: socket.socket, frame: dict, markers: list) -> str:
             best = str(candidate)
             best_d = dist
     return best
+
+
+def part_set(info: dict) -> set[str]:
+    raw = str((info.get("attributes") or {}).get("forsk:parts") or "")
+    return {part for part in raw.split(",") if part}
+
+
+def thin_mm(info: dict) -> float:
+    box = info.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
+    dx = abs(float(box[1][0]) - float(box[0][0]))
+    dy = abs(float(box[1][1]) - float(box[0][1]))
+    return min(dx, dy)
 
 
 def marker_row(rows, marker_id: str) -> dict | None:
@@ -240,6 +256,143 @@ def main() -> int:
             failures.append("added opening is not a void")
         if added.get("host_id") != host_id:
             failures.append("add changed host id")
+
+        print("==> clear the window, then add a door and swap its type")
+        cleared = send_command(sock, "delete_opening", {"id": added.get("marker_id")})
+        print(f"    {cleared.get('message')} openings={cleared.get('host_openings')} voids={cleared.get('host_voids')}")
+        if cleared.get("host_openings") != 0 or cleared.get("host_voids") != 0:
+            failures.append(
+                f"clear window openings={cleared.get('host_openings')} voids={cleared.get('host_voids')}"
+            )
+        door = send_command(sock, "add_opening", {
+            "opening_kind": "door",
+            "host_id": host_id,
+            "t": 0.15,
+            "width": 900,
+        })
+        print(f"    {door.get('message')} openings={door.get('host_openings')} voids={door.get('host_voids')}")
+        door_counts = 1
+        if door.get("host_openings") != door_counts or door.get("host_voids") != door_counts:
+            failures.append(
+                f"door add openings={door.get('host_openings')} voids={door.get('host_voids')}"
+            )
+        door_id = str(door.get("marker_id") or "")
+        if door.get("host_id") != host_id:
+            failures.append("door add changed host id")
+        door_row = marker_row(door.get("markers"), door_id)
+        if door_row is None or door_row.get("inside") is not False:
+            failures.append("added door is not a void")
+
+        def door_state(label: str, result: dict, expect_type: str, expect_parts: set[str]) -> dict:
+            print(
+                f"    {result.get('message')} openings={result.get('host_openings')} "
+                f"voids={result.get('host_voids')}"
+            )
+            if result.get("host_id") != host_id:
+                failures.append(f"{label} host changed")
+            if result.get("host_openings") != door_counts or result.get("host_voids") != door_counts:
+                failures.append(
+                    f"{label} openings={result.get('host_openings')} voids={result.get('host_voids')}"
+                )
+            row = marker_row(result.get("markers"), door_id)
+            if row is None or row.get("inside") is not False:
+                failures.append(f"{label} door is not one void")
+            wall_now = send_command(sock, "get_object_info", {"id": host_id})
+            wall_now_attr = wall_now.get("attributes") or {}
+            if wall_now_attr.get("forsk:id") != wall_fid:
+                failures.append(f"{label} wall id changed")
+            if wall_now_attr.get("forsk:thickness") != wall_thick:
+                failures.append(f"{label} thickness changed")
+            info = send_command(sock, "get_object_info", {"id": door_id})
+            got = info.get("attributes") or {}
+            if got.get("forsk:opening_type") != expect_type:
+                failures.append(f"{label} type={got.get('forsk:opening_type')!r}")
+            block = {}
+            if result.get("block_id"):
+                block = send_command(sock, "get_object_info", {"id": result.get("block_id")})
+            parts = part_set(block)
+            if parts != expect_parts:
+                failures.append(f"{label} parts={sorted(parts)}")
+            try:
+                depth = thin_mm(block)
+                thick = float(wall_thick)
+                if abs(depth - (thick - 2.0)) > 8:
+                    failures.append(f"{label} depth {depth:.1f} thickness {thick:.1f}")
+                else:
+                    print(f"    depth {depth:.1f} mm")
+            except (TypeError, ValueError):
+                failures.append(f"{label} depth unreadable")
+            return got
+
+        born = send_command(sock, "get_object_info", {"id": door_id})
+        born_attr = born.get("attributes") or {}
+        if born_attr.get("forsk:opening_type") != "door.hinged_single":
+            failures.append(f"new door type={born_attr.get('forsk:opening_type')!r}")
+        if born_attr.get("forsk:hand") != "L" or born_attr.get("forsk:swing") != "in":
+            failures.append(
+                f"new door hand={born_attr.get('forsk:hand')!r} swing={born_attr.get('forsk:swing')!r}"
+            )
+        if door.get("block_id"):
+            born_parts = part_set(send_command(sock, "get_object_info", {"id": door.get("block_id")}))
+            if born_parts != {"frame", "leaf", "threshold"}:
+                failures.append(f"hinged parts={sorted(born_parts)}")
+            try:
+                depth = thin_mm(send_command(sock, "get_object_info", {"id": door.get("block_id")}))
+                if abs(depth - (float(wall_thick) - 2.0)) > 8:
+                    failures.append(f"hinged depth {depth:.1f}")
+                else:
+                    print(f"    hinged depth {depth:.1f} mm")
+            except (TypeError, ValueError):
+                failures.append("hinged depth unreadable")
+
+        flipped = send_command(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
+        if flipped.get("message") != f"Flipped swing on 1 door on {wall_fid}":
+            failures.append(f"flip message={flipped.get('message')!r}")
+        flipped_attr = door_state(
+            "flip", flipped, "door.hinged_single", {"frame", "leaf", "threshold"}
+        )
+        if flipped_attr.get("forsk:swing") != "out" or flipped_attr.get("forsk:hand") != "L":
+            failures.append(
+                f"flip hand={flipped_attr.get('forsk:hand')!r} swing={flipped_attr.get('forsk:swing')!r}"
+            )
+
+        sliding = send_command(sock, "set_opening_type", {"id": door_id, "type": "door.sliding"})
+        if sliding.get("message") != f"Changed 1 door to sliding on {wall_fid}":
+            failures.append(f"sliding message={sliding.get('message')!r}")
+        sliding_attr = door_state(
+            "sliding", sliding, "door.sliding", {"frame", "leaf", "threshold", "track"}
+        )
+        if sliding_attr.get("forsk:swing"):
+            failures.append(f"sliding stamped swing={sliding_attr.get('forsk:swing')!r}")
+        if sliding_attr.get("forsk:hand") != "L":
+            failures.append(f"sliding hand={sliding_attr.get('forsk:hand')!r}")
+
+        pocket = send_command(sock, "set_opening_type", {"id": door_id, "type": "door.pocket"})
+        if pocket.get("message") != f"Changed 1 door to pocket on {wall_fid}":
+            failures.append(f"pocket message={pocket.get('message')!r}")
+        pocket_attr = door_state(
+            "pocket", pocket, "door.pocket", {"frame", "leaf", "threshold"}
+        )
+        if pocket_attr.get("forsk:swing"):
+            failures.append(f"pocket stamped swing={pocket_attr.get('forsk:swing')!r}")
+        if pocket_attr.get("forsk:hand") != "L":
+            failures.append(f"pocket hand={pocket_attr.get('forsk:hand')!r}")
+
+        print("==> flip swing on a pocket door")
+        missed = send_raw(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
+        print(f"    status={missed.get('status')} {missed.get('message')}")
+        if missed.get("status") != "error":
+            failures.append(f"pocket flip status={missed.get('status')}")
+        if str(missed.get("message") or "") != "Pocket doors have no swing.":
+            failures.append(f"pocket flip message={missed.get('message')!r}")
+        after_miss = (send_command(sock, "get_object_info", {"id": door_id}).get("attributes") or {})
+        if after_miss.get("forsk:opening_type") != "door.pocket" or after_miss.get("forsk:hand") != "L":
+            failures.append("pocket flip changed the record")
+        if after_miss.get("forsk:swing"):
+            failures.append("pocket flip stamped swing")
+        wall_last = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
+        if wall_last.get("forsk:id") != wall_fid or wall_last.get("forsk:thickness") != wall_thick:
+            failures.append("pocket flip changed the wall")
     finally:
         sock.close()
 

@@ -354,6 +354,143 @@ def pick_delete_pair(sock: socket.socket, marker_ids: list, host_id: str, path: 
     return chosen[:2]
 
 
+def part_set(info: dict) -> set[str]:
+    raw = str((info.get("attributes") or {}).get("forsk:parts") or "")
+    return {part for part in raw.split(",") if part}
+
+
+def row_for(rows, marker_id: str) -> dict | None:
+    want = str(marker_id).lower()
+    for item in rows or []:
+        if str(item.get("id") or "").lower() == want:
+            return item
+    return None
+
+
+def check_opening_types(
+    sock: socket.socket,
+    moved_id: str,
+    added_id: str,
+    host_id: str,
+    wall_fid: str,
+    wall_thick: str,
+    counts: int,
+    failures: list,
+) -> None:
+    if not moved_id or not added_id:
+        failures.append("type swap needs the moved window and the added window")
+        return
+
+    before_moved = send_command(sock, "get_object_info", {"id": moved_id})
+    before_added = send_command(sock, "get_object_info", {"id": added_id})
+    moved_attrs = attrs_of(before_moved)
+    added_attrs = attrs_of(before_added)
+    if moved_attrs.get("forsk:opening_type") != "window.side_hung":
+        failures.append(f"baked type={moved_attrs.get('forsk:opening_type')!r}")
+    if moved_attrs.get("forsk:hand") != "L" or moved_attrs.get("forsk:swing") != "in":
+        failures.append(
+            f"baked hand={moved_attrs.get('forsk:hand')!r} swing={moved_attrs.get('forsk:swing')!r}"
+        )
+
+    def kept(label: str, result: dict, marker_id: str, previous: dict, origin) -> None:
+        print(
+            f"    {result.get('message')} openings={result.get('host_openings')} "
+            f"voids={result.get('host_voids')} frame={result.get('max_frame_mm')}"
+        )
+        if result.get("host_id") != host_id:
+            failures.append(f"{label} host {result.get('host_id')} != {host_id}")
+        if result.get("host_openings") != counts or result.get("host_voids") != counts:
+            failures.append(
+                f"{label} openings={result.get('host_openings')} voids={result.get('host_voids')} expected {counts}"
+            )
+        try:
+            if float(result.get("max_frame_mm")) > 25:
+                failures.append(f"{label} max_frame_mm={result.get('max_frame_mm')}")
+        except (TypeError, ValueError):
+            failures.append(f"{label} max_frame_mm missing")
+        row = row_for(result.get("markers"), marker_id)
+        if row is None or row.get("inside") is not False:
+            failures.append(f"{label} marker is not a void")
+        wall = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
+        if wall.get("forsk:id") != wall_fid:
+            failures.append(f"{label} wall id {wall.get('forsk:id')!r}")
+        if wall.get("forsk:thickness") != wall_thick:
+            failures.append(f"{label} thickness {wall.get('forsk:thickness')!r}")
+        now = send_command(sock, "get_object_info", {"id": marker_id})
+        now_attrs = attrs_of(now)
+        for key in ("forsk:width", "forsk:sill", "forsk:head"):
+            if str(now_attrs.get(key)) != str(previous.get(key)):
+                failures.append(f"{label} {key} {now_attrs.get(key)!r} != {previous.get(key)!r}")
+        now_center = center(now.get("bounding_box"))
+        if origin and now_center and dist_xy(origin, now_center) > 1:
+            failures.append(f"{label} moved {dist_xy(origin, now_center):.1f} mm")
+
+    print("==> swap one window to top_hung")
+    top = send_command(sock, "set_opening_type", {"id": moved_id, "type": "window.top_hung"})
+    if top.get("message") != f"Changed 1 window to top-hung on {wall_fid}":
+        failures.append(f"top_hung message={top.get('message')!r}")
+    kept("top_hung", top, moved_id, moved_attrs, center(before_moved.get("bounding_box")))
+    top_attr = attrs_of(send_command(sock, "get_object_info", {"id": moved_id}))
+    if top_attr.get("forsk:opening_type") != "window.top_hung":
+        failures.append(f"top_hung type={top_attr.get('forsk:opening_type')!r}")
+    if top_attr.get("forsk:hand"):
+        failures.append(f"top_hung stamped hand={top_attr.get('forsk:hand')!r}")
+    if top_attr.get("forsk:swing") != "in":
+        failures.append(f"top_hung swing={top_attr.get('forsk:swing')!r}")
+    top_block = send_command(sock, "get_object_info", {"id": top.get("block_id")}) if top.get("block_id") else {}
+    top_parts = part_set(top_block)
+    if "sash" not in top_parts:
+        failures.append(f"top_hung parts={sorted(top_parts)}")
+
+    print("==> swap one window to fixed")
+    fixed = send_command(sock, "set_opening_type", {"id": added_id, "type": "window.fixed"})
+    if fixed.get("message") != f"Changed 1 window to fixed on {wall_fid}":
+        failures.append(f"fixed message={fixed.get('message')!r}")
+    kept("fixed", fixed, added_id, added_attrs, center(before_added.get("bounding_box")))
+    fixed_attr = attrs_of(send_command(sock, "get_object_info", {"id": added_id}))
+    if fixed_attr.get("forsk:opening_type") != "window.fixed":
+        failures.append(f"fixed type={fixed_attr.get('forsk:opening_type')!r}")
+    if fixed_attr.get("forsk:hand") or fixed_attr.get("forsk:swing"):
+        failures.append(
+            f"fixed hand={fixed_attr.get('forsk:hand')!r} swing={fixed_attr.get('forsk:swing')!r}"
+        )
+    fixed_block = send_command(sock, "get_object_info", {"id": fixed.get("block_id")}) if fixed.get("block_id") else {}
+    fixed_parts = part_set(fixed_block)
+    if "sash" in fixed_parts or "glass" not in fixed_parts:
+        failures.append(f"fixed parts={sorted(fixed_parts)}")
+
+    print("==> forced type miss")
+    shot_top = attrs_of(send_command(sock, "get_object_info", {"id": moved_id}))
+    shot_fixed = attrs_of(send_command(sock, "get_object_info", {"id": added_id}))
+    shot_wall = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
+    shot_top_center = center(send_command(sock, "get_object_info", {"id": moved_id}).get("bounding_box"))
+    door_on_window = send_raw(sock, "set_opening_type", {"id": moved_id, "type": "door.sliding"})
+    print(f"    door on window status={door_on_window.get('status')} {door_on_window.get('message')}")
+    if door_on_window.get("status") != "error":
+        failures.append(f"door on window status={door_on_window.get('status')}")
+    if "That is a window" not in str(door_on_window.get("message") or ""):
+        failures.append(f"door on window message={door_on_window.get('message')!r}")
+    flip_fixed = send_raw(sock, "set_opening_type", {"id": added_id, "swing": "flip"})
+    print(f"    flip fixed status={flip_fixed.get('status')} {flip_fixed.get('message')}")
+    if flip_fixed.get("status") != "error":
+        failures.append(f"flip fixed status={flip_fixed.get('status')}")
+    if str(flip_fixed.get("message") or "") != "Fixed windows have no swing.":
+        failures.append(f"flip fixed message={flip_fixed.get('message')!r}")
+    back_top = attrs_of(send_command(sock, "get_object_info", {"id": moved_id}))
+    back_fixed = attrs_of(send_command(sock, "get_object_info", {"id": added_id}))
+    back_wall = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
+    for key in ("forsk:opening_type", "forsk:hand", "forsk:swing", "forsk:width", "forsk:sill", "forsk:head"):
+        if back_top.get(key) != shot_top.get(key):
+            failures.append(f"type miss changed {key} on top_hung")
+        if back_fixed.get(key) != shot_fixed.get(key):
+            failures.append(f"type miss changed {key} on fixed")
+    if back_wall.get("forsk:id") != shot_wall.get("forsk:id") or back_wall.get("forsk:thickness") != shot_wall.get("forsk:thickness"):
+        failures.append("type miss changed the wall")
+    back_center = center(send_command(sock, "get_object_info", {"id": moved_id}).get("bounding_box"))
+    if shot_top_center and back_center and dist_xy(shot_top_center, back_center) > 1:
+        failures.append("type miss moved the window")
+
+
 def fingerprint(sock: socket.socket, marker_id: str, wall_id: str, sibling_id: str | None):
     marker = send_command(sock, "get_object_info", {"id": marker_id})
     wall = send_command(sock, "get_object_info", {"id": wall_id})
@@ -397,8 +534,9 @@ def main() -> int:
                 if got != expect:
                     raise SmokeError(f"{name}={got} expected {expect}")
         finally:
-            if read_acad_model_units() != previous_units:
-                write_acad_model_units(previous_units)
+            # Always write the saved value. A second read here can throw and
+            # leave the preference on the import setting.
+            write_acad_model_units(previous_units)
 
         baked = bake(sock)
         marker_ids = baked["window_markers"]
@@ -663,6 +801,18 @@ def main() -> int:
                 failures.append("add changed wall id")
             if wall_ids(sock) != walls_before:
                 failures.append("A-WALL ids changed on add")
+
+            print(f"==> opening types, counts stay {expected - 1}")
+            check_opening_types(
+                sock,
+                marker_id,
+                str(added.get("marker_id") or ""),
+                host_id,
+                wall_fid,
+                wall_thick,
+                expected - 1,
+                failures,
+            )
 
         if baked and baked["floor_ids"]:
             floor = send_command(sock, "get_object_info", {"id": baked["floor_ids"][0]})

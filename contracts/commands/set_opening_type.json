@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_opening_type.json",
+  "title": "SetOpeningType Command",
+  "description": "Set type, hand, and/or swing on one or more openings, then rebuild each host wall once. Does not clear the model. Pass at least one of type, hand, swing. Id omitted uses the current selection, including two or more opening markers or frames. Refuses a marker or host with forsk:kind=existing or on layer X-EXIST. A refused change leaves the document unchanged. The same type with no hand or swing change does not rebuild.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Opening marker or frame GUID. Omit to use the current selection."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "door.hinged_single",
+        "door.hinged_double",
+        "door.sliding",
+        "door.pocket",
+        "window.fixed",
+        "window.side_hung",
+        "window.top_hung"
+      ],
+      "description": "Opening type id. Omit to keep the stored type."
+    },
+    "hand": {
+      "type": "string",
+      "enum": ["L", "R", "flip"],
+      "description": "Hinge or park side, read from the interior. flip swaps L and R."
+    },
+    "swing": {
+      "type": "string",
+      "enum": ["in", "out", "flip"],
+      "description": "in swings toward the interior. flip swaps in and out and keeps the hand."
+    }
+  },
+  "anyOf": [
+    { "required": ["type"] },
+    { "required": ["hand"] },
+    { "required": ["swing"] }
+  ],
+  "additionalProperties": false
+}
