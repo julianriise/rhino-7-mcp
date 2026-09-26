@@ -34,3 +34,16 @@ e. Poll `nc -z localhost 1999` for up to 30 s. If it's still closed, retry step 
 f. Run the smoke script. Between fixtures, repeat steps a to e (full quit, fresh open, no save). Office: `RHINO_MCP_TIMEOUT=900 python3 scripts/opening_edit_smoke.py`. Garage: `RHINO_MCP_TIMEOUT=300 python3 scripts/garage_opening_smoke.py`.
 g. If a native dialog blocks you (save prompt, plugin load warning), dismiss it with "Don't Save" or "Cancel" through System Events. Never click Save. On a file that already exists on disk the sheet can offer Save, Revert Changes, and Cancel. Click Revert Changes. That discards the unsaved edits.
 h. After the smoke, quit without saving and delete the temp copy. The pinned DXF and the Rhino template stay byte-for-byte the same.
+
+---
+
+## Token budget
+
+- Live smokes run through forsk `scripts/smoke_office.sh` and `scripts/smoke_garage.sh` once they exist. Never drive smoke steps one by one when a script covers them.
+- While iterating, run only the affected tests with quiet output (`pytest -q`, `dotnet test --verbosity quiet`, print failures only). Full gates run once before the push.
+- Look at downscaled preview copies only (about 1000 px, `sips -Z 1000`), once, at the end. Commit the full-res PNGs.
+- Do not read forsk `docs/archive/` or `docs/smoke/HISTORY.md` unless the task names them.
+- Same failure twice with the same symptom: stop and report. No third approach.
+- One slice per session. Spikes get their own session.
+- Final report 15 lines max: numbers, commit SHAs, link to forsk [`docs/SMOKE.md`](https://github.com/julianriise/forsk/blob/main/docs/SMOKE.md).
+- Poteto-mode code quality stays unchanged. The budget is about reading, looping, and output, not code quality.
