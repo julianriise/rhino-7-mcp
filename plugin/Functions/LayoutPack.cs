@@ -56,7 +56,10 @@ public partial class RhinoMCPFunctions
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the drawing.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
-    private const int MacPreviewAttempts = 5;
+    // Two reads. Each A3 preview takes about a minute, and five black
+    // frames run past the 300s garage command. The rest of the smoke
+    // then never starts.
+    private const int MacPreviewAttempts = 2;
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
     private const int PenEdgePx = 1;

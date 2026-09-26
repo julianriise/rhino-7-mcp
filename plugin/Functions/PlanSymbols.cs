@@ -589,10 +589,10 @@ public partial class RhinoMCPFunctions
                     catch (Exception) { piece = null; }
                     if (piece != null)
                     {
-                        // A dash is a short open stroke. Hatch.Create on that
-                        // ribbon can fill a circle that the stroke bbox does not
-                        // contain, which is the arc below the garage plan.
-                        added += AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count);
+                        var n = AddRibbon(doc, layer, piece, width, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count);
+                        if (n == 0)
+                            n = AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count);
+                        added += n;
                         piece.Dispose();
                     }
                 }
@@ -620,11 +620,14 @@ public partial class RhinoMCPFunctions
         ref int count)
     {
         var half = width * 0.5;
-        if (half <= 0 || curve == null || !curve.IsClosed) return 0;
+        if (half <= 0 || curve == null) return 0;
         // A closed loop offset as one open ribbon self-intersects and
         // Hatch.Create fills a circle the stroke bbox does not contain.
-        // Offset both sides, or leave the curve for the centre-line fallback.
-        var boundaries = ClosedBand(curve, half, tol);
+        // Offset both sides. An open stroke stays a strip. A strip whose
+        // boundary arc is far larger than the stroke is that circle.
+        var boundaries = curve.IsClosed
+            ? ClosedBand(curve, half, tol)
+            : OpenRibbon(curve, half, tol);
         if (boundaries == null || boundaries.Count == 0) return 0;
         Hatch[] hatches = null;
         try
@@ -652,7 +655,7 @@ public partial class RhinoMCPFunctions
             catch (Exception) { id = Guid.Empty; }
             var hatchBox = hatch.GetBoundingBox(true);
             var sourceBox = curve.GetBoundingBox(true);
-            if (id != Guid.Empty && HatchHasWildArc(hatch, sourceBox))
+            if (id != Guid.Empty && !curve.IsClosed && HatchHasWildArc(hatch, sourceBox))
             {
                 try { doc.Objects.Delete(id, true); } catch (Exception) { }
                 id = Guid.Empty;
@@ -743,6 +746,60 @@ public partial class RhinoMCPFunctions
             return null;
         }
         return new List<Curve> { outer, hole };
+    }
+
+    private static List<Curve> OpenRibbon(Curve curve, double half, double tol)
+    {
+        var samples = RibbonSamples(curve, tol);
+        if (samples.Count < 2) return null;
+        var left = new List<Point3d>();
+        var right = new List<Point3d>();
+        for (var i = 0; i < samples.Count; i++)
+        {
+            Vector3d tan;
+            if (i == 0) tan = samples[1] - samples[0];
+            else if (i == samples.Count - 1) tan = samples[i] - samples[i - 1];
+            else tan = samples[i + 1] - samples[i - 1];
+            tan.Z = 0;
+            if (!tan.Unitize()) continue;
+            var normal = new Vector3d(-tan.Y, tan.X, 0);
+            left.Add(samples[i] + (normal * half));
+            right.Add(samples[i] - (normal * half));
+        }
+        if (left.Count < 2) return null;
+        var pts = new List<Point3d>();
+        pts.AddRange(left);
+        for (var i = right.Count - 1; i >= 0; i--)
+            pts.Add(right[i]);
+        pts.Add(pts[0]);
+        return new List<Curve> { new PolylineCurve(pts) };
+    }
+
+    private static List<Point3d> RibbonSamples(Curve curve, double tol)
+    {
+        var pts = new List<Point3d>();
+        if (curve == null) return pts;
+        var length = curve.GetLength();
+        if (length < 0.2) return pts;
+        var linear = false;
+        try { linear = curve.IsLinear(Math.Max(tol, 0.1)); }
+        catch (Exception) { linear = false; }
+        if (linear || length < 80)
+        {
+            pts.Add(curve.PointAtStart);
+            pts.Add(curve.PointAtEnd);
+            return pts;
+        }
+        var steps = (int)Math.Ceiling(length / 80.0);
+        if (steps < 2) steps = 2;
+        if (steps > 32) steps = 32;
+        for (var i = 0; i <= steps; i++)
+        {
+            double t;
+            if (!curve.LengthParameter(length * i / steps, out t)) continue;
+            pts.Add(curve.PointAt(t));
+        }
+        return pts;
     }
 
     private static int AddPlainCurve(

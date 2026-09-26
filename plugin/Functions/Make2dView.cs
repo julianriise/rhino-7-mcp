@@ -1052,20 +1052,10 @@ public partial class RhinoMCPFunctions
             try { hatches = HatchesForGroup(group, plane, pattern, tolerance); }
             catch (Exception) { hatches = null; }
             if (hatches == null) continue;
-            var groupBox = BoundingBox.Empty;
-            foreach (var loop in group)
-            {
-                if (loop != null) groupBox.Union(loop.GetBoundingBox(true));
-            }
             foreach (var hatch in hatches)
             {
                 if (hatch == null) continue;
                 var hatchBox = hatch.GetBoundingBox(true);
-                if (HatchHasWildArc(hatch, groupBox.IsValid ? groupBox : hatchBox))
-                {
-                    hatch.Dispose();
-                    continue;
-                }
                 var stableId = FormatStableId("d", index);
                 var attr = new ObjectAttributes
                 {
