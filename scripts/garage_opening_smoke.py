@@ -101,10 +101,6 @@ def xy_box(obj: dict) -> tuple[float, float, float, float] | None:
     return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
 
 
-def boxes_hit(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
-    return a[0] <= b[2] and a[2] >= b[0] and a[1] <= b[3] and a[3] >= b[1]
-
-
 def all_objects(sock: socket.socket) -> list:
     """Every model object get_objects will return. Page space is not in this list."""
     rows = []
@@ -124,65 +120,72 @@ def all_objects(sock: socket.socket) -> list:
     return rows
 
 
-def sheet_corner(rows: list) -> None:
-    """Lower-right quarter of the plan sheet.
+PLAN_ROLES = {"section_fill", "cut", "greyscale", "roof_outline", "symbol", "room_tag"}
 
-    The detail looks down and camera-up is +Y, so page-right is +X and
-    page-down is -Y. The quarter is the high-X, low-Y half of the plan drawing.
+
+def outside_plan(rows: list, failures: list) -> None:
+    """Fail when something other than the plan drawing sits outside it.
+
+    The plan box is the building drawing (roles below, diagonal under 20 m).
+    A stray circle whose own box is the whole sheet is not part of that box.
     """
     frame = None
+    kept = set()
     for obj in rows:
         attr = obj.get("attributes") or {}
+        if str(attr.get("forsk:kind") or "").lower() != "drawing":
+            continue
         if str(attr.get("forsk:view") or "").lower() != "plan":
             continue
-        if str(attr.get("forsk:kind") or "").lower() != "drawing":
+        if str(attr.get("forsk:role") or "") not in PLAN_ROLES:
             continue
         box = xy_box(obj)
         if box is None:
             continue
-        if frame is None:
-            frame = box
-        else:
-            frame = (
-                min(frame[0], box[0]),
-                min(frame[1], box[1]),
-                max(frame[2], box[2]),
-                max(frame[3], box[3]),
-            )
+        diag = ((box[2] - box[0]) ** 2 + (box[3] - box[1]) ** 2) ** 0.5
+        if diag > 20000:
+            continue
+        kept.add(str(obj.get("id") or "").lower())
+        frame = box if frame is None else (
+            min(frame[0], box[0]),
+            min(frame[1], box[1]),
+            max(frame[2], box[2]),
+            max(frame[3], box[3]),
+        )
     if frame is None:
-        print("    sheet corner missing")
+        print("    outside plan missing")
+        failures.append("outside plan missing")
         return
-    mid_x = (frame[0] + frame[2]) * 0.5
-    mid_y = (frame[1] + frame[3]) * 0.5
-    quarter = (mid_x, frame[1], frame[2], mid_y)
+    pad = 800.0
+    limit = (frame[0] - pad, frame[1] - pad, frame[2] + pad, frame[3] + pad)
     hits = []
     for obj in rows:
+        if str(obj.get("id") or "").lower() in kept:
+            continue
         box = xy_box(obj)
-        if box is None or not boxes_hit(box, quarter):
+        if box is None:
+            continue
+        if (
+            box[0] >= limit[0] and box[1] >= limit[1]
+            and box[2] <= limit[2] and box[3] <= limit[3]
+        ):
             continue
         attr = obj.get("attributes") or {}
         diag = ((box[2] - box[0]) ** 2 + (box[3] - box[1]) ** 2) ** 0.5
         role = attr.get("forsk:role") or ""
-        symbol = attr.get("forsk:symbol") or ""
-        extra = ""
-        if role:
-            extra += f" role={role}"
-        if symbol:
-            extra += f" symbol={symbol}"
-        hits.append((
-            diag,
+        hits.append(
             f"{obj.get('type')} {obj.get('id')} layer={obj.get('layer')} "
             f"bbox=[{box[0]:.0f},{box[1]:.0f},{box[2]:.0f},{box[3]:.0f}] "
-            f"diag={diag:.0f}{extra}",
-        ))
-    hits.sort(key=lambda item: item[0], reverse=True)
+            f"diag={diag:.0f}"
+            + (f" role={role}" if role else "")
+        )
     print(
-        f"    sheet quarter x>={mid_x:.0f} y<={mid_y:.0f} "
-        f"plan=[{frame[0]:.0f},{frame[1]:.0f},{frame[2]:.0f},{frame[3]:.0f}] "
-        f"hits={len(hits)}"
+        f"    outside plan {len(hits)} "
+        f"box=[{frame[0]:.0f},{frame[1]:.0f},{frame[2]:.0f},{frame[3]:.0f}]"
     )
-    for _, line in hits:
-        print(f"    corner {line}")
+    for line in hits:
+        print(f"    outside {line}")
+        failures.append(f"outside {line}")
 
 
 def marker_row(rows, marker_id: str) -> dict | None:
@@ -611,7 +614,7 @@ def main() -> int:
         print(f"    hatches {hatch_n} large {len(large)}")
         for row in large:
             failures.append(f"large hatch {row}")
-        sheet_corner(all_objects(sock))
+        outside_plan(all_objects(sock), failures)
 
         def capture_again(n: int, path: str) -> None:
             pdf = send_command(sock, "export_pdf", {"path": path, "layout": "plan"})

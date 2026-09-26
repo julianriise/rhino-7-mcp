@@ -1052,15 +1052,27 @@ public partial class RhinoMCPFunctions
             try { hatches = HatchesForGroup(group, plane, pattern, tolerance); }
             catch (Exception) { hatches = null; }
             if (hatches == null) continue;
+            var groupBox = BoundingBox.Empty;
+            foreach (var loop in group)
+            {
+                if (loop != null) groupBox.Union(loop.GetBoundingBox(true));
+            }
             foreach (var hatch in hatches)
             {
                 if (hatch == null) continue;
                 var hatchBox = hatch.GetBoundingBox(true);
+                if (HatchHasWildArc(hatch, groupBox.IsValid ? groupBox : hatchBox))
+                {
+                    hatch.Dispose();
+                    continue;
+                }
                 var stableId = FormatStableId("d", index);
                 var attr = new ObjectAttributes
                 {
                     LayerIndex = layer.Index,
                     Name = stableId,
+                    Space = ActiveSpace.ModelSpace,
+                    ViewportId = Guid.Empty,
                     ColorSource = ObjectColorSource.ColorFromObject,
                     ObjectColor = Color.Black,
                     PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
@@ -1513,17 +1525,41 @@ public partial class RhinoMCPFunctions
         doc.Layers.Modify(layer, layer.Index, true);
     }
 
+    private static void CollectLayerDrawings(IEnumerable<RhinoObject> objs, Layer layer, List<Guid> doomed)
+    {
+        if (objs == null || layer == null || doomed == null) return;
+        foreach (var obj in objs)
+        {
+            if (obj?.Attributes == null) continue;
+            if (!string.Equals(GetForskKind(obj), "drawing", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (obj.Attributes.LayerIndex != layer.Index) continue;
+            if (!doomed.Contains(obj.Id)) doomed.Add(obj.Id);
+        }
+    }
+
     private static void DeletePrintDrawings(RhinoDoc doc, Layer layer)
     {
         if (doc == null || layer == null) return;
         var doomed = new List<Guid>();
-        foreach (var obj in doc.Objects)
+        CollectLayerDrawings(doc.Objects, layer, doomed);
+        var pages = doc.Views.GetPageViews();
+        if (pages != null)
         {
-            if (obj == null) continue;
-            if (!string.Equals(GetForskKind(obj), "drawing", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (obj.Attributes.LayerIndex != layer.Index) continue;
-            doomed.Add(obj.Id);
+            foreach (var page in pages)
+            {
+                var viewport = page?.MainViewport;
+                if (viewport == null) continue;
+                var settings = new ObjectEnumeratorSettings
+                {
+                    NormalObjects = true,
+                    HiddenObjects = true,
+                    LockedObjects = true,
+                    ActiveObjects = true
+                };
+                settings.ViewportFilter = viewport;
+                CollectLayerDrawings(doc.Objects.GetObjectList(settings), layer, doomed);
+            }
         }
         foreach (var id in doomed)
             doc.Objects.Delete(id, true);

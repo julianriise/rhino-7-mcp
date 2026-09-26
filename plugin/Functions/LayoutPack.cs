@@ -609,8 +609,11 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        // Stay in Wireframe. Switching the detail to Shaded clears its
+        // framebuffer to opaque black, and GetPreviewImage reads that buffer
+        // before Wireframe paints. CopyPreview only whitens transparent black,
+        // so the black frame is kept as ink.
         var wire = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
-        var shaded = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.ShadedId);
         var details = page.GetDetailViews();
         if (details != null && wire != null)
         {
@@ -618,8 +621,6 @@ public partial class RhinoMCPFunctions
             {
                 var viewport = detail?.Viewport;
                 if (viewport == null) continue;
-                if (shaded != null)
-                    viewport.DisplayMode = shaded;
                 viewport.DisplayMode = wire;
             }
         }
@@ -640,6 +641,10 @@ public partial class RhinoMCPFunctions
     private string EnsureGreyscaleDrawings(RhinoDoc doc, List<RhinoPageView> pages)
     {
         if (doc == null || pages == null) return null;
+        // A layout is often the active view here. New objects then land in
+        // page space, at model millimetres, and a ribbon draws on the sheet
+        // at 1:1. Bake while a model view is active.
+        UseModelView(doc);
         RestorePrintColors(doc);
         List<RhinoObject> clay = null;
         foreach (var page in pages)
@@ -735,10 +740,47 @@ public partial class RhinoMCPFunctions
             else
                 bmp = raw;
             ink = CountDarkSamples(bmp);
-            if (ink > 0)
+            // A near-uniform frame is a missed paint: all white, or the opaque
+            // black buffer. It is not a sheet. Keep looking.
+            if (!IsUniformPreview(bmp, ink))
                 return bmp;
         }
+        if (bmp != null && IsUniformPreview(bmp, ink))
+        {
+            bmp.Dispose();
+            bmp = null;
+            ink = 0;
+        }
         return bmp;
+    }
+
+    /// <summary>
+    /// True when the preview is empty paper or a black framebuffer.
+    /// A drawn A3 sheet is mostly paper with a few percent of ink.
+    /// </summary>
+    private static bool IsUniformPreview(Bitmap bmp, int dark)
+    {
+        if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return true;
+        int samples = ((bmp.Width + 3) / 4) * ((bmp.Height + 3) / 4);
+        if (samples < 1) return true;
+        if (dark < 400) return true;
+        return dark * 5 > samples * 2;
+    }
+
+    private static void UseModelView(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        if (!(doc.Views.ActiveView is RhinoPageView)) return;
+        RhinoView[] views = null;
+        try { views = doc.Views.GetViewList(true, false); }
+        catch (Exception) { views = null; }
+        if (views == null) return;
+        foreach (var view in views)
+        {
+            if (view == null || view is RhinoPageView) continue;
+            doc.Views.ActiveView = view;
+            return;
+        }
     }
 
     private static void WaitForOneIdle()

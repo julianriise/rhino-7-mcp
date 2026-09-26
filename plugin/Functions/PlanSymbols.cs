@@ -562,6 +562,8 @@ public partial class RhinoMCPFunctions
         if (!dashed)
         {
             added += AddRibbon(doc, layer, curve, width, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count);
+            if (added == 0)
+                added += AddPlainCurve(doc, layer, curve, paperMm, role, part, markerId, openY, dashed, ref box, ref index, ref count);
             return added;
         }
 
@@ -587,7 +589,10 @@ public partial class RhinoMCPFunctions
                     catch (Exception) { piece = null; }
                     if (piece != null)
                     {
-                        added += AddRibbon(doc, layer, piece, width, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count);
+                        // A dash is a short open stroke. Hatch.Create on that
+                        // ribbon can fill a circle that the stroke bbox does not
+                        // contain, which is the arc below the garage plan.
+                        added += AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count);
                         piece.Dispose();
                     }
                 }
@@ -615,20 +620,11 @@ public partial class RhinoMCPFunctions
         ref int count)
     {
         var half = width * 0.5;
-        if (half <= 0 || curve == null) return 0;
+        if (half <= 0 || curve == null || !curve.IsClosed) return 0;
         // A closed loop offset as one open ribbon self-intersects and
-        // Hatch.Create fills a circle well outside the wall. Offset both
-        // sides, or keep the centre line.
-        List<Curve> boundaries = null;
-        if (curve.IsClosed)
-            boundaries = ClosedBand(curve, half, tol);
-        var plain = false;
-        if (boundaries == null && curve.IsClosed)
-            plain = true;
-        if (boundaries == null && !plain)
-            boundaries = OpenRibbon(curve, half, tol);
-        if (plain)
-            return AddPlainCurve(doc, layer, curve, role, part, markerId, openY, dashed, ref box, ref index, ref count);
+        // Hatch.Create fills a circle the stroke bbox does not contain.
+        // Offset both sides, or leave the curve for the centre-line fallback.
+        var boundaries = ClosedBand(curve, half, tol);
         if (boundaries == null || boundaries.Count == 0) return 0;
         Hatch[] hatches = null;
         try
@@ -655,6 +651,12 @@ public partial class RhinoMCPFunctions
             try { id = doc.Objects.AddHatch(hatch, attr); }
             catch (Exception) { id = Guid.Empty; }
             var hatchBox = hatch.GetBoundingBox(true);
+            var sourceBox = curve.GetBoundingBox(true);
+            if (id != Guid.Empty && HatchHasWildArc(hatch, sourceBox))
+            {
+                try { doc.Objects.Delete(id, true); } catch (Exception) { }
+                id = Guid.Empty;
+            }
             if (id != Guid.Empty && limit.IsValid && hatchBox.IsValid && !BoxHolds(limit, hatchBox))
             {
                 try { doc.Objects.Delete(id, true); } catch (Exception) { }
@@ -743,37 +745,11 @@ public partial class RhinoMCPFunctions
         return new List<Curve> { outer, hole };
     }
 
-    private static List<Curve> OpenRibbon(Curve curve, double half, double tol)
-    {
-        var samples = RibbonSamples(curve, tol);
-        if (samples.Count < 2) return null;
-        var left = new List<Point3d>();
-        var right = new List<Point3d>();
-        for (var i = 0; i < samples.Count; i++)
-        {
-            Vector3d tan;
-            if (i == 0) tan = samples[1] - samples[0];
-            else if (i == samples.Count - 1) tan = samples[i] - samples[i - 1];
-            else tan = samples[i + 1] - samples[i - 1];
-            tan.Z = 0;
-            if (!tan.Unitize()) continue;
-            var normal = new Vector3d(-tan.Y, tan.X, 0);
-            left.Add(samples[i] + (normal * half));
-            right.Add(samples[i] - (normal * half));
-        }
-        if (left.Count < 2) return null;
-        var pts = new List<Point3d>();
-        pts.AddRange(left);
-        for (var i = right.Count - 1; i >= 0; i--)
-            pts.Add(right[i]);
-        pts.Add(pts[0]);
-        return new List<Curve> { new PolylineCurve(pts) };
-    }
-
     private static int AddPlainCurve(
         RhinoDoc doc,
         Layer layer,
         Curve curve,
+        double plotMm,
         string role,
         string part,
         string markerId,
@@ -785,6 +761,7 @@ public partial class RhinoMCPFunctions
     {
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+        if (plotMm > 0) attr.PlotWeight = plotMm;
         Guid id;
         try { id = doc.Objects.AddCurve(curve, attr); }
         catch (Exception) { id = Guid.Empty; }
@@ -803,31 +780,33 @@ public partial class RhinoMCPFunctions
             curve?.Dispose();
     }
 
-    private static List<Point3d> RibbonSamples(Curve curve, double tol)
+    private static bool HatchHasWildArc(Hatch hatch, BoundingBox source)
     {
-        var pts = new List<Point3d>();
-        if (curve == null) return pts;
-        var length = curve.GetLength();
-        if (length < 0.2) return pts;
-        var linear = false;
-        try { linear = curve.IsLinear(Math.Max(tol, 0.1)); }
-        catch (Exception) { linear = false; }
-        if (linear || length < 80)
+        if (hatch == null) return false;
+        var span = 1.0;
+        if (source.IsValid)
         {
-            pts.Add(curve.PointAtStart);
-            pts.Add(curve.PointAtEnd);
-            return pts;
+            var dx = source.Max.X - source.Min.X;
+            var dy = source.Max.Y - source.Min.Y;
+            var edge = Math.Max(dx, dy);
+            if (edge > span) span = edge;
         }
-        var steps = (int)Math.Ceiling(length / 80.0);
-        if (steps < 2) steps = 2;
-        if (steps > 32) steps = 32;
-        for (var i = 0; i <= steps; i++)
+        var cap = span * 1.25;
+        var wild = false;
+        foreach (var outer in new[] { true, false })
         {
-            double t;
-            if (!curve.LengthParameter(length * i / steps, out t)) continue;
-            pts.Add(curve.PointAt(t));
+            Curve[] curves = null;
+            try { curves = hatch.Get3dCurves(outer); }
+            catch (Exception) { curves = null; }
+            if (curves == null) continue;
+            foreach (var curve in curves)
+            {
+                if (curve is ArcCurve arc && arc.Arc.IsValid && arc.Arc.Radius > cap)
+                    wild = true;
+                curve?.Dispose();
+            }
         }
-        return pts;
+        return wild;
     }
 
     private static ObjectAttributes DrawAttr(
@@ -837,6 +816,8 @@ public partial class RhinoMCPFunctions
         {
             LayerIndex = layer.Index,
             Name = stableId,
+            Space = ActiveSpace.ModelSpace,
+            ViewportId = Guid.Empty,
             ColorSource = ObjectColorSource.ColorFromObject,
             ObjectColor = Color.Black,
             PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
