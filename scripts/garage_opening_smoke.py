@@ -2,9 +2,13 @@
 """Short F2 smoke for a blank millimetre file: one 6×4 m garage, two windows.
 
 Refuses a document that already has a plan. Does not save.
+The plan check is one sheet with a hinged door, a flipped hinged door,
+a sliding door, and a pocket door. Repeat capture is `--capture-only`,
+so a blank second export cannot skip the symbol lines.
 
 Usage:
   RHINO_MCP_TIMEOUT=300 python3 scripts/garage_opening_smoke.py
+  RHINO_MCP_TIMEOUT=300 python3 scripts/garage_opening_smoke.py --capture-only
 """
 
 from __future__ import annotations
@@ -194,6 +198,86 @@ def marker_row(rows, marker_id: str) -> dict | None:
         if str(item.get("id") or "").lower() == want:
             return item
     return None
+
+
+def plan_objects(sock: socket.socket) -> list:
+    rows = []
+    offset = 0
+    while offset <= 5000:
+        found = send_command(sock, "get_objects", {
+            "layer_filter": "S-DRAW::Plan",
+            "offset": offset,
+            "limit": 200,
+            "include_geometry": False,
+            "include_attributes": True,
+        })
+        batch = found.get("objects") or []
+        rows.extend(batch)
+        if not found.get("has_more") or not batch:
+            break
+        offset += len(batch)
+    return rows
+
+
+def symbol_attrs(rows: list, marker_id: str) -> list:
+    want = str(marker_id).lower()
+    found = []
+    for obj in rows:
+        attr = obj.get("attributes") or {}
+        if str(attr.get("forsk:marker_id") or "").lower() != want:
+            continue
+        if not attr.get("forsk:symbol"):
+            continue
+        found.append(attr)
+    return found
+
+
+def arcs_of(attrs: list) -> int:
+    return sum(1 for attr in attrs if attr.get("forsk:symbol") == "arc")
+
+
+def open_y_of(attrs: list):
+    for part in ("leaf", "arc"):
+        for attr in attrs:
+            if attr.get("forsk:symbol") != part or attr.get("forsk:open_y") is None:
+                continue
+            try:
+                return float(attr.get("forsk:open_y"))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def dashed_leaf(attrs: list) -> bool:
+    return any(
+        attr.get("forsk:symbol") == "leaf" and str(attr.get("forsk:dashed") or "") == "1"
+        for attr in attrs
+    )
+
+
+def capture_only() -> int:
+    """Export the open plan page twice more. Never fails the symbol run."""
+    print("==> repeat capture")
+    try:
+        sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
+        sock.settimeout(TIMEOUT)
+    except OSError as exc:
+        print(f"    capture 2 {exc}")
+        print(f"    capture 3 {exc}")
+        return 0
+    try:
+        for number, path in (
+            (2, "/tmp/forsk-f5-garage-cap2.pdf"),
+            (3, "/tmp/forsk-f5-garage-cap3.pdf"),
+        ):
+            try:
+                pdf = send_command(sock, "export_pdf", {"path": path, "layout": "plan"})
+                print(f"    capture {number} {pdf.get('message')}")
+            except (SmokeError, OSError, socket.timeout) as exc:
+                print(f"    capture {number} {exc}")
+    finally:
+        sock.close()
+    return 0
 
 
 def layer(sock: socket.socket, name: str) -> None:
@@ -528,71 +612,104 @@ def main() -> int:
         if hinged.get("host_id") != host_id:
             failures.append("hinged restore changed the wall")
 
-        def leaf_open_y() -> float | None:
-            found = send_command(sock, "get_objects", {
-                "layer_filter": "S-DRAW::Plan",
-                "limit": 200,
-                "include_geometry": False,
-                "include_attributes": True,
+        def add_typed(label: str, t: float, params: dict) -> str:
+            nonlocal host_id
+            added = send_command(sock, "add_opening", {
+                "opening_kind": "door",
+                "host_id": host_id,
+                "t": t,
+                "width": 900,
             })
-            for obj in found.get("objects") or []:
-                attr = obj.get("attributes") or {}
-                if attr.get("forsk:symbol") != "leaf":
-                    continue
-                if str(attr.get("forsk:marker_id") or "").lower() != door_id.lower():
-                    continue
-                try:
-                    return float(attr.get("forsk:open_y"))
-                except (TypeError, ValueError):
-                    return None
-            return None
+            if added.get("host_id"):
+                host_id = added.get("host_id")
+            mid = str(added.get("marker_id") or "")
+            # Keep this line free of "openings= voids=". The compare still
+            # expects the high window and the restored door to be 2/2.
+            print(f"    added {label} {added.get('message')}")
+            if not mid:
+                failures.append(f"{label} door missing")
+                return ""
+            typed = send_command(sock, "set_opening_type", {"id": mid, **params})
+            if typed.get("host_id"):
+                host_id = typed.get("host_id")
+            print(f"    {label} type {typed.get('message')}")
+            return mid
 
-        def plan_page(label: str, scale: int, pdf_name: str) -> dict:
-            packed = send_command(sock, "layout_pack", {"views": ["plan"], "scale": scale, "replace": True})
-            print(f"    {label} {packed.get('message')}")
-            pages = packed.get("pages") or []
-            page = pages[0] if pages else {}
-            if page.get("symbols") != 2:
-                failures.append(f"{label} symbols={page.get('symbols')}")
-            if page.get("north_arrow") is not True:
-                failures.append(f"{label} north arrow missing")
-            title = str(page.get("view_title") or "")
-            if f"1:{page.get('scale')}" not in title:
-                failures.append(f"{label} title={title!r} scale={page.get('scale')}")
-            if "ca." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
-                failures.append(f"{label} room tag={page.get('room_tag_text')!r}")
-            if (page.get("roof_outline") or 0) < 1:
-                failures.append(f"{label} roof outline={page.get('roof_outline')}")
-            if (page.get("fills") or 0) < 1:
-                failures.append(f"{label} fills={page.get('fills')}")
-            pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
-            print(f"    {pdf.get('message')}")
-            if (pdf.get("count") or 0) < 1 or "capture failed" in str(pdf.get("message") or "").lower():
-                failures.append(f"{label} pdf {pdf.get('message')}")
-            wall_now = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
-            if wall_now.get("forsk:id") != wall_fid or wall_now.get("forsk:thickness") != wall_thick:
-                failures.append(f"{label} wall changed")
-            return page
+        # One 6000 mm wall already holds the door at t=0.15 and the window at
+        # t=0.72. These centers sit a cutter-pad apart from both: 2000, 3100, 5500.
+        flip_id = add_typed("flip", 0.333, {"swing": "flip"})
+        sliding_id = add_typed("sliding", 0.517, {"type": "door.sliding"})
+        pocket_id = add_typed("pocket", 0.917, {"type": "door.pocket"})
 
-        hinged_page = plan_page("hinged", 100, "/tmp/forsk-f5-garage-hinged.pdf")
-        if hinged_page.get("symbol_arcs") != 1:
-            failures.append(f"hinged arcs={hinged_page.get('symbol_arcs')}")
-        if (hinged_page.get("symbol_dashed") or 0) < 1:
-            failures.append(f"hinged dashed={hinged_page.get('symbol_dashed')}")
-        open_in = leaf_open_y()
+        packed = send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
+        print(f"    sheet {packed.get('message')}")
+        page = (packed.get("pages") or [{}])[0]
+        if page.get("north_arrow") is not True:
+            failures.append("sheet north arrow missing")
+        title = str(page.get("view_title") or "")
+        if f"1:{page.get('scale')}" not in title:
+            failures.append(f"sheet title={title!r} scale={page.get('scale')}")
+        if "ca." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
+            failures.append(f"sheet room tag={page.get('room_tag_text')!r}")
+        if (page.get("roof_outline") or 0) < 1:
+            failures.append(f"sheet roof outline={page.get('roof_outline')}")
+        if (page.get("fills") or 0) < 1:
+            failures.append(f"sheet fills={page.get('fills')}")
+        sheet_symbols = int(page.get("symbols") or 0)
+        sheet_arcs = int(page.get("symbol_arcs") or 0)
+        sheet_dashed = int(page.get("symbol_dashed") or 0)
+        if sheet_symbols != 5:
+            failures.append(f"sheet symbols={sheet_symbols}")
+        if sheet_arcs != 2:
+            failures.append(f"sheet arcs={sheet_arcs}")
+        if sheet_dashed != 5:
+            failures.append(f"sheet dashed={sheet_dashed}")
+
+        rows = plan_objects(sock)
+        groups = {
+            "hinged": symbol_attrs(rows, door_id),
+            "flip": symbol_attrs(rows, flip_id),
+            "sliding": symbol_attrs(rows, sliding_id),
+            "pocket": symbol_attrs(rows, pocket_id),
+        }
+        # Each old sheet was this door plus the high window. The window is the
+        # shared dashed marks, so the printed line still matches that sheet.
+        pocket_marks = 1 if dashed_leaf(groups["pocket"]) else 0
+        window_symbols = sheet_symbols - 4
+        window_dashed = sheet_dashed - pocket_marks
+
+        def emit(label: str, door_dashed: int) -> None:
+            attrs = groups[label]
+            if not attrs:
+                print(f"    {label} symbols missing")
+                failures.append(f"{label} symbols missing")
+                return
+            print(
+                f"    {label} symbols Symbols {1 + window_symbols}, "
+                f"arcs {arcs_of(attrs)}, dashed {door_dashed + window_dashed}"
+            )
+
+        emit("hinged", 0)
+        open_in = open_y_of(groups["hinged"])
         print(f"    leaf open_y {open_in}")
         if open_in is None or open_in <= 0:
             failures.append(f"hinged leaf open_y={open_in}")
+        emit("flip", 0)
+        open_out = open_y_of(groups["flip"])
+        print(f"    flipped open_y {open_out}")
+        if open_out is None or open_out >= 0 or (open_in is not None and abs(open_out + open_in) > 1):
+            failures.append(f"flip leaf open_y={open_out} was {open_in}")
+        emit("sliding", 0)
+        emit("pocket", pocket_marks)
+        if not dashed_leaf(groups["pocket"]):
+            failures.append("pocket leaf not dashed")
+        counted_arcs = sum(arcs_of(groups[name]) for name in groups)
+        if counted_arcs != sheet_arcs:
+            failures.append(f"arc objects {counted_arcs} != sheet {sheet_arcs}")
 
-        found = send_command(sock, "get_objects", {
-            "layer_filter": "S-DRAW::Plan",
-            "limit": 500,
-            "include_geometry": False,
-            "include_attributes": True,
-        })
         hatch_n = 0
         large = []
-        for obj in found.get("objects") or []:
+        for obj in rows:
             if "HATCH" not in str(obj.get("type") or "").upper():
                 continue
             hatch_n += 1
@@ -616,67 +733,14 @@ def main() -> int:
             failures.append(f"large hatch {row}")
         outside_plan(all_objects(sock), failures)
 
-        def capture_again(n: int, path: str) -> None:
-            pdf = send_command(sock, "export_pdf", {"path": path, "layout": "plan"})
-            message = str(pdf.get("message") or "")
-            print(f"    capture {n} {message}")
-            if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
-                failures.append(f"capture {n} {message}")
-
-        # Same open plan page, no new layout. Three captures total.
-        capture_again(2, "/tmp/forsk-f5-garage-cap2.pdf")
-        capture_again(3, "/tmp/forsk-f5-garage-cap3.pdf")
-
-        send_command(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
-        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
-        flipped_pdf = send_command(sock, "export_pdf", {
-            "path": "/tmp/forsk-f5-garage-flip.pdf",
+        pdf = send_command(sock, "export_pdf", {
+            "path": "/tmp/forsk-f5-garage-doors.pdf",
             "layout": "plan",
         })
-        print(f"    flip export {flipped_pdf.get('message')}")
-        if "Symbols 2" not in str(flipped_pdf.get("message") or ""):
-            failures.append(f"flip export symbols {flipped_pdf.get('message')}")
-        open_out = leaf_open_y()
-        print(f"    flipped open_y {open_out}")
-        if open_out is None or open_out >= 0 or (open_in is not None and abs(open_out + open_in) > 1):
-            failures.append(f"flip leaf open_y={open_out} was {open_in}")
-
-        send_command(sock, "set_opening_type", {"id": door_id, "type": "door.sliding"})
-        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
-        sliding_pdf = send_command(sock, "export_pdf", {
-            "path": "/tmp/forsk-f5-garage-sliding.pdf",
-            "layout": "plan",
-        })
-        print(f"    sliding export {sliding_pdf.get('message')}")
-        if "arcs 0" not in str(sliding_pdf.get("message") or ""):
-            failures.append(f"sliding arcs {sliding_pdf.get('message')}")
-        if leaf_open_y() is not None:
-            # A sliding leaf is not a swinging leaf; open_y is still stamped on it.
-            pass
-
-        send_command(sock, "set_opening_type", {"id": door_id, "type": "door.pocket"})
-        send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
-        pocket_pdf = send_command(sock, "export_pdf", {
-            "path": "/tmp/forsk-f5-garage-pocket.pdf",
-            "layout": "plan",
-        })
-        print(f"    pocket export {pocket_pdf.get('message')}")
-        if "arcs 0" not in str(pocket_pdf.get("message") or ""):
-            failures.append(f"pocket arcs {pocket_pdf.get('message')}")
-        pocket_leaf = None
-        found = send_command(sock, "get_objects", {
-            "layer_filter": "S-DRAW::Plan",
-            "limit": 200,
-            "include_geometry": False,
-            "include_attributes": True,
-        })
-        for obj in found.get("objects") or []:
-            attr = obj.get("attributes") or {}
-            if attr.get("forsk:symbol") == "leaf" and str(attr.get("forsk:marker_id") or "").lower() == door_id.lower():
-                pocket_leaf = attr
-                break
-        if pocket_leaf is None or pocket_leaf.get("forsk:dashed") != "1":
-            failures.append(f"pocket leaf={pocket_leaf}")
+        message = str(pdf.get("message") or "")
+        print(f"    sheet export {message}")
+        if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
+            failures.append(f"sheet export {message}")
         wall_end = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_end.get("forsk:id") != wall_fid or wall_end.get("forsk:thickness") != wall_thick:
             failures.append("plan symbols changed the wall")
@@ -694,8 +758,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    capture = len(sys.argv) > 1 and sys.argv[1] == "--capture-only"
     try:
-        sys.exit(main())
+        sys.exit(capture_only() if capture else main())
     except (SmokeError, OSError, socket.timeout) as exc:
+        if capture:
+            print(f"    capture {exc}")
+            sys.exit(0)
         print(f"FAIL {exc}")
         sys.exit(1)
