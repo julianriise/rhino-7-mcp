@@ -10,7 +10,7 @@ Product sibling: `/Users/jr/Documents/hobby/forsk` — full ship rules in that r
 
 1. Work only on **`main`** in **`julianriise/rhino-7-mcp`** (and `julianriise/forsk` when touching product docs/prompts).
 2. **Never** create feature branches, git worktrees, or pull requests.
-3. Commit on `main` as you go; when green (`contracts` + `pytest` + `dotnet build`), `git push origin main`.
+3. Commit on `main` as you go; when the headless gates are green (`contracts` + `pytest` + `dotnet build`), `git push origin main`. A change that needs a live Rhino check waits for Julian's green smoke (see below).
 4. Never push or open anything against `jingcheng-chen/rhinomcp` or any non-`julianriise` remote. This clone’s default remote must not become the PR target.
 5. Report **main commit SHAs** only (no PR links).
 6. Poteto-mode: one job per brief, typed MCP tools only for geometry (no `execute_*` for modeling).
@@ -18,30 +18,23 @@ Product sibling: `/Users/jr/Documents/hobby/forsk` — full ship rules in that r
 
 ---
 
-## Live smoke: Rhino lifecycle
+## Live Rhino testing: Julian runs it
 
-The agent owns the Rhino lifecycle for live smokes. Never ask Julian to open Rhino, reopen a plan, or run `mcpstart`. macOS Accessibility is available, so do it yourself.
+Full rule: forsk [`AGENTS.md`](https://github.com/julianriise/forsk/blob/main/AGENTS.md) “Live Rhino testing: Julian runs it”.
 
-a. Quit Rhino without saving: `pkill -x Rhinoceros` (process name confirmed with `pgrep -lf Rhino`; `CFBundleExecutable` is `Rhinoceros`). Never save the smoke .3dm files.
-b. Check that the plugin at `~/Library/Application Support/McNeel/Rhinoceros/MacPlugIns/rhinomcp.rhp/rhinomcp.rhp` is the fresh build (mtime newer than the build output at `plugin/bin/Debug/net48/rhinomcp.rhp`). If the build is newer, copy it only while Rhino is quit. Equal mtimes means the installed file is that build. The `7.0/Plug-ins/rhinomcp` copy is stale.
-c. Open a temp copy. Never open a fixture file as the Rhino document, and never save one. `open -a "Rhino 7" "<absolute path>"`. App bundle confirmed with `ls /Applications | grep -i rhino`: `Rhino 7.app` (`open -a` and AppleScript use `Rhino 7`).
-   - Office fixture: `/Users/jr/Documents/hobby/forsk/tests/fixtures/office_2D.dxf` (SHA-256 `53a6791c04b7602327ccce28653944ad206a0f3eaa7c1629aa7655b754066f93`, pinned in `scripts/opening_edit_smoke.py`). Keep it `chmod a-w`. A checkout makes the working copy writable again; `chmod a-w` it before Rhino starts. The smoke refuses a changed hash and a writable fixture.
-   - Office document: copy `/Applications/Rhino 7.app/Contents/Frameworks/RhCore.framework/Versions/A/Resources/en.lproj/Template Files/Large Objects - Millimeters.3dm` to `/tmp/forsk-office-blank.3dm` and open the copy. Do not open the template in place. The smoke sets AutoCAD import `model_units` to 2 for that import (1:1 millimetres; 3 scales this DXF by 10), restores the previous value, checks the plan span, bakes, then runs the checks. The temp name must contain `office` so the 77-opening check runs. It does not save.
-   - Do not open `/Users/jr/Downloads/forsk-rhino/office_2D.3dm` or `office_3D.3dm`. Leave both untouched. They are not smoke fixtures.
-   - Garage: there is no saved garage `.3dm`. Copy the same millimetre template to `/tmp/forsk-garage-blank.3dm` and open the copy. Do not open the template in place. `scripts/garage_opening_smoke.py` draws the 6×4 m band on that blank sheet and refuses a document with more than 40 objects. Do not run it on the office DXF or the Downloads `.3dm` files.
-d. Wait until the document window is up (poll with osascript/System Events, up to about 60 s), then bring Rhino to the front and type into the command line: osascript: tell application "System Events" to keystroke "mcpstart" and then key code 36 (Return).
-e. Poll `nc -z localhost 1999` for up to 30 s. If it's still closed, retry step d once. If it's still closed after that, stop and report what's on screen (take a screenshot with `screencapture`).
-f. Run the smoke script. Between fixtures, repeat steps a to e (full quit, fresh open, no save). Office: `RHINO_MCP_TIMEOUT=900 python3 scripts/opening_edit_smoke.py`. Garage: `RHINO_MCP_TIMEOUT=300 python3 scripts/garage_opening_smoke.py`.
-g. If a native dialog blocks you (save prompt, plugin load warning), dismiss it with "Don't Save" or "Cancel" through System Events. Never click Save. On a file that already exists on disk the sheet can offer Save, Revert Changes, and Cancel. Click Revert Changes. That discards the unsaved edits.
-h. After the smoke, quit without saving and delete the temp copy. The pinned DXF and the Rhino template stay byte-for-byte the same.
+- Build never launches, drives, screenshots, or waits on Rhino, and never runs the live smokes. No macOS Accessibility GUI driving.
+- Gates are headless only: `dotnet build` with 0 warnings, `SoftParam.Tests`, `pytest -q`, contracts, plus any check that does not need a running Rhino.
+- A change that needs a live check is committed locally, not pushed. End the session with a smoke handoff of at most 5 lines: the forsk commands (`./scripts/smoke_office.sh`, `./scripts/smoke_garage.sh`, or a specific one), what should pass, and which 1000 px PNGs in `/tmp` to glance at. Julian runs them and pastes the output. Push `main` only after green; on red, fix from the output and the `/tmp` log.
+- Smoke scripts stay one command, no prompts, stdout at most 25 lines, exit 0/1. They may quit and reopen Rhino and create blank fixtures themselves.
+- Changes that need no live check (docs, pure Python/contracts, tests) push after green headless gates.
 
 ---
 
 ## Token budget
 
-- Live smokes run through forsk `scripts/smoke_office.sh` and `scripts/smoke_garage.sh` once they exist. Never drive smoke steps one by one when a script covers them.
-- While iterating, run only the affected tests with quiet output (`pytest -q`, `dotnet test --verbosity quiet`, print failures only). Full gates run once before the push.
-- Look at downscaled preview copies only (about 1000 px, `sips -Z 1000`), once, at the end. Commit the full-res PNGs.
+- Live smokes run through forsk `scripts/smoke_office.sh` and `scripts/smoke_garage.sh`, and Julian runs them (see above). Build never drives smoke steps itself.
+- While iterating, run only the affected tests with quiet output (`pytest -q`, `dotnet test --verbosity quiet`, print failures only). Full headless gates run once before the push.
+- Build does not open preview PNGs. The smoke handoff names the 1000 px copies in `/tmp` for Julian to glance at. Commit the full-res PNGs after his green run.
 - Do not read forsk `docs/archive/` or `docs/smoke/HISTORY.md` unless the task names them.
 - Same failure twice with the same symptom: stop and report. No third approach.
 - One slice per session. Spikes get their own session.
