@@ -162,6 +162,11 @@ def outside_plan(rows: list, failures: list) -> None:
         return
     pad = 800.0
     limit = (frame[0] - pad, frame[1] - pad, frame[2] + pad, frame[3] + pad)
+    names = {}
+    for obj in rows:
+        oid = str(obj.get("id") or "").lower()
+        if oid:
+            names[oid] = str(obj.get("name") or "")
     hits = []
     for obj in rows:
         if str(obj.get("id") or "").lower() in kept:
@@ -175,13 +180,19 @@ def outside_plan(rows: list, failures: list) -> None:
         ):
             continue
         attr = obj.get("attributes") or {}
-        diag = ((box[2] - box[0]) ** 2 + (box[3] - box[1]) ** 2) ** 0.5
-        role = attr.get("forsk:role") or ""
+        symbol = str(attr.get("forsk:symbol") or "")
+        role = str(attr.get("forsk:role") or "")
+        source = symbol or role or str(obj.get("name") or "-")
+        marker = str(attr.get("forsk:marker_id") or "").lower()
+        door = names.get(marker) or ""
+        if door in ("", "(unnamed)"):
+            kind = str(attr.get("forsk:opening_kind") or "")
+            own = str(obj.get("name") or "")
+            door = own if kind and own not in ("", "(unnamed)") else "-"
         hits.append(
-            f"{obj.get('type')} {obj.get('id')} layer={obj.get('layer')} "
-            f"bbox=[{box[0]:.0f},{box[1]:.0f},{box[2]:.0f},{box[3]:.0f}] "
-            f"diag={diag:.0f}"
-            + (f" role={role}" if role else "")
+            f"layer={obj.get('layer')} type={obj.get('type')} "
+            f"name={obj.get('name')} source={source} door={door} "
+            f"bbox=[{box[0]:.0f},{box[1]:.0f},{box[2]:.0f},{box[3]:.0f}]"
         )
     print(
         f"    outside plan {len(hits)} "
