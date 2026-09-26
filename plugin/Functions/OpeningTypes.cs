@@ -478,10 +478,21 @@ public static class OpeningTypes
     static void AddPocket(List<PlanMark> marks, PlanFrame frame, int parkSign)
     {
         if (parkSign == 0) return;
+        // Leaf parked in the wall, pocket drawn as a cavity inside the faces.
         var span = LeafSpan(frame);
-        var x0 = parkSign * (frame.InnerHalf + 2.0);
-        var x1 = parkSign * (frame.InnerHalf + 2.0 + span);
-        marks.Add(Line(x0, 0, x1, 0, "leaf", true));
+        var mouth = frame.InnerHalf;
+        var far = frame.InnerHalf + 2.0 + span;
+        var inset = Math.Min(12.0, frame.HalfThick * 0.18);
+        if (inset < 1.0) inset = 1.0;
+        var y = frame.HalfThick - inset;
+        if (y < 1.0) y = frame.HalfThick * 0.5;
+        var x0 = parkSign * mouth;
+        var x1 = parkSign * far;
+        marks.Add(Line(x0, y, x1, y, "pocket", false));
+        marks.Add(Line(x0, -y, x1, -y, "pocket", false));
+        marks.Add(Line(x1, -y, x1, y, "pocket", false));
+        marks.Add(Line(x0, -y, x0, y, "pocket", false));
+        marks.Add(Line(parkSign * (mouth + 2.0), 0, parkSign * (far - 2.0), 0, "leaf", true));
     }
 
     static void AddWindow(List<PlanMark> marks, PlanFrame frame, Record record, bool dashed)

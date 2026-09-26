@@ -107,15 +107,30 @@ public class PlanSymbolTests
         var frame = Frame();
         var record = Read("door", "door.pocket", "L", null);
         var marks = OpeningTypes.PlanSymbol(record, "1:100", frame);
-        var leaf = Assert.Single(marks);
+        var leaf = Assert.Single(marks, m => m.Part == "leaf");
         Assert.True(leaf.Dashed);
         Assert.Equal(0, leaf.Y0, 6);
         Assert.Equal(0, leaf.Y1, 6);
-        Assert.True(Math.Abs(leaf.Y0) <= frame.HalfThick);
+        var pocket = marks.Where(m => m.Part == "pocket").ToList();
+        Assert.Equal(4, pocket.Count);
+        Assert.All(pocket, m => Assert.False(m.Dashed));
+        Assert.All(pocket, m =>
+        {
+            Assert.True(Math.Abs(m.Y0) < frame.HalfThick);
+            Assert.True(Math.Abs(m.Y1) < frame.HalfThick);
+        });
+        Assert.Contains(pocket, m => Math.Abs(m.Y0) > frame.HalfThick * 0.5);
+        var minX = pocket.Min(m => Math.Min(m.X0, m.X1));
+        var maxX = pocket.Max(m => Math.Max(m.X0, m.X1));
+        Assert.True(leaf.X0 >= minX - 0.1 && leaf.X0 <= maxX + 0.1);
+        Assert.True(leaf.X1 >= minX - 0.1 && leaf.X1 <= maxX + 0.1);
         var park = OpeningTypes.HandSign(record, frame.XLeft);
         Assert.True(park * leaf.X0 > frame.InnerHalf);
         Assert.True(park * leaf.X1 > frame.InnerHalf);
         Assert.DoesNotContain(marks, m => m.Shape == "arc");
+
+        var right = OpeningTypes.PlanSymbol(Read("door", "door.pocket", "R", null), "1:100", frame);
+        AssertMirrorX(marks, right);
     }
 
     [Fact]

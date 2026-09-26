@@ -487,9 +487,49 @@ def main() -> int:
         if open_in is None or open_in <= 0:
             failures.append(f"hinged leaf open_y={open_in}")
 
+        found = send_command(sock, "get_objects", {
+            "layer_filter": "S-DRAW::Plan",
+            "limit": 500,
+            "include_geometry": False,
+            "include_attributes": True,
+        })
+        hatch_n = 0
+        large = []
+        for obj in found.get("objects") or []:
+            if "HATCH" not in str(obj.get("type") or "").upper():
+                continue
+            hatch_n += 1
+            box = obj.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
+            try:
+                dx = abs(float(box[1][0]) - float(box[0][0]))
+                dy = abs(float(box[1][1]) - float(box[0][1]))
+            except (TypeError, ValueError, IndexError):
+                continue
+            if (dx * dx + dy * dy) ** 0.5 <= 12000:
+                continue
+            attr = obj.get("attributes") or {}
+            row = (
+                f"{obj.get('id')} layer={obj.get('layer')} "
+                f"role={attr.get('forsk:role')} symbol={attr.get('forsk:symbol')} bbox={box}"
+            )
+            large.append(row)
+            print(f"    hatch {row}")
+        print(f"    hatches {hatch_n} large {len(large)}")
+        for row in large:
+            failures.append(f"large hatch {row}")
+
+        def capture_again(n: int, path: str) -> None:
+            pdf = send_command(sock, "export_pdf", {"path": path, "layout": "plan"})
+            message = str(pdf.get("message") or "")
+            print(f"    capture {n} {message}")
+            if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
+                failures.append(f"capture {n} {message}")
+
+        # Same open plan page, no new layout. Three captures total.
+        capture_again(2, "/tmp/forsk-f5-garage-cap2.pdf")
+        capture_again(3, "/tmp/forsk-f5-garage-cap3.pdf")
+
         send_command(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
-        # A second capture of the same page comes back black. A fresh layout
-        # paints, and export_pdf still rebuilds the plan from the record.
         send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
         flipped_pdf = send_command(sock, "export_pdf", {
             "path": "/tmp/forsk-f5-garage-flip.pdf",

@@ -616,40 +616,35 @@ public partial class RhinoMCPFunctions
     {
         var half = width * 0.5;
         if (half <= 0 || curve == null) return 0;
-        var samples = RibbonSamples(curve, tol);
-        if (samples.Count < 2) return 0;
-        var left = new List<Point3d>();
-        var right = new List<Point3d>();
-        for (var i = 0; i < samples.Count; i++)
-        {
-            Vector3d tan;
-            if (i == 0) tan = samples[1] - samples[0];
-            else if (i == samples.Count - 1) tan = samples[i] - samples[i - 1];
-            else tan = samples[i + 1] - samples[i - 1];
-            tan.Z = 0;
-            if (!tan.Unitize()) continue;
-            var normal = new Vector3d(-tan.Y, tan.X, 0);
-            left.Add(samples[i] + (normal * half));
-            right.Add(samples[i] - (normal * half));
-        }
-        if (left.Count < 2) return 0;
-        var pts = new List<Point3d>();
-        pts.AddRange(left);
-        for (var i = right.Count - 1; i >= 0; i--)
-            pts.Add(right[i]);
-        pts.Add(pts[0]);
-        var boundary = new PolylineCurve(pts);
+        // A closed loop offset as one open ribbon self-intersects and
+        // Hatch.Create fills a circle well outside the wall. Offset both
+        // sides, or keep the centre line.
+        List<Curve> boundaries = null;
+        if (curve.IsClosed)
+            boundaries = ClosedBand(curve, half, tol);
+        var plain = false;
+        if (boundaries == null && curve.IsClosed)
+            plain = true;
+        if (boundaries == null && !plain)
+            boundaries = OpenRibbon(curve, half, tol);
+        if (plain)
+            return AddPlainCurve(doc, layer, curve, role, part, markerId, openY, dashed, ref box, ref index, ref count);
+        if (boundaries == null || boundaries.Count == 0) return 0;
         Hatch[] hatches = null;
         try
         {
-            hatches = Hatch.Create(new List<Curve> { boundary }, pattern, 0.0, 1.0, Math.Max(tol, 0.01));
+            hatches = Hatch.Create(boundaries, pattern, 0.0, 1.0, Math.Max(tol, 0.01));
         }
         catch (Exception)
         {
             hatches = null;
         }
-        boundary.Dispose();
+        foreach (var boundary in boundaries)
+            boundary?.Dispose();
         if (hatches == null) return 0;
+        var limit = curve.GetBoundingBox(true);
+        var pad = Math.Max(half * 3.0, 1.0);
+        if (limit.IsValid) limit.Inflate(pad, pad, Math.Max(pad, 1.0));
         var added = 0;
         foreach (var hatch in hatches)
         {
@@ -660,6 +655,11 @@ public partial class RhinoMCPFunctions
             try { id = doc.Objects.AddHatch(hatch, attr); }
             catch (Exception) { id = Guid.Empty; }
             var hatchBox = hatch.GetBoundingBox(true);
+            if (id != Guid.Empty && limit.IsValid && hatchBox.IsValid && !BoxHolds(limit, hatchBox))
+            {
+                try { doc.Objects.Delete(id, true); } catch (Exception) { }
+                id = Guid.Empty;
+            }
             var area = 0.0;
             try
             {
@@ -684,6 +684,123 @@ public partial class RhinoMCPFunctions
             added++;
         }
         return added;
+    }
+
+    private static bool BoxHolds(BoundingBox limit, BoundingBox inner)
+    {
+        return limit.Min.X <= inner.Min.X + 0.5
+            && limit.Min.Y <= inner.Min.Y + 0.5
+            && limit.Max.X >= inner.Max.X - 0.5
+            && limit.Max.Y >= inner.Max.Y - 0.5;
+    }
+
+    /// <summary>
+    /// Band between the outward and inward offsets. One closed curve in,
+    /// outer loop then the hole.
+    /// </summary>
+    private static List<Curve> ClosedBand(Curve curve, double half, double tol)
+    {
+        if (curve == null || !curve.IsClosed || half <= 0) return null;
+        Curve[] grown = null;
+        Curve[] shrunk = null;
+        var gap = Math.Max(tol, 0.01);
+        try
+        {
+            grown = curve.Offset(Plane.WorldXY, half, gap, CurveOffsetCornerStyle.Sharp);
+            shrunk = curve.Offset(Plane.WorldXY, -half, gap, CurveOffsetCornerStyle.Sharp);
+        }
+        catch (Exception)
+        {
+            grown = null;
+            shrunk = null;
+        }
+        if (grown == null || shrunk == null || grown.Length != 1 || shrunk.Length != 1
+            || grown[0] == null || shrunk[0] == null
+            || !grown[0].IsClosed || !shrunk[0].IsClosed)
+        {
+            DisposeCurves(grown);
+            DisposeCurves(shrunk);
+            return null;
+        }
+        var big = AreaMassProperties.Compute(grown[0]);
+        var small = AreaMassProperties.Compute(shrunk[0]);
+        if (big == null || small == null || big.Area < 1.0 || small.Area < 1.0)
+        {
+            grown[0].Dispose();
+            shrunk[0].Dispose();
+            return null;
+        }
+        var outer = big.Area >= small.Area ? grown[0] : shrunk[0];
+        var hole = ReferenceEquals(outer, grown[0]) ? shrunk[0] : grown[0];
+        var centre = AreaMassProperties.Compute(hole);
+        if (centre == null
+            || outer.Contains(centre.Centroid, Plane.WorldXY, gap) != PointContainment.Inside)
+        {
+            outer.Dispose();
+            hole.Dispose();
+            return null;
+        }
+        return new List<Curve> { outer, hole };
+    }
+
+    private static List<Curve> OpenRibbon(Curve curve, double half, double tol)
+    {
+        var samples = RibbonSamples(curve, tol);
+        if (samples.Count < 2) return null;
+        var left = new List<Point3d>();
+        var right = new List<Point3d>();
+        for (var i = 0; i < samples.Count; i++)
+        {
+            Vector3d tan;
+            if (i == 0) tan = samples[1] - samples[0];
+            else if (i == samples.Count - 1) tan = samples[i] - samples[i - 1];
+            else tan = samples[i + 1] - samples[i - 1];
+            tan.Z = 0;
+            if (!tan.Unitize()) continue;
+            var normal = new Vector3d(-tan.Y, tan.X, 0);
+            left.Add(samples[i] + (normal * half));
+            right.Add(samples[i] - (normal * half));
+        }
+        if (left.Count < 2) return null;
+        var pts = new List<Point3d>();
+        pts.AddRange(left);
+        for (var i = right.Count - 1; i >= 0; i--)
+            pts.Add(right[i]);
+        pts.Add(pts[0]);
+        return new List<Curve> { new PolylineCurve(pts) };
+    }
+
+    private static int AddPlainCurve(
+        RhinoDoc doc,
+        Layer layer,
+        Curve curve,
+        string role,
+        string part,
+        string markerId,
+        double? openY,
+        bool dashed,
+        ref BoundingBox box,
+        ref int index,
+        ref int count)
+    {
+        var stableId = FormatStableId("d", index);
+        var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+        Guid id;
+        try { id = doc.Objects.AddCurve(curve, attr); }
+        catch (Exception) { id = Guid.Empty; }
+        if (id == Guid.Empty) return 0;
+        index++;
+        count++;
+        var curveBox = curve.GetBoundingBox(true);
+        if (curveBox.IsValid) box.Union(curveBox);
+        return 1;
+    }
+
+    private static void DisposeCurves(Curve[] curves)
+    {
+        if (curves == null) return;
+        foreach (var curve in curves)
+            curve?.Dispose();
     }
 
     private static List<Point3d> RibbonSamples(Curve curve, double tol)

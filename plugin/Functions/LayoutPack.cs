@@ -568,12 +568,69 @@ public partial class RhinoMCPFunctions
         if (doc != null && CountPrintDrawings(doc, ViewKeyForPage(page)) == 0)
             EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
         ApplyPageDrawingDisplay(doc, page);
+        WakePagePreview(doc, page);
+        WaitForOneIdle();
+    }
+
+    /// <summary>
+    /// The Mac page preview is painted once. A later read of a page that is
+    /// already active returns an empty buffer (white JPEG, transparent black
+    /// pixels). Step through a model view and dirty the detail mode so the
+    /// page paints again. The camera stays put.
+    /// </summary>
+    private static void WakePagePreview(RhinoDoc doc, RhinoPageView page)
+    {
+        if (page == null) return;
+        if (doc != null)
+        {
+            RhinoView model = null;
+            try
+            {
+                var views = doc.Views.GetViewList(true, false);
+                if (views != null)
+                {
+                    foreach (var view in views)
+                    {
+                        if (view == null || view is RhinoPageView) continue;
+                        model = view;
+                        break;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                model = null;
+            }
+            if (model != null)
+            {
+                doc.Views.ActiveView = model;
+                model.Redraw();
+                RhinoApp.Wait();
+            }
+        }
+
+        var wire = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.WireframeId);
+        var shaded = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.ShadedId);
+        var details = page.GetDetailViews();
+        if (details != null && wire != null)
+        {
+            foreach (var detail in details)
+            {
+                var viewport = detail?.Viewport;
+                if (viewport == null) continue;
+                if (shaded != null)
+                    viewport.DisplayMode = shaded;
+                viewport.DisplayMode = wire;
+            }
+        }
+
         if (doc != null)
             doc.Views.ActiveView = page;
         page.SetPageAsActive();
         page.Redraw();
+        if (doc != null)
+            doc.Views.Redraw();
         RhinoApp.Wait();
-        WaitForOneIdle();
     }
 
     /// <summary>
@@ -671,7 +728,12 @@ public partial class RhinoMCPFunctions
                     RhinoApp.Wait();
                 WaitForOneIdle();
             }
-            bmp = page.GetPreviewImage(size, false);
+            var raw = page.GetPreviewImage(size, false);
+            bmp = CopyPreview(raw);
+            if (bmp != null && !ReferenceEquals(bmp, raw))
+                raw?.Dispose();
+            else
+                bmp = raw;
             ink = CountDarkSamples(bmp);
             if (ink > 0)
                 return bmp;
@@ -726,6 +788,120 @@ public partial class RhinoMCPFunctions
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Own the preview pixels. A zero-alpha black sample is an unpainted
+    /// buffer, not ink; any other sample is kept opaque so the PDF draw
+    /// cannot drop it.
+    /// </summary>
+    private static Bitmap CopyPreview(Bitmap source)
+    {
+        if (source == null || source.Width < 2 || source.Height < 2) return source;
+        var copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        BitmapData srcData = null;
+        BitmapData dstData = null;
+        try
+        {
+            var format = source.PixelFormat;
+            int bpp = 0;
+            if (format == PixelFormat.Format24bppRgb) bpp = 3;
+            else if (format == PixelFormat.Format32bppArgb
+                || format == PixelFormat.Format32bppRgb
+                || format == PixelFormat.Format32bppPArgb) bpp = 4;
+            if (bpp == 0) return CopyPreviewPixels(source, copy);
+
+            var rect = new Rectangle(0, 0, source.Width, source.Height);
+            srcData = source.LockBits(rect, ImageLockMode.ReadOnly, format);
+            dstData = copy.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            int height = source.Height;
+            int width = source.Width;
+            int srcAbs = Math.Abs(srcData.Stride);
+            int dstAbs = Math.Abs(dstData.Stride);
+            var srcBuf = new byte[srcAbs * height];
+            var dstBuf = new byte[dstAbs * height];
+            var srcOrigin = srcData.Stride >= 0
+                ? srcData.Scan0
+                : IntPtr.Add(srcData.Scan0, srcData.Stride * (height - 1));
+            Marshal.Copy(srcOrigin, srcBuf, 0, srcBuf.Length);
+            for (int y = 0; y < height; y++)
+            {
+                int srow = y * srcAbs;
+                int drow = y * dstAbs;
+                for (int x = 0; x < width; x++)
+                {
+                    int s = srow + (x * bpp);
+                    int d = drow + (x * 4);
+                    if (s + 2 >= srcBuf.Length || d + 3 >= dstBuf.Length) continue;
+                    byte b0 = srcBuf[s];
+                    byte b1 = srcBuf[s + 1];
+                    byte b2 = srcBuf[s + 2];
+                    byte alpha = bpp == 4 && s + 3 < srcBuf.Length ? srcBuf[s + 3] : (byte)255;
+                    if (alpha < 16 && b0 < 8 && b1 < 8 && b2 < 8)
+                    {
+                        dstBuf[d] = 255;
+                        dstBuf[d + 1] = 255;
+                        dstBuf[d + 2] = 255;
+                        dstBuf[d + 3] = 255;
+                    }
+                    else
+                    {
+                        dstBuf[d] = b0;
+                        dstBuf[d + 1] = b1;
+                        dstBuf[d + 2] = b2;
+                        dstBuf[d + 3] = 255;
+                    }
+                }
+            }
+            var dstOrigin = dstData.Stride >= 0
+                ? dstData.Scan0
+                : IntPtr.Add(dstData.Scan0, dstData.Stride * (height - 1));
+            Marshal.Copy(dstBuf, 0, dstOrigin, dstBuf.Length);
+            return copy;
+        }
+        catch (Exception)
+        {
+            copy.Dispose();
+            return source;
+        }
+        finally
+        {
+            if (srcData != null)
+            {
+                try { source.UnlockBits(srcData); } catch (Exception) { }
+            }
+            if (dstData != null)
+            {
+                try { copy.UnlockBits(dstData); } catch (Exception) { }
+            }
+        }
+    }
+
+    private static Bitmap CopyPreviewPixels(Bitmap source, Bitmap copy)
+    {
+        try
+        {
+            for (int y = 0; y < source.Height; y++)
+            {
+                for (int x = 0; x < source.Width; x++)
+                {
+                    Color color;
+                    try { color = source.GetPixel(x, y); }
+                    catch (Exception) { color = Color.White; }
+                    if (color.A < 16 && color.R < 8 && color.G < 8 && color.B < 8)
+                        color = Color.White;
+                    else
+                        color = Color.FromArgb(255, color.R, color.G, color.B);
+                    copy.SetPixel(x, y, color);
+                }
+            }
+            return copy;
+        }
+        catch (Exception)
+        {
+            copy.Dispose();
+            return source;
         }
     }
 
