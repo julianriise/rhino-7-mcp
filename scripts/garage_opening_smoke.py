@@ -91,6 +91,100 @@ def thin_mm(info: dict) -> float:
     return min(dx, dy)
 
 
+def xy_box(obj: dict) -> tuple[float, float, float, float] | None:
+    box = obj.get("bounding_box") or []
+    try:
+        x0, y0 = float(box[0][0]), float(box[0][1])
+        x1, y1 = float(box[1][0]), float(box[1][1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+
+def boxes_hit(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return a[0] <= b[2] and a[2] >= b[0] and a[1] <= b[3] and a[3] >= b[1]
+
+
+def all_objects(sock: socket.socket) -> list:
+    """Every model object get_objects will return. Page space is not in this list."""
+    rows = []
+    offset = 0
+    while offset <= 5000:
+        found = send_command(sock, "get_objects", {
+            "offset": offset,
+            "limit": 200,
+            "include_geometry": False,
+            "include_attributes": True,
+        })
+        batch = found.get("objects") or []
+        rows.extend(batch)
+        if not found.get("has_more") or not batch:
+            break
+        offset += len(batch)
+    return rows
+
+
+def sheet_corner(rows: list) -> None:
+    """Lower-right quarter of the plan sheet.
+
+    The detail looks down and camera-up is +Y, so page-right is +X and
+    page-down is -Y. The quarter is the high-X, low-Y half of the plan drawing.
+    """
+    frame = None
+    for obj in rows:
+        attr = obj.get("attributes") or {}
+        if str(attr.get("forsk:view") or "").lower() != "plan":
+            continue
+        if str(attr.get("forsk:kind") or "").lower() != "drawing":
+            continue
+        box = xy_box(obj)
+        if box is None:
+            continue
+        if frame is None:
+            frame = box
+        else:
+            frame = (
+                min(frame[0], box[0]),
+                min(frame[1], box[1]),
+                max(frame[2], box[2]),
+                max(frame[3], box[3]),
+            )
+    if frame is None:
+        print("    sheet corner missing")
+        return
+    mid_x = (frame[0] + frame[2]) * 0.5
+    mid_y = (frame[1] + frame[3]) * 0.5
+    quarter = (mid_x, frame[1], frame[2], mid_y)
+    hits = []
+    for obj in rows:
+        box = xy_box(obj)
+        if box is None or not boxes_hit(box, quarter):
+            continue
+        attr = obj.get("attributes") or {}
+        diag = ((box[2] - box[0]) ** 2 + (box[3] - box[1]) ** 2) ** 0.5
+        role = attr.get("forsk:role") or ""
+        symbol = attr.get("forsk:symbol") or ""
+        extra = ""
+        if role:
+            extra += f" role={role}"
+        if symbol:
+            extra += f" symbol={symbol}"
+        hits.append((
+            diag,
+            f"{obj.get('type')} {obj.get('id')} layer={obj.get('layer')} "
+            f"bbox=[{box[0]:.0f},{box[1]:.0f},{box[2]:.0f},{box[3]:.0f}] "
+            f"diag={diag:.0f}{extra}",
+        ))
+    hits.sort(key=lambda item: item[0], reverse=True)
+    print(
+        f"    sheet quarter x>={mid_x:.0f} y<={mid_y:.0f} "
+        f"plan=[{frame[0]:.0f},{frame[1]:.0f},{frame[2]:.0f},{frame[3]:.0f}] "
+        f"hits={len(hits)}"
+    )
+    for _, line in hits:
+        print(f"    corner {line}")
+
+
 def marker_row(rows, marker_id: str) -> dict | None:
     want = str(marker_id).lower()
     for item in rows or []:
@@ -517,6 +611,7 @@ def main() -> int:
         print(f"    hatches {hatch_n} large {len(large)}")
         for row in large:
             failures.append(f"large hatch {row}")
+        sheet_corner(all_objects(sock))
 
         def capture_again(n: int, path: str) -> None:
             pdf = send_command(sock, "export_pdf", {"path": path, "layout": "plan"})
