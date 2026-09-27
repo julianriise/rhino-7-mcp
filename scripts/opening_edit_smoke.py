@@ -887,9 +887,7 @@ def main() -> int:
                 failures.append(
                     f"{label} arcs={page.get('symbol_arcs')} doors={baked.get('door_cuts')}"
                 )
-            title = str(page.get("view_title") or "")
-            if f"1:{page.get('scale')}" not in title:
-                failures.append(f"{label} title={title!r}")
+            plan_smoke.check_footer(page, label, failures)
             if page.get("north_arrow") is not True:
                 failures.append(f"{label} north arrow missing")
             tag = str(page.get("room_tag_text") or "")

@@ -39,7 +39,6 @@ public partial class RhinoMCPFunctions
     {
         public string View;
         public string PageName;
-        public string SheetLabel;
         public Vector3d Look;
         public Vector3d Up;
     }
@@ -90,9 +89,16 @@ public partial class RhinoMCPFunctions
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
     private const double LayoutMarginMm = 10.0;
-    private const double TitleWidthMm = 168.0;
-    private const double TitleHeightMm = 46.0;
-    private const double TitleGapMm = 6.0;
+    // Space under the detail. The fit scale is measured against the detail,
+    // so this stays at the old title block height plus its gap.
+    private const double FooterReserveMm = 52.0;
+    // Footer band along the bottom margin: north arrow, scale bar, title block.
+    private const double FooterBandMm = 18.0;
+    private const double TitleBlockWidthMm = 280.0;
+    private const double NorthShaftMm = 10.0;
+    private const double ScaleBarLeftMm = 26.0;
+    private const double ScaleBarHeightMm = 2.0;
+    private const double FooterTextMm = 2.5;
     private const double PdfDpi = 150.0;
     private const string PrintLogPath = "/tmp/forsk-print.log";
 
@@ -105,19 +111,19 @@ public partial class RhinoMCPFunctions
         switch (view.Trim().ToLowerInvariant())
         {
             case "plan":
-                spec = LayoutSpec("plan", "Forsk — Plan", "Plan", -Vector3d.ZAxis, Vector3d.YAxis);
+                spec = LayoutSpec("plan", "Forsk — Plan", -Vector3d.ZAxis, Vector3d.YAxis);
                 return true;
             case "north":
-                spec = LayoutSpec("north", "Forsk — North", "Elevation north", -Vector3d.YAxis, Vector3d.ZAxis);
+                spec = LayoutSpec("north", "Forsk — North", -Vector3d.YAxis, Vector3d.ZAxis);
                 return true;
             case "east":
-                spec = LayoutSpec("east", "Forsk — East", "Elevation east", -Vector3d.XAxis, Vector3d.ZAxis);
+                spec = LayoutSpec("east", "Forsk — East", -Vector3d.XAxis, Vector3d.ZAxis);
                 return true;
             case "south":
-                spec = LayoutSpec("south", "Forsk — South", "Elevation south", Vector3d.YAxis, Vector3d.ZAxis);
+                spec = LayoutSpec("south", "Forsk — South", Vector3d.YAxis, Vector3d.ZAxis);
                 return true;
             case "west":
-                spec = LayoutSpec("west", "Forsk — West", "Elevation west", Vector3d.XAxis, Vector3d.ZAxis);
+                spec = LayoutSpec("west", "Forsk — West", Vector3d.XAxis, Vector3d.ZAxis);
                 return true;
             default:
                 return false;
@@ -125,13 +131,12 @@ public partial class RhinoMCPFunctions
     }
 
     private static LayoutViewSpec LayoutSpec(
-        string view, string pageName, string sheetLabel, Vector3d look, Vector3d up)
+        string view, string pageName, Vector3d look, Vector3d up)
     {
         return new LayoutViewSpec
         {
             View = view,
             PageName = pageName,
-            SheetLabel = sheetLabel,
             Look = look,
             Up = up
         };
@@ -207,7 +212,7 @@ public partial class RhinoMCPFunctions
         RestorePrintColors(doc);
         _drawIncludeExisting = includeExisting;
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
-        var detailH = A3HeightMm - LayoutMarginMm - TitleHeightMm - TitleGapMm - LayoutMarginMm;
+        var detailH = A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
         var pages = new JArray();
         var applied = new List<int>();
         var drawingNotes = new List<string>();
@@ -284,21 +289,22 @@ public partial class RhinoMCPFunctions
             }
 
             var stableId = FormatStableId("l", pages.Count + 1);
-            var scaleLabel = scaleLocked
-                ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
-                : "fit";
-            var level = WallLevel(doc);
-            var viewTitle = OpeningTypes.ViewTitle(spec.View, level, scale, scaleLocked);
-            var ids = AddTitleBlock(doc, page, spec, stableId, scaleLabel, viewTitle, plan);
+            var viewTitle = OpeningTypes.ViewTitle(spec.View, WallLevel(doc));
+            // The footer reads the scale the detail recorded, not the request.
+            var pageScale = scaleLocked ? DetailModelScale(page) : 0;
+            var footer = new JObject();
+            var ids = AddSheetFooter(doc, page, spec, stableId, pageScale, viewTitle, plan, footer);
             var pageRecord = new JObject
             {
                 ["view"] = spec.View,
                 ["page"] = spec.PageName,
                 ["scale"] = scale,
+                ["page_scale"] = pageScale,
                 ["detail_count"] = 1,
                 ["curves"] = drawn.Count,
                 ["layer"] = drawn.Layer,
-                ["ids"] = ids
+                ["ids"] = ids,
+                ["footer"] = footer
             };
             if (string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase))
             {
@@ -319,7 +325,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
                 pageRecord["rooms_unfit"] = drawn.RoomsUnfit;
                 pageRecord["view_title"] = viewTitle;
-                pageRecord["north_arrow"] = true;
+                pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 if (!string.IsNullOrEmpty(drawn.RoomText))
                     pageRecord["room_tag_text"] = drawn.RoomText;
                 _lastPlanStats = new PlanStats
@@ -1132,11 +1138,6 @@ public partial class RhinoMCPFunctions
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 
-    private static string Dash(string value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? "—" : value;
-    }
-
     private static List<string> ReadLayoutViews(JObject parameters)
     {
         var views = new List<string>();
@@ -1270,7 +1271,7 @@ public partial class RhinoMCPFunctions
     {
         scaleLocked = false;
         var left = MmToPage(doc, LayoutMarginMm);
-        var bottom = MmToPage(doc, LayoutMarginMm + TitleHeightMm + TitleGapMm);
+        var bottom = MmToPage(doc, LayoutMarginMm + FooterReserveMm);
         var right = MmToPage(doc, A3WidthMm - LayoutMarginMm);
         var top = MmToPage(doc, A3HeightMm - LayoutMarginMm);
         var detail = page.AddDetailView(
@@ -2299,104 +2300,216 @@ public partial class RhinoMCPFunctions
                name.Equals("X-EXIST", StringComparison.OrdinalIgnoreCase);
     }
 
-    private JArray AddTitleBlock(
-        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string scaleLabel,
-        string viewTitle, bool northArrow)
+    /// <summary>
+    /// One band along the bottom margin, left to right: north arrow (plan
+    /// only), scale bar, title block. Fills <paramref name="footer"/> with
+    /// the measured boxes in paper mm.
+    /// </summary>
+    private JArray AddSheetFooter(
+        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, int pageScale,
+        string viewTitle, bool northArrow, JObject footer)
     {
         var ids = new JArray();
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
         var pageId = page.MainViewport.Id;
-        var x0 = MmToPage(doc, A3WidthMm - LayoutMarginMm - TitleWidthMm);
-        var y0 = MmToPage(doc, LayoutMarginMm);
-        var x1 = MmToPage(doc, A3WidthMm - LayoutMarginMm);
-        var y1 = MmToPage(doc, LayoutMarginMm + TitleHeightMm);
+        var bandMid = LayoutMarginMm + FooterBandMm / 2.0;
 
-        var rect = new Polyline
+        ObjectAttributes Attr(string role)
         {
-            new Point3d(x0, y0, 0),
-            new Point3d(x1, y0, 0),
-            new Point3d(x1, y1, 0),
-            new Point3d(x0, y1, 0),
-            new Point3d(x0, y0, 0)
-        };
-        var frameId = doc.Objects.AddCurve(rect.ToNurbsCurve(), LayoutAttr(layer.Index, pageId, spec.View, stableId));
-        if (frameId != Guid.Empty)
-            ids.Add(frameId.ToString());
-
-        var meta = ProjectMetaRecord(doc);
-        var lines = new[]
+            var attr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
+            attr.SetUserString("forsk:role", role);
+            return attr;
+        }
+        Guid Line(double x0, double y0, double x1, double y1, ObjectAttributes attr)
         {
-            "Project  " + Dash(meta["project"]?.ToString()),
-            "Client   " + Dash(meta["client"]?.ToString()),
-            "Address  " + Dash(meta["address"]?.ToString()),
-            "Sheet    " + spec.SheetLabel,
-            "Scale    " + scaleLabel,
-            "Date     " + Dash(meta["date"]?.ToString())
-        };
-        var textH = MmToPage(doc, 2.6);
-        var gap = MmToPage(doc, 1.15);
-        var y = y1 - MmToPage(doc, 4.0) - textH;
-        var x = x0 + MmToPage(doc, 3.0);
-        foreach (var line in lines)
+            using (var line = new LineCurve(
+                new Point3d(MmToPage(doc, x0), MmToPage(doc, y0), 0),
+                new Point3d(MmToPage(doc, x1), MmToPage(doc, y1), 0)))
+                return Keep(ids, doc.Objects.AddCurve(line, attr));
+        }
+        Guid Rect(double x0, double y0, double x1, double y1, ObjectAttributes attr)
+        {
+            using (var curve = PageRect(doc, x0, y0, x1, y1))
+                return Keep(ids, doc.Objects.AddCurve(curve, attr));
+        }
+        Guid Text(string text, double x, double y, double height, TextJustification just, ObjectAttributes attr)
         {
             var plane = Plane.WorldXY;
-            plane.Origin = new Point3d(x, y, 0);
-            var id = doc.Objects.AddText(
-                line,
-                plane,
-                textH,
-                "Arial",
-                false,
-                false,
-                LayoutAttr(layer.Index, pageId, spec.View, stableId));
-            if (id != Guid.Empty)
-                ids.Add(id.ToString());
-            y -= textH + gap;
+            plane.Origin = new Point3d(MmToPage(doc, x), MmToPage(doc, y), 0);
+            return Keep(ids, doc.Objects.AddText(
+                text, plane, MmToPage(doc, height), "Arial", false, false, just, attr));
         }
 
-        if (!string.IsNullOrEmpty(viewTitle))
+        // Title block: flush right, full band height, one cell per field.
+        var tx0 = A3WidthMm - LayoutMarginMm - TitleBlockWidthMm;
+        var tx1 = A3WidthMm - LayoutMarginMm;
+        var ty0 = LayoutMarginMm;
+        var ty1 = LayoutMarginMm + FooterBandMm;
+        var meta = ProjectMetaRecord(doc);
+        var cells = OpeningTypes.TitleCells(new[]
         {
-            var titlePlane = Plane.WorldXY;
-            titlePlane.Origin = new Point3d(
-                MmToPage(doc, LayoutMarginMm),
-                MmToPage(doc, LayoutMarginMm + TitleHeightMm + 1.2),
-                0);
-            var titleAttr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
-            titleAttr.Name = "forsk-view-title";
-            titleAttr.SetUserString("forsk:role", "view_title");
-            var titleId = doc.Objects.AddText(
-                viewTitle, titlePlane, MmToPage(doc, 2.5), "Arial", false, false, titleAttr);
-            if (titleId != Guid.Empty)
-                ids.Add(titleId.ToString());
+            new KeyValuePair<string, string>("Drawing", viewTitle),
+            new KeyValuePair<string, string>("Scale", pageScale > 0
+                ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture)
+                : ""),
+            new KeyValuePair<string, string>("Sheet", "A3"),
+            new KeyValuePair<string, string>("Date", meta["date"]?.ToString()),
+            new KeyValuePair<string, string>("Project", meta["project"]?.ToString()),
+            new KeyValuePair<string, string>("Client", meta["client"]?.ToString()),
+            new KeyValuePair<string, string>("Address", meta["address"]?.ToString())
+        });
+        var widths = OpeningTypes.TitleCellWidths(cells, TitleBlockWidthMm);
+        var frameId = Rect(tx0, ty0, tx1, ty1, Attr("title_block"));
+        var cellRows = new JArray();
+        var cx = tx0;
+        for (var i = 0; i < cells.Count; i++)
+        {
+            if (i > 0)
+                Line(cx, ty0, cx, ty1, Attr("title_block"));
+            var captionAttr = Attr("title_cell");
+            captionAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
+            Text(cells[i].Key, cx + 2.0, ty1 - 2.0 - 1.8, 1.8, TextJustification.BottomLeft, captionAttr);
+            var valueAttr = Attr("title_cell");
+            valueAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
+            var valueHeight = i == 0 ? 3.5 : FooterTextMm;
+            Text(cells[i].Value, cx + 2.0, ty0 + 4.0, valueHeight, TextJustification.BottomLeft, valueAttr);
+            cellRows.Add(new JObject { ["name"] = cells[i].Key.ToLowerInvariant(), ["text"] = cells[i].Value });
+            cx += widths[i];
         }
+        var titleBox = PaperBox(doc, new[] { frameId });
+        titleBox["cells"] = cellRows;
+        footer["title_block"] = titleBox;
 
+        // North arrow: far left of the band, arrow plus letter centred on it.
         if (northArrow)
         {
-            var ax = x0 - MmToPage(doc, 16);
-            var ay = y0 + MmToPage(doc, 6);
-            var ah = MmToPage(doc, 12);
-            var head = MmToPage(doc, 3.2);
-            var northAttr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
-            northAttr.Name = "forsk-north";
-            northAttr.SetUserString("forsk:role", "north");
-            var shaft = new LineCurve(new Point3d(ax, ay, 0), new Point3d(ax, ay + ah, 0));
-            var left = new LineCurve(new Point3d(ax, ay + ah, 0), new Point3d(ax - head, ay + ah - head, 0));
-            var right = new LineCurve(new Point3d(ax, ay + ah, 0), new Point3d(ax + head, ay + ah - head, 0));
-            foreach (var stroke in new[] { shaft, left, right })
+            const double head = 3.2;
+            const double letter = 3.2;
+            const double letterGap = 1.2;
+            var ax = LayoutMarginMm + head + 1.0;
+            var ay = bandMid - (NorthShaftMm + letterGap + letter) / 2.0;
+            var top = ay + NorthShaftMm;
+            var northIds = new List<Guid>
             {
-                var strokeId = doc.Objects.AddCurve(stroke, northAttr);
-                stroke.Dispose();
-                if (strokeId != Guid.Empty)
-                    ids.Add(strokeId.ToString());
-            }
-            var letter = Plane.WorldXY;
-            letter.Origin = new Point3d(ax - MmToPage(doc, 1.6), ay + ah + MmToPage(doc, 1.2), 0);
-            var letterId = doc.Objects.AddText(
-                "N", letter, MmToPage(doc, 3.2), "Arial", false, false, northAttr);
-            if (letterId != Guid.Empty)
-                ids.Add(letterId.ToString());
+                Line(ax, ay, ax, top, Attr("north")),
+                Line(ax, top, ax - head, top - head, Attr("north")),
+                Line(ax, top, ax + head, top - head, Attr("north")),
+                Text("N", ax, top + letterGap, letter, TextJustification.BottomCenter, Attr("north"))
+            };
+            footer["north_arrow"] = PaperBox(doc, northIds);
         }
+
+        // Scale bar: between the arrow and the title block, at the page scale.
+        if (pageScale > 0)
+        {
+            var meters = OpeningTypes.ScaleBarMeters(pageScale);
+            var length = OpeningTypes.ScaleBarPaperMm(meters, pageScale);
+            var segments = OpeningTypes.ScaleBarSegments(meters);
+            var by0 = bandMid - (ScaleBarHeightMm + 1.0 + FooterTextMm) / 2.0;
+            var by1 = by0 + ScaleBarHeightMm;
+            var barIds = new List<Guid>();
+            var solid = SolidPatternIndex(doc);
+            for (var i = 0; i < segments; i++)
+            {
+                var sx0 = ScaleBarLeftMm + length * i / segments;
+                var sx1 = ScaleBarLeftMm + length * (i + 1) / segments;
+                barIds.Add(Rect(sx0, by0, sx1, by1, Attr("scale_bar")));
+                if (i % 2 == 0 && solid >= 0)
+                    barIds.Add(AddSolid(doc, ids, sx0, by0, sx1, by1, solid, Attr("scale_bar")));
+            }
+            var labelIds = new List<Guid>(barIds)
+            {
+                Text("0", ScaleBarLeftMm, by1 + 1.0, FooterTextMm, TextJustification.BottomCenter, Attr("scale_bar_label")),
+                Text(OpeningTypes.ScaleBarLabel(meters), ScaleBarLeftMm + length, by1 + 1.0, FooterTextMm,
+                    TextJustification.BottomCenter, Attr("scale_bar_label"))
+            };
+            var bar = PaperBox(doc, barIds);
+            bar["meters"] = meters;
+            bar["segments"] = segments;
+            bar["with_labels"] = PaperBox(doc, labelIds);
+            footer["scale_bar"] = bar;
+        }
+
+        footer["free_labels"] = FreePageText(doc, page.MainViewport);
         return ids;
+    }
+
+    private static Guid Keep(JArray ids, Guid id)
+    {
+        if (id != Guid.Empty)
+            ids.Add(id.ToString());
+        return id;
+    }
+
+    private static Curve PageRect(RhinoDoc doc, double x0, double y0, double x1, double y1)
+    {
+        var rect = new Polyline
+        {
+            new Point3d(MmToPage(doc, x0), MmToPage(doc, y0), 0),
+            new Point3d(MmToPage(doc, x1), MmToPage(doc, y0), 0),
+            new Point3d(MmToPage(doc, x1), MmToPage(doc, y1), 0),
+            new Point3d(MmToPage(doc, x0), MmToPage(doc, y1), 0),
+            new Point3d(MmToPage(doc, x0), MmToPage(doc, y0), 0)
+        };
+        return rect.ToNurbsCurve();
+    }
+
+    private static Guid AddSolid(
+        RhinoDoc doc, JArray ids, double x0, double y0, double x1, double y1, int pattern, ObjectAttributes attr)
+    {
+        using (var boundary = PageRect(doc, x0, y0, x1, y1))
+        {
+            Hatch[] hatches;
+            try { hatches = Hatch.Create(boundary, pattern, 0.0, 1.0, doc.ModelAbsoluteTolerance); }
+            catch (Exception) { return Guid.Empty; }
+            if (hatches == null || hatches.Length == 0 || hatches[0] == null) return Guid.Empty;
+            return Keep(ids, doc.Objects.AddHatch(hatches[0], attr));
+        }
+    }
+
+    /// <summary>Union box of the objects Rhino stored, in paper mm.</summary>
+    private static JObject PaperBox(RhinoDoc doc, IEnumerable<Guid> ids)
+    {
+        var box = BoundingBox.Empty;
+        foreach (var id in ids)
+        {
+            var geom = id == Guid.Empty ? null : doc.Objects.FindId(id)?.Geometry;
+            if (geom != null)
+                box.Union(geom.GetBoundingBox(true));
+        }
+        var mm = MmToPage(doc, 1.0);
+        if (!box.IsValid || mm <= 0) return new JObject();
+        return new JObject
+        {
+            ["x0"] = Math.Round(box.Min.X / mm, 2),
+            ["y0"] = Math.Round(box.Min.Y / mm, 2),
+            ["x1"] = Math.Round(box.Max.X / mm, 2),
+            ["y1"] = Math.Round(box.Max.Y / mm, 2),
+            ["w"] = Math.Round((box.Max.X - box.Min.X) / mm, 2),
+            ["h"] = Math.Round((box.Max.Y - box.Min.Y) / mm, 2)
+        };
+    }
+
+    /// <summary>Text on the page that is not part of the footer.</summary>
+    private static int FreePageText(RhinoDoc doc, RhinoViewport pageViewport)
+    {
+        var settings = new ObjectEnumeratorSettings
+        {
+            NormalObjects = true,
+            LockedObjects = true,
+            HiddenObjects = true,
+            ViewportFilter = pageViewport,
+            ObjectTypeFilter = ObjectType.Annotation
+        };
+        var count = 0;
+        foreach (var obj in doc.Objects.GetObjectList(settings))
+        {
+            if (!(obj?.Geometry is TextEntity)) continue;
+            var role = obj.Attributes?.GetUserString("forsk:role") ?? "";
+            if (role == "title_cell" || role == "scale_bar_label" || role == "north") continue;
+            count++;
+        }
+        return count;
     }
 
     private static int WallLevel(RhinoDoc doc)

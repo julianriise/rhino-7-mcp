@@ -403,6 +403,90 @@ public static class OpeningTypes
         return (int)(Math.Ceiling(need / step - 1e-9) * step);
     }
 
+    public static readonly int[] ScaleBarLengthsM = { 1, 2, 5, 10, 20, 50, 100 };
+    public const double ScaleBarMinMm = 40.0;
+    public const double ScaleBarMaxMm = 80.0;
+
+    /// <summary>Paper length in mm of <paramref name="meters"/> at 1:scale.</summary>
+    public static double ScaleBarPaperMm(int meters, int scale)
+    {
+        if (scale < 1 || meters < 1) return 0;
+        return meters * 1000.0 / scale;
+    }
+
+    /// <summary>
+    /// Scale bar total length in metres: the listed length whose paper
+    /// length lies in 40..80 mm and is nearest 60 mm. When none fits (1:55,
+    /// 1:60, 1:550), the one nearest the band.
+    /// </summary>
+    public static int ScaleBarMeters(int scale)
+    {
+        if (scale < 1) return 0;
+        var best = ScaleBarLengthsM[0];
+        var bestCost = double.MaxValue;
+        foreach (var meters in ScaleBarLengthsM)
+        {
+            var paper = ScaleBarPaperMm(meters, scale);
+            var outside = paper < ScaleBarMinMm ? ScaleBarMinMm - paper
+                : paper > ScaleBarMaxMm ? paper - ScaleBarMaxMm
+                : 0.0;
+            // Outside the band always loses to inside it.
+            var cost = outside * 1000.0 + Math.Abs(paper - 60.0);
+            if (cost < bestCost - 1e-9)
+            {
+                best = meters;
+                bestCost = cost;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Segments of round length: 4 for 2 and 20 m (0.5, 5 m each), else 5.</summary>
+    public static int ScaleBarSegments(int meters)
+    {
+        return meters == 2 || meters == 20 ? 4 : 5;
+    }
+
+    /// <summary>Scale bar end label: "5 m".</summary>
+    public static string ScaleBarLabel(int meters)
+    {
+        return meters.ToString(CultureInfo.InvariantCulture) + " m";
+    }
+
+    /// <summary>Title block cells in order, blank values dropped.</summary>
+    public static List<KeyValuePair<string, string>> TitleCells(IEnumerable<KeyValuePair<string, string>> fields)
+    {
+        var cells = new List<KeyValuePair<string, string>>();
+        if (fields == null) return cells;
+        foreach (var field in fields)
+        {
+            var value = field.Value?.Trim();
+            if (string.IsNullOrEmpty(value) || value == "—" || value == "-") continue;
+            cells.Add(new KeyValuePair<string, string>(field.Key, value));
+        }
+        return cells;
+    }
+
+    /// <summary>
+    /// Cell widths that sum to <paramref name="total"/>, in proportion to
+    /// the longer of caption and value (at least 6 characters).
+    /// </summary>
+    public static double[] TitleCellWidths(IList<KeyValuePair<string, string>> cells, double total)
+    {
+        if (cells == null || cells.Count == 0 || total <= 0) return new double[0];
+        var widths = new double[cells.Count];
+        var sum = 0.0;
+        for (var i = 0; i < cells.Count; i++)
+        {
+            var chars = Math.Max(cells[i].Key?.Length ?? 0, cells[i].Value?.Length ?? 0);
+            widths[i] = Math.Max(6, chars);
+            sum += widths[i];
+        }
+        for (var i = 0; i < widths.Length; i++)
+            widths[i] = total * widths[i] / sum;
+        return widths;
+    }
+
     /// <summary>
     /// Printed height in paper mm of model text seen through a 1:scale
     /// detail. Layout-space annotation scaling draws the text at its own
@@ -835,16 +919,14 @@ public static class OpeningTypes
         return "ca. " + text + " m²";
     }
 
-    public static string ViewTitle(string view, int level, int scale, bool locked)
+    /// <summary>Drawing title for the title block. The scale has its own cell.</summary>
+    public static string ViewTitle(string view, int level)
     {
         var key = string.IsNullOrWhiteSpace(view) ? "" : view.Trim().ToLowerInvariant();
         if (key == "plan")
         {
             var etg = (level < 0 ? 0 : level) + 1;
-            var sc = locked && scale > 0
-                ? "1:" + scale.ToString(CultureInfo.InvariantCulture)
-                : "fit";
-            return "Plan " + etg.ToString(CultureInfo.InvariantCulture) + ". etg " + sc;
+            return "Plan " + etg.ToString(CultureInfo.InvariantCulture) + ". etg";
         }
         if (key == "north") return "Fasade mot nord";
         if (key == "east") return "Fasade mot øst";

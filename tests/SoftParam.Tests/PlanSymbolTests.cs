@@ -342,13 +342,86 @@ public class PlanSymbolTests
     {
         Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12400000));
         Assert.Equal("ca. 20,2 m²", OpeningTypes.RoomTag(20160000));
-        Assert.Equal("Plan 1. etg 1:100", OpeningTypes.ViewTitle("plan", 0, 100, true));
-        Assert.Equal("Plan 1. etg 1:200", OpeningTypes.ViewTitle("plan", 0, 200, true));
-        Assert.Equal("Plan 1. etg fit", OpeningTypes.ViewTitle("plan", 0, 200, false));
-        Assert.Equal("Fasade mot sør", OpeningTypes.ViewTitle("south", 0, 100, true));
-        Assert.Equal("Fasade mot nord", OpeningTypes.ViewTitle("north", 0, 100, true));
-        Assert.Equal("Fasade mot øst", OpeningTypes.ViewTitle("east", 0, 100, true));
-        Assert.Equal("Fasade mot vest", OpeningTypes.ViewTitle("west", 0, 100, true));
+        Assert.Equal("Plan 1. etg", OpeningTypes.ViewTitle("plan", 0));
+        Assert.Equal("Plan 2. etg", OpeningTypes.ViewTitle("plan", 1));
+        Assert.Equal("Fasade mot sør", OpeningTypes.ViewTitle("south", 0));
+        Assert.Equal("Fasade mot nord", OpeningTypes.ViewTitle("north", 0));
+        Assert.Equal("Fasade mot øst", OpeningTypes.ViewTitle("east", 0));
+        Assert.Equal("Fasade mot vest", OpeningTypes.ViewTitle("west", 0));
+    }
+
+    [Theory]
+    [InlineData(20, 1, 50.0)]
+    [InlineData(30, 2, 66.667)]
+    [InlineData(50, 2, 40.0)]
+    [InlineData(75, 5, 66.667)]
+    [InlineData(100, 5, 50.0)]
+    [InlineData(125, 5, 40.0)]
+    [InlineData(150, 10, 66.667)]
+    [InlineData(200, 10, 50.0)]
+    [InlineData(500, 20, 40.0)]
+    [InlineData(1000, 50, 50.0)]
+    [InlineData(2000, 100, 50.0)]
+    public void ScaleBar_LengthIn40To80mm(int scale, int meters, double paper)
+    {
+        Assert.Equal(meters, OpeningTypes.ScaleBarMeters(scale));
+        var mm = OpeningTypes.ScaleBarPaperMm(meters, scale);
+        Assert.Equal(paper, mm, 2);
+        Assert.InRange(mm, 40.0, 80.0);
+        Assert.Contains(meters, OpeningTypes.ScaleBarLengthsM);
+    }
+
+    [Fact]
+    public void ScaleBar_EveryScaleThatCanFitDoes()
+    {
+        for (var scale = 1; scale <= 2500; scale++)
+        {
+            var canFit = OpeningTypes.ScaleBarLengthsM.Any(m =>
+            {
+                var mm = OpeningTypes.ScaleBarPaperMm(m, scale);
+                return mm >= 40.0 && mm <= 80.0;
+            });
+            var mm = OpeningTypes.ScaleBarPaperMm(OpeningTypes.ScaleBarMeters(scale), scale);
+            if (canFit) Assert.InRange(mm, 40.0, 80.0);
+        }
+        // 1:55 sits between 2 m (36 mm) and 5 m (91 mm): nearest the band.
+        Assert.Equal(2, OpeningTypes.ScaleBarMeters(55));
+        Assert.Equal(0, OpeningTypes.ScaleBarMeters(0));
+    }
+
+    [Theory]
+    [InlineData(1, 5)]
+    [InlineData(2, 4)]
+    [InlineData(5, 5)]
+    [InlineData(10, 5)]
+    [InlineData(20, 4)]
+    [InlineData(50, 5)]
+    [InlineData(100, 5)]
+    public void ScaleBar_FourOrFiveRoundSegments(int meters, int segments)
+    {
+        Assert.Equal(segments, OpeningTypes.ScaleBarSegments(meters));
+        var each = meters / (double)segments;
+        Assert.Equal(Math.Round(each * 10) / 10, each, 9);
+        Assert.Equal(meters + " m", OpeningTypes.ScaleBarLabel(meters));
+    }
+
+    [Fact]
+    public void TitleCells_DropEmptyAndSplitTheWidth()
+    {
+        var cells = OpeningTypes.TitleCells(new[]
+        {
+            new System.Collections.Generic.KeyValuePair<string, string>("Drawing", "Plan 1. etg"),
+            new System.Collections.Generic.KeyValuePair<string, string>("Scale", "1:50"),
+            new System.Collections.Generic.KeyValuePair<string, string>("Project", ""),
+            new System.Collections.Generic.KeyValuePair<string, string>("Client", "—"),
+            new System.Collections.Generic.KeyValuePair<string, string>("Address", "  "),
+            new System.Collections.Generic.KeyValuePair<string, string>("Date", "2026-09-27")
+        });
+        Assert.Equal(new[] { "Drawing", "Scale", "Date" }, cells.Select(c => c.Key).ToArray());
+        var widths = OpeningTypes.TitleCellWidths(cells, 280);
+        Assert.Equal(280, widths.Sum(), 6);
+        Assert.True(widths[0] > widths[1]);
+        Assert.Empty(OpeningTypes.TitleCellWidths(new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>(), 280));
     }
 
     static void AssertSills(System.Collections.Generic.List<OpeningTypes.PlanMark> marks, OpeningTypes.PlanFrame frame)

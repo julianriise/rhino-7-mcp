@@ -665,9 +665,6 @@ def main() -> int:
         page = (packed.get("pages") or [{}])[0]
         if page.get("north_arrow") is not True:
             failures.append("sheet north arrow missing")
-        title = str(page.get("view_title") or "")
-        if f"1:{page.get('scale')}" not in title:
-            failures.append(f"sheet title={title!r} scale={page.get('scale')}")
         if "ca." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
             failures.append(f"sheet room tag={page.get('room_tag_text')!r}")
         if (page.get("roof_outline") or 0) < 1:
@@ -686,6 +683,7 @@ def main() -> int:
 
         rows = plan_objects(sock)
         plan_smoke.check_fit(page, "sheet", failures)
+        plan_smoke.check_footer(page, "sheet", failures)
         plan_smoke.check_room_tags(
             rows, int(page.get("scale") or 0), page.get("room_tags"), failures
         )

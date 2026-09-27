@@ -253,6 +253,82 @@ def check_fit(page, label, failures) -> None:
         )
 
 
+TITLE_MAX_MM = 20.0
+BAR_LENGTHS_M = (1, 2, 5, 10, 20, 50, 100)
+BAR_MIN_MM, BAR_MAX_MM = 40.0, 80.0
+BAR_TOL_MM = 0.5
+BOX_SLACK_MM = 0.01  # layout_pack rounds its boxes to 0.01 mm
+
+
+def _paper_box(item):
+    try:
+        return tuple(float(item[k]) for k in ("x0", "y0", "x1", "y1"))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def check_footer(page, label, failures) -> None:
+    """Title block, scale bar, and north arrow as layout_pack measured the
+    objects it stored, in paper mm. The scale is the detail's own scale."""
+    footer = page.get("footer") or {}
+    scale = int(page.get("page_scale") or 0)
+    if scale < 1 or scale != int(page.get("scale") or 0):
+        failures.append(f"{label} page scale {scale} sheet 1:{page.get('scale')}")
+        return
+
+    title = footer.get("title_block") or {}
+    tbox = _paper_box(title)
+    cells = title.get("cells") or []
+    height = float(title.get("h") or 0)
+    width = float(title.get("w") or 0)
+    print(f"    {label} title block h {height:.1f} w {width:.1f} cells {len(cells)}")
+    empty = [c.get("name") for c in cells if str(c.get("text") or "").strip() in ("", "—", "-")]
+    scale_cell = [c.get("text") for c in cells if c.get("name") == "scale"]
+    if tbox is None or height > TITLE_MAX_MM + BOX_SLACK_MM or width <= 4 * height:
+        failures.append(f"{label} title block h {height:.1f} w {width:.1f}")
+    if not cells or empty:
+        failures.append(f"{label} title block cells {len(cells)} empty {empty}")
+    if scale_cell != [f"1:{scale}"]:
+        failures.append(f"{label} title block scale {scale_cell} page 1:{scale}")
+
+    bar = footer.get("scale_bar") or {}
+    meters = int(bar.get("meters") or 0)
+    length = float(bar.get("w") or 0)
+    print(f"    {label} scale bar {meters} m len {length:.1f} mm at 1:{scale}")
+    expect = meters * 1000.0 / scale
+    if (
+        meters not in BAR_LENGTHS_M
+        or not BAR_MIN_MM - BOX_SLACK_MM <= length <= BAR_MAX_MM + BOX_SLACK_MM
+        or abs(expect - length) > BAR_TOL_MM
+    ):
+        failures.append(
+            f"{label} scale bar {meters} m len {length:.1f} mm want {expect:.1f} at 1:{scale}"
+        )
+
+    free = int(footer.get("free_labels", -1))
+    print(f"    {label} free label {free}")
+    if free != 0:
+        failures.append(f"{label} free label {free}")
+
+    if str(page.get("view") or "") != "plan":
+        return
+    arrow = _paper_box(footer.get("north_arrow") or {})
+    barbox = _paper_box(bar.get("with_labels") or {})
+    if arrow is None or barbox is None or tbox is None:
+        failures.append(f"{label} north arrow box {arrow} bar {barbox} title {tbox}")
+        return
+    left = arrow[2] < barbox[0]
+    outside = arrow[2] <= tbox[0] or arrow[0] >= tbox[2] or arrow[3] <= tbox[1] or arrow[1] >= tbox[3]
+    centred = abs((arrow[1] + arrow[3]) / 2 - (tbox[1] + tbox[3]) / 2) <= 0.5
+    if left and outside and centred:
+        print(f"    {label} north arrow left")
+    else:
+        failures.append(
+            f"{label} north arrow {[round(v, 1) for v in arrow]} "
+            f"bar x0 {barbox[0]:.1f} title {[round(v, 1) for v in tbox]}"
+        )
+
+
 def check_room_count(page, expected, label, failures) -> None:
     """Every drawn room is tagged or too small for its tag; none is unbounded."""
     found = int(page.get("room_tags") or 0)
