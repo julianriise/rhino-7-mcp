@@ -2,35 +2,136 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_paint.json",
   "title": "DaylightPaint Command",
-  "description": "Replace the daylight overlay: delete forsk:kind=analysis objects, then add one vertex-coloured mesh on A-ANALYSE with one square per cell. The layer is off in every layout detail and does not print. Sky-vis proxy, not lux.",
+  "description": "Replace the daylight overlay: delete forsk:kind=analysis objects, then add one welded vertex-coloured mesh (shared corner vertices) and its legend (colour bar + text) on A-ANALYSE. Display mode 'Forsk Analysis': mesh wires off, unlit vertex colours. The layer is off in every layout detail and does not print. Sky-vis proxy, not lux.",
   "type": "object",
   "properties": {
-    "cell": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "description": "Cell size in mm (square side)."
-    },
     "z": {
       "type": "number",
       "description": "Mesh height in mm, usually the floor plus 50."
     },
-    "cells": {
+    "vertices": {
       "type": "array",
-      "description": "One [x, y, r, g, b] per usable cell: centre in mm, colour 0-255 from the Planwire ramp.",
       "items": {
         "type": "array",
-        "prefixItems": [
-          { "type": "number" },
-          { "type": "number" },
-          { "type": "integer", "minimum": 0, "maximum": 255 },
-          { "type": "integer", "minimum": 0, "maximum": 255 },
-          { "type": "integer", "minimum": 0, "maximum": 255 }
-        ],
-        "minItems": 5,
-        "maxItems": 5
-      }
+        "items": {
+          "type": "number"
+        },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "description": "Cell corners [x, y] in mm, each once."
+    },
+    "colors": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "minItems": 3,
+        "maxItems": 3
+      },
+      "description": "One Planwire ramp colour per vertex."
+    },
+    "faces": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minItems": 4,
+        "maxItems": 4
+      },
+      "description": "One quad of vertex indices per usable cell."
+    },
+    "legend": {
+      "type": "object",
+      "properties": {
+        "bar": {
+          "type": "object",
+          "properties": {
+            "x0": {
+              "type": "number"
+            },
+            "y0": {
+              "type": "number"
+            },
+            "x1": {
+              "type": "number"
+            },
+            "y1": {
+              "type": "number"
+            },
+            "colors": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "minItems": 2
+            }
+          },
+          "required": [
+            "x0",
+            "y0",
+            "x1",
+            "y1",
+            "colors"
+          ],
+          "additionalProperties": false
+        },
+        "texts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "text",
+              "x",
+              "y",
+              "height"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "bar",
+        "texts"
+      ],
+      "additionalProperties": false,
+      "description": "Legend above the overlay's top-left corner, laid out by the adapter in mm."
     }
   },
-  "required": ["cell", "z", "cells"],
+  "required": [
+    "z",
+    "vertices",
+    "colors",
+    "faces"
+  ],
   "additionalProperties": false
 }

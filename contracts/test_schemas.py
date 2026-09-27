@@ -277,8 +277,18 @@ def test_new_commands():
         }),
         ("commands/clear_generated.json", {"kinds": ["drawing"]}),
         ("commands/daylight_scene.json", {}),
-        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": []}),
-        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": [[600.0, 600.0, 8, 42, 82]]}),
+        ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": []}),
+        ("commands/daylight_paint.json", {
+            "z": 50,
+            "vertices": [[0, 0], [400, 0], [400, 400], [0, 400]],
+            "colors": [[8, 42, 82]] * 4,
+            "faces": [[0, 1, 2, 3]],
+            "legend": {
+                "bar": {"x0": 100, "y0": 500, "x1": 1100, "y1": 580, "colors": [[8, 42, 82], [255, 248, 230]]},
+                "texts": [{"text": "Sky visibility (proxy)", "x": 0, "y": 700, "height": 100}],
+            },
+        }),
+        ("commands/capture_viewport.json", {"viewport": "top", "zoom_bbox": [0, 0, 8000, 4000]}),
         ("commands/daylight_clear.json", {}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
@@ -630,8 +640,9 @@ def test_responses():
     }
     if not validate("responses/daylight_scene_result.json", scene):
         all_passed = False
-    painted = {"id": "12345678-1234-1234-1234-123456789012", "cells": 144, "layer": "A-ANALYSE",
-               "deleted": 1, "message": "Painted 144 daylight cells on A-ANALYSE."}
+    painted = {"id": "12345678-1234-1234-1234-123456789012", "cells": 144, "vertices": 171,
+               "welded": True, "wires": "off", "legend": 5, "layer": "A-ANALYSE", "deleted": 6,
+               "bbox": [200, 200, 7800, 4800], "message": "Painted 144 daylight cells on A-ANALYSE."}
     if not validate("responses/daylight_paint_result.json", painted):
         all_passed = False
     if not validate("responses/daylight_clear_result.json", {"count": 1, "remaining": 0, "message": "Cleared 1"}):
@@ -826,9 +837,10 @@ def test_invalid_examples():
         # Unknown property on get_commands
         ("commands/get_commands.json", {"bogus": 1}, "get_commands unknown field"),
         ("commands/daylight_scene.json", {"selected": True}, "daylight_scene unknown field"),
-        ("commands/daylight_paint.json", {"cell": 400, "z": 50}, "daylight_paint missing cells"),
-        ("commands/daylight_paint.json", {"cell": 0, "z": 50, "cells": []}, "daylight_paint zero cell"),
-        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": [[0, 0, 300, 0, 0]]}, "daylight_paint colour out of range"),
+        ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": []}, "daylight_paint missing faces"),
+        ("commands/daylight_paint.json", {"z": 50, "vertices": [[0, 0]], "colors": [[300, 0, 0]], "faces": []}, "daylight_paint colour out of range"),
+        ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": [[0, 1, 2]]}, "daylight_paint triangle face"),
+        ("commands/capture_viewport.json", {"zoom_bbox": [0, 0, 1]}, "capture_viewport short zoom_bbox"),
         ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),

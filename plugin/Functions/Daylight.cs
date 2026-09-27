@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -121,60 +122,159 @@ public partial class RhinoMCPFunctions
     public JObject DaylightPaint(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
-        var cell = parameters["cell"]?.ToObject<double?>() ?? 0;
         var z = parameters["z"]?.ToObject<double?>() ?? 0;
-        var cells = parameters["cells"] as JArray;
-        if (cell <= 0)
-            throw new ArgumentException("cell must be positive.");
-        if (cells == null)
-            throw new ArgumentException("cells is required.");
+        var vertices = parameters["vertices"] as JArray;
+        var colors = parameters["colors"] as JArray;
+        var faces = parameters["faces"] as JArray;
+        if (vertices == null || colors == null || faces == null)
+            throw new ArgumentException("vertices, colors, and faces are required.");
+        if (colors.Count != vertices.Count)
+            throw new ArgumentException("colors must have one entry per vertex.");
 
         var deleted = DeleteAnalysisOverlay(doc);
         var layer = EnsureLayer(doc, AnalysisLayerName, Color.FromArgb(16, 118, 128));
         KeepAnalysisOffPrint(doc, layer);
+        var mode = AnalysisDisplayMode();
+        var box = BoundingBox.Empty;
 
         var id = Guid.Empty;
-        if (cells.Count > 0)
+        var vertexCount = 0;
+        var welded = false;
+        if (faces.Count > 0)
         {
             var mesh = new Mesh();
-            var half = cell / 2.0;
-            foreach (var token in cells)
+            for (var i = 0; i < vertices.Count; i++)
             {
-                var c = (JArray)token;
-                double x = c[0].ToObject<double>(), y = c[1].ToObject<double>();
-                var color = Color.FromArgb(c[2].ToObject<int>(), c[3].ToObject<int>(), c[4].ToObject<int>());
-                var first = mesh.Vertices.Count;
-                mesh.Vertices.Add(x - half, y - half, z);
-                mesh.Vertices.Add(x + half, y - half, z);
-                mesh.Vertices.Add(x + half, y + half, z);
-                mesh.Vertices.Add(x - half, y + half, z);
-                for (var i = 0; i < 4; i++)
-                    mesh.VertexColors.Add(color);
-                mesh.Faces.AddFace(first, first + 1, first + 2, first + 3);
+                var v = (JArray)vertices[i];
+                mesh.Vertices.Add(v[0].ToObject<double>(), v[1].ToObject<double>(), z);
+                mesh.VertexColors.Add(RgbOf(colors[i]));
+            }
+            foreach (var token in faces)
+            {
+                var f = (JArray)token;
+                mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>(), f[3].ToObject<int>());
             }
             mesh.Normals.ComputeNormals();
-            mesh.Compact();
-
-            var attr = new ObjectAttributes { LayerIndex = layer.Index, Name = "daylight" };
-            StampForskTags(attr, new ForskStamp { Kind = AnalysisKind });
-            // Vertex colours need a shaded mode; the overlay reads in Wireframe views too.
-            var shaded = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.ShadedId);
-            if (shaded != null)
-                attr.SetDisplayModeOverride(shaded);
-            id = doc.Objects.AddMesh(mesh, attr);
+            vertexCount = mesh.Vertices.Count;
+            // One vertex per corner: no two vertices share a location.
+            welded = mesh.TopologyVertices.Count == vertexCount;
+            id = doc.Objects.AddMesh(mesh, AnalysisAttributes(layer, "mesh", "daylight", mode));
             if (id == Guid.Empty)
                 throw new InvalidOperationException("Could not add the daylight mesh.");
+            box.Union(mesh.GetBoundingBox(true));
         }
 
+        var legend = 0;
+        if (id != Guid.Empty && parameters["legend"] is JObject spec)
+            legend = AddDaylightLegend(doc, layer, mode, spec, z, ref box);
+
         doc.Views.Redraw();
+        var bbox = box.IsValid
+            ? new JArray(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
+            : new JArray();
+        var wiresOff = mode != null && !mode.DisplayAttributes.MeshSpecificAttributes.ShowMeshWires;
         return new JObject
         {
             ["id"] = id == Guid.Empty ? "" : id.ToString(),
-            ["cells"] = cells.Count,
+            ["cells"] = faces.Count,
+            ["vertices"] = vertexCount,
+            ["welded"] = welded,
+            ["wires"] = wiresOff ? "off" : "on",
+            ["legend"] = legend,
             ["layer"] = AnalysisLayerName,
             ["deleted"] = deleted,
-            ["message"] = $"Painted {cells.Count} daylight cells on {AnalysisLayerName}."
+            ["bbox"] = bbox,
+            ["message"] = $"Painted {faces.Count} daylight cells on {AnalysisLayerName}."
         };
+    }
+
+    private const string AnalysisDisplayName = "Forsk Analysis";
+
+    /// <summary>
+    /// Shaded copy with mesh wires and vertices off and unlit vertex colours,
+    /// so the overlay shows the ramp colours in any viewport display mode.
+    /// </summary>
+    private static DisplayModeDescription AnalysisDisplayMode()
+    {
+        var mode = DisplayModeDescription.FindByName(AnalysisDisplayName);
+        if (mode == null)
+        {
+            var copied = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.ShadedId, AnalysisDisplayName);
+            mode = DisplayModeDescription.GetDisplayMode(copied);
+        }
+        if (mode == null) return null;
+        var attrs = mode.DisplayAttributes;
+        attrs.MeshSpecificAttributes.ShowMeshWires = false;
+        attrs.MeshSpecificAttributes.ShowMeshVertices = false;
+        attrs.ShadeVertexColors = false;
+        DisplayModeDescription.UpdateDisplayMode(mode);
+        return DisplayModeDescription.GetDisplayMode(mode.Id) ?? mode;
+    }
+
+    private static ObjectAttributes AnalysisAttributes(Layer layer, string role, string name, DisplayModeDescription mode)
+    {
+        var attr = new ObjectAttributes { LayerIndex = layer.Index, Name = name };
+        StampForskTags(attr, new ForskStamp { Kind = AnalysisKind });
+        attr.SetUserString("forsk:role", role);
+        if (mode != null)
+            attr.SetDisplayModeOverride(mode);
+        return attr;
+    }
+
+    /// <summary>Colour bar and text laid out by the Python adapter, in mm.</summary>
+    private static int AddDaylightLegend(
+        RhinoDoc doc, Layer layer, DisplayModeDescription mode, JObject spec, double z, ref BoundingBox box)
+    {
+        var count = 0;
+        if (spec["bar"] is JObject bar && bar["colors"] is JArray steps && steps.Count >= 2)
+        {
+            double x0 = bar["x0"].ToObject<double>(), x1 = bar["x1"].ToObject<double>();
+            double y0 = bar["y0"].ToObject<double>(), y1 = bar["y1"].ToObject<double>();
+            var strip = new Mesh();
+            for (var i = 0; i < steps.Count; i++)
+            {
+                var x = x0 + (x1 - x0) * i / (steps.Count - 1);
+                strip.Vertices.Add(x, y0, z);
+                strip.Vertices.Add(x, y1, z);
+                var color = RgbOf(steps[i]);
+                strip.VertexColors.Add(color);
+                strip.VertexColors.Add(color);
+                if (i > 0)
+                    strip.Faces.AddFace(2 * i - 2, 2 * i, 2 * i + 1, 2 * i - 1);
+            }
+            strip.Normals.ComputeNormals();
+            if (doc.Objects.AddMesh(strip, AnalysisAttributes(layer, "legend", "daylight-legend", mode)) != Guid.Empty)
+            {
+                count++;
+                box.Union(strip.GetBoundingBox(true));
+            }
+        }
+
+        foreach (var token in spec["texts"] as JArray ?? new JArray())
+        {
+            var height = token["height"]?.ToObject<double>() ?? 0;
+            var text = token["text"]?.ToString();
+            if (height <= 0 || string.IsNullOrEmpty(text)) continue;
+            var style = OneToOneTextStyle(doc, "Forsk analysis " + height.ToString("0", CultureInfo.InvariantCulture), height);
+            if (style == null) continue;
+            var plane = Plane.WorldXY;
+            plane.Origin = new Point3d(token["x"].ToObject<double>(), token["y"].ToObject<double>(), z);
+            using var entity = TextEntity.Create(text, plane, style, false, 0, 0);
+            if (entity == null) continue;
+            entity.TextHorizontalAlignment = TextHorizontalAlignment.Left;
+            entity.TextVerticalAlignment = TextVerticalAlignment.Bottom;
+            var attr = AnalysisAttributes(layer, "legend", "daylight-legend", null);
+            if (doc.Objects.AddText(entity, attr) == Guid.Empty) continue;
+            count++;
+            box.Union(entity.GetBoundingBox(true));
+        }
+        return count;
+    }
+
+    private static Color RgbOf(JToken token)
+    {
+        var c = (JArray)token;
+        return Color.FromArgb(c[0].ToObject<int>(), c[1].ToObject<int>(), c[2].ToObject<int>());
     }
 
     [McpCommand("daylight_clear")]

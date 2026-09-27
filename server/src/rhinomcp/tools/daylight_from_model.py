@@ -21,9 +21,10 @@ def daylight_from_model(
     Reads Forsk-tagged walls (forsk:id, forsk:path, forsk:thickness), opening
     markers (forsk:host_id, forsk:width, window or door), and room markers from
     rooms_from_layer. Runs the vendored Planwire tracer in this process and
-    paints one coloured mesh on A-ANALYSE, 50 mm above the floor, one quad per
-    usable cell (cool teal = low, near-white = high). A rerun replaces the
-    previous overlay. The overlay never prints; daylight_clear removes it.
+    paints one welded, smoothly coloured mesh on A-ANALYSE, 50 mm above the
+    floor (deep blue = low, near-white = high, Planwire ramp), with no mesh
+    wires, plus a small legend with the disclaimer at its top-left. A rerun
+    replaces both. They never print; daylight_clear removes them.
 
     Scope: relative 0–1 sky visibility on a 2D grid. Not illuminance (lux),
     not EN 17037 or TEK17, not a code check. No orientation or climate.
@@ -51,6 +52,9 @@ def daylight_from_model(
             **summary,
             "compute_ms": compute_ms,
             "id": painted.get("id"),
+            "vertices": painted.get("vertices", 0),
+            "wires": painted.get("wires"),
+            "legend": painted.get("legend", 0),
             "deleted": painted.get("deleted", 0),
             "layer": painted.get("layer", "A-ANALYSE"),
             "warnings": list(scene.get("warnings") or []) + summary["notes"],

@@ -2,15 +2,64 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_paint_result.json",
   "title": "DaylightPaintResult",
-  "description": "The overlay mesh id (empty when no cells), cells painted, and old overlays deleted first.",
+  "description": "The overlay mesh id (empty when no cells), cells and welded vertices painted, wires state, legend objects, the bbox of mesh plus legend, and old overlay objects deleted first.",
   "type": "object",
   "properties": {
-    "id": { "type": "string" },
-    "cells": { "type": "integer", "minimum": 0 },
-    "layer": { "type": "string", "const": "A-ANALYSE" },
-    "deleted": { "type": "integer", "minimum": 0 },
-    "message": { "type": "string" }
+    "id": {
+      "type": "string"
+    },
+    "cells": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "layer": {
+      "type": "string",
+      "const": "A-ANALYSE"
+    },
+    "deleted": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "message": {
+      "type": "string"
+    },
+    "vertices": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "welded": {
+      "type": "boolean"
+    },
+    "wires": {
+      "type": "string",
+      "enum": [
+        "off",
+        "on"
+      ]
+    },
+    "legend": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bbox": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 4
+    }
   },
-  "required": ["id", "cells", "layer", "deleted", "message"],
+  "required": [
+    "id",
+    "cells",
+    "vertices",
+    "welded",
+    "wires",
+    "legend",
+    "layer",
+    "deleted",
+    "bbox",
+    "message"
+  ],
   "additionalProperties": false
 }

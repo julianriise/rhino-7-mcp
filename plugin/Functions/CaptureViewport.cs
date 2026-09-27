@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Display;
+using Rhino.Geometry;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -44,6 +45,7 @@ public partial class RhinoMCPFunctions
         bool showAxes = parameters["show_axes"]?.ToObject<bool>() ?? true;
         bool showCplaneAxes = parameters["show_cplane_axes"]?.ToObject<bool>() ?? false;
         bool zoomToFit = parameters["zoom_to_fit"]?.ToObject<bool>() ?? false;
+        var zoomBox = parameters["zoom_bbox"] as JArray;
 
         // Ensure minimum dimensions
         width = Math.Max(width, 100);
@@ -80,8 +82,34 @@ public partial class RhinoMCPFunctions
             // Store viewport name
             string viewportName = targetView.ActiveViewport.Name ?? viewportTarget;
 
+            // zoom_bbox: fit [minX, minY, maxX, maxY], then capture at the viewport's
+            // own aspect with the long side from width/height. A different aspect
+            // would crop the fitted box.
+            if (zoomBox != null && zoomBox.Count == 4)
+            {
+                var viewport = targetView.ActiveViewport;
+                viewport.ZoomBoundingBox(new BoundingBox(
+                    zoomBox[0].ToObject<double>(), zoomBox[1].ToObject<double>(), 0,
+                    zoomBox[2].ToObject<double>(), zoomBox[3].ToObject<double>(), 0));
+                doc.Views.Redraw();
+                var screen = viewport.Size;
+                var longSide = Math.Max(width, height);
+                if (screen.Width > 0 && screen.Height > 0)
+                {
+                    if (screen.Width >= screen.Height)
+                    {
+                        width = longSide;
+                        height = Math.Max(100, (int)Math.Round(longSide * (double)screen.Height / screen.Width));
+                    }
+                    else
+                    {
+                        height = longSide;
+                        width = Math.Max(100, (int)Math.Round(longSide * (double)screen.Width / screen.Height));
+                    }
+                }
+            }
             // Apply zoom to fit if requested
-            if (zoomToFit && doc.Objects.Count > 0)
+            else if (zoomToFit && doc.Objects.Count > 0)
             {
                 targetView.ActiveViewport.ZoomExtents();
                 doc.Views.Redraw();
@@ -226,9 +254,11 @@ public partial class RhinoMCPFunctions
     {
         string projectionName = projection.ToString();
 
-        // First, try to find an existing view whose title matches the projection
+        // First, try to find an existing model view whose title matches the projection.
+        // A layout page is never the Top view.
         foreach (var view in doc.Views)
         {
+            if (view is RhinoPageView) continue;
             if (view.ActiveViewport.Name?.Equals(projectionName, StringComparison.OrdinalIgnoreCase) == true)
                 return view;
         }
@@ -237,7 +267,7 @@ public partial class RhinoMCPFunctions
         // renames it). CaptureViewport snapshots and restores both projection and name,
         // so the change is invisible to the user.
         var activeView = doc.Views.ActiveView;
-        if (activeView != null)
+        if (activeView != null && !(activeView is RhinoPageView))
         {
             activeView.ActiveViewport.SetProjection(projection, projectionName, false);
             doc.Views.Redraw();

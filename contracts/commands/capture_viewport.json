@@ -43,6 +43,15 @@
       "type": "boolean",
       "default": false,
       "description": "Whether to zoom viewport to fit all objects before capture"
+    },
+    "zoom_bbox": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[minX, minY, maxX, maxY] in model units. Zoom the target viewport to this box, then capture at the viewport's own aspect with the long side max(width, height), so the box is never cropped. Overrides zoom_to_fit."
     }
   },
   "additionalProperties": false
