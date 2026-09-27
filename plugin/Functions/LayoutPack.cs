@@ -164,10 +164,13 @@ public partial class RhinoMCPFunctions
         if (!paper.Trim().Equals("A3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(UnknownPaperMessage);
 
+        // No scale: the plan fits the detail. Elevations keep 1:100.
         var requestedScale = 100;
+        var fitPlan = true;
         var scaleToken = parameters?["scale"];
         if (scaleToken != null && scaleToken.Type != JTokenType.Null)
         {
+            fitPlan = false;
             requestedScale = scaleToken.ToObject<int>();
             if (requestedScale < 1)
                 throw new InvalidOperationException("Scale must be a positive number.");
@@ -226,12 +229,12 @@ public partial class RhinoMCPFunctions
             var strokeScale = 0;
             double fitNeed = 0;
             if (plan)
-                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH);
+                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH, fitPlan);
             var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
             if (plan)
             {
                 fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
-                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
+                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitPlan);
                 if (fitted != strokeScale)
                 {
                     drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
@@ -252,7 +255,7 @@ public partial class RhinoMCPFunctions
             // title block, and the view title use that same value.
             var scale = plan
                 ? strokeScale
-                : FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
+                : FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, false);
             applied.Add(scale);
 
             var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
@@ -310,6 +313,8 @@ public partial class RhinoMCPFunctions
                 pageRecord["symbol_dashed"] = drawn.SymbolDashed;
                 pageRecord["roof_outline"] = drawn.RoofOutline;
                 pageRecord["fit_need"] = Math.Round(fitNeed, 2);
+                pageRecord["fitted"] = fitPlan || scale != requestedScale;
+                pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH) * 0.9 / scale, 3);
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
                 pageRecord["rooms_unfit"] = drawn.RoomsUnfit;
@@ -1240,12 +1245,17 @@ public partial class RhinoMCPFunctions
         return Math.Max(span.Width / (paperW * 0.9), span.Height / (paperH * 0.9));
     }
 
-    private static int FitLayoutScale(int requested, Span span, double paperW, double paperH)
+    /// <summary>
+    /// fit: the largest standard scale that fits. Otherwise the requested
+    /// scale, rounded up to a standard step only when it does not fit.
+    /// </summary>
+    private static int FitLayoutScale(int requested, Span span, double paperW, double paperH, bool fit)
     {
         var scale = requested < 1 ? 100 : requested;
         if (span.Width <= 0 || span.Height <= 0 || paperW <= 0 || paperH <= 0)
             return scale;
         var need = LayoutFitNeed(span, paperW, paperH);
+        if (fit) return Math.Max(1, OpeningTypes.RoundScaleUp(need));
         return need <= scale ? scale : OpeningTypes.RoundScaleUp(need);
     }
 

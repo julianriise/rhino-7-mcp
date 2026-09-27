@@ -57,7 +57,12 @@ public partial class RhinoMCPFunctions
                 break;
             case "POLYLINE":
                 List<Point3d> ptList = castToPoint3dList(geoParams.SelectToken("points"));
-                objectId = doc.Objects.AddPolyline(ptList);
+                var polyline = new Polyline(ptList);
+                // AddPolyline returns an empty id with no reason. Say it.
+                if (!polyline.IsValid)
+                    throw new InvalidOperationException(
+                        "POLYLINE is invalid: it needs at least 2 points and no repeated consecutive points.");
+                objectId = doc.Objects.AddPolyline(polyline);
                 break;
             case "CIRCLE":
                 Point3d circleCenter = castToPoint3d(geoParams.SelectToken("center"));

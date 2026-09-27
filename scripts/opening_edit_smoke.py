@@ -866,22 +866,17 @@ def main() -> int:
                     break
             return rows
 
-        def check_plan(label: str, scale: int, pdf_name: str, openings: int) -> dict:
-            packed = send_command(sock, "layout_pack", {
-                "views": ["plan"],
-                "scale": scale,
-                "replace": True,
-            })
+        def check_plan(label: str, scale, pdf_name: str, openings: int) -> dict:
+            params = {"views": ["plan"], "replace": True}
+            if scale:
+                params["scale"] = scale
+            packed = send_command(sock, "layout_pack", params)
             print(f"    {label} {packed.get('message')}")
             pages = packed.get("pages") or []
             page = pages[0] if pages else {}
-            if scale == 100:
-                # Does not fit at 1:100: the tightest fit, rounded up to a standard step.
-                need = float(page.get("fit_need") or 0)
-                want = plan_smoke.round_scale_up(need)
-                print(f"    {label} fit need {need:.1f} scale 1:{page.get('scale')} want 1:{want}")
-                if need <= 100 or page.get("scale") != want:
-                    failures.append(f"{label} scale={page.get('scale')} need={need} want {want}")
+            if not scale:
+                # Default: the plan takes the largest standard scale that fits.
+                plan_smoke.check_fit(page, label, failures)
             if scale == 200 and page.get("scale") != 200:
                 failures.append(f"{label} scale={page.get('scale')}")
             if page.get("symbols") != openings:
@@ -941,7 +936,7 @@ def main() -> int:
             return page
 
         openings_now = expected - 1 if baked else 0
-        check_plan("office 1:100", 100, "/tmp/forsk-f5-office-100.pdf", openings_now)
+        check_plan("office fit", None, "/tmp/forsk-f5-office-fit.pdf", openings_now)
         check_plan("office 1:200", 200, "/tmp/forsk-f5-office-200.pdf", openings_now)
     finally:
         sock.close()

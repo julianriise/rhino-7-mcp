@@ -22,8 +22,7 @@
     "scale": {
       "type": "integer",
       "minimum": 1,
-      "default": 100,
-      "description": "Requested detail scale denominator. 100 means 1:100. Bumped if the drawing does not fit the detail."
+      "description": "Requested detail scale denominator. 100 means 1:100. Rounded up to a standard step if the drawing does not fit the detail. Omit to fit: the plan takes the largest scale that fits, elevations 1:100."
     },
     "replace": {
       "type": "boolean",

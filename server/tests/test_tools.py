@@ -3439,7 +3439,8 @@ class TestLayoutPackTool:
         assert result["message"].startswith("Nothing to lay out")
         params = mock_conn.send_command.call_args[0][1]
         assert params["paper"] == "A3"
-        assert params["scale"] == 100
+        # No scale: the plugin fits the plan.
+        assert "scale" not in params
         assert "views" not in params
 
     @patch("rhinomcp.tools.layout_pack.get_rhino_connection")

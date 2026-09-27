@@ -15,7 +15,7 @@ def layout_pack(
     ctx: Context,
     paper: str = "A3",
     views: Optional[List[str]] = None,
-    scale: int = 100,
+    scale: Optional[int] = None,
     replace: bool = True,
     include_existing: bool = True,
 ) -> Dict[str, Any]:
@@ -31,8 +31,9 @@ def layout_pack(
     - paper: A3 only (default A3)
     - views: Optional list of plan, north, east, south, west.
       Omit for plan plus four elevations.
-    - scale: Requested denominator, 100 means 1:100. Bumped if the drawing
-      does not fit the detail.
+    - scale: Requested denominator, 100 means 1:100. Rounded up to a
+      standard step if the drawing does not fit the detail. Omit to fit:
+      the plan takes the largest scale that fits (elevations 1:100).
     - replace: Replace existing Forsk layouts for these views (default true)
     - include_existing: Include X-EXIST in the greyscale drawing (default true)
 
@@ -46,7 +47,7 @@ def layout_pack(
             return {"success": False, "message": "views must be a list."}
         if views is not None and (len(views) == 0 or any(v not in _VIEWS for v in views)):
             return {"success": False, "message": _UNKNOWN_VIEW}
-        if isinstance(scale, bool) or not isinstance(scale, int) or scale < 1:
+        if scale is not None and (isinstance(scale, bool) or not isinstance(scale, int) or scale < 1):
             return {"success": False, "message": "Scale must be a positive number."}
         if not isinstance(replace, bool):
             return {"success": False, "message": "replace must be a boolean."}
@@ -56,12 +57,13 @@ def layout_pack(
         rhino = get_rhino_connection()
         params: Dict[str, Any] = {
             "paper": paper,
-            "scale": scale,
             "replace": replace,
             "include_existing": include_existing,
         }
         if views is not None:
             params["views"] = views
+        if scale is not None:
+            params["scale"] = scale
 
         result = rhino.send_command("layout_pack", params)
         message = result.get("message", "")

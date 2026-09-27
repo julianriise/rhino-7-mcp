@@ -659,7 +659,8 @@ def main() -> int:
             parked = send_command(sock, "get_object_info", {"id": pocket_id}).get("attributes") or {}
             print(f"    pocket hand {parked.get('forsk:hand')}")
 
-        packed = send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
+        # No scale: the sheet fits the plan (8 x 4 m lands well under 1:100).
+        packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True})
         print(f"    sheet {packed.get('message')}")
         page = (packed.get("pages") or [{}])[0]
         if page.get("north_arrow") is not True:
@@ -684,6 +685,7 @@ def main() -> int:
             failures.append(f"sheet dashed={sheet_dashed}")
 
         rows = plan_objects(sock)
+        plan_smoke.check_fit(page, "sheet", failures)
         plan_smoke.check_room_tags(
             rows, int(page.get("scale") or 0), page.get("room_tags"), failures
         )

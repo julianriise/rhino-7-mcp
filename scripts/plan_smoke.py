@@ -236,6 +236,23 @@ def check_symbols_on_wall(rows, scale, failures) -> None:
         print(f"    symbols on wall {len(boxes)}")
 
 
+FILL_MIN = 0.6
+
+
+def check_fit(page, label, failures) -> None:
+    """A fitted plan takes the largest standard scale that fits and fills
+    at least 60% of the detail on its tighter axis."""
+    need = float(page.get("fit_need") or 0)
+    scale = int(page.get("scale") or 0)
+    fill = float(page.get("fill") or 0)
+    want = round_scale_up(need)
+    print(f"    {label} plan fit 1:{scale} fill {fill:.2f}")
+    if page.get("fitted") is not True or scale != want or fill < FILL_MIN:
+        failures.append(
+            f"{label} plan fit 1:{scale} want 1:{want} need {need:.1f} fill {fill:.2f}"
+        )
+
+
 def check_room_count(page, expected, label, failures) -> None:
     """Every drawn room is tagged or too small for its tag; none is unbounded."""
     found = int(page.get("room_tags") or 0)
@@ -284,13 +301,30 @@ def _dxf_entities(path):
         yield current
 
 
+def _open_ring(points, tol: float = 0.01) -> list:
+    """Drop repeated vertices, including a closing copy of the first one.
+    The office DXF closes its rings that way; closing them again gave
+    create_object a zero-length segment and Rhino refused the polyline."""
+    ring = []
+    for point in points:
+        if ring and abs(point[0] - ring[-1][0]) <= tol and abs(point[1] - ring[-1][1]) <= tol:
+            continue
+        ring.append(point)
+    while len(ring) > 1 and abs(ring[0][0] - ring[-1][0]) <= tol and abs(ring[0][1] - ring[-1][1]) <= tol:
+        ring.pop()
+    return ring
+
+
 def dxf_rooms(path) -> list:
-    """Labelled inner wall-face rings of a thickness-wall DXF, as (label, ring)."""
+    """Labelled inner wall-face rings of a thickness-wall DXF, as (label, ring).
+    Rings are open: no vertex repeats, the caller closes them."""
     rings, labels = [], []
     for ent in _dxf_entities(path):
         layer = ent["layer"].lower()
         if layer == "wall" and ent["type"] == "LWPOLYLINE" and len(ent["points"]) >= 3:
-            rings.append([tuple(p) for p in ent["points"]])
+            ring = _open_ring([tuple(p) for p in ent["points"]])
+            if len(ring) >= 3:
+                rings.append(ring)
         elif layer == "label" and ent["type"] in ("TEXT", "MTEXT") and ent["points"]:
             labels.append((ent["text"], tuple(ent["points"][0])))
     rooms = []
