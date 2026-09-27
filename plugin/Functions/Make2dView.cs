@@ -1111,6 +1111,8 @@ public partial class RhinoMCPFunctions
         public int SymbolDashed;
         public int RoofOutline;
         public int RoomTags;
+        public int RoomsUnbounded;
+        public int RoomsUnfit;
         public string SymbolNote;
         public string RoomText;
     }
@@ -1339,6 +1341,8 @@ public partial class RhinoMCPFunctions
                     result.SymbolDashed = planStats.Dashed;
                     result.RoofOutline = planStats.Roof;
                     result.RoomTags = planStats.Rooms;
+                    result.RoomsUnbounded = planStats.RoomsUnbounded;
+                    result.RoomsUnfit = planStats.RoomsUnfit;
                     result.SymbolNote = planStats.Note;
                     result.RoomText = planStats.RoomText;
                 }

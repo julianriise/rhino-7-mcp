@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 FACE_PARTS = {"sill", "frame", "jamb"}
 
 
@@ -56,9 +58,19 @@ def _inside(point, ring, tol: float = 2.0) -> bool:
 
 
 PAPER_TEXT_MM = 2.5
+BOUNDED_MIN = 0.9  # PlanSymbols.RoomBoundedMin
 # Glyph extents run from the comma descender to the top of "m²", so the
 # bbox short side is taller than the cap height (303 for 250 at 1:100).
 GLYPH_BOX = (0.9, 1.5)
+
+
+def round_scale_up(need: float) -> int:
+    """Standard denominator at or above need: step 5 to 50, 10 to 100,
+    25 to 500, then 50. Mirrors OpeningTypes.RoundScaleUp."""
+    if not need or need <= 0:
+        return 0
+    step = 5 if need <= 50 else 10 if need <= 100 else 25 if need <= 500 else 50
+    return int(math.ceil(need / step - 1e-9) * step)
 
 
 def _number(attr, key):
@@ -114,6 +126,13 @@ def check_room_tags(rows, scale, expected, failures) -> None:
         if not low * height <= short <= high * height:
             failures.append(f"room tag bbox {short:.0f} for height {height:.0f}")
             bad += 1
+        bounded = _number(attr, "forsk:bounded")
+        if bounded is None or bounded < BOUNDED_MIN:
+            failures.append(f"room tag bounded by walls {bounded} < {BOUNDED_MIN}")
+            bad += 1
+        if attr.get("forsk:footprint") not in ("floor", "walls"):
+            failures.append(f"room tag footprint {attr.get('forsk:footprint')!r}")
+            bad += 1
         ring = _pairs(attr.get("forsk:room"))
         corners = (
             (box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])
@@ -166,3 +185,120 @@ def check_symbol_faces(rows, failures) -> None:
             bad += 1
     if bad == 0:
         print(f"    symbols on faces {len(groups)}")
+
+
+def check_symbols_on_wall(rows, scale, failures) -> None:
+    """Every symbol of an opening stays within its host wall's length.
+    The run (wall start and end) rides on that opening's sill, frame, or
+    jamb lines. Ribbons are 0.13 mm x scale wide, so allow half of that."""
+    runs, boxes = {}, {}
+    for obj in rows:
+        attr = obj.get("attributes") or {}
+        if str(attr.get("forsk:role") or "") != "symbol":
+            continue
+        marker = str(attr.get("forsk:marker_id") or "")
+        run = _pairs(attr.get("forsk:run"))
+        if marker and len(run) == 2:
+            runs[marker] = run
+        box = _box(obj)
+        if marker and box:
+            boxes.setdefault(marker, []).append(box)
+    if not boxes:
+        failures.append("symbols on wall missing")
+        return
+    tol = 1.0 + 0.13 * float(scale or 0) / 2.0
+    bad = 0
+    for marker, items in boxes.items():
+        run = runs.get(marker)
+        if not run:
+            failures.append(f"symbol {marker[:8]} has no wall run")
+            bad += 1
+            continue
+        a, b = run
+        length = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+        if length < 1:
+            failures.append(f"symbol {marker[:8]} wall run collapsed")
+            bad += 1
+            continue
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        projs = [
+            (x - a[0]) * ux + (y - a[1]) * uy
+            for x0, y0, x1, y1 in items
+            for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+        ]
+        lo, hi = min(projs), max(projs)
+        if lo < -tol or hi > length + tol:
+            failures.append(
+                f"symbol {marker[:8]} spans {lo:.0f}..{hi:.0f} past wall 0..{length:.0f}"
+            )
+            bad += 1
+    if bad == 0:
+        print(f"    symbols on wall {len(boxes)}")
+
+
+def check_room_count(page, expected, label, failures) -> None:
+    """Every drawn room is tagged or too small for its tag; none is unbounded."""
+    found = int(page.get("room_tags") or 0)
+    unfit = int(page.get("rooms_unfit") or 0)
+    unbounded = int(page.get("rooms_unbounded") or 0)
+    print(f"    {label} room tags {found}/{expected} too small {unfit} unbounded {unbounded}")
+    if found < 1 or found + unfit != expected or unbounded:
+        failures.append(
+            f"{label} room tags {found}/{expected} too small {unfit} unbounded {unbounded}"
+        )
+
+
+def _dxf_pairs(path):
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for i in range(0, len(lines) - 1, 2):
+        yield lines[i].strip(), lines[i + 1].strip()
+
+
+def _dxf_entities(path):
+    """(type, layer, points, text) per ENTITIES entry. Stdlib only."""
+    section = None
+    current = None
+    previous = None
+    for code, value in _dxf_pairs(path):
+        if code == "2" and previous == ("0", "SECTION"):
+            section = value
+        previous = (code, value)
+        if section != "ENTITIES":
+            continue
+        if code == "0":
+            if current:
+                yield current
+            current = {"type": value, "layer": "", "points": [], "text": ""}
+            continue
+        if current is None:
+            continue
+        if code == "8":
+            current["layer"] = value
+        elif code == "1":
+            current["text"] = value
+        elif code == "10":
+            current["points"].append([float(value), 0.0])
+        elif code == "20" and current["points"]:
+            current["points"][-1][1] = float(value)
+    if current:
+        yield current
+
+
+def dxf_rooms(path) -> list:
+    """Labelled inner wall-face rings of a thickness-wall DXF, as (label, ring)."""
+    rings, labels = [], []
+    for ent in _dxf_entities(path):
+        layer = ent["layer"].lower()
+        if layer == "wall" and ent["type"] == "LWPOLYLINE" and len(ent["points"]) >= 3:
+            rings.append([tuple(p) for p in ent["points"]])
+        elif layer == "label" and ent["type"] in ("TEXT", "MTEXT") and ent["points"]:
+            labels.append((ent["text"], tuple(ent["points"][0])))
+    rooms = []
+    for ring in rings:
+        # The outer outline holds every other ring. Rooms hold none.
+        if any(other is not ring and _inside(other[0], ring, 0.0) for other in rings):
+            continue
+        names = [text for text, point in labels if _inside(point, ring, 0.0)]
+        if names:
+            rooms.append((names[0], ring))
+    return rooms

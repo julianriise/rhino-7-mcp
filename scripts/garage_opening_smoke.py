@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Short F2 smoke for a blank millimetre file: one 6×4 m garage, two windows.
+"""Short F2 smoke for a blank millimetre file: one 8×4 m garage, two windows.
 
 Refuses a document that already has a plan. Does not save.
 The plan check is one sheet with a hinged door, a flipped hinged door,
@@ -318,18 +318,18 @@ def main() -> int:
         if count > 40:
             raise SmokeError("document is not a blank garage sheet")
 
-        print("==> 6×4 m wall band and one window")
+        print("==> 8×4 m wall band and one window")
         layer(sock, "wall")
         # A single filled rectangle is a room, not a wall. The band is 200 mm.
         send_command(sock, "create_object", {
             "type": "POLYLINE",
             "name": "garage-wall",
-            "params": {"points": [[0, 0, 0], [6000, 0, 0], [6000, 4000, 0], [0, 4000, 0], [0, 0, 0]]},
+            "params": {"points": [[0, 0, 0], [8000, 0, 0], [8000, 4000, 0], [0, 4000, 0], [0, 0, 0]]},
         })
         send_command(sock, "create_object", {
             "type": "POLYLINE",
             "name": "garage-wall-inner",
-            "params": {"points": [[200, 200, 0], [5800, 200, 0], [5800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
+            "params": {"points": [[200, 200, 0], [7800, 200, 0], [7800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
         })
         walls = send_command(sock, "walls_from_layer", {})
         print(f"    {walls.get('message')}")
@@ -593,7 +593,7 @@ def main() -> int:
         send_command(sock, "create_object", {
             "type": "POLYLINE",
             "name": "garage-room",
-            "params": {"points": [[200, 200, 0], [5800, 200, 0], [5800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
+            "params": {"points": [[200, 200, 0], [7800, 200, 0], [7800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
         })
         rooms = send_command(sock, "rooms_from_layer", {})
         print(f"    {rooms.get('message')} count={rooms.get('count')}")
@@ -604,7 +604,7 @@ def main() -> int:
         high = send_command(sock, "add_opening", {
             "opening_kind": "window",
             "host_id": host_id,
-            "t": 0.72,
+            "t": 0.60,
             "width": 1200,
             "sill": 1300,
             "head": 2100,
@@ -648,11 +648,16 @@ def main() -> int:
             print(f"    {label} type {typed.get('message')}")
             return mid
 
-        # One 6000 mm wall already holds the door at t=0.15 and the window at
-        # t=0.72. These centers sit a cutter-pad apart from both: 2000, 3100, 5500.
-        flip_id = add_typed("flip", 0.333, {"swing": "flip"})
-        sliding_id = add_typed("sliding", 0.517, {"type": "door.sliding"})
-        pocket_id = add_typed("pocket", 0.917, {"type": "door.pocket"})
+        # The 8000 mm wall holds the door at t=0.15 (750..1650) and the window
+        # at t=0.60 (4200..5400). Flip 1850..2750, sliding 2950..3850. The
+        # pocket sits at the east end, clear of the cross wall, and parks west
+        # into 5400..6830 because the east side has no room for it.
+        flip_id = add_typed("flip", 0.2875, {"swing": "flip"})
+        sliding_id = add_typed("sliding", 0.425, {"type": "door.sliding"})
+        pocket_id = add_typed("pocket", 0.91, {"type": "door.pocket"})
+        if pocket_id:
+            parked = send_command(sock, "get_object_info", {"id": pocket_id}).get("attributes") or {}
+            print(f"    pocket hand {parked.get('forsk:hand')}")
 
         packed = send_command(sock, "layout_pack", {"views": ["plan"], "scale": 100, "replace": True})
         print(f"    sheet {packed.get('message')}")
@@ -683,6 +688,7 @@ def main() -> int:
             rows, int(page.get("scale") or 0), page.get("room_tags"), failures
         )
         plan_smoke.check_symbol_faces(rows, failures)
+        plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),
             "flip": symbol_attrs(rows, flip_id),

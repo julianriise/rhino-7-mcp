@@ -344,6 +344,7 @@ public partial class RhinoMCPFunctions
             var before = ReadOpeningStyle(marker, rec.Kind);
             if (!OpeningTypes.TryApply(before, typeRaw, handRaw, swingRaw, out var edit, out var error))
                 throw new ArgumentException(error);
+            ParkPocket(doc, rec.MarkerId, edit, string.IsNullOrWhiteSpace(handRaw));
             var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
             var label = host.Attributes?.GetUserString("forsk:id");
             if (string.IsNullOrWhiteSpace(label)) label = host.Attributes?.Name;
@@ -1123,19 +1124,22 @@ public partial class RhinoMCPFunctions
         if (spec.T.HasValue) rawT = spec.T.Value;
         else if (spec.DistanceMm.HasValue) rawT = spec.DistanceMm.Value / chosen.Length;
         else rawT = 0.5;
-        var t = ClampT(chosen, spec.Width, rawT);
+        // An outer face run ends in the cross wall at each corner. A new
+        // opening stays clear of it, not only of the outer corner.
+        var t = OpeningTypes.ClampAlong(
+            chosen.Length, spec.Width, rawT, FacadeConst.EdgeMargin,
+            chosen.FromOuter ? chosen.Thickness : 0);
+        if (double.IsNaN(t))
+            throw new InvalidOperationException("Wall is too short for this opening.");
         return FootprintAtT(chosen, spec, t);
     }
 
     private static double ClampT(WallSegment seg, double width, double rawT)
     {
-        var minT = (FacadeConst.EdgeMargin + width * 0.5) / seg.Length;
-        var maxT = 1.0 - minT;
-        if (maxT < minT)
+        var t = OpeningTypes.ClampAlong(seg.Length, width, rawT, FacadeConst.EdgeMargin, 0);
+        if (double.IsNaN(t))
             throw new InvalidOperationException("Wall is too short for this opening.");
-        if (rawT < minT) return minT;
-        if (rawT > maxT) return maxT;
-        return rawT;
+        return t;
     }
 
     private static double ProjectT(WallSegment seg, Point3d pt)

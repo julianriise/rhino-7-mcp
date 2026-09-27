@@ -242,6 +242,89 @@ public class PlanSymbolTests
     }
 
     [Theory]
+    [InlineData(34.55, 35)]
+    [InlineData(4.2, 5)]
+    [InlineData(50, 50)]
+    [InlineData(50.01, 60)]
+    [InlineData(100, 100)]
+    [InlineData(100.01, 125)]
+    [InlineData(116.1, 125)]
+    [InlineData(137, 150)]
+    [InlineData(500, 500)]
+    [InlineData(500.01, 550)]
+    [InlineData(0, 0)]
+    public void RoundScaleUp_StandardSteps(double need, int scale)
+    {
+        Assert.Equal(scale, OpeningTypes.RoundScaleUp(need));
+    }
+
+    [Fact]
+    public void ClampAlong_KeepsClearOfCornerWall()
+    {
+        // 8 m outer face, 900 door: 50 mm margin inside the 200 mm cross wall.
+        Assert.Equal(7300.0 / 8000, OpeningTypes.ClampAlong(8000, 900, 0.99, 50, 200), 9);
+        Assert.Equal(7500.0 / 8000, OpeningTypes.ClampAlong(8000, 900, 0.99, 50, 0), 9);
+        Assert.Equal(0.5, OpeningTypes.ClampAlong(8000, 900, 0.5, 50, 200), 9);
+        Assert.True(double.IsNaN(OpeningTypes.ClampAlong(1000, 900, 0.5, 50, 200)));
+    }
+
+    [Fact]
+    public void Pocket_ParksWhereTheWallHasRoom()
+    {
+        var frame = Frame();
+        var reach = OpeningTypes.PocketReach(frame);
+        Assert.Equal(1350, reach, 6);
+        var marks = OpeningTypes.PlanSymbol(Read("door", "door.pocket", "L", null), "1:100", frame);
+        Assert.Equal(reach, marks.Max(m => Math.Max(Math.Abs(m.X0), Math.Abs(m.X1))), 6);
+
+        // L parks +X here. East end of the garage: 70 mm to the wall end.
+        Assert.True(OpeningTypes.PocketHand("L", 1, 1880, 70, reach, out var hand));
+        Assert.Equal("R", hand);
+        Assert.True(OpeningTypes.PocketHand("L", 1, 0, 5000, reach, out hand));
+        Assert.Equal("L", hand);
+        Assert.True(OpeningTypes.PocketHand("R", 1, 1400, 0, reach, out hand));
+        Assert.Equal("R", hand);
+        Assert.False(OpeningTypes.PocketHand("L", 1, 900, 900, reach, out _));
+    }
+
+    static OpeningTypes.PlanRegion Band()
+    {
+        // 8 x 4 m garage band, 200 mm walls: outer ring plus the room hole.
+        var band = new OpeningTypes.PlanRegion();
+        band.Xs.Add(new double[] { 0, 8000, 8000, 0 });
+        band.Ys.Add(new double[] { 0, 0, 4000, 4000 });
+        band.Xs.Add(new double[] { 200, 7800, 7800, 200 });
+        band.Ys.Add(new double[] { 200, 200, 3800, 3800 });
+        return band;
+    }
+
+    [Fact]
+    public void Room_BoundedByWalls()
+    {
+        var walls = new[] { Band() };
+        Assert.True(OpeningTypes.InRegions(100, 2000, walls));
+        Assert.False(OpeningTypes.InRegions(4000, 2000, walls));
+        Assert.False(OpeningTypes.InRegions(9000, 2000, walls));
+
+        var room = new[] { 200.0, 7800, 7800, 200 };
+        var roomY = new[] { 200.0, 200, 3800, 3800 };
+        Assert.Equal(1.0, OpeningTypes.BoundedFraction(room, roomY, walls, 50), 9);
+        // Clockwise input scores the same.
+        Assert.Equal(1.0, OpeningTypes.BoundedFraction(
+            room.Reverse().ToArray(), roomY.Reverse().ToArray(), walls, 50), 9);
+
+        // The old office fixture: a 4 x 5 m rectangle in open space.
+        var loose = new[] { 9500.0, 13500, 13500, 9500 };
+        var looseY = new[] { 1500.0, 1500, 6500, 6500 };
+        Assert.Equal(0.0, OpeningTypes.BoundedFraction(loose, looseY, walls, 50), 9);
+
+        // Half inside the room: two sides float, so it is not a room.
+        var half = new[] { 1000.0, 3000, 3000, 1000 };
+        var halfY = new[] { 200.0, 200, 2000, 2000 };
+        Assert.True(OpeningTypes.BoundedFraction(half, halfY, walls, 50) < 0.9);
+    }
+
+    [Theory]
     [InlineData(100, 250)]
     [InlineData(200, 500)]
     public void PlanText_PrintsAt2_5mm(int scale, double model)

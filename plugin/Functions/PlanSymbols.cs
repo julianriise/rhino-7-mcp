@@ -21,6 +21,8 @@ public partial class RhinoMCPFunctions
         public int Dashed;
         public int Roof;
         public int Rooms;
+        public int RoomsUnbounded;
+        public int RoomsUnfit;
         public int Skipped;
         public string Note;
         public string RoomText;
@@ -29,6 +31,10 @@ public partial class RhinoMCPFunctions
     private const double PlanCutMm = 0.50;
     private const double PlanBeyondMm = 0.18;
     private const double PlanThinMm = 0.13;
+    // Room tags: probe 50 mm past each room edge into the wall section,
+    // taken 50 mm under the wall top so door and window voids stay out.
+    private const double RoomProbeMm = 50;
+    private const double RoomBoundedMin = 0.9;
 
     /// <summary>
     /// Replace plan centre-lines with width ribbons, then add symbols, the
@@ -160,7 +166,14 @@ public partial class RhinoMCPFunctions
             var markerId = marker.Id.ToString();
             var faceHi = MapPlan(0, frame.HalfThick, plane, worldToHld, delta);
             var faceLo = MapPlan(0, -frame.HalfThick, plane, worldToHld, delta);
-            var faces = FaceStamp(faceHi, faceLo);
+            var faces = new SymbolStamp { Faces = FaceStamp(faceHi, faceLo) };
+            // The host wall's length along this opening's run, for the smoke.
+            if (TryWallRun(doc, marker, out _, out var runSeg, out _, out _, out _))
+            {
+                faces.Run = FaceStamp(
+                    ToDrawing(runSeg.Start, worldToHld, delta),
+                    ToDrawing(runSeg.End, worldToHld, delta));
+            }
             foreach (var mark in marks)
             {
                 Curve curve = null;
@@ -286,6 +299,108 @@ public partial class RhinoMCPFunctions
         return true;
     }
 
+    /// <summary>
+    /// A pocket door parks where its wall has room. With no hand given, a
+    /// pocket that would run past the wall end or into the next opening
+    /// parks the other way. With no room on either side the edit is refused.
+    /// </summary>
+    private void ParkPocket(RhinoDoc doc, Guid markerId, OpeningTypes.Edit edit, bool handFree)
+    {
+        var after = edit?.After;
+        if (after == null || !string.Equals(after.TypeId, "door.pocket", StringComparison.Ordinal))
+            return;
+        var marker = doc.Objects.FindId(markerId);
+        if (marker?.Attributes == null) return;
+        if (!TrySymbolFrame(doc, marker, out _, out var plane, out var frame)) return;
+        if (!TryWallRoom(doc, marker, plane, out var roomNeg, out var roomPos)) return;
+        var reach = OpeningTypes.PocketReach(frame);
+        if (!OpeningTypes.PocketHand(after.Hand, frame.XLeft, roomNeg, roomPos, reach, out var chosen))
+            throw new InvalidOperationException("No room in the wall for the pocket.");
+        if (string.Equals(chosen, after.Hand, StringComparison.OrdinalIgnoreCase)) return;
+        if (!handFree)
+            throw new InvalidOperationException("No room in the wall for the pocket on that side.");
+        after.Hand = chosen;
+        edit.HandChanged = !string.Equals(edit.Before?.Hand ?? "", chosen, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The wall run an opening sits on: its segment, the centre along it,
+    /// and the clear run [lo, hi] inside the cross walls of an outer face.
+    /// </summary>
+    private bool TryWallRun(
+        RhinoDoc doc, RhinoObject marker,
+        out List<WallSegment> segs, out WallSegment seg, out double at, out double lo, out double hi)
+    {
+        segs = null;
+        seg = null;
+        at = lo = hi = 0;
+        var hostRaw = marker?.Attributes?.GetUserString("forsk:host");
+        if (!Guid.TryParse(hostRaw, out var hostId)) return false;
+        var host = doc.Objects.FindId(hostId);
+        if (host == null) return false;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
+        segs = SegmentsFromPath(host.Attributes?.GetUserString("forsk:path"), tol);
+        var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+        if (!box.IsValid) return false;
+        var center = box.Center;
+        center.Z = 0;
+        if (!TryOffsetOnSegments(segs, center, out seg, out var t, out _) || seg == null)
+            return false;
+        at = t * seg.Length;
+        var reserve = seg.FromOuter ? seg.Thickness : 0;
+        lo = reserve;
+        hi = seg.Length - reserve;
+        return hi > lo;
+    }
+
+    private static bool SameRun(WallSegment a, WallSegment b)
+    {
+        return a != null && b != null
+            && a.Start.DistanceTo(b.Start) < 1.0 && a.End.DistanceTo(b.End) < 1.0;
+    }
+
+    /// <summary>
+    /// Clear wall on each side of the opening centre, in the symbol plane's
+    /// -X and +X: to the next opening on the same run, or to the run's end
+    /// (inside the cross wall when the run is an outer face).
+    /// </summary>
+    private bool TryWallRoom(RhinoDoc doc, RhinoObject marker, Plane plane, out double roomNeg, out double roomPos)
+    {
+        roomNeg = 0;
+        roomPos = 0;
+        if (!TryWallRun(doc, marker, out var segs, out var seg, out var at, out var lo, out var hi)) return false;
+        var hostRaw = marker.Attributes.GetUserString("forsk:host");
+        foreach (var other in EnumerateDocObjects(doc))
+        {
+            if (other?.Attributes == null || other.Id == marker.Id) continue;
+            if (!string.Equals(GetForskKind(other), "opening_marker", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.Equals(other.Attributes.GetUserString("forsk:host"), hostRaw, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var ob = other.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            if (!ob.IsValid) continue;
+            var oc = ob.Center;
+            oc.Z = 0;
+            if (!TryOffsetOnSegments(segs, oc, out var oseg, out _, out _) || !SameRun(oseg, seg))
+                continue;
+            double smin = double.PositiveInfinity, smax = double.NegativeInfinity;
+            foreach (var corner in ob.GetCorners())
+            {
+                var along = (new Point3d(corner.X, corner.Y, 0) - seg.Start) * seg.Tangent;
+                smin = Math.Min(smin, along);
+                smax = Math.Max(smax, along);
+            }
+            if (smax <= at) lo = Math.Max(lo, smax);
+            else if (smin >= at) hi = Math.Min(hi, smin);
+        }
+        var back = Math.Max(0, at - lo);
+        var ahead = Math.Max(0, hi - at);
+        var forward = plane.XAxis * seg.Tangent >= 0;
+        roomPos = forward ? ahead : back;
+        roomNeg = forward ? back : ahead;
+        return true;
+    }
+
     private static string FaceStamp(Point3d a, Point3d b)
     {
         return a.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
@@ -294,7 +409,14 @@ public partial class RhinoMCPFunctions
             + b.Y.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
-    private static void StampSymbolLine(ObjectAttributes attr, Curve curve, string part, string faces)
+    /// <summary>Wall faces and clear wall run at one opening, drawing coordinates.</summary>
+    private sealed class SymbolStamp
+    {
+        public string Faces;
+        public string Run;
+    }
+
+    private static void StampSymbolLine(ObjectAttributes attr, Curve curve, string part, SymbolStamp faces)
     {
         if (attr == null || curve == null) return;
         if (part != "sill" && part != "frame" && part != "jamb") return;
@@ -305,8 +427,10 @@ public partial class RhinoMCPFunctions
             + a.Y.ToString("0.###", CultureInfo.InvariantCulture) + ";"
             + b.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
             + b.Y.ToString("0.###", CultureInfo.InvariantCulture));
-        if (!string.IsNullOrEmpty(faces))
-            attr.SetUserString("forsk:faces", faces);
+        if (!string.IsNullOrEmpty(faces?.Faces))
+            attr.SetUserString("forsk:faces", faces.Faces);
+        if (!string.IsNullOrEmpty(faces?.Run))
+            attr.SetUserString("forsk:run", faces.Run);
     }
 
     private static Curve MarkCurve(OpeningTypes.PlanMark mark, Plane plane, Transform worldToHld, Vector3d delta)
@@ -412,10 +536,18 @@ public partial class RhinoMCPFunctions
         var texts = new List<string>();
         var height = OpeningTypes.PlanAnnotationHeight(scale);
         var rooms = new List<RhinoObject>();
+        var walls = new List<OpeningTypes.PlanRegion>();
+        var floors = new List<OpeningTypes.PlanRegion>();
+        var tol = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase))
+            var kind = GetForskKind(obj);
+            if (string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
                 rooms.Add(obj);
+            else if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
+                AddSectionRegion(obj, true, tol, walls);
+            else if (string.Equals(kind, "floor", StringComparison.OrdinalIgnoreCase))
+                AddSectionRegion(obj, false, tol, floors);
         }
         foreach (var obj in rooms)
         {
@@ -431,6 +563,20 @@ public partial class RhinoMCPFunctions
             }
             double ix, iy;
             if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy)) continue;
+            // A room is a drawn space bounded by walls, on the floor slab when
+            // there is one. A marker in open space gets no tag.
+            var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm);
+            var onFloor = floors.Count == 0 || OpeningTypes.InRegions(ix, iy, floors);
+            if (bounded < RoomBoundedMin || !onFloor)
+            {
+                stats.RoomsUnbounded++;
+                continue;
+            }
+            var stamps = new Dictionary<string, string>
+            {
+                ["forsk:bounded"] = bounded.ToString("0.00", CultureInfo.InvariantCulture),
+                ["forsk:footprint"] = floors.Count > 0 ? "floor" : "walls"
+            };
             var at = new Point3d(ix, iy, 0);
             var ring = new List<Point3d>();
             foreach (var point in worldRing)
@@ -442,20 +588,78 @@ public partial class RhinoMCPFunctions
             if (!string.IsNullOrEmpty(name))
             {
                 var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-                if (AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, ref box, ref index, ref count))
+                if (AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count))
                     added++;
             }
             var line = OpeningTypes.RoomTag(area.Value);
-            if (AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, ref box, ref index, ref count))
+            if (AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count))
             {
                 added++;
                 stats.Rooms++;
                 texts.Add(line);
             }
+            else
+            {
+                stats.RoomsUnfit++;
+            }
         }
         if (texts.Count > 0)
             stats.RoomText = string.Join(" | ", texts.ToArray());
         return added;
+    }
+
+    /// <summary>
+    /// Plan section of a wall (50 mm under its top) or a floor (mid-depth)
+    /// as one even-odd region.
+    /// </summary>
+    private static void AddSectionRegion(RhinoObject obj, bool nearTop, double tol, List<OpeningTypes.PlanRegion> regions)
+    {
+        if (!(obj?.Geometry is Brep brep)) return;
+        var bb = brep.GetBoundingBox(true);
+        if (!bb.IsValid || bb.Max.Z - bb.Min.Z < 1) return;
+        var z = nearTop
+            ? Math.Max(bb.Max.Z - RoomProbeMm, (bb.Min.Z + bb.Max.Z) / 2)
+            : (bb.Min.Z + bb.Max.Z) / 2;
+        Curve[] cuts;
+        Point3d[] points;
+        try
+        {
+            if (!Rhino.Geometry.Intersect.Intersection.BrepPlane(
+                    brep, new Plane(new Point3d(0, 0, z), Vector3d.ZAxis), tol, out cuts, out points))
+                return;
+        }
+        catch (Exception) { return; }
+        if (cuts == null || cuts.Length == 0) return;
+        var joined = Curve.JoinCurves(cuts, tol * 10) ?? cuts;
+        var region = new OpeningTypes.PlanRegion();
+        foreach (var curve in joined)
+        {
+            if (curve == null || !curve.IsClosed) continue;
+            var ring = new List<Point3d>();
+            Polyline poly;
+            if (curve.TryGetPolyline(out poly) && poly != null && poly.Count >= 4)
+            {
+                foreach (var point in poly) ring.Add(point);
+            }
+            else
+            {
+                var ts = curve.DivideByCount(Math.Min(Math.Max(curve.SpanCount * 4, 16), 256), true);
+                if (ts != null)
+                    foreach (var t in ts) ring.Add(curve.PointAt(t));
+            }
+            if (ring.Count < 3) continue;
+            var xs = new double[ring.Count];
+            var ys = new double[ring.Count];
+            for (var i = 0; i < ring.Count; i++)
+            {
+                xs[i] = ring[i].X;
+                ys[i] = ring[i].Y;
+            }
+            region.Xs.Add(xs);
+            region.Ys.Add(ys);
+        }
+        foreach (var curve in joined) curve?.Dispose();
+        if (region.Xs.Count > 0) regions.Add(region);
     }
 
     private static bool TryRoomPolygon(RhinoObject room, out List<Point3d> polygon)
@@ -549,6 +753,7 @@ public partial class RhinoMCPFunctions
         string role,
         string part,
         string room,
+        IDictionary<string, string> stamps,
         ref BoundingBox box,
         ref int index,
         ref int count)
@@ -560,6 +765,9 @@ public partial class RhinoMCPFunctions
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, null, null);
         attr.SetUserString("forsk:tag", part);
+        if (stamps != null)
+            foreach (var pair in stamps)
+                attr.SetUserString(pair.Key, pair.Value);
         if (!string.IsNullOrEmpty(room))
             attr.SetUserString("forsk:room", room);
         TextEntity entity = null;
@@ -770,7 +978,7 @@ public partial class RhinoMCPFunctions
         ref BoundingBox box,
         ref int index,
         ref int count,
-        string faces = null)
+        SymbolStamp faces = null)
     {
         if (curve == null || paperMm <= 0 || scale < 1) return 0;
         // A swing arc ribbon fills the sector. Draw the arc as a thin curve.
@@ -850,7 +1058,7 @@ public partial class RhinoMCPFunctions
         ref BoundingBox box,
         ref int index,
         ref int count,
-        string faces = null)
+        SymbolStamp faces = null)
     {
         var half = width * 0.5;
         if (half <= 0 || curve == null) return 0;
@@ -1049,7 +1257,7 @@ public partial class RhinoMCPFunctions
         ref BoundingBox box,
         ref int index,
         ref int count,
-        string faces = null)
+        SymbolStamp faces = null)
     {
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);

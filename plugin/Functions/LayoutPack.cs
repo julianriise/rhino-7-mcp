@@ -224,14 +224,19 @@ public partial class RhinoMCPFunctions
             if (plan)
                 clip = planClip;
             var strokeScale = 0;
+            double fitNeed = 0;
             if (plan)
                 strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH);
             var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
             if (plan)
             {
+                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
                 var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
                 if (fitted != strokeScale)
+                {
                     drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
+                    strokeScale = fitted;
+                }
             }
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
             {
@@ -243,7 +248,11 @@ public partial class RhinoMCPFunctions
             drawingNotes.Add(
                 spec.View + " " + drawn.Count.ToString(CultureInfo.InvariantCulture));
 
-            var scale = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
+            // Plan strokes and tags were drawn at strokeScale. The detail, the
+            // title block, and the view title use that same value.
+            var scale = plan
+                ? strokeScale
+                : FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH);
             applied.Add(scale);
 
             var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
@@ -300,7 +309,10 @@ public partial class RhinoMCPFunctions
                 pageRecord["symbol_arcs"] = drawn.SymbolArcs;
                 pageRecord["symbol_dashed"] = drawn.SymbolDashed;
                 pageRecord["roof_outline"] = drawn.RoofOutline;
+                pageRecord["fit_need"] = Math.Round(fitNeed, 2);
                 pageRecord["room_tags"] = drawn.RoomTags;
+                pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
+                pageRecord["rooms_unfit"] = drawn.RoomsUnfit;
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = true;
                 if (!string.IsNullOrEmpty(drawn.RoomText))
@@ -1221,18 +1233,20 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// 1:requested when the clay fits the detail. Otherwise double until it fits.
     /// </summary>
+    /// <summary>Scale denominator that fills 90% of the detail on the tighter side.</summary>
+    private static double LayoutFitNeed(Span span, double paperW, double paperH)
+    {
+        if (span.Width <= 0 || span.Height <= 0 || paperW <= 0 || paperH <= 0) return 0;
+        return Math.Max(span.Width / (paperW * 0.9), span.Height / (paperH * 0.9));
+    }
+
     private static int FitLayoutScale(int requested, Span span, double paperW, double paperH)
     {
         var scale = requested < 1 ? 100 : requested;
         if (span.Width <= 0 || span.Height <= 0 || paperW <= 0 || paperH <= 0)
             return scale;
-        var guard = 0;
-        while (guard++ < 8 &&
-               (span.Width / scale > paperW * 0.9 || span.Height / scale > paperH * 0.9))
-        {
-            scale *= 2;
-        }
-        return scale;
+        var need = LayoutFitNeed(span, paperW, paperH);
+        return need <= scale ? scale : OpeningTypes.RoundScaleUp(need);
     }
 
     private DetailViewObject AddClayDetail(

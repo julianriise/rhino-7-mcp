@@ -826,29 +826,23 @@ def main() -> int:
                 failures.append("roof missing after edits")
 
         print("==> plan symbols")
-        rooms = send_command(sock, "rooms_from_layer", {})
-        print(f"    rooms {rooms.get('count')}")
-        if (rooms.get("count") or 0) < 1 and baked and baked.get("wall_ids"):
-            wall = send_command(sock, "get_object_info", {"id": baked["wall_ids"][0]})
-            box = wall.get("bounding_box") or [[0, 0, 0], [10000, 10000, 0]]
-            x0 = float(box[0][0]) + 1500
-            y0 = float(box[0][1]) + 1500
-            layer_room = send_command(sock, "create_layer", {"name": "A-ROOM"})
-            print(f"    room layer {layer_room.get('name') or layer_room.get('message')}")
-            send_command(sock, "get_or_set_current_layer", {"name": "A-ROOM"})
+        # The DXF has no A-ROOM layer. Its wall layer holds the outer outline
+        # plus each room's inner wall-face ring; the labelled rings are the rooms.
+        room_rings = plan_smoke.dxf_rooms(office_dxf_path())
+        print(f"    dxf rooms {len(room_rings)}")
+        layer_room = send_command(sock, "create_layer", {"name": "A-ROOM"})
+        print(f"    room layer {layer_room.get('name') or layer_room.get('message')}")
+        send_command(sock, "get_or_set_current_layer", {"name": "A-ROOM"})
+        for number, (_name, ring) in enumerate(room_rings, 1):
             send_command(sock, "create_object", {
                 "type": "POLYLINE",
-                "name": "office-room",
-                "params": {"points": [
-                    [x0, y0, 0],
-                    [x0 + 4000, y0, 0],
-                    [x0 + 4000, y0 + 5000, 0],
-                    [x0, y0 + 5000, 0],
-                    [x0, y0, 0],
-                ]},
+                "name": f"office-room-{number:02d}",
+                "params": {"points": [[x, y, 0] for x, y in ring + ring[:1]]},
             })
-            rooms = send_command(sock, "rooms_from_layer", {})
-            print(f"    rooms after curve {rooms.get('count')} {rooms.get('message')}")
+        rooms = send_command(sock, "rooms_from_layer", {})
+        print(f"    rooms {rooms.get('count')} {rooms.get('message')}")
+        if (rooms.get("count") or 0) != len(room_rings):
+            failures.append(f"office rooms {rooms.get('count')} expected {len(room_rings)}")
         if (rooms.get("count") or 0) < 1:
             failures.append("office room tag has no room")
 
@@ -881,8 +875,13 @@ def main() -> int:
             print(f"    {label} {packed.get('message')}")
             pages = packed.get("pages") or []
             page = pages[0] if pages else {}
-            if page.get("scale") != 200 and scale == 100:
-                failures.append(f"{label} scale={page.get('scale')} expected 200")
+            if scale == 100:
+                # Does not fit at 1:100: the tightest fit, rounded up to a standard step.
+                need = float(page.get("fit_need") or 0)
+                want = plan_smoke.round_scale_up(need)
+                print(f"    {label} fit need {need:.1f} scale 1:{page.get('scale')} want 1:{want}")
+                if need <= 100 or page.get("scale") != want:
+                    failures.append(f"{label} scale={page.get('scale')} need={need} want {want}")
             if scale == 200 and page.get("scale") != 200:
                 failures.append(f"{label} scale={page.get('scale')}")
             if page.get("symbols") != openings:
@@ -920,7 +919,9 @@ def main() -> int:
             plan_smoke.check_room_tags(
                 rows, int(page.get("scale") or 0), page.get("room_tags"), failures
             )
+            plan_smoke.check_room_count(page, len(room_rings), label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
+            plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
             pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
             print(f"    {pdf.get('message')}")
             message = str(pdf.get("message") or "")

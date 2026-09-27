@@ -391,6 +391,19 @@ public static class OpeningTypes
     }
 
     /// <summary>
+    /// Smallest standard scale denominator at or above <paramref name="need"/>:
+    /// step 5 up to 50, 10 up to 100, 25 up to 500, then 50. 34.55 → 35,
+    /// 137 → 150. Rounding up keeps the drawing inside the detail.
+    /// </summary>
+    public static int RoundScaleUp(double need)
+    {
+        if (double.IsNaN(need) || double.IsInfinity(need) || need <= 0) return 0;
+        var step = need <= 50 ? 5.0 : need <= 100 ? 10.0 : need <= 500 ? 25.0 : 50.0;
+        // Float noise just above a step (125.0000000001) stays on it.
+        return (int)(Math.Ceiling(need / step - 1e-9) * step);
+    }
+
+    /// <summary>
     /// Printed height in paper mm of model text seen through a 1:scale
     /// detail. Layout-space annotation scaling draws the text at its own
     /// height on paper, so plan text needs it off.
@@ -492,6 +505,67 @@ public static class OpeningTypes
             }
         }
         return found;
+    }
+
+    /// <summary>Plan section of one solid: its rings, read even-odd.</summary>
+    public sealed class PlanRegion
+    {
+        public List<double[]> Xs = new List<double[]>();
+        public List<double[]> Ys = new List<double[]>();
+    }
+
+    /// <summary>True when (x, y) is inside any region (even-odd within each).</summary>
+    public static bool InRegions(double x, double y, IList<PlanRegion> regions)
+    {
+        if (regions == null) return false;
+        foreach (var region in regions)
+        {
+            if (region == null) continue;
+            var inside = false;
+            for (var i = 0; i < region.Xs.Count; i++)
+                if (PointInPolygon(x, y, region.Xs[i], region.Ys[i])) inside = !inside;
+            if (inside) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Share of probes just outside the room edges that land in a wall.
+    /// Probes sit at a quarter, half, and three quarters of each edge,
+    /// <paramref name="probe"/> mm outward. A drawn room scores 1; a
+    /// rectangle in open space scores 0.
+    /// </summary>
+    public static double BoundedFraction(double[] xs, double[] ys, IList<PlanRegion> walls, double probe)
+    {
+        var ring = CleanRing(xs, ys);
+        if (ring.Count < 3 || walls == null || walls.Count == 0 || probe <= 0) return 0;
+        double area2 = 0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            area2 += a[0] * b[1] - b[0] * a[1];
+        }
+        var sign = area2 >= 0 ? 1.0 : -1.0;
+        int hits = 0, total = 0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            var dx = b[0] - a[0];
+            var dy = b[1] - a[1];
+            var len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) continue;
+            // Outward normal of a counter-clockwise ring is (dy, -dx).
+            var nx = sign * dy / len;
+            var ny = -sign * dx / len;
+            foreach (var t in new[] { 0.25, 0.5, 0.75 })
+            {
+                total++;
+                if (InRegions(a[0] + dx * t + nx * probe, a[1] + dy * t + ny * probe, walls)) hits++;
+            }
+        }
+        return total == 0 ? 0 : (double)hits / total;
     }
 
     public static bool PointInPolygon(double px, double py, double[] xs, double[] ys)
@@ -667,13 +741,52 @@ public static class OpeningTypes
         marks.Add(Line(x1, y, back, y - arrow * 0.55, "arrow", false));
     }
 
+    /// <summary>How far the pocket cavity reaches from the opening centre.</summary>
+    public static double PocketReach(PlanFrame frame)
+    {
+        return frame == null ? 0 : frame.InnerHalf + 2.0 + LeafSpan(frame);
+    }
+
+    /// <summary>
+    /// Hand for a pocket door given clear wall on each side of the centre
+    /// (frame -X and +X). Keeps the hand when its side holds the pocket,
+    /// otherwise parks the other way. False when neither side has room.
+    /// </summary>
+    public static bool PocketHand(string hand, int xLeft, double roomNeg, double roomPos, double reach, out string chosen)
+    {
+        chosen = string.IsNullOrEmpty(hand) ? "L" : hand;
+        var sign = HandSign(chosen, xLeft);
+        var here = sign < 0 ? roomNeg : roomPos;
+        var there = sign < 0 ? roomPos : roomNeg;
+        if (here >= reach) return true;
+        if (there < reach) return false;
+        chosen = string.Equals(chosen, "R", StringComparison.OrdinalIgnoreCase) ? "L" : "R";
+        return true;
+    }
+
+    /// <summary>
+    /// Opening centre along a wall run, clamped so the opening stays
+    /// <paramref name="margin"/> clear of each end after <paramref name="reserve"/>
+    /// (the cross wall at a corner). Returns NaN when it cannot fit.
+    /// </summary>
+    public static double ClampAlong(double length, double width, double rawT, double margin, double reserve)
+    {
+        if (length <= 0) return double.NaN;
+        var minT = (reserve + margin + width * 0.5) / length;
+        var maxT = 1.0 - minT;
+        if (maxT < minT) return double.NaN;
+        if (rawT < minT) return minT;
+        if (rawT > maxT) return maxT;
+        return rawT;
+    }
+
     static void AddPocket(List<PlanMark> marks, PlanFrame frame, int parkSign)
     {
         if (parkSign == 0) return;
         // Leaf parked in the wall, pocket drawn as a cavity inside the faces.
         var span = LeafSpan(frame);
         var mouth = frame.InnerHalf;
-        var far = frame.InnerHalf + 2.0 + span;
+        var far = PocketReach(frame);
         var inset = Math.Min(12.0, frame.HalfThick * 0.18);
         if (inset < 1.0) inset = 1.0;
         var y = frame.HalfThick - inset;
