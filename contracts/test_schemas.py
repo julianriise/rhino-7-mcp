@@ -276,6 +276,10 @@ def test_new_commands():
             "name_prefixes": ["wall-", "floor-"],
         }),
         ("commands/clear_generated.json", {"kinds": ["drawing"]}),
+        ("commands/daylight_scene.json", {}),
+        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": []}),
+        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": [[600.0, 600.0, 8, 42, 82]]}),
+        ("commands/daylight_clear.json", {}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
             "view": "south",
@@ -615,6 +619,24 @@ def test_responses():
     if not validate("responses/clear_generated_result.json", clear_dry):
         all_passed = False
 
+    print("  daylight results:")
+    scene = {
+        "walls": [{"id": "w01", "thickness": 200, "rings": [[[0, 0], [8000, 0], [8000, 4000], [0, 4000]]]}],
+        "openings": [{"id": "window-01", "host_id": "w01", "kind": "window", "width": 1200, "center": [4800, 100]}],
+        "rooms": [{"id": "12345678-1234-1234-1234-123456789012", "name": "room-01",
+                   "ring": [[200, 200], [7800, 200], [7800, 3800], [200, 3800]], "z": 0}],
+        "selected_room_ids": [],
+        "warnings": [],
+    }
+    if not validate("responses/daylight_scene_result.json", scene):
+        all_passed = False
+    painted = {"id": "12345678-1234-1234-1234-123456789012", "cells": 144, "layer": "A-ANALYSE",
+               "deleted": 1, "message": "Painted 144 daylight cells on A-ANALYSE."}
+    if not validate("responses/daylight_paint_result.json", painted):
+        all_passed = False
+    if not validate("responses/daylight_clear_result.json", {"count": 1, "remaining": 0, "message": "Cleared 1"}):
+        all_passed = False
+
     print("  make2d_view_result:")
     guid = "12345678-1234-1234-1234-123456789012"
     make2d_result = {
@@ -803,6 +825,11 @@ def test_invalid_examples():
         ("commands/run_command.json", {"command": ""}, "run_command empty command"),
         # Unknown property on get_commands
         ("commands/get_commands.json", {"bogus": 1}, "get_commands unknown field"),
+        ("commands/daylight_scene.json", {"selected": True}, "daylight_scene unknown field"),
+        ("commands/daylight_paint.json", {"cell": 400, "z": 50}, "daylight_paint missing cells"),
+        ("commands/daylight_paint.json", {"cell": 0, "z": 50, "cells": []}, "daylight_paint zero cell"),
+        ("commands/daylight_paint.json", {"cell": 400, "z": 50, "cells": [[0, 0, 300, 0, 0]]}, "daylight_paint colour out of range"),
+        ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),
         # delete_object: unknown properties rejected

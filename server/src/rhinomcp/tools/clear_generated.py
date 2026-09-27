@@ -17,7 +17,8 @@ def clear_generated(
     name_prefixes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Delete Forsk-generated walls, floors, roofs, rooms, opening frames, and opening markers.
+    Delete Forsk-generated walls, floors, roofs, rooms, opening frames, opening markers,
+    and the daylight overlay on A-ANALYSE.
 
     Does not delete forsk:kind=drawing unless kinds explicitly includes drawing.
     Sheet curves stay across a 3D rebuild. Use clear_drawings for sheets.
@@ -30,7 +31,7 @@ def clear_generated(
     Prefer tagged clear for rebuilds.
 
     Parameters:
-    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room).
+    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room, analysis).
       Omit drawing. Pass drawing only when sheets should be deleted.
     - level: optional forsk:level filter
     - dry_run: list matching ids without deleting (default false)

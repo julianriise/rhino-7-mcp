@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_paint_result.json",
+  "title": "DaylightPaintResult",
+  "description": "The overlay mesh id (empty when no cells), cells painted, and old overlays deleted first.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "cells": { "type": "integer", "minimum": 0 },
+    "layer": { "type": "string", "const": "A-ANALYSE" },
+    "deleted": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["id", "cells", "layer", "deleted", "message"],
+  "additionalProperties": false
+}

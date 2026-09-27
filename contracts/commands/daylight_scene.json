@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_scene.json",
+  "title": "DaylightScene Command",
+  "description": "Read-only. Forsk-tagged walls (forsk:id, forsk:path rings, forsk:thickness), opening markers (host_id, kind, width, centre), and room markers in model mm, plus the ids of selected room markers. The Python MCP server turns this into a Planwire DaylightRequest (cm). Skips X-EXIST.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -16,7 +16,7 @@ public partial class RhinoMCPFunctions
         // and title-block objects. Layout pages are views, not objects.
         // An explicit kinds list that contains "drawing" or "layout" still deletes those objects.
         var kinds = parameters["kinds"]?.ToObject<List<string>>()
-            ?? new List<string> { "wall", "floor", "roof", "opening", "opening_marker", "room" };
+            ?? new List<string> { "wall", "floor", "roof", "opening", "opening_marker", "room", "analysis" };
         var kindSet = new HashSet<string>(
             kinds.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()),
             StringComparer.OrdinalIgnoreCase);

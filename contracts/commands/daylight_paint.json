@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_paint.json",
+  "title": "DaylightPaint Command",
+  "description": "Replace the daylight overlay: delete forsk:kind=analysis objects, then add one vertex-coloured mesh on A-ANALYSE with one square per cell. The layer is off in every layout detail and does not print. Sky-vis proxy, not lux.",
+  "type": "object",
+  "properties": {
+    "cell": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Cell size in mm (square side)."
+    },
+    "z": {
+      "type": "number",
+      "description": "Mesh height in mm, usually the floor plus 50."
+    },
+    "cells": {
+      "type": "array",
+      "description": "One [x, y, r, g, b] per usable cell: centre in mm, colour 0-255 from the Planwire ramp.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number" },
+          { "type": "number" },
+          { "type": "integer", "minimum": 0, "maximum": 255 },
+          { "type": "integer", "minimum": 0, "maximum": 255 },
+          { "type": "integer", "minimum": 0, "maximum": 255 }
+        ],
+        "minItems": 5,
+        "maxItems": 5
+      }
+    }
+  },
+  "required": ["cell", "z", "cells"],
+  "additionalProperties": false
+}

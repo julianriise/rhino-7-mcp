@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_scene_result.json",
+  "title": "DaylightSceneResult",
+  "description": "Tagged plan geometry for daylight, model mm. Rings are open (no repeated first point).",
+  "type": "object",
+  "$defs": {
+    "xy": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "ring": { "type": "array", "items": { "$ref": "#/$defs/xy" } }
+  },
+  "properties": {
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "thickness": { "type": "number" },
+          "rings": { "type": "array", "items": { "$ref": "#/$defs/ring" } }
+        },
+        "required": ["id", "thickness", "rings"],
+        "additionalProperties": false
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "host_id": { "type": "string" },
+          "kind": { "type": "string" },
+          "width": { "type": "number" },
+          "center": { "$ref": "#/$defs/xy" }
+        },
+        "required": ["id", "host_id", "kind", "width", "center"],
+        "additionalProperties": false
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "ring": { "$ref": "#/$defs/ring" },
+          "z": { "type": "number" }
+        },
+        "required": ["id", "ring", "z"],
+        "additionalProperties": false
+      }
+    },
+    "selected_room_ids": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["walls", "openings", "rooms", "selected_room_ids", "warnings"],
+  "additionalProperties": false
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_clear.json",
+  "title": "DaylightClear Command",
+  "description": "Delete the daylight overlay (forsk:kind=analysis on A-ANALYSE). Nothing else changes. clear_generated removes it too.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

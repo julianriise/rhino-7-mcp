@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "daylight_clear_result.json",
+  "title": "DaylightClearResult",
+  "description": "Overlays deleted, and overlays left after the clear (0 on success).",
+  "type": "object",
+  "properties": {
+    "count": { "type": "integer", "minimum": 0 },
+    "remaining": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["count", "remaining", "message"],
+  "additionalProperties": false
+}
