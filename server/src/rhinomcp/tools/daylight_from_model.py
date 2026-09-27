@@ -22,7 +22,7 @@ def daylight_from_model(
     markers (forsk:host_id, forsk:width, window or door), and room markers from
     rooms_from_layer. Runs the vendored Planwire tracer in this process and
     paints one welded, smoothly coloured mesh on A-ANALYSE, 50 mm above the
-    floor (deep blue = low, near-white = high, Planwire ramp), with no mesh
+    floor (dark blue = low, near-white = high, Forsk sky ramp), with no mesh
     wires. A rerun replaces it. It never prints; daylight_clear removes it.
 
     Scope: relative 0–1 sky visibility on a 2D grid. Not illuminance (lux),

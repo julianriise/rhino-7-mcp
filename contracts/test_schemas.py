@@ -636,9 +636,9 @@ def test_responses():
     }
     if not validate("responses/daylight_scene_result.json", scene):
         all_passed = False
-    painted = {"id": "12345678-1234-1234-1234-123456789012", "cells": 144, "vertices": 171,
+    painted = {"id": "12345678-1234-1234-1234-123456789012", "faces": 200, "vertices": 231,
                "welded": True, "wires": "off", "layer": "A-ANALYSE", "deleted": 1,
-               "bbox": [200, 200, 7800, 3800], "message": "Painted 144 daylight cells on A-ANALYSE."}
+               "bbox": [200, 200, 7800, 3800], "message": "Painted 200 daylight faces on A-ANALYSE."}
     if not validate("responses/daylight_paint_result.json", painted):
         all_passed = False
     if not validate("responses/daylight_clear_result.json", {"count": 1, "remaining": 0, "message": "Cleared 1"}):
@@ -835,7 +835,7 @@ def test_invalid_examples():
         ("commands/daylight_scene.json", {"selected": True}, "daylight_scene unknown field"),
         ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": []}, "daylight_paint missing faces"),
         ("commands/daylight_paint.json", {"z": 50, "vertices": [[0, 0]], "colors": [[300, 0, 0]], "faces": []}, "daylight_paint colour out of range"),
-        ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": [[0, 1, 2]]}, "daylight_paint triangle face"),
+        ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": [[0, 1, 2, 3, 4]]}, "daylight_paint pentagon face"),
         ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": [], "legend": {}}, "daylight_paint legend removed"),
         ("commands/capture_viewport.json", {"zoom_bbox": [0, 0, 1]}, "capture_viewport short zoom_bbox"),
         ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),

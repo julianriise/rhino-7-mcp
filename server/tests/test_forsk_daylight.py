@@ -9,6 +9,7 @@ import pytest
 
 import forsk_daylight as fd
 from daylight.elements import request_to_elements
+from daylight.geom import point_in_polygon, point_to_segment_dist
 from daylight.portals import build_daylight_scene
 from daylight.ramp import score_to_rgb
 
@@ -36,7 +37,7 @@ GARAGE = {
 # Garage smoke baseline: daylight_windows / daylight_cells.
 GARAGE_WINDOWS = 1
 GARAGE_CELLS = 144
-GARAGE_VERTICES = 171
+GARAGE_VERTICES = 231
 
 
 def two_rooms() -> dict:
@@ -165,41 +166,83 @@ def test_unknown_host_is_noted_and_skipped():
     assert "w99" in run.notes[0]
 
 
-def test_paint_params_are_one_welded_mesh_on_the_room_cells():
-    run = fd.run_scene(GARAGE)
+def mesh_area(params) -> float:
+    return sum(abs(fd._area2([tuple(params["vertices"][i]) for i in f])) / 2 for f in params["faces"])
+
+
+def l_shape() -> dict:
+    """An L room with a 200 mm wall stub poking into it and a notch: the cases a
+    grid-corner mesh cannot fill. One window on the south face."""
+    ring = [[200, 200], [6000, 200], [6000, 2000], [3100, 2000], [3100, 1400], [2900, 1400],
+            [2900, 2000], [2000, 2000], [2000, 4000], [200, 4000]]
+    return {
+        "walls": [{"id": "w01", "thickness": 200, "rings": [
+            [[0, 0], [6200, 0], [6200, 2200], [2200, 2200], [2200, 4200], [0, 4200]], ring,
+        ]}],
+        "openings": [{"id": "window-01", "host_id": "w01", "kind": "window", "width": 1200, "center": [3000, 100]}],
+        "rooms": [{"id": "r01", "ring": ring, "z": 0}],
+        "selected_room_ids": [],
+    }
+
+
+@pytest.mark.parametrize("scene", [GARAGE, l_shape(), two_rooms()], ids=["garage", "l-shape", "two-rooms"])
+def test_mesh_fills_each_room_to_the_inner_faces(scene):
+    run = fd.run_scene(scene)
     params = run.paint_params()
-    assert params["z"] == 50.0
-    assert len(params["faces"]) == GARAGE_CELLS
-    # 18 × 8 cells share 19 × 9 corners: no vertex is repeated.
-    assert len(params["vertices"]) == GARAGE_VERTICES == 19 * 9
+    rings = run.rings_mm()
+    assert mesh_area(params) == pytest.approx(sum(abs(fd._area2(r)) / 2 for r in rings), abs=1.0)
+    assert run.mesh_gap_mm(params) <= 1.0
+    for x, y in params["vertices"]:
+        inside = any(point_in_polygon(x, y, r) for r in rings)
+        on_face = any(point_to_segment_dist(x, y, *a, *b) <= 0.01 for r in rings for a, b in zip(r, r[1:] + r[:1]))
+        assert inside or on_face
+
+
+def test_mesh_is_welded_with_no_inner_open_edges():
+    run = fd.run_scene(l_shape())
+    params = run.paint_params()
     assert len({tuple(v) for v in params["vertices"]}) == len(params["vertices"])
     assert len(params["colors"]) == len(params["vertices"])
-    for x, y in params["vertices"]:
-        assert 200 <= x <= 7800 and 200 <= y <= 3800
+    assert all(len(f) in (3, 4) for f in params["faces"])
+    # Every open edge lies on a room face: nothing inside the room is left unshared.
+    assert run.mesh_gap_mm(params) < 0.02
 
 
-def test_vertex_colour_is_the_ramp_of_the_mean_of_its_cells():
+def test_garage_mesh_pins_the_smoke_vertex_count():
+    params = fd.run_scene(GARAGE).paint_params()
+    assert params["z"] == 50.0
+    # Lattice lines through cell centres, 20 × 10 pieces up to the faces.
+    assert len(params["faces"]) == 200
+    assert len(params["vertices"]) == GARAGE_VERTICES == 21 * 11
+
+
+def test_centre_vertex_takes_its_cell_score_and_edge_vertex_the_nearest():
     run = fd.run_scene(GARAGE)
     params = run.paint_params()
+    colour = {tuple(v): tuple(c) for v, c in zip(params["vertices"], params["colors"])}
     grid = run.grid
-    # A corner shared by four cells takes the mean of their four scores.
-    x, y = params["vertices"][len(params["vertices"]) // 2]
-    around = []
-    for row in range(grid.rows):
-        for col in range(grid.cols):
-            idx = row * grid.cols + col
-            cx, cy = grid.x_coords[col] * 10, grid.y_coords[row] * 10
-            if grid.usable_mask[idx] and abs(cx - x) == 200 and abs(cy - y) == 200:
-                around.append(float(run.scores[idx]))
-    assert len(around) == 4
-    colour = params["colors"][len(params["vertices"]) // 2]
-    assert tuple(colour) == score_to_rgb(sum(around) / 4)
+    row, col = grid.rows // 2, grid.cols // 2
+    x, y = grid.x_coords[col] * 10, grid.y_coords[row] * 10
+    assert colour[(round(x, 2), round(y, 2))] == fd.display_rgb(float(run.scores[row * grid.cols + col]))
+    # On the south face, straight below that centre: the nearest cell is the first usable row.
+    first = next(r for r in range(grid.rows) if grid.usable_mask[r * grid.cols + col])
+    assert colour[(round(x, 2), 200.0)] == fd.display_rgb(float(run.scores[first * grid.cols + col]))
 
 
-def test_colours_stay_on_the_planwire_ramp_without_renormalising():
+def test_sky_ramp_stops_and_clamp():
+    assert fd.RAMP == "sky"
+    assert fd.display_rgb(-1) == fd.display_rgb(0) == (0x0B, 0x25, 0x45)
+    assert fd.display_rgb(0.33) == (0x2F, 0x66, 0x90)
+    assert fd.display_rgb(0.66) == (0x8F, 0xBC, 0xE6)
+    assert fd.display_rgb(2) == fd.display_rgb(1) == (0xF2, 0xF8, 0xFD)
+
+
+def test_colours_stay_on_the_sky_ramp_and_scores_stay_planwire():
     run = fd.run_scene(GARAGE)
-    ramp = {score_to_rgb(i / 100000) for i in range(100001)}
+    ramp = {fd.display_rgb(i / 100000) for i in range(100001)}
     assert all(tuple(c) in ramp for c in run.paint_params()["colors"])
+    # Planwire's own ramp is untouched: the display ramp is Forsk's only.
+    assert score_to_rgb(0) == (8, 42, 82)
 
 
 def test_summary_carries_the_proxy_scope():

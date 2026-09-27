@@ -13,6 +13,8 @@ sys.path.insert(0, str(SCRIPTS))
 import daylight_smoke  # noqa: E402
 from tests.test_forsk_daylight import GARAGE, GARAGE_CELLS, GARAGE_VERTICES  # noqa: E402
 
+GARAGE_FACES = 200
+
 PNG = b"\x89PNG\r\n\x1a\n"
 
 
@@ -30,7 +32,7 @@ class FakeRhino:
             assert "legend" not in params
             deleted = len(self.rows)
             self.rows = [{"attributes": {"forsk:kind": "analysis", "forsk:role": "mesh"}}]
-            return {"id": "m", "cells": len(params["faces"]), "vertices": len(params["vertices"]),
+            return {"id": "m", "faces": len(params["faces"]), "vertices": len(params["vertices"]),
                     "welded": True, "wires": "off", "layer": "A-ANALYSE",
                     "deleted": deleted, "bbox": [200, 200, 7800, 3800]}
         if command == "get_objects":
@@ -55,8 +57,8 @@ def test_garage_step_prints_the_compare_lines(tmp_path, capsys):
     assert failures == []
     assert f"daylight spaces 1 windows 1 cells {GARAGE_CELLS} in " in out
     assert (
-        f"daylight mesh A-ANALYSE welded {GARAGE_VERTICES} vertices wires off overlays 1 "
-        f"painted {GARAGE_CELLS} scope sky-vis-proxy"
+        f"daylight mesh A-ANALYSE welded {GARAGE_VERTICES} vertices wires off gap 0 ramp sky overlays 1 "
+        f"painted {GARAGE_FACES} scope sky-vis-proxy"
     ) in out
     assert "legend" not in out
     assert f"daylight rerun overlays 1 deleted 1 cells {GARAGE_CELLS}" in out

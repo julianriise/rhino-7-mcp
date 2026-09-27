@@ -21,6 +21,14 @@ import forsk_daylight  # noqa: E402
 
 Send = Callable[[str, dict], dict]
 CAPTURE_MARGIN = 0.05
+# The mesh reaches the inner wall faces within this.
+GAP_MM = 1.0
+
+
+def on_ramp(colors: list) -> bool:
+    """Every vertex colour is a colour of Forsk's sky display ramp."""
+    ramp = {forsk_daylight.display_rgb(i / 100000) for i in range(100001)}
+    return all(tuple(c) in ramp for c in colors)
 
 
 def analysis_objects(send: Send) -> list[dict]:
@@ -72,10 +80,12 @@ def run_step(send: Send, png: str, spaces: int, failures: list, rerun: bool = Fa
         rows = analysis_objects(send)
         meshes = by_role(rows, "mesh")
         welded = "welded" if painted.get("welded") else "unwelded"
+        gap = round(run.mesh_gap_mm(params), 1)
+        ramp = forsk_daylight.RAMP if on_ramp(params["colors"]) else "off"
         print(
             f"    daylight mesh {painted.get('layer')} {welded} {painted.get('vertices')} vertices "
-            f"wires {painted.get('wires')} overlays {len(meshes)} painted {painted.get('cells')} "
-            f"scope {forsk_daylight.SCOPE}"
+            f"wires {painted.get('wires')} gap {gap:g} ramp {ramp} overlays {len(meshes)} "
+            f"painted {painted.get('faces')} scope {forsk_daylight.SCOPE}"
         )
         if len(rows) != len(meshes):
             failures.append(f"daylight overlay objects {len(rows)} expected {len(meshes)} mesh only")
@@ -85,15 +95,17 @@ def run_step(send: Send, png: str, spaces: int, failures: list, rerun: bool = Fa
             failures.append(f"daylight windows {run.windows} cells {run.cells}")
         if (
             len(meshes) != 1
-            or painted.get("cells") != run.cells
+            or painted.get("faces") != len(params["faces"])
             or not painted.get("welded")
             or painted.get("vertices") != len(params["vertices"])
             or painted.get("wires") != "off"
         ):
             failures.append(
-                f"daylight mesh overlays {len(meshes)} painted {painted.get('cells')} "
+                f"daylight mesh overlays {len(meshes)} painted {painted.get('faces')} "
                 f"{welded} {painted.get('vertices')} wires {painted.get('wires')}"
             )
+        if gap > GAP_MM or ramp != forsk_daylight.RAMP:
+            failures.append(f"daylight mesh gap {gap:g} ramp {ramp}")
         if rerun:
             again, _params, repainted, _ms = paint(send)
             rows = analysis_objects(send)

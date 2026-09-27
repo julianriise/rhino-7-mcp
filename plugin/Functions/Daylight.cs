@@ -12,7 +12,7 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// Daylight (F4) geometry I/O only. The sky-vis proxy runs in the Python MCP
 /// server: daylight_scene reads tagged walls, openings, and rooms in mm, and
-/// daylight_paint draws the scored cells as one coloured mesh on A-ANALYSE.
+/// daylight_paint draws the rooms as one coloured mesh on A-ANALYSE.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -151,7 +151,10 @@ public partial class RhinoMCPFunctions
             foreach (var token in faces)
             {
                 var f = (JArray)token;
-                mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>(), f[3].ToObject<int>());
+                if (f.Count == 3)
+                    mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>());
+                else
+                    mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>(), f[3].ToObject<int>());
             }
             mesh.Normals.ComputeNormals();
             vertexCount = mesh.Vertices.Count;
@@ -171,14 +174,14 @@ public partial class RhinoMCPFunctions
         return new JObject
         {
             ["id"] = id == Guid.Empty ? "" : id.ToString(),
-            ["cells"] = faces.Count,
+            ["faces"] = faces.Count,
             ["vertices"] = vertexCount,
             ["welded"] = welded,
             ["wires"] = wiresOff ? "off" : "on",
             ["layer"] = AnalysisLayerName,
             ["deleted"] = deleted,
             ["bbox"] = bbox,
-            ["message"] = $"Painted {faces.Count} daylight cells on {AnalysisLayerName}."
+            ["message"] = $"Painted {faces.Count} daylight faces on {AnalysisLayerName}."
         };
     }
 
