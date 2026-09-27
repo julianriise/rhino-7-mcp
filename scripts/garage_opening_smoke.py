@@ -679,7 +679,9 @@ def main() -> int:
             failures.append(f"sheet dashed={sheet_dashed}")
 
         rows = plan_objects(sock)
-        plan_smoke.check_room_tags(rows, int(page.get("scale") or 0), failures)
+        plan_smoke.check_room_tags(
+            rows, int(page.get("scale") or 0), page.get("room_tags"), failures
+        )
         plan_smoke.check_symbol_faces(rows, failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),

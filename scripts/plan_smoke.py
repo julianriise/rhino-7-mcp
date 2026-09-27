@@ -55,27 +55,54 @@ def _inside(point, ring, tol: float = 2.0) -> bool:
     return inside
 
 
-def check_room_tags(rows, scale, failures) -> None:
-    """Each room tag sits inside its room and is 2.5 mm times the plan scale."""
-    expect = 2.5 * float(scale)
+PAPER_TEXT_MM = 2.5
+# Glyph extents run from the comma descender to the top of "m²", so the
+# bbox short side is taller than the cap height (303 for 250 at 1:100).
+GLYPH_BOX = (0.9, 1.5)
+
+
+def _number(attr, key):
+    try:
+        return float(attr.get(key))
+    except (TypeError, ValueError):
+        return None
+
+
+def check_room_tags(rows, scale, expected, failures) -> None:
+    """Room tags as PlanSymbols.AddPlanText makes them: role room_tag, one
+    area line per room, model height 2.5 mm x scale, printed 2.5 mm, inside."""
+    expect = PAPER_TEXT_MM * float(scale)
     tags = [
         obj for obj in rows
         if str((obj.get("attributes") or {}).get("forsk:role") or "") == "room_tag"
     ]
+    areas = [
+        obj for obj in tags
+        if str((obj.get("attributes") or {}).get("forsk:tag") or "") == "area"
+    ]
     if expect <= 0 or not tags:
-        failures.append(f"room tags missing scale={scale}")
+        failures.append(f"room tags missing scale={scale} rows={len(rows)}")
+        return
+    if len(areas) != int(expected or 0):
+        failures.append(f"room tag areas {len(areas)} expected {expected}")
         return
     bad = 0
+    heights, papers = [], []
     for obj in tags:
         attr = obj.get("attributes") or {}
-        try:
-            height = float(attr.get("forsk:text_height"))
-        except (TypeError, ValueError):
-            failures.append("room tag height missing")
+        height = _number(attr, "forsk:text_height")
+        paper = _number(attr, "forsk:paper_height")
+        if height is None or paper is None:
+            failures.append(f"room tag height {height} paper {paper} missing")
             bad += 1
             continue
+        heights.append(height)
+        papers.append(paper)
         if abs(height - expect) > expect * 0.10:
-            failures.append(f"room tag height {height} expected {expect:.0f}")
+            failures.append(f"room tag height {height:.0f} expected {expect:.0f}")
+            bad += 1
+        if abs(paper - PAPER_TEXT_MM) > PAPER_TEXT_MM * 0.10:
+            failures.append(f"room tag paper {paper:g} mm expected {PAPER_TEXT_MM:g}")
             bad += 1
         box = _box(obj)
         if box is None:
@@ -83,18 +110,22 @@ def check_room_tags(rows, scale, failures) -> None:
             bad += 1
             continue
         short = min(box[2] - box[0], box[3] - box[1])
-        if abs(short - expect) > expect * 0.10:
-            failures.append(f"room tag bbox {short:.0f} expected {expect:.0f}")
+        low, high = GLYPH_BOX
+        if not low * height <= short <= high * height:
+            failures.append(f"room tag bbox {short:.0f} for height {height:.0f}")
             bad += 1
         ring = _pairs(attr.get("forsk:room"))
         corners = (
             (box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])
         )
         if len(ring) < 3 or any(not _inside(corner, ring) for corner in corners):
-            failures.append("room tag outside its room")
+            failures.append(f"room tag outside its room bbox {[round(v) for v in box]}")
             bad += 1
     if bad == 0:
-        print(f"    room tags {len(tags)} height {expect:.0f} inside")
+        print(
+            f"    room tags {len(areas)} height {max(heights):.0f} "
+            f"paper {max(papers):g} inside"
+        )
 
 
 def check_symbol_faces(rows, failures) -> None:

@@ -391,6 +391,17 @@ public static class OpeningTypes
     }
 
     /// <summary>
+    /// Printed height in paper mm of model text seen through a 1:scale
+    /// detail. Layout-space annotation scaling draws the text at its own
+    /// height on paper, so plan text needs it off.
+    /// </summary>
+    public static double PaperTextHeight(double modelHeight, int scale, bool layoutScaling)
+    {
+        if (scale < 1 || modelHeight <= 0) return 0;
+        return layoutScaling ? modelHeight : modelHeight / scale;
+    }
+
+    /// <summary>
     /// Move the opening onto the measured wall centreline. (dx, dy) is the
     /// thickness direction. (ax, ay) is a point on that centreline.
     /// </summary>

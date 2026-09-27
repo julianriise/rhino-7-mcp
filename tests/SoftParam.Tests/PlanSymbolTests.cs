@@ -241,6 +241,19 @@ public class PlanSymbolTests
         });
     }
 
+    [Theory]
+    [InlineData(100, 250)]
+    [InlineData(200, 500)]
+    public void PlanText_PrintsAt2_5mm(int scale, double model)
+    {
+        var height = OpeningTypes.PlanAnnotationHeight(scale);
+        Assert.Equal(model, height, 6);
+        Assert.Equal(2.5, OpeningTypes.PaperTextHeight(height, scale, false), 6);
+        // Layout-space scaling prints the model height on paper: the old bug.
+        Assert.Equal(model, OpeningTypes.PaperTextHeight(height, scale, true), 6);
+        Assert.Equal(0, OpeningTypes.PaperTextHeight(height, 0, false));
+    }
+
     [Fact]
     public void RoomTag_AndViewTitle()
     {

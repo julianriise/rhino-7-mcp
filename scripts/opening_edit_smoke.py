@@ -917,7 +917,9 @@ def main() -> int:
             ]
             if frames:
                 failures.append(f"{label} frame curves in the plan pack")
-            plan_smoke.check_room_tags(rows, int(page.get("scale") or 0), failures)
+            plan_smoke.check_room_tags(
+                rows, int(page.get("scale") or 0), page.get("room_tags"), failures
+            )
             plan_smoke.check_symbol_faces(rows, failures)
             pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
             print(f"    {pdf.get('message')}")

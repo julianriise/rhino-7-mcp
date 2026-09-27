@@ -442,11 +442,11 @@ public partial class RhinoMCPFunctions
             if (!string.IsNullOrEmpty(name))
             {
                 var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-                if (AddPlanText(doc, layer, name, nameAt, height, "room_tag", room, ref box, ref index, ref count))
+                if (AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, ref box, ref index, ref count))
                     added++;
             }
             var line = OpeningTypes.RoomTag(area.Value);
-            if (AddPlanText(doc, layer, line, origin, height, "room_tag", room, ref box, ref index, ref count))
+            if (AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, ref box, ref index, ref count))
             {
                 added++;
                 stats.Rooms++;
@@ -545,19 +545,21 @@ public partial class RhinoMCPFunctions
         Layer layer,
         string text,
         Point3d origin,
-        double height,
+        int scale,
         string role,
+        string part,
         string room,
         ref BoundingBox box,
         ref int index,
         ref int count)
     {
+        var height = OpeningTypes.PlanAnnotationHeight(scale);
         if (string.IsNullOrWhiteSpace(text) || height <= 0) return false;
         var plane = Plane.WorldXY;
         plane.Origin = origin;
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, null, null);
-        attr.SetUserString("forsk:text_height", height.ToString("0.###", CultureInfo.InvariantCulture));
+        attr.SetUserString("forsk:tag", part);
         if (!string.IsNullOrEmpty(room))
             attr.SetUserString("forsk:room", room);
         TextEntity entity = null;
@@ -581,6 +583,16 @@ public partial class RhinoMCPFunctions
         var written = doc.Objects.FindId(id);
         var textBox = written?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
         entity?.Dispose();
+        // Stamp what Rhino stored and what the detail will print, not the request.
+        if (written?.Geometry is TextEntity stored)
+        {
+            var dimScale = stored.DimensionScale > 0 ? stored.DimensionScale : 1.0;
+            var model = stored.TextHeight * dimScale;
+            var paper = OpeningTypes.PaperTextHeight(model, scale, doc.LayoutSpaceAnnotationScalingEnabled);
+            written.Attributes.SetUserString("forsk:text_height", model.ToString("0.###", CultureInfo.InvariantCulture));
+            written.Attributes.SetUserString("forsk:paper_height", paper.ToString("0.###", CultureInfo.InvariantCulture));
+            written.CommitChanges();
+        }
         if (textBox.IsValid)
         {
             var shortSide = Math.Min(textBox.Max.X - textBox.Min.X, textBox.Max.Y - textBox.Min.Y);
@@ -597,11 +609,15 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Model height is the paper cap height times the plan scale. Dimension
-    /// scale stays 1 so the document scale does not multiply it again.
+    /// Model height is the paper cap height times the plan scale, and the
+    /// detail's 1:scale shrinks it to 2.5 mm. Layout-space annotation scaling
+    /// would draw the text at its model height on paper (250 mm at 1:100),
+    /// so plan text turns it off. Dimension scale stays 1 in model space.
     /// </summary>
     private static TextEntity PlanAnnotation(RhinoDoc doc, string text, Plane plane, double height)
     {
+        if (doc.LayoutSpaceAnnotationScalingEnabled)
+            doc.LayoutSpaceAnnotationScalingEnabled = false;
         var name = "Forsk plan " + height.ToString("0", CultureInfo.InvariantCulture);
         var found = doc.DimStyles.FindName(name);
         if (found == null)
