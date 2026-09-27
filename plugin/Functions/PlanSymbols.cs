@@ -826,7 +826,22 @@ public partial class RhinoMCPFunctions
     {
         if (doc.LayoutSpaceAnnotationScalingEnabled)
             doc.LayoutSpaceAnnotationScalingEnabled = false;
-        var name = "Forsk plan " + height.ToString("0", CultureInfo.InvariantCulture);
+        var found = OneToOneTextStyle(doc, "Forsk plan " + height.ToString("0", CultureInfo.InvariantCulture), height);
+        if (found == null) return null;
+        var entity = TextEntity.Create(text, plane, found, false, 0, 0);
+        if (entity == null) return null;
+        entity.TextHorizontalAlignment = TextHorizontalAlignment.Center;
+        entity.TextVerticalAlignment = TextVerticalAlignment.Middle;
+        return entity;
+    }
+
+    /// <summary>
+    /// Text style of <paramref name="height"/> with dimension scale 1. With
+    /// layout-space scaling off, text on the document's own style takes its
+    /// model dimension scale (x100 in the mm templates), on a page too.
+    /// </summary>
+    private static DimensionStyle OneToOneTextStyle(RhinoDoc doc, string name, double height)
+    {
         var found = doc.DimStyles.FindName(name);
         if (found == null)
         {
@@ -838,20 +853,12 @@ public partial class RhinoMCPFunctions
             style.DimensionScaleValue = ScaleValue.OneToOne();
             var index = doc.DimStyles.Add(style, false);
             if (index < 0) return null;
-            found = doc.DimStyles.FindName(name);
-            if (found == null) return null;
+            return doc.DimStyles.FindName(name);
         }
-        else
-        {
-            found.TextHeight = height;
-            found.DimensionScaleValue = ScaleValue.OneToOne();
-            doc.DimStyles.Modify(found, found.Index, false);
-        }
-        var entity = TextEntity.Create(text, plane, found, false, 0, 0);
-        if (entity == null) return null;
-        entity.TextHorizontalAlignment = TextHorizontalAlignment.Center;
-        entity.TextVerticalAlignment = TextVerticalAlignment.Middle;
-        return entity;
+        found.TextHeight = height;
+        found.DimensionScaleValue = ScaleValue.OneToOne();
+        doc.DimStyles.Modify(found, found.Index, false);
+        return found;
     }
 
     private static bool RoomHolds(BoundingBox box, string room)

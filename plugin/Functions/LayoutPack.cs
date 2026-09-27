@@ -89,13 +89,12 @@ public partial class RhinoMCPFunctions
     private const double A3WidthMm = 420.0;
     private const double A3HeightMm = 297.0;
     private const double LayoutMarginMm = 10.0;
-    // Space under the detail. The fit scale is measured against the detail,
-    // so this stays at the old title block height plus its gap.
-    private const double FooterReserveMm = 52.0;
+    // Space under the detail: the footer band plus a 5 mm gap.
+    private const double FooterReserveMm = 23.0;
     // Footer band along the bottom margin: north arrow, scale bar, title block.
     private const double FooterBandMm = 18.0;
     private const double TitleBlockWidthMm = 280.0;
-    private const double NorthShaftMm = 10.0;
+    private const double NorthArrowMm = 12.0;
     private const double ScaleBarLeftMm = 26.0;
     private const double ScaleBarHeightMm = 2.0;
     private const double FooterTextMm = 2.5;
@@ -2332,12 +2331,21 @@ public partial class RhinoMCPFunctions
             using (var curve = PageRect(doc, x0, y0, x1, y1))
                 return Keep(ids, doc.Objects.AddCurve(curve, attr));
         }
-        Guid Text(string text, double x, double y, double height, TextJustification just, ObjectAttributes attr)
+        // Paper text: its own 1:1 style, never the document style or the plan scale.
+        Guid Text(string text, double x, double y, double height, TextHorizontalAlignment align, ObjectAttributes attr)
         {
+            var style = OneToOneTextStyle(
+                doc, "Forsk paper " + height.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, height));
+            if (style == null) return Guid.Empty;
             var plane = Plane.WorldXY;
             plane.Origin = new Point3d(MmToPage(doc, x), MmToPage(doc, y), 0);
-            return Keep(ids, doc.Objects.AddText(
-                text, plane, MmToPage(doc, height), "Arial", false, false, just, attr));
+            using (var entity = TextEntity.Create(text, plane, style, false, 0, 0))
+            {
+                if (entity == null) return Guid.Empty;
+                entity.TextHorizontalAlignment = align;
+                entity.TextVerticalAlignment = TextVerticalAlignment.Bottom;
+                return Keep(ids, doc.Objects.AddText(entity, attr));
+            }
         }
 
         // Title block: flush right, full band height, one cell per field.
@@ -2359,6 +2367,7 @@ public partial class RhinoMCPFunctions
             new KeyValuePair<string, string>("Address", meta["address"]?.ToString())
         });
         var widths = OpeningTypes.TitleCellWidths(cells, TitleBlockWidthMm);
+        var titleStart = ids.Count;
         var frameId = Rect(tx0, ty0, tx1, ty1, Attr("title_block"));
         var cellRows = new JArray();
         var cx = tx0;
@@ -2368,33 +2377,39 @@ public partial class RhinoMCPFunctions
                 Line(cx, ty0, cx, ty1, Attr("title_block"));
             var captionAttr = Attr("title_cell");
             captionAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
-            Text(cells[i].Key, cx + 2.0, ty1 - 2.0 - 1.8, 1.8, TextJustification.BottomLeft, captionAttr);
+            Text(cells[i].Key, cx + 2.0, ty1 - 2.0 - 1.8, 1.8, TextHorizontalAlignment.Left, captionAttr);
             var valueAttr = Attr("title_cell");
             valueAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
             var valueHeight = i == 0 ? 3.5 : FooterTextMm;
-            Text(cells[i].Value, cx + 2.0, ty0 + 4.0, valueHeight, TextJustification.BottomLeft, valueAttr);
+            Text(cells[i].Value, cx + 2.0, ty0 + 4.0, valueHeight, TextHorizontalAlignment.Left, valueAttr);
             cellRows.Add(new JObject { ["name"] = cells[i].Key.ToLowerInvariant(), ["text"] = cells[i].Value });
             cx += widths[i];
         }
         var titleBox = PaperBox(doc, new[] { frameId });
         titleBox["cells"] = cellRows;
+        var titleIds = new List<Guid>();
+        for (var i = titleStart; i < ids.Count; i++)
+            titleIds.Add(Guid.Parse(ids[i].ToString()));
+        // Frame, dividers, and every cell's text: all of it must stay in the band.
+        titleBox["all"] = PaperBox(doc, titleIds);
         footer["title_block"] = titleBox;
 
-        // North arrow: far left of the band, arrow plus letter centred on it.
+        // North arrow: far left of the band, arrow plus letter centred on it,
+        // NorthArrowMm tall in paper mm whatever the plan scale.
         if (northArrow)
         {
             const double head = 3.2;
-            const double letter = 3.2;
-            const double letterGap = 1.2;
+            const double letterGap = 1.0;
+            var shaft = NorthArrowMm - letterGap - FooterTextMm;
             var ax = LayoutMarginMm + head + 1.0;
-            var ay = bandMid - (NorthShaftMm + letterGap + letter) / 2.0;
-            var top = ay + NorthShaftMm;
+            var ay = bandMid - NorthArrowMm / 2.0;
+            var top = ay + shaft;
             var northIds = new List<Guid>
             {
                 Line(ax, ay, ax, top, Attr("north")),
                 Line(ax, top, ax - head, top - head, Attr("north")),
                 Line(ax, top, ax + head, top - head, Attr("north")),
-                Text("N", ax, top + letterGap, letter, TextJustification.BottomCenter, Attr("north"))
+                Text("N", ax, top + letterGap, FooterTextMm, TextHorizontalAlignment.Center, Attr("north"))
             };
             footer["north_arrow"] = PaperBox(doc, northIds);
         }
@@ -2419,9 +2434,9 @@ public partial class RhinoMCPFunctions
             }
             var labelIds = new List<Guid>(barIds)
             {
-                Text("0", ScaleBarLeftMm, by1 + 1.0, FooterTextMm, TextJustification.BottomCenter, Attr("scale_bar_label")),
+                Text("0", ScaleBarLeftMm, by1 + 1.0, FooterTextMm, TextHorizontalAlignment.Center, Attr("scale_bar_label")),
                 Text(OpeningTypes.ScaleBarLabel(meters), ScaleBarLeftMm + length, by1 + 1.0, FooterTextMm,
-                    TextJustification.BottomCenter, Attr("scale_bar_label"))
+                    TextHorizontalAlignment.Center, Attr("scale_bar_label"))
             };
             var bar = PaperBox(doc, barIds);
             bar["meters"] = meters;

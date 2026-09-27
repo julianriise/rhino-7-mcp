@@ -254,10 +254,14 @@ def check_fit(page, label, failures) -> None:
 
 
 TITLE_MAX_MM = 20.0
-BAR_LENGTHS_M = (1, 2, 5, 10, 20, 50, 100)
+BAR_LENGTHS_M = (1, 2, 3, 5, 10, 20, 30, 50, 100)
 BAR_MIN_MM, BAR_MAX_MM = 40.0, 80.0
 BAR_TOL_MM = 0.5
 BOX_SLACK_MM = 0.01  # layout_pack rounds its boxes to 0.01 mm
+# A3 sheet border (10 mm margin) and the footer band along its bottom edge.
+BORDER_X = (10.0, 410.0)
+BAND_Y = (10.0, 28.0)
+NORTH_MM = 12.0
 
 
 def _paper_box(item):
@@ -310,22 +314,44 @@ def check_footer(page, label, failures) -> None:
     if free != 0:
         failures.append(f"{label} free label {free}")
 
-    if str(page.get("view") or "") != "plan":
+    plan = str(page.get("view") or "") == "plan"
+    groups = {
+        "title": _paper_box(title.get("all") or {}),
+        "bar": _paper_box(bar.get("with_labels") or {}),
+    }
+    if plan:
+        groups["arrow"] = _paper_box(footer.get("north_arrow") or {})
+    missing = [name for name, box in groups.items() if box is None]
+    if missing:
+        failures.append(f"{label} footer boxes missing {missing}")
         return
-    arrow = _paper_box(footer.get("north_arrow") or {})
-    barbox = _paper_box(bar.get("with_labels") or {})
-    if arrow is None or barbox is None or tbox is None:
-        failures.append(f"{label} north arrow box {arrow} bar {barbox} title {tbox}")
+    lo_x, hi_x = BORDER_X[0] - BOX_SLACK_MM, BORDER_X[1] + BOX_SLACK_MM
+    lo_y, hi_y = BAND_Y[0] - BOX_SLACK_MM, BAND_Y[1] + BOX_SLACK_MM
+    out = [
+        f"{name} {[round(v, 1) for v in box]}"
+        for name, box in groups.items()
+        if not (lo_x <= box[0] and box[2] <= hi_x and lo_y <= box[1] and box[3] <= hi_y)
+    ]
+    if groups["bar"][2] >= groups["title"][0]:
+        out.append(f"bar x1 {groups['bar'][2]:.1f} >= title x0 {groups['title'][0]:.1f}")
+    if out:
+        failures.append(f"{label} footer outside band: " + "; ".join(out))
+    else:
+        print(f"    {label} footer inside sheet")
+
+    if not plan:
         return
+    arrow, barbox = groups["arrow"], groups["bar"]
+    tall = arrow[3] - arrow[1]
     left = arrow[2] < barbox[0]
-    outside = arrow[2] <= tbox[0] or arrow[0] >= tbox[2] or arrow[3] <= tbox[1] or arrow[1] >= tbox[3]
-    centred = abs((arrow[1] + arrow[3]) / 2 - (tbox[1] + tbox[3]) / 2) <= 0.5
-    if left and outside and centred:
+    sized = abs(tall - NORTH_MM) <= 0.5
+    centred = abs((arrow[1] + arrow[3]) / 2 - sum(BAND_Y) / 2) <= 0.5
+    if left and sized and centred:
         print(f"    {label} north arrow left")
     else:
         failures.append(
-            f"{label} north arrow {[round(v, 1) for v in arrow]} "
-            f"bar x0 {barbox[0]:.1f} title {[round(v, 1) for v in tbox]}"
+            f"{label} north arrow {[round(v, 1) for v in arrow]} h {tall:.1f} "
+            f"bar x0 {barbox[0]:.1f}"
         )
 
 

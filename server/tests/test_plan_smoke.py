@@ -37,7 +37,7 @@ def test_round_scale_up_matches_plugin_steps(need, scale):
     assert plan_smoke.round_scale_up(need) == scale
 
 
-def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.2, free=0):
+def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.4, free=0):
     """A page record shaped like layout_pack's, boxes in paper mm."""
     if cells is None:
         cells = [
@@ -50,8 +50,11 @@ def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.2, fre
         "scale": scale,
         "page_scale": scale,
         "footer": {
-            "title_block": {"x0": 130, "y0": 10, "x1": 410, "y1": 28, "w": 280, "h": 18, "cells": cells},
-            "north_arrow": {"x0": 10.8, "y0": 11.8, "x1": arrow_x1, "y1": 26.2},
+            "title_block": {
+                "x0": 130, "y0": 10, "x1": 410, "y1": 28, "w": 280, "h": 18, "cells": cells,
+                "all": {"x0": 130, "y0": 10, "x1": 410, "y1": 28},
+            },
+            "north_arrow": {"x0": 11.0, "y0": 13.0, "x1": arrow_x1, "y1": 25.0},
             "scale_bar": {
                 "x0": 26, "y0": 16.25, "x1": 26 + length, "y1": 18.25, "w": length, "h": 2,
                 "meters": meters,
@@ -71,6 +74,7 @@ def test_footer_passes_and_prints_the_smoke_lines(capsys):
     assert "sheet scale bar 2 m len 40.0 mm at 1:50" in out
     assert "sheet free label 0" in out
     assert "sheet north arrow left" in out
+    assert "sheet footer inside sheet" in out
 
 
 @pytest.mark.parametrize(
@@ -78,7 +82,7 @@ def test_footer_passes_and_prints_the_smoke_lines(capsys):
     [
         (_footer_page(meters=5, length=100.0), "scale bar 5 m"),
         (_footer_page(meters=2, length=45.0), "scale bar 2 m"),
-        (_footer_page(meters=3, length=60.0), "scale bar 3 m"),
+        (_footer_page(meters=4, length=60.0), "scale bar 4 m"),
         (_footer_page(cells=[{"name": "scale", "text": "1:50"}, {"name": "client", "text": "—"}]), "empty"),
         (_footer_page(cells=[{"name": "scale", "text": "1:100"}]), "title block scale"),
         (_footer_page(free=1), "free label 1"),
@@ -97,3 +101,38 @@ def test_footer_fails_a_tall_title_block():
     failures = []
     plan_smoke.check_footer(page, "sheet", failures)
     assert any("title block h 46.0" in item for item in failures)
+
+
+def test_footer_accepts_3_and_30_m_bars():
+    for scale, meters in ((55, 3), (60, 3), (525, 30), (600, 30)):
+        failures = []
+        page = _footer_page(scale=scale, meters=meters, length=round(meters * 1000 / scale, 2))
+        plan_smoke.check_footer(page, "sheet", failures)
+        assert failures == [], (scale, failures)
+
+
+def test_footer_fails_the_scaled_north_letter():
+    """The F5.0b run: "N" drawn at 100x its paper height."""
+    page = _footer_page()
+    page["footer"]["north_arrow"] = {"x0": -113.6, "y0": 11.8, "x1": 138.6, "y1": 343.0}
+    page["footer"]["scale_bar"]["with_labels"]["x0"] = -187.2
+    failures = []
+    plan_smoke.check_footer(page, "sheet", failures)
+    assert any("footer outside band" in item and "arrow" in item and "bar" in item for item in failures)
+    assert any("north arrow" in item and "h 331.2" in item for item in failures)
+
+
+def test_footer_fails_title_text_out_of_the_band():
+    page = _footer_page()
+    page["footer"]["title_block"]["all"]["y1"] = 300.0
+    failures = []
+    plan_smoke.check_footer(page, "sheet", failures)
+    assert any("footer outside band: title" in item for item in failures)
+
+
+def test_footer_fails_a_bar_running_into_the_title_block():
+    page = _footer_page()
+    page["footer"]["scale_bar"]["with_labels"]["x1"] = 135.0
+    failures = []
+    plan_smoke.check_footer(page, "sheet", failures)
+    assert any("bar x1 135.0 >= title x0 130.0" in item for item in failures)

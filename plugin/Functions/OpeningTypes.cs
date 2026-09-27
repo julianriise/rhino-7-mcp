@@ -403,7 +403,7 @@ public static class OpeningTypes
         return (int)(Math.Ceiling(need / step - 1e-9) * step);
     }
 
-    public static readonly int[] ScaleBarLengthsM = { 1, 2, 5, 10, 20, 50, 100 };
+    public static readonly int[] ScaleBarLengthsM = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
     public const double ScaleBarMinMm = 40.0;
     public const double ScaleBarMaxMm = 80.0;
 
@@ -416,8 +416,8 @@ public static class OpeningTypes
 
     /// <summary>
     /// Scale bar total length in metres: the listed length whose paper
-    /// length lies in 40..80 mm and is nearest 60 mm. When none fits (1:55,
-    /// 1:60, 1:550), the one nearest the band.
+    /// length lies in 40..80 mm and is nearest 60 mm. Every scale from 1:13
+    /// to 1:2500 has one; outside that, the one nearest the band.
     /// </summary>
     public static int ScaleBarMeters(int scale)
     {
@@ -441,7 +441,7 @@ public static class OpeningTypes
         return best;
     }
 
-    /// <summary>Segments of round length: 4 for 2 and 20 m (0.5, 5 m each), else 5.</summary>
+    /// <summary>Segments of round length: 4 for 2 and 20 m (0.5, 5 m each), else 5 (3 m: 0.6 m).</summary>
     public static int ScaleBarSegments(int meters)
     {
         return meters == 2 || meters == 20 ? 4 : 5;

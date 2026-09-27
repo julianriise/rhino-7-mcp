@@ -353,13 +353,18 @@ public class PlanSymbolTests
     [Theory]
     [InlineData(20, 1, 50.0)]
     [InlineData(30, 2, 66.667)]
-    [InlineData(50, 2, 40.0)]
+    [InlineData(50, 3, 60.0)]
+    [InlineData(55, 3, 54.5455)]
+    [InlineData(60, 3, 50.0)]
     [InlineData(75, 5, 66.667)]
     [InlineData(100, 5, 50.0)]
     [InlineData(125, 5, 40.0)]
     [InlineData(150, 10, 66.667)]
     [InlineData(200, 10, 50.0)]
-    [InlineData(500, 20, 40.0)]
+    [InlineData(500, 30, 60.0)]
+    [InlineData(525, 30, 57.143)]
+    [InlineData(550, 30, 54.5455)]
+    [InlineData(600, 30, 50.0)]
     [InlineData(1000, 50, 50.0)]
     [InlineData(2000, 100, 50.0)]
     public void ScaleBar_LengthIn40To80mm(int scale, int meters, double paper)
@@ -372,29 +377,32 @@ public class PlanSymbolTests
     }
 
     [Fact]
-    public void ScaleBar_EveryScaleThatCanFitDoes()
+    public void ScaleBar_EveryScaleFrom13To2500Fits()
     {
-        for (var scale = 1; scale <= 2500; scale++)
+        for (var scale = 13; scale <= 2500; scale++)
         {
-            var canFit = OpeningTypes.ScaleBarLengthsM.Any(m =>
+            var meters = OpeningTypes.ScaleBarMeters(scale);
+            var mm = OpeningTypes.ScaleBarPaperMm(meters, scale);
+            Assert.InRange(mm, 40.0, 80.0);
+            // No other listed length is nearer 60 mm inside the band.
+            foreach (var other in OpeningTypes.ScaleBarLengthsM)
             {
-                var mm = OpeningTypes.ScaleBarPaperMm(m, scale);
-                return mm >= 40.0 && mm <= 80.0;
-            });
-            var mm = OpeningTypes.ScaleBarPaperMm(OpeningTypes.ScaleBarMeters(scale), scale);
-            if (canFit) Assert.InRange(mm, 40.0, 80.0);
+                var alt = OpeningTypes.ScaleBarPaperMm(other, scale);
+                if (alt >= 40.0 && alt <= 80.0)
+                    Assert.True(Math.Abs(mm - 60.0) <= Math.Abs(alt - 60.0) + 1e-9, $"1:{scale} {meters} m vs {other} m");
+            }
         }
-        // 1:55 sits between 2 m (36 mm) and 5 m (91 mm): nearest the band.
-        Assert.Equal(2, OpeningTypes.ScaleBarMeters(55));
         Assert.Equal(0, OpeningTypes.ScaleBarMeters(0));
     }
 
     [Theory]
     [InlineData(1, 5)]
     [InlineData(2, 4)]
+    [InlineData(3, 5)]
     [InlineData(5, 5)]
     [InlineData(10, 5)]
     [InlineData(20, 4)]
+    [InlineData(30, 5)]
     [InlineData(50, 5)]
     [InlineData(100, 5)]
     public void ScaleBar_FourOrFiveRoundSegments(int meters, int segments)
