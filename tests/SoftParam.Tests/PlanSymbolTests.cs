@@ -177,6 +177,71 @@ public class PlanSymbolTests
     }
 
     [Fact]
+    public void AnnotationHeight_IsPaperTimesScale()
+    {
+        Assert.Equal(0, OpeningTypes.PlanAnnotationHeight(0));
+        Assert.Equal(250, OpeningTypes.PlanAnnotationHeight(100));
+        Assert.Equal(500, OpeningTypes.PlanAnnotationHeight(200));
+    }
+
+    [Fact]
+    public void WallCenter_MovesOffTheFaceOntoTheMeasuredAxis()
+    {
+        double x, y;
+        OpeningTypes.WallCenter(2600, 0, 1800, 100, 0, 1, out x, out y);
+        Assert.Equal(2600, x, 6);
+        Assert.Equal(100, y, 6);
+        OpeningTypes.WallCenter(x, y, 1800, 100, 0, 1, out var x2, out var y2);
+        Assert.Equal(y, y2, 6);
+        Assert.Equal(x, x2, 6);
+    }
+
+    [Fact]
+    public void InteriorPoint_UsesCentroid_OrAPointInsideAnL()
+    {
+        double x, y;
+        Assert.True(OpeningTypes.TryInteriorPoint(
+            new[] { 0d, 10, 10, 0 }, new[] { 0d, 0, 6, 6 }, out x, out y));
+        Assert.Equal(5, x, 6);
+        Assert.Equal(3, y, 6);
+
+        var ex = new[] { 0d, 6, 6, 2, 2, 0 };
+        var ey = new[] { 0d, 0, 2, 2, 6, 6 };
+        Assert.True(OpeningTypes.TryInteriorPoint(ex, ey, out x, out y));
+        Assert.True(OpeningTypes.PointInPolygon(x, y, ex, ey));
+        Assert.False(OpeningTypes.PointInPolygon(4, 4, ex, ey));
+    }
+
+    [Fact]
+    public void WindowSills_SpanTheVoid_AndDoorsSitOnTheFaces()
+    {
+        var frame = Frame();
+        frame.VoidHalf = 600;
+        frame.HalfThick = 100;
+        var window = OpeningTypes.PlanSymbol(Read("window", "window.fixed", null, null), "1:100", frame);
+        var sills = window.Where(m => m.Part == "sill").ToList();
+        Assert.Equal(2, sills.Count);
+        Assert.All(sills, m =>
+        {
+            Assert.Equal(-600, Math.Min(m.X0, m.X1), 6);
+            Assert.Equal(600, Math.Max(m.X0, m.X1), 6);
+            Assert.Equal(Math.Abs(m.Y0), frame.HalfThick, 6);
+        });
+
+        var door = new System.Collections.Generic.List<OpeningTypes.PlanMark>();
+        OpeningTypes.AddWallFrame(door, frame);
+        Assert.Equal(2, door.Count(m => m.Part == "frame"));
+        Assert.Equal(2, door.Count(m => m.Part == "jamb"));
+        Assert.All(door.Where(m => m.Part == "frame"), m => Assert.Equal(frame.HalfThick, Math.Abs(m.Y0), 6));
+        Assert.All(door.Where(m => m.Part == "jamb"), m =>
+        {
+            Assert.Equal(frame.VoidHalf, Math.Abs(m.X0), 6);
+            Assert.Equal(-frame.HalfThick, Math.Min(m.Y0, m.Y1), 6);
+            Assert.Equal(frame.HalfThick, Math.Max(m.Y0, m.Y1), 6);
+        });
+    }
+
+    [Fact]
     public void RoomTag_AndViewTitle()
     {
         Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12400000));

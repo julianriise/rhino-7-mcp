@@ -20,6 +20,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import plan_smoke
+
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "900"))
@@ -915,6 +917,8 @@ def main() -> int:
             ]
             if frames:
                 failures.append(f"{label} frame curves in the plan pack")
+            plan_smoke.check_room_tags(rows, int(page.get("scale") or 0), failures)
+            plan_smoke.check_symbol_faces(rows, failures)
             pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
             print(f"    {pdf.get('message')}")
             message = str(pdf.get("message") or "")

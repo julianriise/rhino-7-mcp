@@ -18,6 +18,8 @@ import os
 import socket
 import sys
 
+import plan_smoke
+
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "300"))
@@ -677,6 +679,8 @@ def main() -> int:
             failures.append(f"sheet dashed={sheet_dashed}")
 
         rows = plan_objects(sock)
+        plan_smoke.check_room_tags(rows, int(page.get("scale") or 0), failures)
+        plan_smoke.check_symbol_faces(rows, failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),
             "flip": symbol_attrs(rows, flip_id),

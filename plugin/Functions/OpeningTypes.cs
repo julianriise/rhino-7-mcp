@@ -375,11 +375,192 @@ public static class OpeningTypes
         public double OuterHalf;
         public double InnerHalf;
         public double HalfThick;
+        public double VoidHalf;
         public double Sill;
         public double Head;
         public double CutZ;
         public int YInward;
         public int XLeft;
+    }
+
+    /// <summary>Paper cap height 2.5 mm times the plan scale, in model mm.</summary>
+    public static double PlanAnnotationHeight(int scale)
+    {
+        if (scale < 1) return 0;
+        return 2.5 * scale;
+    }
+
+    /// <summary>
+    /// Move the opening onto the measured wall centreline. (dx, dy) is the
+    /// thickness direction. (ax, ay) is a point on that centreline.
+    /// </summary>
+    public static void WallCenter(
+        double ox, double oy, double ax, double ay, double dx, double dy,
+        out double x, out double y)
+    {
+        var len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1e-9)
+        {
+            x = ox;
+            y = oy;
+            return;
+        }
+        dx /= len;
+        dy /= len;
+        var shift = (ax - ox) * dx + (ay - oy) * dy;
+        x = ox + dx * shift;
+        y = oy + dy * shift;
+    }
+
+    /// <summary>
+    /// Centroid when it lies in the polygon, otherwise the inside sample
+    /// nearest the centroid.
+    /// </summary>
+    public static bool TryInteriorPoint(double[] xs, double[] ys, out double x, out double y)
+    {
+        x = 0;
+        y = 0;
+        var ring = CleanRing(xs, ys);
+        if (ring.Count < 3) return false;
+        double area2 = 0, cx = 0, cy = 0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            var cross = a[0] * b[1] - b[0] * a[1];
+            area2 += cross;
+            cx += (a[0] + b[0]) * cross;
+            cy += (a[1] + b[1]) * cross;
+        }
+        double gx, gy;
+        if (Math.Abs(area2) < 1e-6)
+        {
+            double sx = 0, sy = 0;
+            foreach (var p in ring) { sx += p[0]; sy += p[1]; }
+            gx = sx / ring.Count;
+            gy = sy / ring.Count;
+        }
+        else
+        {
+            gx = cx / (3.0 * area2);
+            gy = cy / (3.0 * area2);
+        }
+        if (PointInPolygon(gx, gy, ring))
+        {
+            x = gx;
+            y = gy;
+            return true;
+        }
+
+        double minX = ring[0][0], maxX = ring[0][0], minY = ring[0][1], maxY = ring[0][1];
+        foreach (var p in ring)
+        {
+            if (p[0] < minX) minX = p[0];
+            if (p[0] > maxX) maxX = p[0];
+            if (p[1] < minY) minY = p[1];
+            if (p[1] > maxY) maxY = p[1];
+        }
+        var bestD = double.MaxValue;
+        var found = false;
+        const int steps = 8;
+        for (var ix = 0; ix <= steps; ix++)
+        {
+            for (var iy = 0; iy <= steps; iy++)
+            {
+                var sx = minX + (maxX - minX) * ix / steps;
+                var sy = minY + (maxY - minY) * iy / steps;
+                if (!PointInPolygon(sx, sy, ring)) continue;
+                var d = (sx - gx) * (sx - gx) + (sy - gy) * (sy - gy);
+                if (d < bestD)
+                {
+                    bestD = d;
+                    x = sx;
+                    y = sy;
+                    found = true;
+                }
+            }
+        }
+        return found;
+    }
+
+    public static bool PointInPolygon(double px, double py, double[] xs, double[] ys)
+    {
+        return PointInPolygon(px, py, CleanRing(xs, ys));
+    }
+
+    static bool PointInPolygon(double px, double py, List<double[]> ring)
+    {
+        if (ring == null || ring.Count < 3) return false;
+        var inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+        {
+            var ax = ring[i][0];
+            var ay = ring[i][1];
+            var bx = ring[j][0];
+            var by = ring[j][1];
+            if (OnSegment(px, py, ax, ay, bx, by)) return true;
+            var crosses = (ay > py) != (by > py);
+            if (!crosses) continue;
+            var xhit = (bx - ax) * (py - ay) / (by - ay) + ax;
+            if (px < xhit) inside = !inside;
+        }
+        return inside;
+    }
+
+    static List<double[]> CleanRing(double[] xs, double[] ys)
+    {
+        var ring = new List<double[]>();
+        if (xs == null || ys == null) return ring;
+        var n = Math.Min(xs.Length, ys.Length);
+        for (var i = 0; i < n; i++)
+        {
+            if (ring.Count > 0 && Math.Abs(ring[ring.Count - 1][0] - xs[i]) <= 1e-6
+                && Math.Abs(ring[ring.Count - 1][1] - ys[i]) <= 1e-6)
+                continue;
+            ring.Add(new[] { xs[i], ys[i] });
+        }
+        if (ring.Count > 1
+            && Math.Abs(ring[0][0] - ring[ring.Count - 1][0]) <= 1e-6
+            && Math.Abs(ring[0][1] - ring[ring.Count - 1][1]) <= 1e-6)
+            ring.RemoveAt(ring.Count - 1);
+        return ring;
+    }
+
+    static bool OnSegment(double px, double py, double ax, double ay, double bx, double by)
+    {
+        var abx = bx - ax;
+        var aby = by - ay;
+        var apx = px - ax;
+        var apy = py - ay;
+        var cross = abx * apy - aby * apx;
+        if (Math.Abs(cross) > 1e-4) return false;
+        var dot = apx * abx + apy * aby;
+        if (dot < -1e-4) return false;
+        var len2 = abx * abx + aby * aby;
+        return dot <= len2 + 1e-4;
+    }
+
+    /// <summary>Face lines and jambs on the wall faces and the void edges.</summary>
+    public static void AddWallFrame(List<PlanMark> marks, PlanFrame frame)
+    {
+        if (marks == null || frame == null) return;
+        var x = frame.VoidHalf > 1 ? frame.VoidHalf : frame.InnerHalf;
+        var y = frame.HalfThick;
+        if (x < 1 || y <= 0) return;
+        marks.Add(Line(-x, y, x, y, "frame", false));
+        marks.Add(Line(-x, -y, x, -y, "frame", false));
+        marks.Add(Line(-x, -y, -x, y, "jamb", false));
+        marks.Add(Line(x, -y, x, y, "jamb", false));
+    }
+
+    public static void AddJambs(List<PlanMark> marks, PlanFrame frame)
+    {
+        if (marks == null || frame == null) return;
+        var x = frame.VoidHalf > 1 ? frame.VoidHalf : frame.InnerHalf;
+        var y = frame.HalfThick;
+        if (x < 1 || y <= 0) return;
+        marks.Add(Line(-x, -y, -x, y, "jamb", false));
+        marks.Add(Line(x, -y, x, y, "jamb", false));
     }
 
     public sealed class PlanMark
@@ -497,8 +678,9 @@ public static class OpeningTypes
 
     static void AddWindow(List<PlanMark> marks, PlanFrame frame, Record record, bool dashed)
     {
-        var x0 = -frame.InnerHalf;
-        var x1 = frame.InnerHalf;
+        var half = frame.VoidHalf > 1 ? frame.VoidHalf : frame.InnerHalf;
+        var x0 = -half;
+        var x1 = half;
         marks.Add(Line(x0, frame.HalfThick, x1, frame.HalfThick, "sill", dashed));
         marks.Add(Line(x0, -frame.HalfThick, x1, -frame.HalfThick, "sill", dashed));
         marks.Add(Line(x0, 0, x1, 0, "glass", dashed));

@@ -130,9 +130,10 @@ public partial class RhinoMCPFunctions
             List<OpeningTypes.PlanMark> marks = null;
             Plane plane = Plane.Unset;
             OpeningTypes.PlanFrame frame = null;
+            OpeningTypes.Record record = null;
             try
             {
-                if (!TrySymbolFrame(doc, marker, out var record, out plane, out frame))
+                if (!TrySymbolFrame(doc, marker, out record, out plane, out frame))
                 {
                     stats.Skipped++;
                     continue;
@@ -150,9 +151,16 @@ public partial class RhinoMCPFunctions
                 stats.Skipped++;
                 continue;
             }
+            if (string.Equals(record.Kind, "window", StringComparison.OrdinalIgnoreCase))
+                OpeningTypes.AddJambs(marks, frame);
+            else
+                OpeningTypes.AddWallFrame(marks, frame);
 
             var baked = 0;
             var markerId = marker.Id.ToString();
+            var faceHi = MapPlan(0, frame.HalfThick, plane, worldToHld, delta);
+            var faceLo = MapPlan(0, -frame.HalfThick, plane, worldToHld, delta);
+            var faces = FaceStamp(faceHi, faceLo);
             foreach (var mark in marks)
             {
                 Curve curve = null;
@@ -160,10 +168,11 @@ public partial class RhinoMCPFunctions
                 {
                     curve = MarkCurve(mark, plane, worldToHld, delta);
                     if (curve == null) continue;
+                    var onWall = mark.Part == "sill" || mark.Part == "frame" || mark.Part == "jamb";
                     var n = AddStroke(doc, layer, curve, PlanThinMm, scale, mark.Dashed, pattern, tol,
                         "symbol", mark.Part, markerId,
                         mark.Part == "leaf" || mark.Part == "arc" ? mark.Y1 * frame.YInward : (double?)null,
-                        ref box, ref index, ref count);
+                        ref box, ref index, ref count, onWall ? faces : null);
                     curve.Dispose();
                     curve = null;
                     baked += n;
@@ -208,19 +217,15 @@ public partial class RhinoMCPFunctions
         if (!Guid.TryParse(hostRaw, out var hostId)) return false;
         var host = doc.Objects.FindId(hostId);
         if (host == null) return false;
-        var thickness = ParseMm(host.Attributes?.GetUserString("forsk:thickness")) ?? 0;
-        if (thickness < 40) return false;
 
         var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
         if (!box.IsValid) return false;
-        var center = box.Center;
-        center.Z = 0;
+        var opening = box.Center;
+        opening.Z = 0;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
         var segs = SegmentsFromPath(host.Attributes?.GetUserString("forsk:path"), tol);
-        if (!TryOffsetOnSegments(segs, center, out var segment, out _, out _) || segment == null)
+        if (!TryOffsetOnSegments(segs, opening, out var segment, out _, out _) || segment == null)
             return false;
-        var on = new Line(segment.Start, segment.End).ClosestPoint(center, true);
-        center = new Point3d(on.X, on.Y, 0);
 
         var widthDir = segment.Tangent;
         widthDir.Z = 0;
@@ -228,11 +233,38 @@ public partial class RhinoMCPFunctions
         var inward = segment.Inward;
         inward.Z = 0;
         if (!inward.Unitize()) return false;
+
+        // The path segment is one face. The symbol spans the solid's real
+        // faces at this opening, not the frame depth and not a 200 mm default.
+        Brep measured = null;
+        var disposeMeasured = false;
+        if (host.Geometry is Brep solid)
+            measured = solid;
+        else if (host.Geometry is Extrusion extrusion)
+        {
+            measured = extrusion.ToBrep();
+            disposeMeasured = measured != null;
+        }
+        double thickness = 0;
+        Point3d axis = Point3d.Origin;
+        var measuredOk = false;
+        if (measured != null)
+        {
+            measuredOk = TryMeasureWallThickness(
+                measured, opening, widthDir, inward, sill, head, width, FacadeConst.Pad, tol,
+                out thickness, out axis);
+        }
+        if (disposeMeasured) measured?.Dispose();
+        if (!measuredOk || thickness < 40) return false;
+        double cx, cy;
+        OpeningTypes.WallCenter(
+            opening.X, opening.Y, axis.X, axis.Y, inward.X, inward.Y, out cx, out cy);
+        var center = new Point3d(cx, cy, 0);
         if (!TryOpeningPlane(center, widthDir, inward, out plane)) return false;
         OpeningFacing(plane, inward, out var yInward, out var xLeft);
 
         var outerHalf = width * 0.5 + FacadeConst.Pad - OpeningFrameInsetMm;
-        var halfThick = thickness * 0.5 - OpeningFrameInsetMm;
+        var halfThick = thickness * 0.5;
         var clear = head - sill - (2.0 * OpeningFrameInsetMm);
         if (clear < 80 || outerHalf < 30 || halfThick < 8) return false;
         var face = Math.Min(OpeningFrameFaceMm, Math.Min(outerHalf * 0.4, clear * 0.22));
@@ -245,12 +277,36 @@ public partial class RhinoMCPFunctions
             OuterHalf = outerHalf,
             InnerHalf = innerHalf,
             HalfThick = halfThick,
+            VoidHalf = width * 0.5,
             Sill = sill,
             Head = head,
             YInward = yInward,
             XLeft = xLeft
         };
         return true;
+    }
+
+    private static string FaceStamp(Point3d a, Point3d b)
+    {
+        return a.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
+            + a.Y.ToString("0.###", CultureInfo.InvariantCulture) + ";"
+            + b.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
+            + b.Y.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static void StampSymbolLine(ObjectAttributes attr, Curve curve, string part, string faces)
+    {
+        if (attr == null || curve == null) return;
+        if (part != "sill" && part != "frame" && part != "jamb") return;
+        var a = curve.PointAtStart;
+        var b = curve.PointAtEnd;
+        attr.SetUserString("forsk:line",
+            a.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
+            + a.Y.ToString("0.###", CultureInfo.InvariantCulture) + ";"
+            + b.X.ToString("0.###", CultureInfo.InvariantCulture) + ","
+            + b.Y.ToString("0.###", CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(faces))
+            attr.SetUserString("forsk:faces", faces);
     }
 
     private static Curve MarkCurve(OpeningTypes.PlanMark mark, Plane plane, Transform worldToHld, Vector3d delta)
@@ -354,31 +410,43 @@ public partial class RhinoMCPFunctions
     {
         var added = 0;
         var texts = new List<string>();
-        var height = 2.5 * scale;
+        var height = OpeningTypes.PlanAnnotationHeight(scale);
+        var rooms = new List<RhinoObject>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (!string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase))
-                continue;
+            if (string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase))
+                rooms.Add(obj);
+        }
+        foreach (var obj in rooms)
+        {
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
             if (!area.HasValue || area.Value <= 0) continue;
-            var bbox = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
-            if (!bbox.IsValid) continue;
-            var origin = bbox.Center;
-            origin.Z = 0;
-            if (worldToHld.IsValid && !worldToHld.IsIdentity)
-                origin.Transform(worldToHld);
-            origin += delta;
-            origin.Z = 0;
+            if (!TryRoomPolygon(obj, out var worldRing)) continue;
+            var xs = new double[worldRing.Count];
+            var ys = new double[worldRing.Count];
+            for (var i = 0; i < worldRing.Count; i++)
+            {
+                xs[i] = worldRing[i].X;
+                ys[i] = worldRing[i].Y;
+            }
+            double ix, iy;
+            if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy)) continue;
+            var at = new Point3d(ix, iy, 0);
+            var ring = new List<Point3d>();
+            foreach (var point in worldRing)
+                ring.Add(ToDrawing(point, worldToHld, delta));
+            var room = RoomStamp(ring);
+            var origin = ToDrawing(at, worldToHld, delta);
 
-            var name = RoomLabelInside(doc, obj, bbox);
+            var name = RoomLabelInside(obj);
             if (!string.IsNullOrEmpty(name))
             {
-                var nameAt = origin + new Vector3d(0, height * 1.15, 0);
-                if (AddPlanText(doc, layer, name, nameAt, height, "room_tag", ref box, ref index, ref count))
+                var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
+                if (AddPlanText(doc, layer, name, nameAt, height, "room_tag", room, ref box, ref index, ref count))
                     added++;
             }
             var line = OpeningTypes.RoomTag(area.Value);
-            if (AddPlanText(doc, layer, line, origin, height, "room_tag", ref box, ref index, ref count))
+            if (AddPlanText(doc, layer, line, origin, height, "room_tag", room, ref box, ref index, ref count))
             {
                 added++;
                 stats.Rooms++;
@@ -390,10 +458,70 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
-    private static string RoomLabelInside(RhinoDoc doc, RhinoObject room, BoundingBox bbox)
+    private static bool TryRoomPolygon(RhinoObject room, out List<Point3d> polygon)
     {
-        if (doc == null || !bbox.IsValid) return null;
-        var midZ = (bbox.Min.Z + bbox.Max.Z) * 0.5;
+        polygon = new List<Point3d>();
+        if (!(room?.Geometry is Brep brep) || brep.Faces.Count == 0) return false;
+        var face = brep.Faces[0];
+        var loop = face?.OuterLoop;
+        if (loop == null) return false;
+        Curve curve = null;
+        try { curve = loop.To3dCurve(); }
+        catch (Exception) { curve = null; }
+        if (curve == null) return false;
+        try
+        {
+            Polyline poly;
+            if (curve.TryGetPolyline(out poly) && poly != null && poly.Count >= 3)
+            {
+                foreach (var point in poly)
+                    polygon.Add(new Point3d(point.X, point.Y, 0));
+            }
+            else
+            {
+                var count = Math.Max(curve.SpanCount * 2, 8);
+                if (count > 48) count = 48;
+                var ts = curve.DivideByCount(count, true);
+                if (ts == null) return false;
+                foreach (var t in ts)
+                    polygon.Add(new Point3d(curve.PointAt(t).X, curve.PointAt(t).Y, 0));
+            }
+        }
+        finally
+        {
+            curve.Dispose();
+        }
+        return polygon.Count >= 3;
+    }
+
+    private static Point3d ToDrawing(Point3d point, Transform worldToHld, Vector3d delta)
+    {
+        point.Z = 0;
+        if (worldToHld.IsValid && !worldToHld.IsIdentity)
+            point.Transform(worldToHld);
+        point += delta;
+        point.Z = 0;
+        return point;
+    }
+
+    private static string RoomStamp(List<Point3d> ring)
+    {
+        var parts = new List<string>();
+        var limit = ring.Count > 32 ? 32 : ring.Count;
+        for (var i = 0; i < limit; i++)
+        {
+            parts.Add(ring[i].X.ToString("0.###", CultureInfo.InvariantCulture)
+                + "," + ring[i].Y.ToString("0.###", CultureInfo.InvariantCulture));
+        }
+        return string.Join(";", parts.ToArray());
+    }
+
+    private static string RoomLabelInside(RhinoObject room)
+    {
+        if (!(room?.Geometry is Brep brep) || brep.Faces.Count == 0) return null;
+        var face = brep.Faces[0];
+        var doc = room.Document;
+        if (doc == null || face == null) return null;
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj?.Attributes == null) continue;
@@ -402,13 +530,9 @@ public partial class RhinoMCPFunctions
             if (!name.Equals("label", StringComparison.OrdinalIgnoreCase)) continue;
             if (!(obj.Geometry is TextEntity text)) continue;
             var point = text.Plane.Origin;
-            if (point.X < bbox.Min.X || point.X > bbox.Max.X) continue;
-            if (point.Y < bbox.Min.Y || point.Y > bbox.Max.Y) continue;
-            if (room.Geometry is Brep brep)
-            {
-                if (!brep.IsPointInside(new Point3d(point.X, point.Y, midZ), 1.0, false))
-                    continue;
-            }
+            double u, v;
+            if (!face.ClosestPoint(point, out u, out v)) continue;
+            if (face.IsPointOnFace(u, v) != PointFaceRelation.Interior) continue;
             var plain = text.PlainText;
             if (string.IsNullOrWhiteSpace(plain)) continue;
             return plain.Trim();
@@ -423,6 +547,7 @@ public partial class RhinoMCPFunctions
         Point3d origin,
         double height,
         string role,
+        string room,
         ref BoundingBox box,
         ref int index,
         ref int count)
@@ -432,19 +557,109 @@ public partial class RhinoMCPFunctions
         plane.Origin = origin;
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, null, null);
-        Guid id;
+        attr.SetUserString("forsk:text_height", height.ToString("0.###", CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(room))
+            attr.SetUserString("forsk:room", room);
+        TextEntity entity = null;
+        Guid id = Guid.Empty;
         try
         {
-            id = doc.Objects.AddText(text, plane, height, "Arial", false, false, attr);
+            entity = PlanAnnotation(doc, text, plane, height);
+            if (entity == null) return false;
+            id = doc.Objects.AddText(entity, attr);
         }
         catch (Exception)
         {
+            entity?.Dispose();
             return false;
         }
-        if (id == Guid.Empty) return false;
+        if (id == Guid.Empty)
+        {
+            entity?.Dispose();
+            return false;
+        }
+        var written = doc.Objects.FindId(id);
+        var textBox = written?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+        entity?.Dispose();
+        if (textBox.IsValid)
+        {
+            var shortSide = Math.Min(textBox.Max.X - textBox.Min.X, textBox.Max.Y - textBox.Min.Y);
+            if (shortSide > height * 2.0 || !RoomHolds(textBox, room))
+            {
+                try { doc.Objects.Delete(id, true); } catch (Exception) { }
+                return false;
+            }
+            box.Union(textBox);
+        }
         index++;
         count++;
-        box.Union(new BoundingBox(origin, origin + new Vector3d(height * text.Length * 0.6, height, 0)));
+        return true;
+    }
+
+    /// <summary>
+    /// Model height is the paper cap height times the plan scale. Dimension
+    /// scale stays 1 so the document scale does not multiply it again.
+    /// </summary>
+    private static TextEntity PlanAnnotation(RhinoDoc doc, string text, Plane plane, double height)
+    {
+        var name = "Forsk plan " + height.ToString("0", CultureInfo.InvariantCulture);
+        var found = doc.DimStyles.FindName(name);
+        if (found == null)
+        {
+            var style = doc.DimStyles.Current != null
+                ? doc.DimStyles.Current.Duplicate()
+                : new DimensionStyle();
+            style.Name = name;
+            style.TextHeight = height;
+            style.DimensionScaleValue = ScaleValue.OneToOne();
+            var index = doc.DimStyles.Add(style, false);
+            if (index < 0) return null;
+            found = doc.DimStyles.FindName(name);
+            if (found == null) return null;
+        }
+        else
+        {
+            found.TextHeight = height;
+            found.DimensionScaleValue = ScaleValue.OneToOne();
+            doc.DimStyles.Modify(found, found.Index, false);
+        }
+        var entity = TextEntity.Create(text, plane, found, false, 0, 0);
+        if (entity == null) return null;
+        entity.TextHorizontalAlignment = TextHorizontalAlignment.Center;
+        entity.TextVerticalAlignment = TextVerticalAlignment.Middle;
+        return entity;
+    }
+
+    private static bool RoomHolds(BoundingBox box, string room)
+    {
+        if (string.IsNullOrEmpty(room)) return false;
+        var ring = new List<Point3d>();
+        foreach (var pair in room.Split(';'))
+        {
+            var xy = pair.Split(',');
+            if (xy.Length != 2) continue;
+            double x, y;
+            if (!double.TryParse(xy[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)) continue;
+            if (!double.TryParse(xy[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) continue;
+            ring.Add(new Point3d(x, y, 0));
+        }
+        if (ring.Count < 3) return false;
+        var corners = new[]
+        {
+            new Point3d(box.Min.X, box.Min.Y, 0),
+            new Point3d(box.Max.X, box.Min.Y, 0),
+            new Point3d(box.Max.X, box.Max.Y, 0),
+            new Point3d(box.Min.X, box.Max.Y, 0)
+        };
+        var xs = new double[ring.Count];
+        var ys = new double[ring.Count];
+        for (var i = 0; i < ring.Count; i++)
+        {
+            xs[i] = ring[i].X;
+            ys[i] = ring[i].Y;
+        }
+        foreach (var corner in corners)
+            if (!OpeningTypes.PointInPolygon(corner.X, corner.Y, xs, ys)) return false;
         return true;
     }
 
@@ -538,7 +753,8 @@ public partial class RhinoMCPFunctions
         double? openY,
         ref BoundingBox box,
         ref int index,
-        ref int count)
+        ref int count,
+        string faces = null)
     {
         if (curve == null || paperMm <= 0 || scale < 1) return 0;
         // A swing arc ribbon fills the sector. Draw the arc as a thin curve.
@@ -561,9 +777,9 @@ public partial class RhinoMCPFunctions
         var added = 0;
         if (!dashed)
         {
-            added += AddRibbon(doc, layer, curve, width, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count);
+            added += AddRibbon(doc, layer, curve, width, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             if (added == 0)
-                added += AddPlainCurve(doc, layer, curve, paperMm, role, part, markerId, openY, dashed, ref box, ref index, ref count);
+                added += AddPlainCurve(doc, layer, curve, paperMm, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             return added;
         }
 
@@ -589,9 +805,9 @@ public partial class RhinoMCPFunctions
                     catch (Exception) { piece = null; }
                     if (piece != null)
                     {
-                        var n = AddRibbon(doc, layer, piece, width, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count);
+                        var n = AddRibbon(doc, layer, piece, width, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         if (n == 0)
-                            n = AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count);
+                            n = AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         added += n;
                         piece.Dispose();
                     }
@@ -617,7 +833,8 @@ public partial class RhinoMCPFunctions
         bool dashed,
         ref BoundingBox box,
         ref int index,
-        ref int count)
+        ref int count,
+        string faces = null)
     {
         var half = width * 0.5;
         if (half <= 0 || curve == null) return 0;
@@ -650,6 +867,7 @@ public partial class RhinoMCPFunctions
             if (hatch == null) continue;
             var stableId = FormatStableId("d", index);
             var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+            StampSymbolLine(attr, curve, part, faces);
             Guid id;
             try { id = doc.Objects.AddHatch(hatch, attr); }
             catch (Exception) { id = Guid.Empty; }
@@ -814,10 +1032,12 @@ public partial class RhinoMCPFunctions
         bool dashed,
         ref BoundingBox box,
         ref int index,
-        ref int count)
+        ref int count,
+        string faces = null)
     {
         var stableId = FormatStableId("d", index);
         var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+        StampSymbolLine(attr, curve, part, faces);
         if (plotMm > 0) attr.PlotWeight = plotMm;
         Guid id;
         try { id = doc.Objects.AddCurve(curve, attr); }
