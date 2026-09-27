@@ -44,6 +44,18 @@ namespace RhinoMCPPlugin
             if (panelIcon != null) return panelIcon;
             try
             {
+                using (var stream = typeof(RhinoMCPPlugin).Assembly.GetManifestResourceStream("rhinomcp.EmbeddedResources.plugin-utility.ico"))
+                {
+                    if (stream != null)
+                        return panelIcon = new System.Drawing.Icon(stream, 32, 32);
+                }
+            }
+            catch
+            {
+                // Fall back to a stock icon below.
+            }
+            try
+            {
                 if (System.Drawing.SystemIcons.Application != null)
                     return System.Drawing.SystemIcons.Application;
             }

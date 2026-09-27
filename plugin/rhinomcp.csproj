@@ -46,6 +46,9 @@
     <EmbeddedResource Include="Forsk/Fonts/Geist-Medium.otf">
       <LogicalName>RhinoMCPPlugin.Fonts.Geist-Medium.otf</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="EmbeddedResources/plugin-utility.ico">
+      <LogicalName>rhinomcp.EmbeddedResources.plugin-utility.ico</LogicalName>
+    </EmbeddedResource>
     <!-- OFL notice ships beside the plugin. The faces themselves are embedded. -->
     <Content Include="Forsk/Fonts/OFL.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
