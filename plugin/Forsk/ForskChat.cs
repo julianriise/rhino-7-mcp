@@ -18,151 +18,6 @@ using rhinomcp.Serializers;
 
 namespace RhinoMCPPlugin.Forsk
 {
-    public enum ForskIntent
-    {
-        Build,
-        Edit,
-        Sheets,
-        Print,
-        General
-    }
-
-    /// <summary>
-    /// One-turn tool bias from the message. Order is print, sheets, edit, build.
-    /// An opening selection is edit when those words are absent.
-    /// </summary>
-    public static class ForskIntentRouter
-    {
-        public static ForskIntent Classify(string text, string target)
-        {
-            var t = Normalize(text);
-            if (IsPrint(t)) return ForskIntent.Print;
-            if (IsSheets(t)) return ForskIntent.Sheets;
-            if (IsEdit(t)) return ForskIntent.Edit;
-            if (IsBuild(t)) return ForskIntent.Build;
-            if (TargetIsOpening(target)) return ForskIntent.Edit;
-            return ForskIntent.General;
-        }
-
-        static string Normalize(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-            var sb = new StringBuilder(text.Length);
-            var space = true;
-            foreach (var raw in text.ToLowerInvariant())
-            {
-                var c = raw == '_' ? ' ' : raw;
-                if (char.IsLetterOrDigit(c))
-                {
-                    sb.Append(c);
-                    space = false;
-                }
-                else if (!space)
-                {
-                    sb.Append(' ');
-                    space = true;
-                }
-            }
-            return sb.ToString().Trim();
-        }
-
-        static bool IsPrint(string t)
-        {
-            if (t.Length == 0) return false;
-            if (HasWord(t, "print") || HasWord(t, "pdf") || HasWord(t, "a3")) return true;
-            if (HasWord(t, "layout") || HasWord(t, "layouts")) return true;
-            return t.Contains("skriv ut");
-        }
-
-        static bool IsSheets(string t)
-        {
-            if (HasWord(t, "sheets") || HasWord(t, "sheet")) return true;
-            if (t.Contains("make2d") || t.Contains("make 2d")) return true;
-            if (HasWord(t, "drawings") || HasWord(t, "tegning") || HasWord(t, "tegninger")) return true;
-            return t.Contains("sheet pack") || t.Contains("clear drawings");
-        }
-
-        static bool IsEdit(string t)
-        {
-            if (t.Contains("move opening") || t.Contains("add opening") || t.Contains("delete opening"))
-                return true;
-            if (t.Contains("set opening") || t.Contains("set window") || t.Contains("set door"))
-                return true;
-            if (t.Contains("toward the corner") || t.Contains("along the wall"))
-                return true;
-            if (HasWord(t, "set") && (HasWord(t, "width") || HasWord(t, "sill") || HasWord(t, "head")))
-                return true;
-            var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove")
-                || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")
-                || HasWord(t, "narrow") || HasWord(t, "narrower");
-            var noun = HasWord(t, "window") || HasWord(t, "windows")
-                || HasWord(t, "door") || HasWord(t, "doors")
-                || HasWord(t, "opening") || HasWord(t, "openings");
-            return verb && noun;
-        }
-
-        static bool IsBuild(string t)
-        {
-            if (t.Contains("wall height") || t.Contains("tilbygg") || t.Contains("påbygg")) return true;
-            if (t.Contains("paabygg") || t.Contains("pabygg") || HasWord(t, "extension")) return true;
-            if (HasWord(t, "generate") || HasWord(t, "bake") || HasWord(t, "rebuild") || HasWord(t, "regenerate"))
-                return true;
-            if (t.Contains("clear generated") || t.Contains("clear and regenerate")) return true;
-            if (t.Contains("mark as existing") || t.Contains("mark existing")) return true;
-            return WallsWithHeight(t);
-        }
-
-        static bool WallsWithHeight(string t)
-        {
-            var i = 0;
-            while ((i = t.IndexOf("wall", i, StringComparison.Ordinal)) >= 0)
-            {
-                var left = i == 0 || t[i - 1] == ' ';
-                var end = i + 4;
-                if (end < t.Length && t[end] == 's') end++;
-                if (left && (end == t.Length || t[end] == ' '))
-                {
-                    var j = end;
-                    while (j < t.Length && t[j] == ' ') j++;
-                    if (j < t.Length && char.IsDigit(t[j])) return true;
-                }
-                i += 4;
-            }
-            return false;
-        }
-
-        static bool TargetIsOpening(string target)
-        {
-            if (string.IsNullOrWhiteSpace(target)) return false;
-            var t = target.ToLowerInvariant();
-            return t.Contains("forsk:opening") || t.Contains("a-open");
-        }
-
-        static bool HasWord(string text, string word)
-        {
-            var i = 0;
-            while ((i = text.IndexOf(word, i, StringComparison.Ordinal)) >= 0)
-            {
-                var left = i == 0 || text[i - 1] == ' ';
-                var end = i + word.Length;
-                var right = end == text.Length || text[end] == ' ';
-                if (left && right) return true;
-                i = end;
-            }
-            return false;
-        }
-    }
-
-    public sealed class BakeChip
-    {
-        public bool HasPlan;
-        public bool HasWalls;
-        public bool ShowPrint => HasWalls;
-        public bool ShowGenerate => HasPlan && !HasWalls;
-        public bool Visible => ShowPrint || ShowGenerate;
-        public string Label => ShowPrint ? "Print PDF" : "Generate 3D model";
-    }
-
     /// <summary>
     /// In-process dispatch onto the existing [McpCommand] handlers.
     /// Geometry stays in those handlers. This class only filters and wraps undo.
@@ -216,6 +71,12 @@ namespace RhinoMCPPlugin.Forsk
             "clear_layouts"
         };
 
+        static readonly string[] DaylightOnly =
+        {
+            ForskDaylight.ToolName,
+            "daylight_clear"
+        };
+
         public static JArray ToolsFor()
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -224,6 +85,7 @@ namespace RhinoMCPPlugin.Forsk
             AddTools(BuildOnly, seen, tools);
             AddTools(EditOnly, seen, tools);
             AddTools(SheetsOnly, seen, tools);
+            AddTools(DaylightOnly, seen, tools);
             return tools;
         }
 
@@ -248,7 +110,26 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (!Catalog.ContainsKey(name))
                 return Fail("Tool " + name + " is not available in the Forsk panel.");
+            if (name == ForskDaylight.ToolName)
+                return ForskDaylight.Run(parameters?["target"]?.ToString(), Dispatch);
             return Dispatch(name, parameters);
+        }
+
+        /// <summary>A bridge command outside the chat catalog, such as daylight_scene. UI thread.</summary>
+        public static JObject Command(string name, JObject parameters)
+        {
+            return Dispatch(name, parameters);
+        }
+
+        /// <summary>Command from a background thread, run on the UI thread.</summary>
+        public static JObject CommandOnUi(string name, JObject parameters)
+        {
+            JObject envelope = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                envelope = Dispatch(name, parameters);
+            }));
+            return envelope ?? Fail("No result");
         }
 
         public static string Receipt(string name, JObject envelope)
@@ -320,7 +201,8 @@ namespace RhinoMCPPlugin.Forsk
             return Array.IndexOf(Shared, name) >= 0
                 || Array.IndexOf(BuildOnly, name) >= 0
                 || Array.IndexOf(EditOnly, name) >= 0
-                || Array.IndexOf(SheetsOnly, name) >= 0;
+                || Array.IndexOf(SheetsOnly, name) >= 0
+                || Array.IndexOf(DaylightOnly, name) >= 0;
         }
 
         static JObject Dispatch(string name, JObject parameters)
@@ -727,6 +609,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Sheets) return "ui_sheets.md";
             if (intent == ForskIntent.Print) return "ui_print.md";
             if (intent == ForskIntent.Build) return "ui_build.md";
+            if (intent == ForskIntent.Daylight) return "daylight.md";
             return null;
         }
 
@@ -760,6 +643,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";
             }
+            if (intent == ForskIntent.Daylight)
+            {
+                return "Turn bias: Daylight. daylight_from_model runs it, daylight_clear clears it. "
+                    + "Reply with spaces, windows, and the time, then the tool's disclaimer line word for word. "
+                    + "No rooms: say rooms come from closed outlines on A-ROOM and offer rooms_from_layer. "
+                    + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
+            }
             if (intent == ForskIntent.Build)
             {
                 return "Turn bias: Build. At most two sentences. A full bake is one line. "
@@ -775,7 +665,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
     public static class ForskKeys
     {
         public const string Missing =
-            "Set FORSK_GROK_API_KEY to chat. Export it before launching Rhino, or put FORSK_GROK_API_KEY=… in ~/.forsk/grok.env. Generate 3D and Print PDF still run without a key.";
+            "Set FORSK_GROK_API_KEY to chat. Export it before launching Rhino, or put FORSK_GROK_API_KEY=… in ~/.forsk/grok.env. Generate 3D, Print PDF, and Daylight still run without a key.";
 
         public static string Load()
         {
@@ -1061,6 +951,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Sheets) return "Sheets";
             if (intent == ForskIntent.Print) return "Print";
             if (intent == ForskIntent.Build) return "Build";
+            if (intent == ForskIntent.Daylight) return "Daylight";
             return "General";
         }
 
@@ -1076,6 +967,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
             }
+            // The tracer runs here, off the UI thread. Scene and paint hop onto it.
+            if (name == ForskDaylight.ToolName)
+                return ForskDaylight.Run(args?["target"]?.ToString(), ForskTools.CommandOnUi);
             JObject envelope = null;
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
@@ -1220,6 +1114,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 var generated = obj.Attributes.GetUserString("forsk:generated");
                 if (generated == "1" && string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
                     chip.HasWalls = true;
+                if (generated == "1" && string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
+                    chip.HasRooms = true;
+                if (generated == "1" && string.Equals(kind, "analysis", StringComparison.OrdinalIgnoreCase))
+                    chip.HasOverlay = true;
+                if (generated == "1" && string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(obj.Attributes.GetUserString("forsk:opening_kind"), "window", StringComparison.OrdinalIgnoreCase))
+                    chip.HasWindows = true;
                 if (!(obj.Geometry is Curve)) continue;
                 if (IsPlanLayer(LayerName(doc, obj)))
                     chip.HasPlan = true;

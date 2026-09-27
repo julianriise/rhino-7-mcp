@@ -18,6 +18,7 @@
     <Compile Include="..\..\plugin\Functions\SoftParamPlan.cs" Link="SoftParamPlan.cs" />
     <Compile Include="..\..\plugin\Functions\SelectPlan.cs" Link="SelectPlan.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningTypes.cs" Link="OpeningTypes.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskIntent.cs" Link="ForskIntent.cs" />
   </ItemGroup>
 
 </Project>

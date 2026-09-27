@@ -1,6 +1,5 @@
 """Daylight (sky-vis proxy) from tagged walls, openings, and rooms, painted on A-ANALYSE."""
 
-import time
 from typing import Any, Dict
 
 from mcp.server.fastmcp import Context
@@ -41,28 +40,18 @@ def daylight_from_model(
     try:
         rhino = get_rhino_connection()
         scene = rhino.send_command("daylight_scene", {})
-        started = time.perf_counter()
-        run = forsk_daylight.run_scene(scene, target=target, cell_mm=cell_size)
-        compute_ms = round((time.perf_counter() - started) * 1000)
-        painted = rhino.send_command("daylight_paint", run.paint_params())
-        summary = run.summary()
+        result = forsk_daylight.evaluate(scene, target=target, cell_mm=cell_size)
+        if not result["success"]:
+            return result
+        painted = rhino.send_command("daylight_paint", result.pop("paint"))
         return {
-            "success": True,
-            **summary,
-            "compute_ms": compute_ms,
+            **result,
             "id": painted.get("id"),
             "vertices": painted.get("vertices", 0),
             "wires": painted.get("wires"),
             "deleted": painted.get("deleted", 0),
             "layer": painted.get("layer", "A-ANALYSE"),
-            "warnings": list(scene.get("warnings") or []) + summary["notes"],
-            "message": (
-                f"Daylight on {run.spaces} space(s): {run.windows} window(s), "
-                f"{run.cells} cells on A-ANALYSE. {forsk_daylight.DISCLAIMER}"
-            ),
         }
-    except forsk_daylight.DaylightTargetError as e:
-        return {"success": False, "message": str(e), "disclaimer": forsk_daylight.DISCLAIMER}
     except Exception as e:
         logger.error(f"Error in daylight_from_model: {str(e)}")
         return {"success": False, "message": str(e)}

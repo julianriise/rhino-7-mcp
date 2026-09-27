@@ -590,6 +590,22 @@ def main() -> int:
             failures.append("pocket flip changed the wall")
 
         print("==> plan symbols: room, roof, high window, door swings")
+
+        def panel(action: str, **extra) -> dict:
+            return send_command(sock, "panel_daylight", {"action": action, **extra})
+
+        # F4.3: before any room the panel Daylight chip is disabled with the
+        # A-ROOM hint, and a chat run is refused with the reason.
+        bare = panel("state")
+        refused = panel("run")
+        no_rooms_ok = (
+            bare.get("label") == "Needs rooms (A-ROOM)"
+            and bare.get("enabled") is False
+            and refused.get("ok") is False
+            and "A-ROOM" in str(refused.get("line"))
+        )
+        if not no_rooms_ok:
+            failures.append(f"panel no-rooms chip {bare.get('label')!r} run {refused.get('line')!r}")
         layer(sock, "A-ROOM")
         send_command(sock, "create_object", {
             "type": "POLYLINE",
@@ -668,6 +684,31 @@ def main() -> int:
             1,
             failures,
             rerun=True,
+        )
+
+        # F4.3: the panel path (chat intent, then the chip) runs and clears
+        # the same overlay, so the sheet below still sees none.
+        intents = [panel("state", text=t).get("intent") for t in ("run daylight", "is this room dark", "clear daylight")]
+        intent_ok = intents == ["daylight"] * 3
+        ready = panel("state")
+        ran = panel("run")
+        cleared = panel("clear")
+        chip_ok = (
+            ready.get("label") == "Daylight" and ready.get("enabled") is True
+            and ran.get("ok") is True and ran.get("label") == "Clear daylight"
+            and cleared.get("ok") is True and cleared.get("label") == "Daylight"
+        )
+        if not intent_ok:
+            failures.append(f"panel daylight intents {intents}")
+        if not chip_ok:
+            failures.append(
+                f"panel chip {ready.get('label')!r} run {ran.get('line')!r} -> {ran.get('label')!r} "
+                f"clear {cleared.get('line')!r} -> {cleared.get('label')!r}"
+            )
+        word = {True: "ok", False: "FAIL"}
+        print(
+            f"    panel daylight intent {word[intent_ok]}, chip run/clear {word[chip_ok]}, "
+            f"no-rooms refusal {word[no_rooms_ok]}"
         )
 
         # No scale: the sheet fits the plan (8 x 4 m lands well under 1:100).

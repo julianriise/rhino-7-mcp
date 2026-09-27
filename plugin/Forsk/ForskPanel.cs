@@ -15,6 +15,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         ForskHeader _header;
         ForskButton _chip;
+        ForskButton _daylight;
         ForskComposer _composer;
         Scrollable _scroll;
         StackLayout _thread;
@@ -60,6 +61,7 @@ namespace RhinoMCPPlugin.Forsk
 
             _header = new ForskHeader();
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
+            _daylight = new ForskButton { Text = "Daylight", Visible = false, Secondary = true };
             _composer = new ForskComposer();
 
             _chip.Click += (s, e) =>
@@ -67,6 +69,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (_chipState.ShowPrint) PrintPdf();
                 else Bake();
             };
+            _daylight.Click += (s, e) => Daylight();
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
             _composer.Input.GotFocus += (s, e) =>
@@ -94,7 +97,7 @@ namespace RhinoMCPPlugin.Forsk
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper,
-                Items = { _header, _chip }
+                Items = { _header, _chip, _daylight }
             };
 
             _thread = new StackLayout
@@ -225,6 +228,9 @@ namespace RhinoMCPPlugin.Forsk
             _chipState = ForskBake.Detect();
             _chip.Visible = _chipState.Visible;
             _chip.Text = _chipState.Label;
+            _daylight.Visible = _chipState.ShowDaylight;
+            _daylight.Text = _chipState.DaylightLabel;
+            _daylight.EnabledClick = !_busy && _chipState.DaylightEnabled;
             RefreshTarget();
         }
 
@@ -359,6 +365,49 @@ namespace RhinoMCPPlugin.Forsk
             });
         }
 
+        void Daylight()
+        {
+            if (_busy || !_chipState.DaylightEnabled) return;
+            _busy = true;
+            _composer.Send.EnabledClick = false;
+            _chip.EnabledClick = false;
+            _daylight.EnabledClick = false;
+            var clears = _chipState.DaylightClears;
+            var label = _chipState.DaylightLabel;
+            AddLine("user", label);
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                JObject envelope;
+                try
+                {
+                    envelope = clears
+                        ? ForskDaylight.Clear(ForskTools.CommandOnUi)
+                        : ForskDaylight.Run("floor", ForskTools.CommandOnUi);
+                }
+                catch (Exception e)
+                {
+                    envelope = ForskTools.Fail(e.Message);
+                }
+                var line = ForskDaylight.Line(label, envelope);
+                var disclaimer = ForskDaylight.Disclaimer(envelope);
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    AddLine("receipt", line);
+                    AddLine("assistant", disclaimer);
+                    _history.Add(new JObject { ["role"] = "user", ["content"] = label });
+                    _history.Add(new JObject
+                    {
+                        ["role"] = "assistant",
+                        ["content"] = string.IsNullOrEmpty(disclaimer) ? line : line + "\n" + disclaimer
+                    });
+                    _busy = false;
+                    _composer.Send.EnabledClick = true;
+                    _chip.EnabledClick = true;
+                    RefreshChrome();
+                });
+            });
+        }
+
         void AddLine(string role, string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
@@ -402,6 +451,7 @@ namespace RhinoMCPPlugin.Forsk
             int inner = Math.Max(200, Width - 32);
             _header.Reflow(inner);
             _chip.Width = inner;
+            _daylight.Width = inner;
             _composer.Width = inner;
             _composer.Place();
             int threadW = _scroll.Width > 100 ? _scroll.Width - 20 : inner;

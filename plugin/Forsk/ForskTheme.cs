@@ -178,6 +178,9 @@ namespace RhinoMCPPlugin.Forsk
         bool _enabled = true;
         bool _hover;
 
+        /// <summary>Outlined on paper, under the primary chip.</summary>
+        public bool Secondary { get; set; }
+
         public string Text
         {
             get { return _text; }
@@ -215,7 +218,12 @@ namespace RhinoMCPPlugin.Forsk
             if (w < 2 || h < 2) return;
             var fill = !_enabled ? ForskPaint.Track : _hover ? ForskPaint.AccentHover : ForskPaint.Accent;
             var fg = !_enabled ? ForskPaint.Quiet : Colors.White;
-            ForskPaint.Rect(g, fill, 0, 0, w, h, false);
+            if (Secondary)
+            {
+                fill = !_enabled ? ForskPaint.Paper : _hover ? ForskPaint.Track : ForskPaint.Paper;
+                fg = !_enabled ? ForskPaint.Quiet : ForskPaint.Accent;
+            }
+            ForskPaint.Rect(g, fill, 0, 0, w, h, Secondary);
             g.AntiAlias = true;
             var size = g.MeasureString(ForskType.Button, _text);
             g.DrawText(ForskType.Button, fg, (w - size.Width) / 2f, (h - size.Height) / 2f, _text);

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -151,6 +155,35 @@ def test_no_rooms_is_refused():
     scene["rooms"] = []
     with pytest.raises(fd.DaylightTargetError, match="rooms_from_layer"):
         fd.run_scene(scene)
+
+
+def test_doors_only_is_refused():
+    scene = copy.deepcopy(GARAGE)
+    scene["openings"] = [o for o in scene["openings"] if o["kind"] == "door"]
+    with pytest.raises(fd.DaylightTargetError, match="No windows"):
+        fd.run_scene(scene)
+
+
+def test_panel_entry_scores_in_a_child_process_like_the_panel():
+    """The Forsk panel pipes {"scene"} into python -m forsk_daylight and paints "paint"."""
+    src = Path(fd.__file__).resolve().parent
+    done = subprocess.run(
+        [sys.executable, "-m", "forsk_daylight"],
+        input=json.dumps({"scene": GARAGE, "target": "floor"}),
+        capture_output=True, text=True, cwd=src, env={"PYTHONPATH": str(src)}, check=True,
+    )
+    out = json.loads(done.stdout)
+    assert out["success"] is True
+    assert (out["spaces"], out["windows"], out["cells"]) == (1, GARAGE_WINDOWS, GARAGE_CELLS)
+    assert out["compute_ms"] >= 0 and fd.DISCLAIMER in out["message"]
+    assert len(out["paint"]["vertices"]) == GARAGE_VERTICES
+
+
+def test_panel_entry_refusal_is_a_message_not_a_crash():
+    scene = copy.deepcopy(GARAGE)
+    scene["rooms"] = []
+    out = fd.evaluate(scene)
+    assert out["success"] is False and "A-ROOM" in out["message"] and "paint" not in out
 
 
 def test_huge_grid_is_refused():

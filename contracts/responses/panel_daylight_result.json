@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "panel_daylight_result.json",
+  "title": "PanelDaylightResult",
+  "description": "The Daylight chip after the action: visible, enabled, label (Daylight, Clear daylight, Needs rooms (A-ROOM), or Needs windows). intent when text was sent. ok and the receipt line after run or clear; a refusal is ok false with the reason in line.",
+  "type": "object",
+  "properties": {
+    "visible": { "type": "boolean" },
+    "enabled": { "type": "boolean" },
+    "label": { "type": "string" },
+    "intent": { "type": "string", "enum": ["build", "edit", "sheets", "print", "daylight", "general"] },
+    "ok": { "type": "boolean" },
+    "line": { "type": "string" }
+  },
+  "required": ["visible", "enabled", "label"],
+  "additionalProperties": false
+}

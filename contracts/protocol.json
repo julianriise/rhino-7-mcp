@@ -61,6 +61,7 @@
             "daylight_scene",
             "daylight_paint",
             "daylight_clear",
+            "panel_daylight",
             "make2d_view",
             "sheet_pack",
             "clear_drawings",

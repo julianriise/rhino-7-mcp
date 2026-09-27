@@ -286,6 +286,8 @@ def test_new_commands():
         }),
         ("commands/capture_viewport.json", {"viewport": "top", "zoom_bbox": [0, 0, 8000, 4000]}),
         ("commands/daylight_clear.json", {}),
+        ("commands/panel_daylight.json", {}),
+        ("commands/panel_daylight.json", {"action": "run", "text": "run daylight"}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
             "view": "south",
@@ -643,6 +645,11 @@ def test_responses():
         all_passed = False
     if not validate("responses/daylight_clear_result.json", {"count": 1, "remaining": 0, "message": "Cleared 1"}):
         all_passed = False
+    if not validate("responses/panel_daylight_result.json", {
+        "visible": True, "enabled": False, "label": "Needs rooms (A-ROOM)", "intent": "daylight",
+        "ok": False, "line": "Daylight · error · No rooms.",
+    }):
+        all_passed = False
 
     print("  make2d_view_result:")
     guid = "12345678-1234-1234-1234-123456789012"
@@ -839,6 +846,7 @@ def test_invalid_examples():
         ("commands/daylight_paint.json", {"z": 50, "vertices": [], "colors": [], "faces": [], "legend": {}}, "daylight_paint legend removed"),
         ("commands/capture_viewport.json", {"zoom_bbox": [0, 0, 1]}, "capture_viewport short zoom_bbox"),
         ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),
+        ("commands/panel_daylight.json", {"action": "paint"}, "panel_daylight unknown action"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),
         # delete_object: unknown properties rejected

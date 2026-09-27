@@ -12,7 +12,10 @@ Planwire classifies it by probing 40 cm either side, as it does upstream.
 
 from __future__ import annotations
 
+import json
 import math
+import sys
+import time
 from dataclasses import dataclass, field
 
 from daylight.compute import compute_daylight_request
@@ -45,7 +48,8 @@ SKY_STOPS: tuple[RampStop, ...] = (
     RampStop(1.0, 0xF2, 0xF8, 0xFD),
 )
 
-NO_ROOMS ="No rooms. Draw closed room outlines on A-ROOM and run rooms_from_layer first."
+NO_ROOMS = "No rooms. Draw closed room outlines on A-ROOM and run rooms_from_layer first."
+NO_WINDOWS = "No windows. Daylight comes in through windows: add one with add_opening, then run daylight again."
 NO_SELECTION = "Select a room marker first (A-ROOM), or run daylight on the whole floor."
 
 
@@ -516,6 +520,8 @@ def build_request(scene: dict, target: str = "floor", cell_mm: float = DEFAULT_C
         if target == "selection" and _is_interior(portal, all_rings):
             continue
         portals.append(portal)
+    if not any(p.kind == "WINDOW" for p in portals):
+        raise DaylightTargetError(NO_WINDOWS)
 
     walls = []
     for faces in faces_by_wall.values():
@@ -562,3 +568,47 @@ def run_scene(scene: dict, target: str = "floor", cell_mm: float = DEFAULT_CELL_
         floor_z=floor_z,
         notes=notes,
     )
+
+
+def status(run: DaylightRun) -> str:
+    return (
+        f"Daylight on {run.spaces} space(s): {run.windows} window(s), "
+        f"{run.cells} cells on A-ANALYSE. {DISCLAIMER}"
+    )
+
+
+def evaluate(scene: dict, target: str = "floor", cell_mm: float = DEFAULT_CELL_MM) -> dict:
+    """Score a daylight_scene result. On success the daylight_paint params ride
+    along under "paint"; a refusal is success False with the message."""
+    try:
+        started = time.perf_counter()
+        run = run_scene(scene, target=target, cell_mm=cell_mm)
+        compute_ms = round((time.perf_counter() - started) * 1000)
+    except DaylightTargetError as e:
+        return {"success": False, "message": str(e), "disclaimer": DISCLAIMER}
+    summary = run.summary()
+    return {
+        "success": True,
+        **summary,
+        "compute_ms": compute_ms,
+        "warnings": list(scene.get("warnings") or []) + summary["notes"],
+        "message": status(run),
+        "paint": run.paint_params(),
+    }
+
+
+def main() -> int:
+    """Forsk panel entry: {"scene", "target", "cell_size"} JSON on stdin, the
+    evaluate() result as one JSON object on stdout. The panel paints it."""
+    request = json.load(sys.stdin)
+    result = evaluate(
+        request.get("scene") or {},
+        target=request.get("target") or "floor",
+        cell_mm=float(request.get("cell_size") or DEFAULT_CELL_MM),
+    )
+    json.dump(result, sys.stdout)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
