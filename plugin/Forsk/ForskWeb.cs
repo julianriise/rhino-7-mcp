@@ -237,7 +237,7 @@ button {
   height: 28px;
   border: 0;
   border-radius: 0;
-  background: #1C1917;
+  background: #2948F5;
   color: #fff;
   font: 16px Geist, -apple-system, sans-serif;
   cursor: pointer;

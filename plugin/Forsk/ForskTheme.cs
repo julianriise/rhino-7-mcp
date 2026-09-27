@@ -10,7 +10,8 @@ namespace RhinoMCPPlugin.Forsk
     {
         public static readonly Color Paper = Color.FromArgb(246, 245, 242);
         public static readonly Color Ink = Color.FromArgb(28, 25, 23);
-        public static readonly Color InkHover = Color.FromArgb(0, 0, 0);
+        public static readonly Color Accent = Color.FromArgb(41, 72, 245);
+        public static readonly Color AccentHover = Color.FromArgb(10, 43, 225);
         public static readonly Color Quiet = Color.FromArgb(120, 113, 108);
         public static readonly Color Line = Color.FromArgb(228, 224, 216);
         public static readonly Color Track = Color.FromArgb(238, 235, 227);
@@ -212,7 +213,7 @@ namespace RhinoMCPPlugin.Forsk
             float w = Width;
             float h = Height;
             if (w < 2 || h < 2) return;
-            var fill = !_enabled ? ForskPaint.Track : _hover ? ForskPaint.InkHover : ForskPaint.Ink;
+            var fill = !_enabled ? ForskPaint.Track : _hover ? ForskPaint.AccentHover : ForskPaint.Accent;
             var fg = !_enabled ? ForskPaint.Quiet : Colors.White;
             ForskPaint.Rect(g, fill, 0, 0, w, h, false);
             g.AntiAlias = true;
@@ -264,7 +265,7 @@ namespace RhinoMCPPlugin.Forsk
             if (w < 2 || h < 2) return;
             bool hot = _enabled && _armed;
             var fill = hot
-                ? (_hover ? ForskPaint.InkHover : ForskPaint.Ink)
+                ? (_hover ? ForskPaint.AccentHover : ForskPaint.Accent)
                 : (_hover ? ForskPaint.Track : Colors.White);
             ForskPaint.Rect(g, fill, 0, 0, w, h, !hot);
             g.AntiAlias = true;
