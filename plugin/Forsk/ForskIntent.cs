@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace RhinoMCPPlugin.Forsk
@@ -149,20 +150,43 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
+    public enum DaylightAction
+    {
+        None,
+        Run,
+        Clear,
+        MakeRooms
+    }
+
     /// <summary>
-    /// Chip state from one document pass. The primary chip is Generate or Print.
-    /// The secondary Daylight chip sits under Print: it runs when walls, windows,
-    /// and A-ROOM rooms exist, and clears while the overlay is on A-ANALYSE.
+    /// One document object as the Daylight chip sees it. The rows come from the
+    /// same enumeration daylight_scene uses: hidden layers such as A-OPEN
+    /// included, X-EXIST left out.
+    /// </summary>
+    public sealed class ChipRow
+    {
+        public bool Generated;
+        public string Kind;
+        public string OpeningKind;
+        public string Layer;
+        public bool ClosedCurve;
+    }
+
+    /// <summary>
+    /// Chip state. The primary chip is Generate or Print. The secondary Daylight
+    /// chip sits under Print: it runs when walls, windows, and rooms exist, clears
+    /// while an overlay is on A-ANALYSE, and offers Make rooms when rooms are missing.
     /// </summary>
     public sealed class BakeChip
     {
-        public const string NeedsRooms = "Needs rooms (A-ROOM)";
         public const string NeedsWindows = "Needs windows";
+        public const string NeedsWindowsHint = "Daylight comes in through windows. Add a window, then run it.";
 
         public bool HasPlan;
         public bool HasWalls;
         public bool HasWindows;
         public bool HasRooms;
+        public bool HasRoomCurves;
         public bool HasOverlay;
         public bool ShowPrint => HasWalls;
         public bool ShowGenerate => HasPlan && !HasWalls;
@@ -170,18 +194,58 @@ namespace RhinoMCPPlugin.Forsk
         public string Label => ShowPrint ? "Print PDF" : "Generate 3D model";
 
         public bool ShowDaylight => HasWalls || HasOverlay;
-        public bool DaylightClears => HasOverlay;
-        public bool DaylightEnabled => HasOverlay || (HasRooms && HasWindows);
+
+        public DaylightAction Daylight
+        {
+            get
+            {
+                if (HasOverlay) return DaylightAction.Clear;
+                if (!HasRooms) return DaylightAction.MakeRooms;
+                if (!HasWindows) return DaylightAction.None;
+                return DaylightAction.Run;
+            }
+        }
+
+        public bool DaylightEnabled => Daylight != DaylightAction.None;
 
         public string DaylightLabel
         {
             get
             {
-                if (HasOverlay) return "Clear daylight";
-                if (!HasRooms) return NeedsRooms;
-                if (!HasWindows) return NeedsWindows;
-                return "Daylight";
+                switch (Daylight)
+                {
+                    case DaylightAction.Clear: return "Clear daylight";
+                    case DaylightAction.MakeRooms: return "Make rooms";
+                    case DaylightAction.None: return NeedsWindows;
+                    default: return "Daylight";
+                }
             }
+        }
+
+        public string DaylightHint => Daylight == DaylightAction.None ? NeedsWindowsHint : null;
+
+        /// <summary>Daylight facts from the model rows. Called on every refresh; nothing is cached.</summary>
+        public void ReadDaylight(IEnumerable<ChipRow> rows)
+        {
+            HasWindows = HasRooms = HasRoomCurves = HasOverlay = false;
+            foreach (var row in rows)
+            {
+                if (row == null) continue;
+                if (!row.Generated)
+                {
+                    if (row.ClosedCurve && string.Equals(row.Layer, "A-ROOM", StringComparison.OrdinalIgnoreCase))
+                        HasRoomCurves = true;
+                    continue;
+                }
+                if (Is(row.Kind, "room")) HasRooms = true;
+                else if (Is(row.Kind, "analysis")) HasOverlay = true;
+                else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "window")) HasWindows = true;
+            }
+        }
+
+        static bool Is(string value, string expected)
+        {
+            return string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

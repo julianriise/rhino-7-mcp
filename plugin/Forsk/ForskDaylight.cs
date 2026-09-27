@@ -56,6 +56,44 @@ namespace RhinoMCPPlugin.Forsk
             return call("daylight_clear", new JObject());
         }
 
+        public const string DrawRooms =
+            "Daylight scores rooms. Draw closed room outlines on A-ROOM, then press Make rooms or say make rooms.";
+
+        /// <summary>
+        /// The Daylight chip's click, off the UI thread. line is the receipt row;
+        /// note is the assistant line under it (the disclaimer, or how to get rooms).
+        /// Make rooms is the chat offer: rooms_from_layer when A-ROOM holds closed
+        /// curves, otherwise how to draw them.
+        /// </summary>
+        public static void Chip(DaylightAction action, bool roomCurves, out string line, out string note)
+        {
+            note = "";
+            if (action == DaylightAction.MakeRooms)
+            {
+                if (!roomCurves)
+                {
+                    line = "Make rooms · no closed curves on A-ROOM";
+                    note = DrawRooms;
+                    return;
+                }
+                line = ForskTools.Receipt("rooms_from_layer", ForskTools.CommandOnUi("rooms_from_layer", new JObject()));
+                return;
+            }
+            if (action == DaylightAction.Clear)
+            {
+                line = Line("Clear daylight", Clear(ForskTools.CommandOnUi));
+                return;
+            }
+            if (action == DaylightAction.Run)
+            {
+                var envelope = Run("floor", ForskTools.CommandOnUi);
+                line = Line("Daylight", envelope);
+                note = Disclaimer(envelope);
+                return;
+            }
+            line = BakeChip.NeedsWindows + " · " + BakeChip.NeedsWindowsHint;
+        }
+
         /// <summary>Chip receipt: Daylight · ok · 1 space · 1 window · 0.4 s.</summary>
         public static string Line(string label, JObject envelope)
         {

@@ -646,7 +646,7 @@ def test_responses():
     if not validate("responses/daylight_clear_result.json", {"count": 1, "remaining": 0, "message": "Cleared 1"}):
         all_passed = False
     if not validate("responses/panel_daylight_result.json", {
-        "visible": True, "enabled": False, "label": "Needs rooms (A-ROOM)", "intent": "daylight",
+        "visible": True, "enabled": True, "label": "Make rooms", "intent": "daylight",
         "ok": False, "line": "Daylight · error · No rooms.",
     }):
         all_passed = False

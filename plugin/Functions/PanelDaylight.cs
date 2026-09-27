@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
+using Rhino;
+using Rhino.Geometry;
 using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
@@ -48,5 +51,28 @@ public partial class RhinoMCPFunctions
             result["line"] = ForskDaylight.Line(label, envelope);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Daylight chip rows from the objects daylight_scene reads: hidden layers
+    /// (A-OPEN) included, X-EXIST left out, the overlay as it is on A-ANALYSE now.
+    /// </summary>
+    public static List<ChipRow> ChipRows(RhinoDoc doc)
+    {
+        var rows = new List<ChipRow>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (obj?.Attributes == null || IsExistingUnderlay(doc, obj)) continue;
+            var index = obj.Attributes.LayerIndex;
+            rows.Add(new ChipRow
+            {
+                Generated = IsForskGenerated(obj),
+                Kind = GetForskKind(obj),
+                OpeningKind = obj.Attributes.GetUserString("forsk:opening_kind"),
+                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
+                ClosedCurve = obj.Geometry is Curve curve && curve.IsClosed
+            });
+        }
+        return rows;
     }
 }

@@ -594,18 +594,15 @@ def main() -> int:
         def panel(action: str, **extra) -> dict:
             return send_command(sock, "panel_daylight", {"action": action, **extra})
 
-        # F4.3: before any room the panel Daylight chip is disabled with the
-        # A-ROOM hint, and a chat run is refused with the reason.
+        # F4.3: before any room the panel chip offers Make rooms, and a chat
+        # run is refused with the A-ROOM reason.
         bare = panel("state")
         refused = panel("run")
-        no_rooms_ok = (
-            bare.get("label") == "Needs rooms (A-ROOM)"
-            and bare.get("enabled") is False
-            and refused.get("ok") is False
-            and "A-ROOM" in str(refused.get("line"))
-        )
-        if not no_rooms_ok:
-            failures.append(f"panel no-rooms chip {bare.get('label')!r} run {refused.get('line')!r}")
+        no_rooms = []
+        if (bare.get("label"), bare.get("enabled")) != ("Make rooms", True):
+            no_rooms.append(f"label={bare.get('label')} enabled={bare.get('enabled')} expected Make rooms")
+        if refused.get("ok") is not False or "A-ROOM" not in str(refused.get("line")):
+            no_rooms.append(f"run={refused.get('line')}")
         layer(sock, "A-ROOM")
         send_command(sock, "create_object", {
             "type": "POLYLINE",
@@ -686,30 +683,34 @@ def main() -> int:
             rerun=True,
         )
 
-        # F4.3: the panel path (chat intent, then the chip) runs and clears
-        # the same overlay, so the sheet below still sees none.
-        intents = [panel("state", text=t).get("intent") for t in ("run daylight", "is this room dark", "clear daylight")]
-        intent_ok = intents == ["daylight"] * 3
-        ready = panel("state")
-        ran = panel("run")
-        cleared = panel("clear")
-        chip_ok = (
-            ready.get("label") == "Daylight" and ready.get("enabled") is True
-            and ran.get("ok") is True and ran.get("label") == "Clear daylight"
-            and cleared.get("ok") is True and cleared.get("label") == "Daylight"
-        )
-        if not intent_ok:
-            failures.append(f"panel daylight intents {intents}")
-        if not chip_ok:
-            failures.append(
-                f"panel chip {ready.get('label')!r} run {ran.get('line')!r} -> {ran.get('label')!r} "
-                f"clear {cleared.get('line')!r} -> {cleared.get('label')!r}"
-            )
-        word = {True: "ok", False: "FAIL"}
+        # F4.3: the panel path (chat intent, then the chip). The chip sets up
+        # its own state: clear, run, clear. The sheet below sees no overlay.
+        texts = ("run daylight", "is this room dark", "clear daylight")
+        intent = [f"{t}={i}" for t in texts if (i := panel("state", text=t).get("intent")) != "daylight"]
+        chip: list[str] = []
+
+        def expect(step: str, got: dict, label: str) -> None:
+            if chip:
+                return
+            if got.get("ok") is not True:
+                chip.append(f"{step} {got.get('line')}")
+            elif got.get("label") != label or got.get("enabled") is not True:
+                chip.append(f"{step} label={got.get('label')} expected {label}")
+
+        expect("clear", panel("clear"), "Daylight")
+        expect("run", panel("run"), "Clear daylight")
+        expect("clear", panel("clear"), "Daylight")
+
+        def verdict(reasons: list[str]) -> str:
+            return "FAIL: " + "; ".join(reasons) if reasons else "ok"
+
         print(
-            f"    panel daylight intent {word[intent_ok]}, chip run/clear {word[chip_ok]}, "
-            f"no-rooms refusal {word[no_rooms_ok]}"
+            f"    panel daylight intent {verdict(intent)}, chip run/clear {verdict(chip)}, "
+            f"no-rooms refusal {verdict(no_rooms)}"
         )
+        for reasons in (intent, chip, no_rooms):
+            if reasons:
+                failures.append("panel daylight " + "; ".join(reasons))
 
         # No scale: the sheet fits the plan (8 x 4 m lands well under 1:100).
         packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True})

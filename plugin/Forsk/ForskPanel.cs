@@ -231,6 +231,7 @@ namespace RhinoMCPPlugin.Forsk
             _daylight.Visible = _chipState.ShowDaylight;
             _daylight.Text = _chipState.DaylightLabel;
             _daylight.EnabledClick = !_busy && _chipState.DaylightEnabled;
+            _daylight.ToolTip = _chipState.DaylightHint;
             RefreshTarget();
         }
 
@@ -372,33 +373,32 @@ namespace RhinoMCPPlugin.Forsk
             _composer.Send.EnabledClick = false;
             _chip.EnabledClick = false;
             _daylight.EnabledClick = false;
-            var clears = _chipState.DaylightClears;
+            var action = _chipState.Daylight;
             var label = _chipState.DaylightLabel;
+            var roomCurves = _chipState.HasRoomCurves;
             AddLine("user", label);
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
-                JObject envelope;
+                string line;
+                string note;
                 try
                 {
-                    envelope = clears
-                        ? ForskDaylight.Clear(ForskTools.CommandOnUi)
-                        : ForskDaylight.Run("floor", ForskTools.CommandOnUi);
+                    ForskDaylight.Chip(action, roomCurves, out line, out note);
                 }
                 catch (Exception e)
                 {
-                    envelope = ForskTools.Fail(e.Message);
+                    line = label + " · error · " + ForskTools.Clip(e.Message);
+                    note = "";
                 }
-                var line = ForskDaylight.Line(label, envelope);
-                var disclaimer = ForskDaylight.Disclaimer(envelope);
                 Application.Instance.AsyncInvoke(() =>
                 {
                     AddLine("receipt", line);
-                    AddLine("assistant", disclaimer);
+                    AddLine("assistant", note);
                     _history.Add(new JObject { ["role"] = "user", ["content"] = label });
                     _history.Add(new JObject
                     {
                         ["role"] = "assistant",
-                        ["content"] = string.IsNullOrEmpty(disclaimer) ? line : line + "\n" + disclaimer
+                        ["content"] = string.IsNullOrEmpty(note) ? line : line + "\n" + note
                     });
                     _busy = false;
                     _composer.Send.EnabledClick = true;

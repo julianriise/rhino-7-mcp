@@ -1114,17 +1114,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 var generated = obj.Attributes.GetUserString("forsk:generated");
                 if (generated == "1" && string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
                     chip.HasWalls = true;
-                if (generated == "1" && string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
-                    chip.HasRooms = true;
-                if (generated == "1" && string.Equals(kind, "analysis", StringComparison.OrdinalIgnoreCase))
-                    chip.HasOverlay = true;
-                if (generated == "1" && string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(obj.Attributes.GetUserString("forsk:opening_kind"), "window", StringComparison.OrdinalIgnoreCase))
-                    chip.HasWindows = true;
                 if (!(obj.Geometry is Curve)) continue;
                 if (IsPlanLayer(LayerName(doc, obj)))
                     chip.HasPlan = true;
             }
+            chip.ReadDaylight(RhinoMCPFunctions.ChipRows(doc));
             return chip;
         }
 
