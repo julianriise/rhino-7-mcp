@@ -1,0 +1,96 @@
+{
+  "$id": "https://planwire.dev/schema/daylight-request-v1.json",
+  "title": "DaylightRequest",
+  "description": "Instant Daylight v1 scene. Units: centimetres. No orientation or climate.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "segments", "thickness"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "segments": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "type": "number" }
+            }
+          },
+          "thickness": { "type": "number", "exclusiveMinimum": 0 }
+        }
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "wallRef", "width"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "kind": { "enum": ["WINDOW", "DOOR"] },
+          "wallRef": { "type": "string", "minLength": 1 },
+          "width": { "type": "number", "exclusiveMinimum": 0 },
+          "t": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "spaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["floor"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "floor": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["center", "size"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "center": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "number" }
+          },
+          "size": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "number" }
+          }
+        }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cellSizeCm": { "type": "number", "exclusiveMinimum": 0, "default": 40 }
+      }
+    }
+  }
+}

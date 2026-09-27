@@ -1,0 +1,12 @@
+{
+  "comment": "Two walls share id north. validate_daylight_request rejects duplicate wall ids.",
+  "walls": [
+    { "id": "north", "segments": [[0, 800], [800, 800]], "thickness": 20 },
+    { "id": "north", "segments": [[800, 800], [800, 0]], "thickness": 20 },
+    { "id": "south", "segments": [[800, 0], [0, 0]], "thickness": 20 },
+    { "id": "west", "segments": [[0, 0], [0, 800]], "thickness": 20 }
+  ],
+  "openings": [],
+  "spaces": [{ "id": "apt", "floor": [[10, 10], [790, 10], [790, 790], [10, 790], [10, 10]] }],
+  "grid": { "cellSizeCm": 40 }
+}
