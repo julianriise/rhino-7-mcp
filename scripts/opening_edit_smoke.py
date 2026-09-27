@@ -20,6 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import daylight_smoke
 import plan_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
@@ -845,6 +846,14 @@ def main() -> int:
             failures.append(f"office rooms {rooms.get('count')} expected {len(room_rings)}")
         if (rooms.get("count") or 0) < 1:
             failures.append("office room tag has no room")
+
+        # Daylight before Print: paint, capture, clear. The sheets below must not change.
+        daylight_smoke.run_step(
+            lambda cmd, params: send_command(sock, cmd, params),
+            "/tmp/forsk-smoke-office-daylight-1000.png",
+            len(room_rings),
+            failures,
+        )
 
         def plan_objects() -> list:
             rows = []

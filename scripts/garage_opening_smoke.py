@@ -18,6 +18,7 @@ import os
 import socket
 import sys
 
+import daylight_smoke
 import plan_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
@@ -658,6 +659,16 @@ def main() -> int:
         if pocket_id:
             parked = send_command(sock, "get_object_info", {"id": pocket_id}).get("attributes") or {}
             print(f"    pocket hand {parked.get('forsk:hand')}")
+
+        # Daylight before Print: paint, rerun, capture, clear. The sheet below
+        # must not change.
+        daylight_smoke.run_step(
+            lambda cmd, params: send_command(sock, cmd, params),
+            "/tmp/forsk-smoke-garage-daylight-1000.png",
+            1,
+            failures,
+            rerun=True,
+        )
 
         # No scale: the sheet fits the plan (8 x 4 m lands well under 1:100).
         packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True})
