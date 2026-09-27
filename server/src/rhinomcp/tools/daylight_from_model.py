@@ -23,8 +23,7 @@ def daylight_from_model(
     rooms_from_layer. Runs the vendored Planwire tracer in this process and
     paints one welded, smoothly coloured mesh on A-ANALYSE, 50 mm above the
     floor (deep blue = low, near-white = high, Planwire ramp), with no mesh
-    wires, plus a small legend with the disclaimer at its top-left. A rerun
-    replaces both. They never print; daylight_clear removes them.
+    wires. A rerun replaces it. It never prints; daylight_clear removes it.
 
     Scope: relative 0–1 sky visibility on a 2D grid. Not illuminance (lux),
     not EN 17037 or TEK17, not a code check. No orientation or climate.
@@ -54,7 +53,6 @@ def daylight_from_model(
             "id": painted.get("id"),
             "vertices": painted.get("vertices", 0),
             "wires": painted.get("wires"),
-            "legend": painted.get("legend", 0),
             "deleted": painted.get("deleted", 0),
             "layer": painted.get("layer", "A-ANALYSE"),
             "warnings": list(scene.get("warnings") or []) + summary["notes"],

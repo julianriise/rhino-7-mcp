@@ -32,12 +32,6 @@ PROBE_CM = 40.0
 PARALLEL_SIN = 0.02
 MIN_PIECE_CM = 1.0
 
-LEGEND_TITLE = "Sky visibility (proxy)"
-# Same 24 steps the Planwire demo heatmap draws.
-LEGEND_STEPS = 24
-LEGEND_MIN_MM = 100.0
-LEGEND_MAX_MM = 600.0
-
 NO_ROOMS ="No rooms. Draw closed room outlines on A-ROOM and run rooms_from_layer first."
 NO_SELECTION = "Select a room marker first (A-ROOM), or run daylight on the whole floor."
 
@@ -71,7 +65,7 @@ class DaylightRun:
     notes: list[str]
 
     def paint_params(self) -> dict:
-        """daylight_paint params in mm: one welded mesh and its legend.
+        """daylight_paint params in mm: one welded mesh.
 
         Vertices sit on cell corners and are shared. A vertex takes the mean
         score of the usable cells around it, then the Planwire ramp, so colours
@@ -103,7 +97,6 @@ class DaylightRun:
             "vertices": vertices,
             "colors": colors,
             "faces": faces,
-            "legend": legend_layout(vertices),
         }
 
     def summary(self) -> dict:
@@ -118,30 +111,6 @@ class DaylightRun:
             "disclaimer": DISCLAIMER,
             "notes": self.notes,
         }
-
-
-def legend_layout(vertices: list[list[float]]) -> dict:
-    """Legend in mm above the overlay's top-left corner, bottom to top:
-    disclaimer, then 0 · colour bar · 1, then the title. Text height scales
-    with the overlay so it reads at Top-view zoom on a garage and an office."""
-    xs = [v[0] for v in vertices] or [0.0]
-    ys = [v[1] for v in vertices] or [0.0]
-    h = min(max(0.03 * max(max(xs) - min(xs), max(ys) - min(ys)), LEGEND_MIN_MM), LEGEND_MAX_MM)
-    x, y = min(xs), max(ys) + h
-    bar_y = y + 1.2 * h
-    bar_x0, bar_x1 = x + h, x + h + 10 * h
-    return {
-        "bar": {
-            "x0": bar_x0, "y0": bar_y, "x1": bar_x1, "y1": bar_y + 0.8 * h,
-            "colors": [list(score_to_rgb(i / LEGEND_STEPS)) for i in range(LEGEND_STEPS + 1)],
-        },
-        "texts": [
-            {"text": DISCLAIMER, "x": x, "y": y, "height": 0.6 * h},
-            {"text": "0", "x": x, "y": bar_y, "height": 0.8 * h},
-            {"text": "1", "x": bar_x1 + 0.3 * h, "y": bar_y, "height": 0.8 * h},
-            {"text": LEGEND_TITLE, "x": x, "y": y + 2.6 * h, "height": h},
-        ],
-    }
 
 
 def _cm(point) -> tuple[float, float]:

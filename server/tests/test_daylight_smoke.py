@@ -5,6 +5,8 @@ import copy
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -17,32 +19,25 @@ PNG = b"\x89PNG\r\n\x1a\n"
 class FakeRhino:
     """Keeps the overlay objects the way the plugin does: paint replaces, clear empties."""
 
-    def __init__(self, clear_works: bool = True, legend_below: bool = False):
+    def __init__(self, clear_works: bool = True):
         self.rows: list = []
         self.clear_works = clear_works
-        self.legend_below = legend_below
 
     def __call__(self, command: str, params: dict) -> dict:
         if command == "daylight_scene":
             return copy.deepcopy(GARAGE)
         if command == "daylight_paint":
+            assert "legend" not in params
             deleted = len(self.rows)
-            legend = params["legend"]
-            shift = -5000 if self.legend_below else 0
             self.rows = [{"attributes": {"forsk:kind": "analysis", "forsk:role": "mesh"}}]
-            bar = legend["bar"]
-            boxes = [[[bar["x0"], bar["y0"] + shift, 50], [bar["x1"], bar["y1"] + shift, 50]]]
-            boxes += [[[t["x"], t["y"] + shift, 50], [t["x"] + 1000, t["y"] + t["height"] + shift, 50]]
-                      for t in legend["texts"]]
-            self.rows += [{"attributes": {"forsk:kind": "analysis", "forsk:role": "legend"},
-                           "bounding_box": box} for box in boxes]
             return {"id": "m", "cells": len(params["faces"]), "vertices": len(params["vertices"]),
-                    "welded": True, "wires": "off", "legend": len(boxes), "layer": "A-ANALYSE",
-                    "deleted": deleted, "bbox": [200, 200, 7800, 5000]}
+                    "welded": True, "wires": "off", "layer": "A-ANALYSE",
+                    "deleted": deleted, "bbox": [200, 200, 7800, 3800]}
         if command == "get_objects":
             return {"objects": list(self.rows)}
         if command == "capture_viewport":
-            assert len(params["zoom_bbox"]) == 4
+            # Mesh bbox 7600 × 3600 plus 5% on each side.
+            assert params["zoom_bbox"] == pytest.approx([-180, 20, 8180, 3980])
             return {"image_data": base64.b64encode(PNG).decode(), "width": 1000, "height": 700}
         if command == "daylight_clear":
             count = len(self.rows)
@@ -63,8 +58,8 @@ def test_garage_step_prints_the_compare_lines(tmp_path, capsys):
         f"daylight mesh A-ANALYSE welded {GARAGE_VERTICES} vertices wires off overlays 1 "
         f"painted {GARAGE_CELLS} scope sky-vis-proxy"
     ) in out
-    assert "daylight legend objects 5 top-left yes" in out
-    assert f"daylight rerun overlays 1 legend 5 deleted 6 cells {GARAGE_CELLS}" in out
+    assert "legend" not in out
+    assert f"daylight rerun overlays 1 deleted 1 cells {GARAGE_CELLS}" in out
     assert "daylight clear remaining 0 overlays 0" in out
     assert "not illuminance / EN 17037" in out
     assert png.read_bytes() == PNG
@@ -73,7 +68,7 @@ def test_garage_step_prints_the_compare_lines(tmp_path, capsys):
 def test_a_clear_that_leaves_the_mesh_fails(tmp_path, capsys):
     failures: list = []
     daylight_smoke.run_step(FakeRhino(clear_works=False), str(tmp_path / "d.png"), 1, failures)
-    assert failures == ["daylight clear left 6"]
+    assert failures == ["daylight clear left 1"]
 
 
 def test_wrong_space_count_fails_but_still_clears(tmp_path, capsys):
@@ -82,10 +77,3 @@ def test_wrong_space_count_fails_but_still_clears(tmp_path, capsys):
     daylight_smoke.run_step(rhino, str(tmp_path / "d.png"), 15, failures)
     assert failures == ["daylight spaces 1 expected 15"]
     assert rhino.rows == []
-
-
-def test_a_legend_inside_the_overlay_fails(tmp_path, capsys):
-    failures: list = []
-    daylight_smoke.run_step(FakeRhino(legend_below=True), str(tmp_path / "d.png"), 1, failures)
-    assert "daylight legend objects 5 top-left no" in capsys.readouterr().out
-    assert failures == ["daylight legend objects 5 top-left False"]

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Globalization;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -164,10 +163,6 @@ public partial class RhinoMCPFunctions
             box.Union(mesh.GetBoundingBox(true));
         }
 
-        var legend = 0;
-        if (id != Guid.Empty && parameters["legend"] is JObject spec)
-            legend = AddDaylightLegend(doc, layer, mode, spec, z, ref box);
-
         doc.Views.Redraw();
         var bbox = box.IsValid
             ? new JArray(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
@@ -180,7 +175,6 @@ public partial class RhinoMCPFunctions
             ["vertices"] = vertexCount,
             ["welded"] = welded,
             ["wires"] = wiresOff ? "off" : "on",
-            ["legend"] = legend,
             ["layer"] = AnalysisLayerName,
             ["deleted"] = deleted,
             ["bbox"] = bbox,
@@ -219,56 +213,6 @@ public partial class RhinoMCPFunctions
         if (mode != null)
             attr.SetDisplayModeOverride(mode);
         return attr;
-    }
-
-    /// <summary>Colour bar and text laid out by the Python adapter, in mm.</summary>
-    private static int AddDaylightLegend(
-        RhinoDoc doc, Layer layer, DisplayModeDescription mode, JObject spec, double z, ref BoundingBox box)
-    {
-        var count = 0;
-        if (spec["bar"] is JObject bar && bar["colors"] is JArray steps && steps.Count >= 2)
-        {
-            double x0 = bar["x0"].ToObject<double>(), x1 = bar["x1"].ToObject<double>();
-            double y0 = bar["y0"].ToObject<double>(), y1 = bar["y1"].ToObject<double>();
-            var strip = new Mesh();
-            for (var i = 0; i < steps.Count; i++)
-            {
-                var x = x0 + (x1 - x0) * i / (steps.Count - 1);
-                strip.Vertices.Add(x, y0, z);
-                strip.Vertices.Add(x, y1, z);
-                var color = RgbOf(steps[i]);
-                strip.VertexColors.Add(color);
-                strip.VertexColors.Add(color);
-                if (i > 0)
-                    strip.Faces.AddFace(2 * i - 2, 2 * i, 2 * i + 1, 2 * i - 1);
-            }
-            strip.Normals.ComputeNormals();
-            if (doc.Objects.AddMesh(strip, AnalysisAttributes(layer, "legend", "daylight-legend", mode)) != Guid.Empty)
-            {
-                count++;
-                box.Union(strip.GetBoundingBox(true));
-            }
-        }
-
-        foreach (var token in spec["texts"] as JArray ?? new JArray())
-        {
-            var height = token["height"]?.ToObject<double>() ?? 0;
-            var text = token["text"]?.ToString();
-            if (height <= 0 || string.IsNullOrEmpty(text)) continue;
-            var style = OneToOneTextStyle(doc, "Forsk analysis " + height.ToString("0", CultureInfo.InvariantCulture), height);
-            if (style == null) continue;
-            var plane = Plane.WorldXY;
-            plane.Origin = new Point3d(token["x"].ToObject<double>(), token["y"].ToObject<double>(), z);
-            using var entity = TextEntity.Create(text, plane, style, false, 0, 0);
-            if (entity == null) continue;
-            entity.TextHorizontalAlignment = TextHorizontalAlignment.Left;
-            entity.TextVerticalAlignment = TextVerticalAlignment.Bottom;
-            var attr = AnalysisAttributes(layer, "legend", "daylight-legend", null);
-            if (doc.Objects.AddText(entity, attr) == Guid.Empty) continue;
-            count++;
-            box.Union(entity.GetBoundingBox(true));
-        }
-        return count;
     }
 
     private static Color RgbOf(JToken token)

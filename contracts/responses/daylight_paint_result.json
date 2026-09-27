@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_paint_result.json",
   "title": "DaylightPaintResult",
-  "description": "The overlay mesh id (empty when no cells), cells and welded vertices painted, wires state, legend objects, the bbox of mesh plus legend, and old overlay objects deleted first.",
+  "description": "The overlay mesh id (empty when no cells), cells and welded vertices painted, wires state, the mesh bbox, and old overlay objects deleted first.",
   "type": "object",
   "properties": {
     "id": {
@@ -37,10 +37,6 @@
         "on"
       ]
     },
-    "legend": {
-      "type": "integer",
-      "minimum": 0
-    },
     "bbox": {
       "type": "array",
       "items": {
@@ -55,7 +51,6 @@
     "vertices",
     "welded",
     "wires",
-    "legend",
     "layer",
     "deleted",
     "bbox",

@@ -202,21 +202,6 @@ def test_colours_stay_on_the_planwire_ramp_without_renormalising():
     assert all(tuple(c) in ramp for c in run.paint_params()["colors"])
 
 
-def test_legend_sits_above_the_overlay_top_left_with_the_disclaimer():
-    params = fd.run_scene(GARAGE).paint_params()
-    legend = params["legend"]
-    min_x = min(v[0] for v in params["vertices"])
-    max_y = max(v[1] for v in params["vertices"])
-    texts = {t["text"]: t for t in legend["texts"]}
-    assert set(texts) == {fd.DISCLAIMER, "0", "1", fd.LEGEND_TITLE}
-    assert texts[fd.DISCLAIMER]["x"] == min_x
-    assert all(t["y"] > max_y for t in legend["texts"])
-    assert legend["bar"]["y0"] > max_y and legend["bar"]["x0"] > min_x
-    assert legend["bar"]["colors"][0] == list(score_to_rgb(0))
-    assert legend["bar"]["colors"][-1] == list(score_to_rgb(1))
-    assert len(legend["bar"]["colors"]) == fd.LEGEND_STEPS + 1
-
-
 def test_summary_carries_the_proxy_scope():
     summary = fd.run_scene(GARAGE).summary()
     assert summary["scope"] == "sky-vis-proxy"
