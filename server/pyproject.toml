@@ -16,7 +16,6 @@ classifiers = [
 dependencies = [
     "mcp[cli]>=1.16.0",
     "numpy>=1.26",
-    "pydantic>=2",
 ]
 
 [project.optional-dependencies]
