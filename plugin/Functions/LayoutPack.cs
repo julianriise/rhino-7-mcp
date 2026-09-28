@@ -324,7 +324,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
                 pageRecord["rooms_overflow"] = drawn.RoomsOverflow;
                 pageRecord["rooms_too_small"] = drawn.RoomsTooSmall;
-                pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
+                pageRecord["rooms_no_outline"] = drawn.RoomsNoOutline;
                 pageRecord["rooms_untagged"] = new JArray(drawn.RoomsUntagged ?? new List<string>());
                 pageRecord["rooms_overflowing"] = new JArray(drawn.RoomsOverflowing ?? new List<string>());
                 pageRecord["view_title"] = viewTitle;

@@ -409,19 +409,19 @@ def check_tag_names(rows, rooms, label, failures) -> None:
 def check_room_count(page, expected, label, failures) -> None:
     """One line per sheet, the counts as PlanStats defines them: every room is
     tagged (its name is on the sheet), too small (under the 1 m² cutoff), or
-    unbounded (no outline to read). Of the tagged, area dropped show the name
+    without an outline to read. Of the tagged, area dropped show the name
     alone and overflow are the names that run past their room. Then the
     overflowing and the untagged rooms by id, each on its own line."""
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
     overflow = int(page.get("rooms_overflow") or 0)
     small = int(page.get("rooms_too_small") or 0)
-    unbounded = int(page.get("rooms_unbounded") or 0)
+    no_outline = int(page.get("rooms_no_outline") or 0)
     untagged = [str(item) for item in page.get("rooms_untagged") or []]
     overflowing = [str(item) for item in page.get("rooms_overflowing") or []]
     line = (
         f"{label} room tags {tagged}/{expected} area dropped {dropped} overflow {overflow} "
-        f"too small {small} unbounded {unbounded}"
+        f"too small {small} no outline {no_outline}"
     )
     print(f"    {line}")
     if overflowing:
@@ -430,9 +430,9 @@ def check_room_count(page, expected, label, failures) -> None:
         print(f"    {label} room tags untagged {'; '.join(untagged)}")
     if (
         tagged < 1
-        or tagged + small + unbounded != expected
-        or unbounded
-        or len(untagged) != small + unbounded
+        or tagged + small + no_outline != expected
+        or no_outline
+        or len(untagged) != small + no_outline
         or len(overflowing) != overflow
         or not overflow <= dropped <= tagged
     ):

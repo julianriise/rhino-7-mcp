@@ -1115,7 +1115,7 @@ public partial class RhinoMCPFunctions
         public int RoomAreasDropped;
         public int RoomsOverflow;
         public int RoomsTooSmall;
-        public int RoomsUnbounded;
+        public int RoomsNoOutline;
         public List<string> RoomsUntagged;
         public List<string> RoomsOverflowing;
         public string SymbolNote;
@@ -1349,7 +1349,7 @@ public partial class RhinoMCPFunctions
                     result.RoomAreasDropped = planStats.RoomAreasDropped;
                     result.RoomsOverflow = planStats.RoomsOverflow;
                     result.RoomsTooSmall = planStats.RoomsTooSmall;
-                    result.RoomsUnbounded = planStats.RoomsUnbounded;
+                    result.RoomsNoOutline = planStats.RoomsNoOutline;
                     result.RoomsUntagged = planStats.RoomsUntagged;
                     result.RoomsOverflowing = planStats.RoomsOverflowing;
                     result.SymbolNote = planStats.Note;

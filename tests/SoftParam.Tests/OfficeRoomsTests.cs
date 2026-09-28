@@ -160,11 +160,10 @@ public class OfficeRoomsTests
         var (scene, _, _) = Office();
         foreach (var room in RoomDetect.Detect(scene).Rooms)
         {
-            Assert.True(OpeningTypes.TryInteriorPoint(
-                room.Ring.Select(p => p.X).ToArray(), room.Ring.Select(p => p.Y).ToArray(), out var x, out var y));
-            var clear = Clearance(x, y, room.Ring);
+            Assert.True(RoomDetect.TryInside(new List<List<Pt>> { room.Ring }, out var at));
+            var clear = Clearance(at.X, at.Y, room.Ring);
             var hall = RoomDetect.Contains(room.Ring, new Pt(7618.35, 17752.5));
-            Assert.True(clear >= (hall ? 1500 : 500), $"tag at {x:0},{y:0} is {clear:0} mm from the room edge");
+            Assert.True(clear >= (hall ? 1500 : 500), $"tag at {at.X:0},{at.Y:0} is {clear:0} mm from the room edge");
         }
     }
 

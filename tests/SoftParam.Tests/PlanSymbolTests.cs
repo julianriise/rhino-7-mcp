@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using RhinoMCPPlugin.Functions;
 using Xunit;
@@ -196,20 +197,37 @@ public class PlanSymbolTests
         Assert.Equal(x, x2, 6);
     }
 
+    static List<RoomDetect.Pt> Ring(params double[] xy)
+    {
+        var ring = new List<RoomDetect.Pt>();
+        for (var i = 0; i + 1 < xy.Length; i += 2) ring.Add(new RoomDetect.Pt(xy[i], xy[i + 1]));
+        return ring;
+    }
+
     [Fact]
     public void InteriorPoint_UsesCentroid_OrAPointInsideAnL()
     {
-        double x, y;
-        Assert.True(OpeningTypes.TryInteriorPoint(
-            new[] { 0d, 10, 10, 0 }, new[] { 0d, 0, 6, 6 }, out x, out y));
-        Assert.Equal(5, x, 6);
-        Assert.Equal(3, y, 6);
+        Assert.True(RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { Ring(0, 0, 10, 0, 10, 6, 0, 6) }, out var at));
+        Assert.Equal(5, at.X, 6);
+        Assert.Equal(3, at.Y, 6);
 
-        var ex = new[] { 0d, 6, 6, 2, 2, 0 };
-        var ey = new[] { 0d, 0, 2, 2, 6, 6 };
-        Assert.True(OpeningTypes.TryInteriorPoint(ex, ey, out x, out y));
-        Assert.True(OpeningTypes.PointInPolygon(x, y, ex, ey));
-        Assert.False(OpeningTypes.PointInPolygon(4, 4, ex, ey));
+        var l = Ring(0, 0, 6, 0, 6, 2, 2, 2, 2, 6, 0, 6);
+        Assert.True(RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { l }, out at));
+        Assert.True(RoomDetect.Contains(l, at));
+        Assert.False(RoomDetect.Contains(l, new RoomDetect.Pt(4, 4)));
+    }
+
+    [Fact]
+    public void InteriorPoint_FindsAThinWallBand()
+    {
+        // A 200 mm wall band around a 30 x 20 m hall: the hole's even-odd
+        // region is the band. The 32-step grid (937 mm) misses it; a finer
+        // grid finds it, so detection still tells wall from room.
+        var outer = Ring(0, 0, 30000, 0, 30000, 20000, 0, 20000);
+        var hole = Ring(200, 200, 200, 19800, 29800, 19800, 29800, 200);
+        Assert.True(RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { outer, hole }, out var at));
+        Assert.True(RoomDetect.Contains(outer, at));
+        Assert.False(RoomDetect.Contains(hole, at));
     }
 
     [Fact]

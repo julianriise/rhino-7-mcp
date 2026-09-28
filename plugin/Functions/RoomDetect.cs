@@ -294,45 +294,120 @@ public static class RoomDetect
         return inside;
     }
 
+    /// <summary>A centroid this close to the edge, next to the roomiest point, gives way to it.</summary>
+    public const double Cramped = 0.5;
+
     /// <summary>
-    /// A point well inside the even-odd region of rings: the middle of the
-    /// widest span on a scanline halfway between two vertex heights.
+    /// A point well inside the even-odd region of rings, and where a room's
+    /// tag goes: the centroid, unless it lies outside or has under half the
+    /// edge clearance of the roomiest point (the inside point farthest from
+    /// every edge). Then that roomiest point. A rectangle keeps its centre;
+    /// an L-shaped room gets its point in the open part, not at the inner
+    /// corner its centroid falls next to.
     /// </summary>
     public static bool TryInside(List<List<Pt>> rings, out Pt at)
     {
         at = default;
-        var ys = new List<double>();
+        double area2 = 0, cx = 0, cy = 0, sx = 0, sy = 0;
+        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+        var n = 0;
         foreach (var ring in rings)
-            foreach (var p in ring)
-                ys.Add(p.Y);
-        ys.Sort();
-        var best = 0.0;
-        var xs = new List<double>();
-        for (var k = 0; k + 1 < ys.Count; k++)
         {
-            if (ys[k + 1] - ys[k] < 1e-6) continue;
-            var y = (ys[k] + ys[k + 1]) / 2.0;
-            xs.Clear();
-            foreach (var ring in rings)
+            if (ring == null) continue;
+            for (var i = 0; i < ring.Count; i++)
             {
-                for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
-                {
-                    var a = ring[i];
-                    var b = ring[j];
-                    if ((a.Y > y) != (b.Y > y))
-                        xs.Add(a.X + (y - a.Y) * (b.X - a.X) / (b.Y - a.Y));
-                }
-            }
-            xs.Sort();
-            for (var m = 0; m + 1 < xs.Count; m += 2)
-            {
-                var width = xs[m + 1] - xs[m];
-                if (width <= best) continue;
-                best = width;
-                at = new Pt((xs[m] + xs[m + 1]) / 2.0, y);
+                var a = ring[i];
+                var b = ring[(i + 1) % ring.Count];
+                var cross = a.X * b.Y - b.X * a.Y;
+                area2 += cross;
+                cx += (a.X + b.X) * cross;
+                cy += (a.Y + b.Y) * cross;
+                sx += a.X;
+                sy += a.Y;
+                n++;
+                minX = Math.Min(minX, a.X);
+                minY = Math.Min(minY, a.Y);
+                maxX = Math.Max(maxX, a.X);
+                maxY = Math.Max(maxY, a.Y);
             }
         }
-        return best > 0;
+        if (n < 3) return false;
+        var centroid = Math.Abs(area2) < 1e-6
+            ? new Pt(sx / n, sy / n)
+            : new Pt(cx / (3.0 * area2), cy / (3.0 * area2));
+
+        // The roomiest point: the best clearance on a 32-step grid, refined by
+        // halving the step around it. A band too thin for the grid (a wall
+        // footprint) gets a finer one.
+        var span = Math.Max(maxX - minX, maxY - minY);
+        if (span <= 0) return false;
+        var best = 0.0;
+        var roomiest = default(Pt);
+        var step = 0.0;
+        for (var cells = 32; cells <= 256 && best <= 0; cells *= 2)
+        {
+            step = span / cells;
+            for (var x = minX + step / 2; x < maxX; x += step)
+                for (var y = minY + step / 2; y < maxY; y += step)
+                    Roomier(rings, new Pt(x, y), ref roomiest, ref best);
+        }
+        for (var k = 0; k < 12 && best > 0; k++)
+        {
+            step /= 2;
+            var around = roomiest;
+            for (var i = -2; i <= 2; i++)
+                for (var j = -2; j <= 2; j++)
+                    Roomier(rings, new Pt(around.X + i * step, around.Y + j * step), ref roomiest, ref best);
+        }
+        if (best <= 0) return false;
+        var keep = InRings(rings, centroid) && Clearance(rings, centroid) >= Cramped * best;
+        at = keep ? centroid : roomiest;
+        return true;
+    }
+
+    static void Roomier(List<List<Pt>> rings, Pt p, ref Pt roomiest, ref double best)
+    {
+        if (!InRings(rings, p)) return;
+        var d = Clearance(rings, p);
+        if (d <= best) return;
+        best = d;
+        roomiest = p;
+    }
+
+    static bool InRings(List<List<Pt>> rings, Pt p)
+    {
+        var inside = false;
+        foreach (var ring in rings)
+            if (Contains(ring, p)) inside = !inside;
+        return inside;
+    }
+
+    static double Clearance(List<List<Pt>> rings, Pt p)
+    {
+        var best = double.MaxValue;
+        foreach (var ring in rings)
+            best = Math.Min(best, Clearance(ring, p));
+        return best;
+    }
+
+    /// <summary>Distance from p to the nearest edge of ring.</summary>
+    public static double Clearance(IList<Pt> ring, Pt p)
+    {
+        var best = double.MaxValue;
+        if (ring == null) return best;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            var dx = b.X - a.X;
+            var dy = b.Y - a.Y;
+            var len2 = dx * dx + dy * dy;
+            var t = len2 <= 1e-12 ? 0 : Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len2));
+            var ex = a.X + dx * t - p.X;
+            var ey = a.Y + dy * t - p.Y;
+            best = Math.Min(best, Math.Sqrt(ex * ex + ey * ey));
+        }
+        return best;
     }
 
     static bool Covered(List<List<Pt>> keep, List<Pt> ring, Pt inside)
@@ -661,12 +736,7 @@ public static class RoomDetect
         static bool InWall(Scene scene, Pt p)
         {
             foreach (var wall in scene.Walls)
-            {
-                var inside = false;
-                foreach (var ring in wall)
-                    if (Contains(ring, p)) inside = !inside;
-                if (inside) return true;
-            }
+                if (InRings(wall, p)) return true;
             return false;
         }
 

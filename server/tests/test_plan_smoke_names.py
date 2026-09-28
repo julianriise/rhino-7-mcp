@@ -100,7 +100,7 @@ def test_tag_text_is_checked_against_the_detected_name():
 
 FIT_PAGE = {
     "room_tags": 16, "room_areas_dropped": 4, "rooms_overflow": 2, "rooms_too_small": 0,
-    "rooms_unbounded": 0, "rooms_untagged": [],
+    "rooms_no_outline": 0, "rooms_untagged": [],
     "rooms_overflowing": ["rd-07 Bøttekott: name 1.75 m wide, room 1.46 x 1.42 m",
                           "rd-14 Wet Room: name 2.02 m wide, room 1.31 x 1.10 m"],
 }
@@ -111,7 +111,7 @@ def test_room_count_line_names_overflowing_rooms_by_id(capsys):
     plan_smoke.check_room_count(FIT_PAGE, 16, "office fit", failures)
     assert failures == []
     assert capsys.readouterr().out.splitlines() == [
-        "    office fit room tags 16/16 area dropped 4 overflow 2 too small 0 unbounded 0",
+        "    office fit room tags 16/16 area dropped 4 overflow 2 too small 0 no outline 0",
         "    office fit room tags overflow rd-07 Bøttekott: name 1.75 m wide, room 1.46 x 1.42 m; "
         "rd-14 Wet Room: name 2.02 m wide, room 1.31 x 1.10 m",
     ]
@@ -122,7 +122,7 @@ def test_room_count_line_names_overflowing_rooms_by_id(capsys):
     {"room_tags": 15, "rooms_too_small": 1},            # too small with no reason
     {"rooms_overflow": 1},                              # an overflow not listed
     {"rooms_overflow": 5, "room_areas_dropped": 4},     # overflow keeps no area line
-    {"rooms_unbounded": 1, "room_tags": 15, "rooms_untagged": ["rd-01: no outline to tag"]},
+    {"rooms_no_outline": 1, "room_tags": 15, "rooms_untagged": ["rd-01: no outline to tag"]},
 ])
 def test_room_count_line_fails_when_the_counts_do_not_add_up(change):
     failures = []

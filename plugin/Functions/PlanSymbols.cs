@@ -22,7 +22,7 @@ public partial class RhinoMCPFunctions
         public int Roof;
         // Every room marker ends in exactly one of three counts: Rooms (tagged:
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
-        // RoomsUnbounded (no outline to read). Of the
+        // RoomsNoOutline (no outline to read). Of the
         // tagged rooms, RoomAreasDropped show the name alone (the ca. X m² line
         // did not fit), and RoomsOverflow are those whose name runs past the
         // room edge. RoomsUntagged says why, by room id, for each room without
@@ -31,7 +31,7 @@ public partial class RhinoMCPFunctions
         public int RoomAreasDropped;
         public int RoomsOverflow;
         public int RoomsTooSmall;
-        public int RoomsUnbounded;
+        public int RoomsNoOutline;
         public List<string> RoomsUntagged;
         public List<string> RoomsOverflowing;
         public int Skipped;
@@ -550,23 +550,12 @@ public partial class RhinoMCPFunctions
             var who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString();
             // A marker with no outline to read gets no tag.
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
-            if (!area.HasValue || area.Value <= 0 || !TryRoomPolygon(obj, out var worldRing))
+            List<Point3d> worldRing = null;
+            var inside = default(RoomDetect.Pt);
+            if (!area.HasValue || area.Value <= 0 || !TryRoomPolygon(obj, out worldRing)
+                || !RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { PlanPoints(worldRing) }, out inside))
             {
-                stats.RoomsUnbounded++;
-                stats.RoomsUntagged.Add(who + ": no outline to tag");
-                continue;
-            }
-            var xs = new double[worldRing.Count];
-            var ys = new double[worldRing.Count];
-            for (var i = 0; i < worldRing.Count; i++)
-            {
-                xs[i] = worldRing[i].X;
-                ys[i] = worldRing[i].Y;
-            }
-            double ix, iy;
-            if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy))
-            {
-                stats.RoomsUnbounded++;
+                stats.RoomsNoOutline++;
                 stats.RoomsUntagged.Add(who + ": no outline to tag");
                 continue;
             }
@@ -582,7 +571,7 @@ public partial class RhinoMCPFunctions
             }
             var stamps = new Dictionary<string, string>();
             if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
-            var at = new Point3d(ix, iy, 0);
+            var at = new Point3d(inside.X, inside.Y, 0);
             var ring = new List<Point3d>();
             foreach (var point in worldRing)
                 ring.Add(ToDrawing(point, worldToHld, delta));
@@ -824,7 +813,7 @@ public partial class RhinoMCPFunctions
     private static bool RoomHolds(BoundingBox box, string room)
     {
         if (string.IsNullOrEmpty(room)) return false;
-        var ring = new List<Point3d>();
+        var ring = new List<RoomDetect.Pt>();
         foreach (var pair in room.Split(';'))
         {
             var xy = pair.Split(',');
@@ -832,25 +821,19 @@ public partial class RhinoMCPFunctions
             double x, y;
             if (!double.TryParse(xy[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)) continue;
             if (!double.TryParse(xy[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) continue;
-            ring.Add(new Point3d(x, y, 0));
+            ring.Add(new RoomDetect.Pt(x, y));
         }
         if (ring.Count < 3) return false;
         var corners = new[]
         {
-            new Point3d(box.Min.X, box.Min.Y, 0),
-            new Point3d(box.Max.X, box.Min.Y, 0),
-            new Point3d(box.Max.X, box.Max.Y, 0),
-            new Point3d(box.Min.X, box.Max.Y, 0)
+            new RoomDetect.Pt(box.Min.X, box.Min.Y),
+            new RoomDetect.Pt(box.Max.X, box.Min.Y),
+            new RoomDetect.Pt(box.Max.X, box.Max.Y),
+            new RoomDetect.Pt(box.Min.X, box.Max.Y)
         };
-        var xs = new double[ring.Count];
-        var ys = new double[ring.Count];
-        for (var i = 0; i < ring.Count; i++)
-        {
-            xs[i] = ring[i].X;
-            ys[i] = ring[i].Y;
-        }
+        // A corner on the room edge still counts as inside.
         foreach (var corner in corners)
-            if (!OpeningTypes.PointInPolygon(corner.X, corner.Y, xs, ys)) return false;
+            if (!RoomDetect.Contains(ring, corner) && RoomDetect.Clearance(ring, corner) > 1e-4) return false;
         return true;
     }
 
