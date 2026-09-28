@@ -42,6 +42,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             "get_objects",
             "clear_generated",
+            "dxf_import",
             "floor_from_layer",
             "walls_from_layer",
             "roof_flat_from_walls",
@@ -379,6 +380,13 @@ namespace RhinoMCPPlugin.Forsk
                         ["head"] = Num("Top Z. Default 2100.")
                     },
                     "layer"),
+                Fn("dxf_import",
+                    "Import a DXF plan with its text intact: Rhino's import, then every TEXT and MTEXT rewritten from the DXF file, matched by layer and position. Rhino's own Import turns B\\U+00F8ttekott into B00F8ttekott. Reports texts matched, rewritten, and unmatched.",
+                    new JObject
+                    {
+                        ["path"] = Str("Absolute path of the .dxf file.")
+                    },
+                    "path"),
                 Fn("rooms_from_layer",
                     "Planar room markers from closed curves on A-ROOM (alias room). Count 0 if the layer is missing. Does not find rooms from walls; rooms_detect does.",
                     new JObject
@@ -536,6 +544,8 @@ Empty selection refuse, exact copy:
 Nothing is selected. Click the object in Rhino, then say it again. Or name it and I will select it.
 
 Plan to 3D order is floor_from_layer, walls_from_layer, roof_flat_from_walls, openings_from_layer door, openings_from_layer window, rooms_from_layer. Skip rooms when there are no room curves.
+
+Import a DXF with dxf_import and its absolute .dxf path, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room.
 
 Defaults: walls 3000, floor thickness 400, roof 200, doors sill 0 head 2100 width 900, windows sill 900 head 2100 width 1200. Pass stated heights as tool params. If the user states none, use the defaults and say so once.
 
