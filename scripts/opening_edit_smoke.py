@@ -845,6 +845,14 @@ def main() -> int:
         )
         if covered != len(room_rings):
             failures.append(f"office rooms detected {covered}/{len(room_rings)}: {rooms.get('message')}")
+        # The count the tag checks use comes from rooms_detect, so pin it here
+        # from the DXF: its one space_divider line adds one region.
+        regions = len(room_rings) + 1
+        if rooms.get("detected") != regions or rooms.get("open"):
+            failures.append(
+                f"office rooms regions {rooms.get('detected')} open {len(rooms.get('open') or [])} "
+                f"expected {regions} open 0"
+            )
         if room_count < 1:
             failures.append("office room tag has no room")
         # The names rooms_detect returned, against the DXF labels. The sheets
