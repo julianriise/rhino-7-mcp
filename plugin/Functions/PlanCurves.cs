@@ -56,7 +56,7 @@ public partial class RhinoMCPFunctions
         var rawCurves = new List<Curve>();
         foreach (var obj in doc.Objects)
         {
-            if (!ObjectOnLayer(doc, obj, sourceLayer)) continue;
+            if (!ObjectOnLayer(doc, obj, sourceLayer) || IsRoomMarker(obj)) continue;
             if (obj.Geometry is Curve curve)
                 rawCurves.Add(curve.DuplicateCurve());
         }

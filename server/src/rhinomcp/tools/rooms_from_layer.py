@@ -1,4 +1,4 @@
-"""Planar room markers from closed curves on A-ROOM."""
+"""Room markers (boundary curves, no surface) from closed curves on A-ROOM."""
 
 from mcp.server.fastmcp import Context
 from rhinomcp.server import get_rhino_connection, mcp, logger
@@ -14,7 +14,7 @@ def rooms_from_layer(
     join_tolerance: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Build selectable planar room markers from closed curves on a room layer.
+    Build room markers (boundary curves with tag data, no surface) from closed curves on a room layer.
 
     Default source is A-ROOM. Layer name room is an alias for A-ROOM when
     the other is missing. Each closed curve becomes one marker named

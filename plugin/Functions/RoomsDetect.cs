@@ -72,7 +72,7 @@ public partial class RhinoMCPFunctions
         {
             foreach (var obj in EnumerateDocObjects(doc))
             {
-                if (!ObjectOnLayer(doc, obj, roomLayer) || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
+                if (!ObjectOnLayer(doc, obj, roomLayer) || IsRoomMarker(obj) || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
                 var pts = LoopPoints(FlattenToWorldXY(curve, tol), tol);
                 if (pts == null || pts.Count < 3) continue;
                 if (string.Equals(obj.Attributes.GetUserString(RoomSourceKey), DetectedRoomSource, StringComparison.Ordinal))
@@ -241,10 +241,30 @@ public partial class RhinoMCPFunctions
         var list = new List<RhinoObject>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (IsForskGenerated(obj) && string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase))
-                list.Add(obj);
+            if (IsRoomMarker(obj)) list.Add(obj);
         }
         return list;
+    }
+
+    /// <summary>
+    /// A room marker: the closed curve rooms_from_layer adds on A-ROOM. It is
+    /// not a room outline, so the readers of A-ROOM outlines skip it.
+    /// </summary>
+    private static bool IsRoomMarker(RhinoObject obj)
+    {
+        return IsForskGenerated(obj) && string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A marker's outline. Markers are curves; a Brep marker from a file made
+    /// before F2.6 gives its face's outer loop. Null when there is none.
+    /// </summary>
+    private static Curve RoomMarkerOutline(RhinoObject marker)
+    {
+        if (marker?.Geometry is Curve curve) return curve.IsClosed ? curve.DuplicateCurve() : null;
+        if (!(marker?.Geometry is Brep brep) || brep.Faces.Count == 0) return null;
+        try { return brep.Faces[0].OuterLoop?.To3dCurve(); }
+        catch (Exception) { return null; }
     }
 
     /// <summary>

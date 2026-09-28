@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "rooms_from_layer_result.json",
   "title": "RoomsFromLayerResult",
-  "description": "Planar room markers created from closed room curves",
+  "description": "Room markers (boundary curves) created from closed room curves",
   "type": "object",
   "properties": {
     "ids": {

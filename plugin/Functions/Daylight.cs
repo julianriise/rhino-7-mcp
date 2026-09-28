@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -30,6 +31,7 @@ public partial class RhinoMCPFunctions
         var warnings = new JArray();
         var wallIdByGuid = new Dictionary<Guid, string>();
         var markers = new List<RhinoObject>();
+        var roomRings = new List<KeyValuePair<string, List<RoomDetect.Pt>>>();
 
         foreach (var obj in EnumerateDocObjects(doc))
         {
@@ -62,22 +64,20 @@ public partial class RhinoMCPFunctions
             }
             else if (kind.Equals("room", StringComparison.OrdinalIgnoreCase))
             {
-                var brep = obj.Geometry as Brep;
-                var loop = brep != null && brep.Faces.Count > 0
-                    ? brep.Faces[0].OuterLoop?.To3dCurve()
-                    : null;
+                var loop = RoomMarkerOutline(obj);
                 var pts = loop == null ? null : LoopPoints(loop, tol);
                 if (pts == null || pts.Count < 3)
                 {
                     warnings.Add($"Room {obj.Attributes.Name} has no outline.");
                     continue;
                 }
+                roomRings.Add(new KeyValuePair<string, List<RoomDetect.Pt>>(obj.Id.ToString(), PlanPoints(pts)));
                 rooms.Add(new JObject
                 {
                     ["id"] = obj.Id.ToString(),
                     ["name"] = obj.Attributes.Name ?? "",
                     ["ring"] = XyRing(pts),
-                    ["z"] = brep.GetBoundingBox(true).Min.Z
+                    ["z"] = loop.GetBoundingBox(true).Min.Z
                 });
             }
         }
@@ -101,10 +101,23 @@ public partial class RhinoMCPFunctions
         }
 
         var selected = new JArray();
+        var roomLayer = ResolveRoomSourceLayer(doc, "A-ROOM");
         foreach (var obj in ListSelected(doc))
         {
-            if (string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase))
+            if (IsRoomMarker(obj))
+            {
                 selected.Add(obj.Id.ToString());
+                continue;
+            }
+            // A marker is a curve on its room's outline, so a click may pick the
+            // outline instead: the room whose marker holds it is selected.
+            if (roomLayer == null || !ObjectOnLayer(doc, obj, roomLayer)
+                || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
+            var outline = LoopPoints(curve, tol);
+            if (outline == null || outline.Count < 3
+                || !RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { PlanPoints(outline) }, out var at)) continue;
+            var room = roomRings.Find(r => RoomDetect.Contains(r.Value, at));
+            if (room.Key != null && !selected.Any(t => t.ToString() == room.Key)) selected.Add(room.Key);
         }
 
         return new JObject

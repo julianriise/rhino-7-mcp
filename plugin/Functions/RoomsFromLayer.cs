@@ -8,7 +8,9 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Planar room markers from closed curves on A-ROOM (alias layer room).
+/// Room markers from closed curves on A-ROOM (alias layer room): each the
+/// room's boundary curve with its tag data, no surface. A planar surface on
+/// the plan Z is the floor slab's top face and z-fights in Rendered mode.
 /// Source curves stay. clear_generated removes the markers.
 /// </summary>
 public partial class RhinoMCPFunctions
@@ -73,7 +75,7 @@ public partial class RhinoMCPFunctions
         {
             try
             {
-                var marker = RoomMarkerFromCurve(curve, profiles.Tol);
+                var marker = RoomMarkerFromCurve(curve);
                 if (marker == null || !marker.IsValid)
                 {
                     warnings.Add("Room marker failed for a closed curve.");
@@ -96,7 +98,7 @@ public partial class RhinoMCPFunctions
                     Area = CurveArea(curve),
                     SourceLayer = profiles.SourceLayer.Name
                 });
-                var id = doc.Objects.AddBrep(marker, attr);
+                var id = doc.Objects.AddCurve(marker, attr);
                 if (id == Guid.Empty)
                 {
                     warnings.Add("Room marker was not added.");
@@ -141,34 +143,13 @@ public partial class RhinoMCPFunctions
         return null;
     }
 
-    private static Brep RoomMarkerFromCurve(Curve curve, double tol)
+    /// <summary>The marker: a copy of the closed outline, counter-clockwise.</summary>
+    private static Curve RoomMarkerFromCurve(Curve curve)
     {
-        if (curve == null) return null;
-        var dup = curve.DuplicateCurve();
-        if (dup != null &&
-            dup.IsClosed &&
-            dup.ClosedCurveOrientation(Plane.WorldXY) == CurveOrientation.Clockwise)
-        {
+        var dup = curve?.DuplicateCurve();
+        if (dup == null || !dup.IsClosed) return null;
+        if (dup.ClosedCurveOrientation(Plane.WorldXY) == CurveOrientation.Clockwise)
             dup.Reverse();
-        }
-
-        Brep[] planar;
-        try
-        {
-            planar = Brep.CreatePlanarBreps(dup, Math.Max(tol, 1e-6));
-        }
-        catch
-        {
-            return null;
-        }
-
-        if (planar == null) return null;
-        foreach (var brep in planar)
-        {
-            if (brep != null && brep.IsValid)
-                return brep;
-        }
-
-        return null;
+        return dup;
     }
 }

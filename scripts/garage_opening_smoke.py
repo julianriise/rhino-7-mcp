@@ -621,6 +621,11 @@ def main() -> int:
             failures.append(f"rooms rerun ids={ids} removed={rooms.get('removed')} open={rooms.get('open')}")
         if abs(float(rooms.get("area_m2") or 0) - 27.4) > 0.05:
             failures.append(f"rooms area {rooms.get('area_m2')} expected 27.4")
+        # F2.6: a room marker is its boundary curve. A surface on the slab top z-fights.
+        for marker_id in rooms.get("ids") or []:
+            kind = send_command(sock, "get_object_info", {"id": marker_id}).get("type")
+            if kind not in ("POLYLINE", "Curve", "LINE"):
+                failures.append(f"room marker {marker_id} is {kind}, expected a curve (no surface on the slab)")
         roof = send_command(sock, "roof_flat_from_walls", {"overhang": 500})
         print(f"    {roof.get('message')}")
         high = send_command(sock, "add_opening", {

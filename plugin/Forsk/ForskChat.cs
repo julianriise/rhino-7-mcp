@@ -388,7 +388,7 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "path"),
                 Fn("rooms_from_layer",
-                    "Planar room markers from closed curves on A-ROOM (alias room). Count 0 if the layer is missing. Does not find rooms from walls; rooms_detect does.",
+                    "Room markers from closed curves on A-ROOM (alias room): each the boundary curve with its tag data, no surface. Count 0 if the layer is missing. Does not find rooms from walls; rooms_detect does.",
                     new JObject
                     {
                         ["layer"] = Str("Source layer. Default A-ROOM.")

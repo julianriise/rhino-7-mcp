@@ -645,13 +645,7 @@ public partial class RhinoMCPFunctions
     private static bool TryRoomPolygon(RhinoObject room, out List<Point3d> polygon)
     {
         polygon = new List<Point3d>();
-        if (!(room?.Geometry is Brep brep) || brep.Faces.Count == 0) return false;
-        var face = brep.Faces[0];
-        var loop = face?.OuterLoop;
-        if (loop == null) return false;
-        Curve curve = null;
-        try { curve = loop.To3dCurve(); }
-        catch (Exception) { curve = null; }
+        var curve = RoomMarkerOutline(room);
         if (curve == null) return false;
         try
         {
