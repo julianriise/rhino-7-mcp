@@ -69,6 +69,8 @@ PARALLEL_SIN = 0.02
 PROBE_MM = 200.0
 # Cut lookup key: face index times this, plus the distance along the face.
 CUT_KEY = 1e7
+# Point × face pairs per ray test, so a large model does not build huge arrays.
+RAY_PAIRS = 2_000_000
 # Mesh: outline vertices closer than this merge; faces smaller than this drop.
 MESH_EPS_MM = 0.01
 MIN_FACE_AREA2 = 1e-3
@@ -489,7 +491,7 @@ def room_irc(model: Model, r: int) -> float:
     room = model.rooms[r]
     glass = [o for o in model.openings if o.kind == "window" and o.role == "facade" and o.room == r]
     window = sum(o.width * (o.head - o.sill) for o in glass) / 1e6
-    if window <= 0:
+    if window <= 0 or room.area <= 0:
         return 0.0
     height = max(room.ceiling - room.z, 1.0) / 1000.0
     mid = sum(o.width * (o.head - o.sill) * ((o.sill + o.head) / 2 - room.z) for o in glass) / 1e6 / window / 1000.0
@@ -589,16 +591,17 @@ def sky_component(model: Model, points) -> np.ndarray:
         else:
             open_sky = np.ones_like(dz, dtype=bool)
         seen = np.zeros(len(front))
+        step = max(1, RAY_PAIRS // max(len(model.faces), 1))
         for j in range(cols):
             c = -o.width / 2 + (j + 0.5) * pw
             weight = _patch_weights(fd, c - foot, dz, pw, ph) * open_sky
             live = np.nonzero((weight > 0).any(axis=1))[0]
-            if not len(live):
-                continue
-            blocked, panes = _ray_blocks(
-                model, own, fx[live], fy[live], fz[live], o.mx + o.ux * c, o.my + o.uy * c, zr,
-            )
-            seen[live] += (weight[live] * ~blocked * GLASS_TRANSMITTANCE ** panes).sum(axis=1)
+            for lo in range(0, len(live), step):
+                part = live[lo:lo + step]
+                blocked, panes = _ray_blocks(
+                    model, own, fx[part], fy[part], fz[part], o.mx + o.ux * c, o.my + o.uy * c, zr,
+                )
+                seen[part] += (weight[part] * ~blocked * GLASS_TRANSMITTANCE ** panes).sum(axis=1)
         total[front] += seen
     return 100.0 * total / OPEN_SKY
 
