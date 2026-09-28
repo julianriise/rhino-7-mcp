@@ -56,27 +56,23 @@ namespace RhinoMCPPlugin.Forsk
             return call("daylight_clear", new JObject());
         }
 
-        public const string DrawRooms =
-            "Daylight scores rooms. Draw closed room outlines on A-ROOM, then press Make rooms or say make rooms.";
+        public const string NoRooms =
+            "No closed rooms between the walls. Put a door in each gap, or draw closed room outlines on A-ROOM.";
 
         /// <summary>
         /// The Daylight chip's click, off the UI thread. line is the receipt row;
         /// note is the assistant line under it (the disclaimer, or how to get rooms).
-        /// Make rooms is the chat offer: rooms_from_layer when A-ROOM holds closed
-        /// curves, otherwise how to draw them.
+        /// Make rooms is rooms_detect: rooms from the walls, outlines on A-ROOM kept.
         /// </summary>
-        public static void Chip(DaylightAction action, bool roomCurves, out string line, out string note)
+        public static void Chip(DaylightAction action, out string line, out string note)
         {
             note = "";
             if (action == DaylightAction.MakeRooms)
             {
-                if (!roomCurves)
-                {
-                    line = "Make rooms · no closed curves on A-ROOM";
-                    note = DrawRooms;
-                    return;
-                }
-                line = ForskTools.Receipt("rooms_from_layer", ForskTools.CommandOnUi("rooms_from_layer", new JObject()));
+                var rooms = MakeRooms(ForskTools.CommandOnUi);
+                line = RoomsLine(rooms);
+                if (Ok(rooms) && (rooms["result"]?["count"]?.Value<int>() ?? 0) == 0)
+                    note = NoRooms;
                 return;
             }
             if (action == DaylightAction.Clear)
@@ -92,6 +88,19 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             line = BakeChip.NeedsWindows + " · " + BakeChip.NeedsWindowsHint;
+        }
+
+        public static JObject MakeRooms(Func<string, JObject, JObject> call)
+        {
+            return call("rooms_detect", new JObject());
+        }
+
+        /// <summary>Chip receipt: Make rooms · ok · 15 rooms, 412.3 m². 1 open: gap 0.9 m without a door.</summary>
+        public static string RoomsLine(JObject envelope)
+        {
+            if (!Ok(envelope))
+                return "Make rooms · error · " + ForskTools.Clip(envelope?["message"]?.ToString() ?? "failed");
+            return "Make rooms · ok · " + ForskTools.Clip(envelope["result"]?["message"]?.ToString() ?? "");
         }
 
         /// <summary>Chip receipt: Daylight · ok · 1 space · 1 window · 0.4 s.</summary>

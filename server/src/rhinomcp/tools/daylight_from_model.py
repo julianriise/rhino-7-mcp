@@ -19,7 +19,7 @@ def daylight_from_model(
 
     Reads Forsk-tagged walls (forsk:id, forsk:path, forsk:thickness), opening
     markers (forsk:host_id, forsk:width, window or door), and room markers from
-    rooms_from_layer. Runs the vendored Planwire tracer in this process and
+    rooms_detect or rooms_from_layer. Runs the vendored Planwire tracer in this process and
     paints one welded, smoothly coloured mesh on A-ANALYSE, 50 mm above the
     floor (dark blue = low, near-white = high, Forsk sky ramp), with no mesh
     wires. A rerun replaces it. It never prints; daylight_clear removes it.

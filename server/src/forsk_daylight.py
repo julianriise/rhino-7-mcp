@@ -48,7 +48,7 @@ SKY_STOPS: tuple[RampStop, ...] = (
     RampStop(1.0, 0xF2, 0xF8, 0xFD),
 )
 
-NO_ROOMS = "No rooms. Draw closed room outlines on A-ROOM and run rooms_from_layer first."
+NO_ROOMS = "No rooms. Run rooms_detect (Make rooms) to find them from the walls, or draw closed outlines on A-ROOM."
 NO_WINDOWS = "No windows. Daylight comes in through windows: add one with add_opening, then run daylight again."
 NO_SELECTION = "Select a room marker first (A-ROOM), or run daylight on the whole floor."
 

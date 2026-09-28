@@ -603,16 +603,24 @@ def main() -> int:
             no_rooms.append(f"label={bare.get('label')} enabled={bare.get('enabled')} expected Make rooms")
         if refused.get("ok") is not False or "A-ROOM" not in str(refused.get("line")):
             no_rooms.append(f"run={refused.get('line')}")
-        layer(sock, "A-ROOM")
-        send_command(sock, "create_object", {
-            "type": "POLYLINE",
-            "name": "garage-room",
-            "params": {"points": [[200, 200, 0], [7800, 200, 0], [7800, 3800, 0], [200, 3800, 0], [200, 200, 0]]},
-        })
-        rooms = send_command(sock, "rooms_from_layer", {})
-        print(f"    {rooms.get('message')} count={rooms.get('count')}")
-        if (rooms.get("count") or 0) < 1:
-            failures.append(f"rooms={rooms.get('count')}")
+        # F2.5: Make rooms finds the room inside the wall band (A-ROOM does not
+        # exist yet). A rerun keeps its id. No window now, so the chip says so.
+        made = panel("rooms")
+        rooms = send_command(sock, "rooms_detect", {})
+        ids = [room.get("id") for room in rooms.get("rooms") or []]
+        print(
+            f"    rooms detected {rooms.get('detected')} area {rooms.get('area_m2')} "
+            f"open {len(rooms.get('open') or [])} rerun {','.join(ids)} count={rooms.get('count')} "
+            f"chip {made.get('label')}"
+        )
+        if made.get("ok") is not True or not str(made.get("line")).startswith("Make rooms · ok · 1 room,"):
+            failures.append(f"make rooms {made.get('line')}")
+        if made.get("label") != "Needs windows":
+            failures.append(f"make rooms chip {made.get('label')} expected Needs windows")
+        if ids != ["rd-01"] or rooms.get("removed") != 0 or rooms.get("open"):
+            failures.append(f"rooms rerun ids={ids} removed={rooms.get('removed')} open={rooms.get('open')}")
+        if abs(float(rooms.get("area_m2") or 0) - 27.4) > 0.05:
+            failures.append(f"rooms area {rooms.get('area_m2')} expected 27.4")
         roof = send_command(sock, "roof_flat_from_walls", {"overhang": 500})
         print(f"    {roof.get('message')}")
         high = send_command(sock, "add_opening", {

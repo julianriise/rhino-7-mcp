@@ -153,7 +153,7 @@ def test_empty_selection_is_refused():
 def test_no_rooms_is_refused():
     scene = copy.deepcopy(GARAGE)
     scene["rooms"] = []
-    with pytest.raises(fd.DaylightTargetError, match="rooms_from_layer"):
+    with pytest.raises(fd.DaylightTargetError, match="rooms_detect"):
         fd.run_scene(scene)
 
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "panel_daylight_result.json",
   "title": "PanelDaylightResult",
-  "description": "The Daylight chip after the action: visible, enabled, label (Daylight, Clear daylight, Make rooms, or Needs windows, which is the only disabled one). intent when text was sent. ok and the receipt line after run or clear; a refusal is ok false with the reason in line.",
+  "description": "The Daylight chip after the action: visible, enabled, label (Daylight, Clear daylight, Make rooms, or Needs windows, which is the only disabled one). intent when text was sent. ok and the receipt line after run, clear, or rooms; a refusal is ok false with the reason in line.",
   "type": "object",
   "properties": {
     "visible": { "type": "boolean" },

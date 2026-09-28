@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rooms_detect.json",
+  "title": "RoomsDetect Command",
+  "description": "Find rooms from the model: the closed regions between the Forsk walls (forsk:path footprints, X-EXIST left out), closed where a door or non-window opening marker sits in a gap between two wall ends, and split by curves on layer space_divider. Each room becomes a closed curve on A-ROOM (created if missing) with forsk:room_source=detected and a forsk:room_id (rd-01, …) that survives re-runs. Closed curves already on A-ROOM without that stamp win: detection only fills what they leave. Regions under 1 m² are slivers. A region whose gap has no door stays open and is reported. Then every room marker is rebuilt from the closed A-ROOM curves, as rooms_from_layer does.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

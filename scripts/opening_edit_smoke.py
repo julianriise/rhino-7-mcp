@@ -827,31 +827,32 @@ def main() -> int:
                 failures.append("roof missing after edits")
 
         print("==> plan symbols")
-        # The DXF has no A-ROOM layer. Its wall layer holds the outer outline
-        # plus each room's inner wall-face ring; the labelled rings are the rooms.
+        # F2.5: the DXF has no A-ROOM layer. rooms_detect finds the rooms from
+        # the baked walls; the space_divider splits the open corridor, so there
+        # is one more region than labelled wall-face rings. Every ring must hold
+        # a detected room.
         room_rings = plan_smoke.dxf_rooms(office_dxf_path())
-        print(f"    dxf rooms {len(room_rings)}")
-        layer_room = send_command(sock, "create_layer", {"name": "A-ROOM"})
-        print(f"    room layer {layer_room.get('name') or layer_room.get('message')}")
-        send_command(sock, "get_or_set_current_layer", {"name": "A-ROOM"})
-        for number, (_name, ring) in enumerate(room_rings, 1):
-            send_command(sock, "create_object", {
-                "type": "POLYLINE",
-                "name": f"office-room-{number:02d}",
-                "params": {"points": [[x, y, 0] for x, y in ring + ring[:1]]},
-            })
-        rooms = send_command(sock, "rooms_from_layer", {})
-        print(f"    rooms {rooms.get('count')} {rooms.get('message')}")
-        if (rooms.get("count") or 0) != len(room_rings):
-            failures.append(f"office rooms {rooms.get('count')} expected {len(room_rings)}")
-        if (rooms.get("count") or 0) < 1:
+        rooms = send_command(sock, "rooms_detect", {})
+        found = rooms.get("rooms") or []
+        covered = sum(
+            1 for _name, ring in room_rings
+            if any(plan_smoke._inside((room["x"], room["y"]), ring, 0.0) for room in found)
+        )
+        room_count = int(rooms.get("count") or 0)
+        print(
+            f"    rooms detected {covered}/{len(room_rings)} regions {rooms.get('detected')} "
+            f"area {rooms.get('area_m2')} open {len(rooms.get('open') or [])} count={room_count}"
+        )
+        if covered != len(room_rings):
+            failures.append(f"office rooms detected {covered}/{len(room_rings)}: {rooms.get('message')}")
+        if room_count < 1:
             failures.append("office room tag has no room")
 
         # Daylight before Print: paint, capture, clear. The sheets below must not change.
         daylight_smoke.run_step(
             lambda cmd, params: send_command(sock, cmd, params),
             "/tmp/forsk-smoke-office-daylight-1000.png",
-            len(room_rings),
+            room_count,
             failures,
         )
 
@@ -921,7 +922,7 @@ def main() -> int:
             plan_smoke.check_room_tags(
                 rows, int(page.get("scale") or 0), page.get("room_tags"), failures
             )
-            plan_smoke.check_room_count(page, len(room_rings), label, failures)
+            plan_smoke.check_room_count(page, room_count, label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
             plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
             pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})

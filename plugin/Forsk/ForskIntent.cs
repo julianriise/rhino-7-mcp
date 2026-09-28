@@ -106,6 +106,7 @@ namespace RhinoMCPPlugin.Forsk
                 return true;
             if (t.Contains("clear generated") || t.Contains("clear and regenerate")) return true;
             if (t.Contains("mark as existing") || t.Contains("mark existing")) return true;
+            if (t.Contains("make rooms") || t.Contains("find rooms") || t.Contains("detect rooms")) return true;
             return WallsWithHeight(t);
         }
 
@@ -169,7 +170,6 @@ namespace RhinoMCPPlugin.Forsk
         public string Kind;
         public string OpeningKind;
         public string Layer;
-        public bool ClosedCurve;
     }
 
     /// <summary>
@@ -186,7 +186,6 @@ namespace RhinoMCPPlugin.Forsk
         public bool HasWalls;
         public bool HasWindows;
         public bool HasRooms;
-        public bool HasRoomCurves;
         public bool HasOverlay;
         public bool ShowPrint => HasWalls;
         public bool ShowGenerate => HasPlan && !HasWalls;
@@ -227,16 +226,11 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>Daylight facts from the model rows. Called on every refresh; nothing is cached.</summary>
         public void ReadDaylight(IEnumerable<ChipRow> rows)
         {
-            HasWindows = HasRooms = HasRoomCurves = HasOverlay = false;
+            HasWindows = HasRooms = HasOverlay = false;
             foreach (var row in rows)
             {
                 if (row == null) continue;
-                if (!row.Generated)
-                {
-                    if (row.ClosedCurve && string.Equals(row.Layer, "A-ROOM", StringComparison.OrdinalIgnoreCase))
-                        HasRoomCurves = true;
-                    continue;
-                }
+                if (!row.Generated) continue;
                 if (Is(row.Kind, "room")) HasRooms = true;
                 else if (Is(row.Kind, "analysis")) HasOverlay = true;
                 else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "window")) HasWindows = true;

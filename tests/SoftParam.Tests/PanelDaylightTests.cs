@@ -37,7 +37,6 @@ public class PanelDaylightTests
     static ChipRow Door() => new ChipRow { Generated = true, Kind = "opening_marker", OpeningKind = "door", Layer = "A-OPEN" };
     static ChipRow Room() => new ChipRow { Generated = true, Kind = "room", Layer = "A-ROOM" };
     static ChipRow Overlay() => new ChipRow { Generated = true, Kind = "analysis", Layer = "A-ANALYSE" };
-    static ChipRow RoomCurve() => new ChipRow { Layer = "A-ROOM", ClosedCurve = true };
 
     static BakeChip Chip(params ChipRow[] rows)
     {
@@ -91,15 +90,15 @@ public class PanelDaylightTests
         Assert.Equal(DaylightAction.MakeRooms, chip.Daylight);
         Assert.True(chip.DaylightEnabled);
         Assert.Equal("Make rooms", chip.DaylightLabel);
-        Assert.False(chip.HasRoomCurves);
     }
 
-    [Fact]
-    public void NoRooms_SeesClosedA_RoomCurvesForRoomsFromLayer()
+    [Theory]
+    [InlineData("make rooms")]
+    [InlineData("Find rooms please")]
+    [InlineData("detect rooms")]
+    public void MakeRoomsWords_ClassifyAsBuild(string text)
     {
-        var chip = Chip(Wall(), Window(), RoomCurve());
-        Assert.Equal(DaylightAction.MakeRooms, chip.Daylight);
-        Assert.True(chip.HasRoomCurves);
+        Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text, ""));
     }
 
     [Fact]

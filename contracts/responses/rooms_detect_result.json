@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rooms_detect_result.json",
+  "title": "RoomsDetectResult",
+  "description": "Rooms after detection: markers for every closed A-ROOM curve, the detected outlines' stable ids, total area, and the regions left open with the reason.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "GUIDs of the room markers, drawn and detected"
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "forsk:room_id (rd-01, …)" },
+          "area_m2": { "type": "number" },
+          "x": { "type": "number" },
+          "y": { "type": "number" }
+        },
+        "required": ["id", "area_m2", "x", "y"],
+        "additionalProperties": false
+      },
+      "description": "Detected outlines: stable id, area, and a point well inside"
+    },
+    "count": { "type": "integer", "description": "Room markers" },
+    "detected": { "type": "integer", "description": "Regions detected from the walls" },
+    "kept": { "type": "integer", "description": "Regions left to outlines already drawn on A-ROOM" },
+    "removed": { "type": "integer", "description": "Earlier detected outlines whose region is gone" },
+    "slivers": { "type": "integer", "description": "Free regions under 1 m²" },
+    "area_m2": { "type": "number", "description": "Total marker area in m², one decimal" },
+    "open": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason": { "type": "string" },
+          "x": { "type": "number" },
+          "y": { "type": "number" }
+        },
+        "required": ["reason", "x", "y"],
+        "additionalProperties": false
+      },
+      "description": "Regions left open: an undoored gap, or a space divider that meets no wall"
+    },
+    "layer": { "type": "string" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "message": { "type": "string", "description": "15 rooms, 412.3 m². 1 open: gap 0.9 m without a door." }
+  },
+  "required": ["ids", "count", "detected", "area_m2", "open", "message"],
+  "additionalProperties": false
+}

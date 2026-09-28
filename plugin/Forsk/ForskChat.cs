@@ -47,6 +47,7 @@ namespace RhinoMCPPlugin.Forsk
             "roof_flat_from_walls",
             "openings_from_layer",
             "rooms_from_layer",
+            "rooms_detect",
             "mark_as_existing"
         };
 
@@ -379,11 +380,14 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "layer"),
                 Fn("rooms_from_layer",
-                    "Planar room markers from closed curves on A-ROOM (alias room). Count 0 if the layer is missing. Does not invent rooms from walls.",
+                    "Planar room markers from closed curves on A-ROOM (alias room). Count 0 if the layer is missing. Does not find rooms from walls; rooms_detect does.",
                     new JObject
                     {
                         ["layer"] = Str("Source layer. Default A-ROOM.")
                     }),
+                Fn("rooms_detect",
+                    "Make rooms / find rooms: closed regions between the Forsk walls, closed at doors and split by space_divider, drawn on A-ROOM, then room markers. Outlines already on A-ROOM win. Reports rooms, total area, and regions left open with the reason.",
+                    new JObject()),
                 Fn("mark_as_existing",
                     "Move the selection onto X-EXIST and stamp forsk:kind=existing. Empty selection is refused.",
                     new JObject()),
@@ -647,7 +651,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             {
                 return "Turn bias: Daylight. daylight_from_model runs it, daylight_clear clears it. "
                     + "Reply with spaces, windows, and the time, then the tool's disclaimer line word for word. "
-                    + "No rooms: say rooms come from closed outlines on A-ROOM and offer rooms_from_layer. "
+                    + "No rooms: offer rooms_detect, which finds them from the walls. "
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
             }
             if (intent == ForskIntent.Build)
@@ -655,6 +659,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 return "Turn bias: Build. At most two sentences. A full bake is one line. "
                     + "Bake, heights, tilbygg, clear_generated. "
                     + "Order: floor, walls, roof, openings, rooms. "
+                    + "Make rooms or find rooms is rooms_detect: reply with rooms, total area, and any open region's reason. "
                     + "Rebuild is clear_generated, then that order. There is no Rebuild button. "
                     + "Refuse X-EXIST as a bake source.";
             }

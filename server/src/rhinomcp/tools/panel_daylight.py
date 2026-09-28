@@ -13,13 +13,13 @@ def panel_daylight(ctx: Context, action: str = "state", text: Optional[str] = No
     daylight_from_model and daylight_clear for daylight itself.
 
     Parameters:
-    - action: "state" (read the chip), "run" (panel daylight on the floor), or
-      "clear" (remove the overlay)
+    - action: "state" (read the chip), "run" (panel daylight on the floor),
+      "clear" (remove the overlay), or "rooms" (Make rooms: rooms_detect)
     - text: optional chat message; the result then carries the panel intent
 
     Returns:
     Dictionary with visible, enabled, label (the chip after the action),
-    intent when text is given, and ok and line after run or clear.
+    intent when text is given, and ok and line after run, clear, or rooms.
     """
     try:
         params: Dict[str, Any] = {"action": action}

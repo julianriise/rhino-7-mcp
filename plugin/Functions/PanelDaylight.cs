@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using Rhino;
-using Rhino.Geometry;
 using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
@@ -31,9 +30,13 @@ public partial class RhinoMCPFunctions
             label = "Clear daylight";
             envelope = ForskDaylight.Clear(ForskTools.Command);
         }
+        else if (action == "rooms")
+        {
+            envelope = ForskDaylight.MakeRooms(ForskTools.Command);
+        }
         else if (action != "state")
         {
-            throw new ArgumentException("action must be state, run, or clear.");
+            throw new ArgumentException("action must be state, run, clear, or rooms.");
         }
 
         var chip = ForskBake.Detect();
@@ -48,7 +51,7 @@ public partial class RhinoMCPFunctions
         if (envelope != null)
         {
             result["ok"] = string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
-            result["line"] = ForskDaylight.Line(label, envelope);
+            result["line"] = action == "rooms" ? ForskDaylight.RoomsLine(envelope) : ForskDaylight.Line(label, envelope);
         }
         return result;
     }
@@ -69,8 +72,7 @@ public partial class RhinoMCPFunctions
                 Generated = IsForskGenerated(obj),
                 Kind = GetForskKind(obj),
                 OpeningKind = obj.Attributes.GetUserString("forsk:opening_kind"),
-                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
-                ClosedCurve = obj.Geometry is Curve curve && curve.IsClosed
+                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : ""
             });
         }
         return rows;

@@ -375,7 +375,6 @@ namespace RhinoMCPPlugin.Forsk
             _daylight.EnabledClick = false;
             var action = _chipState.Daylight;
             var label = _chipState.DaylightLabel;
-            var roomCurves = _chipState.HasRoomCurves;
             AddLine("user", label);
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -383,7 +382,7 @@ namespace RhinoMCPPlugin.Forsk
                 string note;
                 try
                 {
-                    ForskDaylight.Chip(action, roomCurves, out line, out note);
+                    ForskDaylight.Chip(action, out line, out note);
                 }
                 catch (Exception e)
                 {

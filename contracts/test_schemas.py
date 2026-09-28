@@ -288,6 +288,8 @@ def test_new_commands():
         ("commands/daylight_clear.json", {}),
         ("commands/panel_daylight.json", {}),
         ("commands/panel_daylight.json", {"action": "run", "text": "run daylight"}),
+        ("commands/panel_daylight.json", {"action": "rooms"}),
+        ("commands/rooms_detect.json", {}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
             "view": "south",
@@ -650,6 +652,13 @@ def test_responses():
         "ok": False, "line": "Daylight · error · No rooms.",
     }):
         all_passed = False
+    if not validate("responses/rooms_detect_result.json", {
+        "ids": ["12345678-1234-1234-1234-123456789012"], "rooms": [{"id": "rd-01", "area_m2": 27.36, "x": 4000.0, "y": 2000.0}],
+        "count": 1, "detected": 1, "kept": 0, "removed": 0, "slivers": 1, "area_m2": 27.4,
+        "open": [{"reason": "gap 0.9 m without a door", "x": 1950.0, "y": 2100.0}],
+        "layer": "A-ROOM", "warnings": [], "message": "1 room, 27.4 m². 1 open: gap 0.9 m without a door.",
+    }):
+        all_passed = False
 
     print("  make2d_view_result:")
     guid = "12345678-1234-1234-1234-123456789012"
@@ -847,6 +856,7 @@ def test_invalid_examples():
         ("commands/capture_viewport.json", {"zoom_bbox": [0, 0, 1]}, "capture_viewport short zoom_bbox"),
         ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),
         ("commands/panel_daylight.json", {"action": "paint"}, "panel_daylight unknown action"),
+        ("commands/rooms_detect.json", {"layer": "A-ROOM"}, "rooms_detect takes no parameters"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),
         # delete_object: unknown properties rejected

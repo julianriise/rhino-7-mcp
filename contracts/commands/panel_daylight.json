@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "panel_daylight.json",
   "title": "PanelDaylight Command",
-  "description": "Smoke hook for the Forsk panel's Daylight chip. state reads the chip; run and clear do what the chip does (daylight_scene, the server's tracer in a child process, daylight_paint; or daylight_clear). text adds the panel chat intent for that message.",
+  "description": "Smoke hook for the Forsk panel's Daylight chip. state reads the chip; run and clear do what the chip does (daylight_scene, the server's tracer in a child process, daylight_paint; or daylight_clear). rooms is the chip's Make rooms: rooms_detect. text adds the panel chat intent for that message.",
   "type": "object",
   "properties": {
-    "action": { "type": "string", "enum": ["state", "run", "clear"], "default": "state" },
+    "action": { "type": "string", "enum": ["state", "run", "clear", "rooms"], "default": "state" },
     "text": { "type": "string" }
   },
   "additionalProperties": false
