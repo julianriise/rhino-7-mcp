@@ -322,9 +322,11 @@ public partial class RhinoMCPFunctions
                 pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH) * 0.9 / scale, 3);
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
+                pageRecord["rooms_overflow"] = drawn.RoomsOverflow;
                 pageRecord["rooms_too_small"] = drawn.RoomsTooSmall;
                 pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
                 pageRecord["rooms_untagged"] = new JArray(drawn.RoomsUntagged ?? new List<string>());
+                pageRecord["rooms_overflowing"] = new JArray(drawn.RoomsOverflowing ?? new List<string>());
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 if (!string.IsNullOrEmpty(drawn.RoomText))

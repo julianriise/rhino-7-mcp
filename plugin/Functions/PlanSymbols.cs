@@ -20,17 +20,20 @@ public partial class RhinoMCPFunctions
         public int Arcs;
         public int Dashed;
         public int Roof;
-        // Every room marker with an area ends in exactly one of three counts:
-        // Rooms (tagged: its name is on the sheet), RoomsTooSmall (bounded, but
-        // not even the name fits inside), RoomsUnbounded (open space or off the
-        // floor slab, not a room). RoomAreasDropped counts the tagged rooms
-        // whose ca. X m² line did not fit: they show the name alone.
-        // RoomsUntagged says why, by room id, for each room without a tag.
+        // Every room marker ends in exactly one of three counts: Rooms (tagged:
+        // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
+        // RoomsUnbounded (open space, off the floor slab, or no outline). Of the
+        // tagged rooms, RoomAreasDropped show the name alone (the ca. X m² line
+        // did not fit), and RoomsOverflow are those whose name runs past the
+        // room edge. RoomsUntagged says why, by room id, for each room without
+        // a tag; RoomsOverflowing gives the overflowing names and widths.
         public int Rooms;
         public int RoomAreasDropped;
+        public int RoomsOverflow;
         public int RoomsTooSmall;
         public int RoomsUnbounded;
         public List<string> RoomsUntagged;
+        public List<string> RoomsOverflowing;
         public int Skipped;
         public string Note;
         public string RoomText;
@@ -64,7 +67,7 @@ public partial class RhinoMCPFunctions
         ref int count,
         out PlanStats stats)
     {
-        stats = new PlanStats { RoomsUntagged = new List<string>() };
+        stats = new PlanStats { RoomsUntagged = new List<string>(), RoomsOverflowing = new List<string>() };
         if (doc == null || layer == null || scale < 1) return false;
         var pattern = SolidPatternIndex(doc);
         if (pattern < 0) return false;
@@ -591,6 +594,14 @@ public partial class RhinoMCPFunctions
                 continue;
             }
             var name = RoomDetect.Name(labels, PlanPoints(worldRing));
+            // Under the 1 m² room cutoff (RoomDetect.MinAreaMm2) a marker gets no tag.
+            if (area.Value < RoomDetect.MinAreaMm2)
+            {
+                stats.RoomsTooSmall++;
+                stats.RoomsUntagged.Add(who + " " + name + ": "
+                    + (area.Value / 1000000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m² under 1 m²");
+                continue;
+            }
             // A room is a drawn space bounded by walls (or a space divider), on
             // the floor slab when there is one. A marker in open space gets no tag.
             var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm, dividers);
@@ -618,15 +629,17 @@ public partial class RhinoMCPFunctions
             var origin = ToDrawing(at, worldToHld, delta);
 
             // The tag is the name over ca. X m². A room too small for both shows
-            // its name alone, centred. Too small for the name, it has no tag.
+            // its name alone, centred. A name wider than its room is still
+            // placed, centred, and runs past the room edge (overflow). Text
+            // stays 2.5 mm on paper; leader lines come with F5.2.
             var line = OpeningTypes.RoomTag(area.Value);
-            var areaId = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count, out _);
+            var areaId = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count, false, out _);
             var nameId = Guid.Empty;
             var nameWidth = 0.0;
             if (areaId != Guid.Empty)
             {
                 var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-                nameId = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, out nameWidth);
+                nameId = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out nameWidth);
                 if (nameId == Guid.Empty && doc.Objects.Delete(areaId, true))
                 {
                     areaId = Guid.Empty;
@@ -635,16 +648,23 @@ public partial class RhinoMCPFunctions
                 }
             }
             if (nameId == Guid.Empty)
-                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, out nameWidth);
+                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out nameWidth);
             if (nameId == Guid.Empty)
             {
+                var overflow = new Dictionary<string, string>(stamps) { ["forsk:overflow"] = "1" };
+                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, overflow, ref box, ref index, ref count, true, out nameWidth);
+                if (nameId == Guid.Empty)
+                {
+                    // Rhino made no text at all. It is in no count, so the sheet's counts fail.
+                    stats.RoomsUntagged.Add(who + " " + name + ": text not placed");
+                    continue;
+                }
                 var span = new BoundingBox(ring);
-                stats.RoomsTooSmall++;
-                stats.RoomsUntagged.Add(who + " " + name + ": name "
+                stats.RoomsOverflow++;
+                stats.RoomsOverflowing.Add(who + " " + name + ": name "
                     + (nameWidth / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m wide, room "
                     + ((span.Max.X - span.Min.X) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " x "
                     + ((span.Max.Y - span.Min.Y) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m");
-                continue;
             }
             stats.Rooms++;
             added++;
@@ -789,9 +809,10 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Plan text inside <paramref name="room"/>. Returns its id, or Guid.Empty
-    /// when it was not placed; <paramref name="width"/> is the width Rhino
-    /// measured for it (0 when it never got that far).
+    /// Plan text inside <paramref name="room"/>, or running past its edge when
+    /// <paramref name="overflow"/>. Returns its id, or Guid.Empty when it was
+    /// not placed; <paramref name="width"/> is the width Rhino measured for it
+    /// (0 when it never got that far).
     /// </summary>
     private static Guid AddPlanText(
         RhinoDoc doc,
@@ -806,6 +827,7 @@ public partial class RhinoMCPFunctions
         ref BoundingBox box,
         ref int index,
         ref int count,
+        bool overflow,
         out double width)
     {
         width = 0;
@@ -856,7 +878,7 @@ public partial class RhinoMCPFunctions
         {
             width = textBox.Max.X - textBox.Min.X;
             var shortSide = Math.Min(width, textBox.Max.Y - textBox.Min.Y);
-            if (shortSide > height * 2.0 || !RoomHolds(textBox, room))
+            if (shortSide > height * 2.0 || (!overflow && !RoomHolds(textBox, room)))
             {
                 try { doc.Objects.Delete(id, true); } catch (Exception) { }
                 return Guid.Empty;
