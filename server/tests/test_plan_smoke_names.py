@@ -76,7 +76,17 @@ def test_every_room_rom_fails(rings):
 def test_a_label_from_another_room_fails(rings):
     failures = []
     plan_smoke.check_room_names(rooms(rd_03="WC"), rings, failures)
-    assert failures and "rd-03='WC'" in failures[0]
+    assert failures and "rd-03 'WC'" in failures[0]
+
+
+def test_an_undecoded_label_fails_in_one_short_line(rings):
+    # The live office run: Rhino read B\U+00F8ttekott as B00F8ttekott.
+    failures = []
+    plan_smoke.check_room_names(rooms(rd_07="B00F8ttekott"), rings, failures)
+    assert failures == [
+        "office room names wrong 2: rd-07 'B00F8ttekott' not a label in its DXF room; "
+        "DXF room 'Bøttekott' names no room"
+    ]
 
 
 def test_tag_text_is_checked_against_the_detected_name():
@@ -88,19 +98,65 @@ def test_tag_text_is_checked_against_the_detected_name():
     assert failures == ["office fit names not as detected: rd-07='Rom' detected 'Bøttekott'"]
 
 
-def test_room_count_line_lists_untagged_rooms_by_id(capsys):
-    page = {
-        "room_tags": 14, "room_areas_dropped": 2, "rooms_too_small": 2, "rooms_unbounded": 0,
-        "rooms_untagged": ["rd-07 Bøttekott: name 1.75 m wide, room 1.46 x 1.42 m",
-                           "rd-14 Wet Room: name 2.06 m wide, room 1.32 x 1.10 m"],
-    }
+FIT_PAGE = {
+    "room_tags": 16, "room_areas_dropped": 4, "rooms_overflow": 2, "rooms_too_small": 0,
+    "rooms_unbounded": 0, "rooms_untagged": [],
+    "rooms_overflowing": ["rd-07 Bøttekott: name 1.75 m wide, room 1.46 x 1.42 m",
+                          "rd-14 Wet Room: name 2.02 m wide, room 1.31 x 1.10 m"],
+}
+
+
+def test_room_count_line_names_overflowing_rooms_by_id(capsys):
     failures = []
-    plan_smoke.check_room_count(page, 16, "office fit", failures)
+    plan_smoke.check_room_count(FIT_PAGE, 16, "office fit", failures)
     assert failures == []
-    assert capsys.readouterr().out.startswith(
-        "    office fit room tags 14/16 area dropped 2 too small 2 unbounded 0: rd-07 Bøttekott"
-    )
-    # A room in no count, or too small with no reason, fails.
-    plan_smoke.check_room_count(dict(page, rooms_too_small=1), 16, "office fit", failures)
-    plan_smoke.check_room_count(dict(page, rooms_untagged=[]), 16, "office fit", failures)
-    assert len(failures) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "    office fit room tags 16/16 area dropped 4 overflow 2 too small 0 unbounded 0",
+        "    office fit room tags overflow rd-07 Bøttekott: name 1.75 m wide, room 1.46 x 1.42 m; "
+        "rd-14 Wet Room: name 2.02 m wide, room 1.31 x 1.10 m",
+    ]
+
+
+@pytest.mark.parametrize("change", [
+    {"room_tags": 15},                                  # a room in no count
+    {"room_tags": 15, "rooms_too_small": 1},            # too small with no reason
+    {"rooms_overflow": 1},                              # an overflow not listed
+    {"rooms_overflow": 5, "room_areas_dropped": 4},     # overflow keeps no area line
+    {"rooms_unbounded": 1, "room_tags": 15, "rooms_untagged": ["rd-01 Rom: off the floor slab"]},
+])
+def test_room_count_line_fails_when_the_counts_do_not_add_up(change):
+    failures = []
+    plan_smoke.check_room_count(dict(FIT_PAGE, **change), 16, "office fit", failures)
+    assert len(failures) == 1 and len(failures[0]) <= 120
+
+
+def tag(part, box, ring, overflow=False):
+    attributes = {
+        "forsk:role": "room_tag", "forsk:tag": part, "forsk:room_id": "rd-07",
+        "forsk:text_height": "312.5", "forsk:paper_height": "2.5", "forsk:bounded": "1.00",
+        "forsk:footprint": "floor", "forsk:room": ";".join(f"{x},{y}" for x, y in ring),
+    }
+    if overflow:
+        attributes["forsk:overflow"] = "1"
+    return {"attributes": attributes, "bounding_box": [[box[0], box[1], 0], [box[2], box[3], 0]]}
+
+
+def test_an_overflowing_name_may_run_past_its_room_but_is_centred_in_it(capsys):
+    room = [(0, 0), (1460, 0), (1460, 1420), (0, 1420)]
+    wide = (-150, 540, 1610, 880)  # 1.76 m name in a 1.46 m room, centred
+    page = {"scale": 125, "room_tags": 1, "room_areas_dropped": 1, "rooms_overflow": 1}
+    failures = []
+    plan_smoke.check_room_tags([tag("name", wide, room, overflow=True)], page, failures)
+    assert failures == []
+    assert "room tag text height 312 paper 2.5 inside" in capsys.readouterr().out
+    # Not stamped overflow: the same box is outside its room.
+    plan_smoke.check_room_tags([tag("name", wide, room)], dict(page, rooms_overflow=0), failures)
+    assert any("outside its room" in item for item in failures)
+    # Stamped, but its centre is out of the room.
+    failures = []
+    plan_smoke.check_room_tags([tag("name", (1300, 540, 3060, 880), room, overflow=True)], page, failures)
+    assert any("outside its room" in item for item in failures)
+    # The page's overflow count must match the stamped tags.
+    failures = []
+    plan_smoke.check_room_tags([tag("name", wide, room, overflow=True)], dict(page, rooms_overflow=0), failures)
+    assert failures and "overflow" in failures[0]

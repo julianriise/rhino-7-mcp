@@ -92,10 +92,12 @@ def _tag_texts(rows, part: str) -> list:
 def check_room_tags(rows, page, failures) -> None:
     """Room tag texts as PlanSymbols.AddPlanText makes them: a name for each
     tagged room, an area line for each tagged room whose area was not dropped,
-    model height 2.5 mm x scale, printed 2.5 mm, inside its room."""
+    model height 2.5 mm x scale, printed 2.5 mm, inside its room. A name
+    stamped forsk:overflow may run past the room edge; its centre is inside."""
     scale = int(page.get("scale") or 0)
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
+    overflow = int(page.get("rooms_overflow") or 0)
     expect = PAPER_TEXT_MM * float(scale)
     names = _tag_texts(rows, "name")
     areas = _tag_texts(rows, "area")
@@ -103,9 +105,11 @@ def check_room_tags(rows, page, failures) -> None:
     if expect <= 0 or not tags:
         failures.append(f"room tags missing scale={scale} rows={len(rows)}")
         return
-    if len(names) != tagged or len(areas) != tagged - dropped:
+    runs_over = [obj for obj in names if (obj.get("attributes") or {}).get("forsk:overflow") == "1"]
+    if len(names) != tagged or len(areas) != tagged - dropped or len(runs_over) != overflow:
         failures.append(
-            f"room tag texts: {len(names)} names {len(areas)} areas for {tagged} tagged, {dropped} area dropped"
+            f"room tag texts: {len(names)} names {len(areas)} areas {len(runs_over)} overflow "
+            f"for {tagged} tagged, {dropped} area dropped, {overflow} overflow"
         )
         return
     bad = 0
@@ -144,10 +148,11 @@ def check_room_tags(rows, page, failures) -> None:
             failures.append(f"room tag footprint {attr.get('forsk:footprint')!r}")
             bad += 1
         ring = _pairs(attr.get("forsk:room"))
-        corners = (
-            (box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])
-        )
-        if len(ring) < 3 or any(not _inside(corner, ring) for corner in corners):
+        if attr.get("forsk:overflow") == "1":
+            points = (((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),)
+        else:
+            points = ((box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3]))
+        if len(ring) < 3 or any(not _inside(point, ring) for point in points):
             failures.append(f"room tag outside its room bbox {[round(v) for v in box]}")
             bad += 1
     if bad == 0:
@@ -383,15 +388,15 @@ def check_room_names(rooms, dxf_rings, failures) -> None:
         if not name:
             bad.append(f"{room['id']} has no name")
         elif name != DEFAULT_ROOM_NAME and not any(name in texts for texts in held):
-            bad.append(f"{room['id']}={name!r} is no label of its DXF room {held}")
+            bad.append(f"{room['id']} {name!r} not a label in its DXF room")
     for texts, ring in dxf_rings:
         inside = [room.get("name") for room in rooms if _inside((room["x"], room["y"]), ring, 0.0)]
         if not any(name in texts for name in inside):
-            bad.append(f"DXF room {texts} names none of {inside}")
+            bad.append(f"DXF room {texts[0]!r} names no room")
     rom = sum(1 for room in rooms if room.get("name") == DEFAULT_ROOM_NAME)
     print(f"    room names {len(rooms)} from DXF labels {len(rooms) - rom} Rom {rom} wrong {len(bad)}")
     if bad:
-        failures.append(f"office room names wrong {len(bad)}: {'; '.join(bad[:3])}")
+        failures.append(f"office room names wrong {len(bad)}: {'; '.join(bad[:2])}")
 
 
 def check_tag_names(rows, rooms, label, failures) -> None:
@@ -411,22 +416,36 @@ def check_tag_names(rows, rooms, label, failures) -> None:
 
 def check_room_count(page, expected, label, failures) -> None:
     """One line per sheet, the counts as PlanStats defines them: every room is
-    tagged (its name is on the sheet), too small (not even the name fits), or
-    unbounded; area dropped counts tagged rooms showing the name alone. Each
-    untagged room is listed by id with the reason."""
+    tagged (its name is on the sheet), too small (under the 1 m² cutoff), or
+    unbounded. Of the tagged, area dropped show the name alone and overflow
+    are the names that run past their room. Then the overflowing and the
+    untagged rooms by id, each on its own line."""
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
+    overflow = int(page.get("rooms_overflow") or 0)
     small = int(page.get("rooms_too_small") or 0)
     unbounded = int(page.get("rooms_unbounded") or 0)
     untagged = [str(item) for item in page.get("rooms_untagged") or []]
+    overflowing = [str(item) for item in page.get("rooms_overflowing") or []]
     line = (
-        f"{label} room tags {tagged}/{expected} area dropped {dropped} "
+        f"{label} room tags {tagged}/{expected} area dropped {dropped} overflow {overflow} "
         f"too small {small} unbounded {unbounded}"
     )
-    why = f": {'; '.join(untagged)}" if untagged else ""
-    print(f"    {line}{why}")
-    if tagged < 1 or tagged + small + unbounded != expected or unbounded or len(untagged) != small + unbounded:
-        failures.append(line + why)
+    print(f"    {line}")
+    if overflowing:
+        print(f"    {label} room tags overflow {'; '.join(overflowing)}")
+    if untagged:
+        print(f"    {label} room tags untagged {'; '.join(untagged)}")
+    if (
+        tagged < 1
+        or tagged + small + unbounded != expected
+        or unbounded
+        or len(untagged) != small + unbounded
+        or len(overflowing) != overflow
+        or not overflow <= dropped <= tagged
+    ):
+        ids = " ".join(item.split(" ", 1)[0] for item in untagged)
+        failures.append(line + (f", untagged {ids}" if ids else ""))
 
 
 def _dxf_pairs(path):
