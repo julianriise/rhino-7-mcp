@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dxf_import_result.json",
+  "title": "DxfImportResult",
+  "description": "What the import added and which texts were read from the DXF source.",
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean", "description": "Rhino's import ran" },
+    "objects": { "type": "integer", "description": "Objects the import added" },
+    "texts": { "type": "integer", "description": "Text objects among them" },
+    "matched": { "type": "integer", "description": "Texts matched to their DXF entity (layer and position) and stamped" },
+    "rewritten": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Texts whose stored string changed, as 'Rhino's text -> decoded text'"
+    },
+    "unmatched": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Texts left as Rhino made them: no DXF entity on their layer within 1 mm, or two equally near"
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "message": { "type": "string", "description": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten." }
+  },
+  "required": ["success", "objects", "texts", "matched", "rewritten", "unmatched", "message"],
+  "additionalProperties": false
+}

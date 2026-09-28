@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dxf_import.json",
+  "title": "DxfImport Command",
+  "description": "Forsk's DXF import: Rhino's import of the file, then every imported text rewritten from the DXF source (TEXT and MTEXT decoded once: \\U+XXXX and \\M+ escapes, %% codes, MTEXT formatting, $DWGCODEPAGE before AutoCAD 2007). Rhino's own import loses escapes such as \\U+00F8. A text is matched to its DXF entity by layer and position; a rewritten text is stamped forsk:label_source=dxf and forsk:dxf_handle.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute path of the .dxf file."
+    }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}

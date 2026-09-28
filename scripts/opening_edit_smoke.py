@@ -208,12 +208,18 @@ def write_acad_model_units(value: int) -> None:
     )
 
 
-def import_office_dxf(sock: socket.socket, path: Path) -> None:
-    command = f'_-Import "{path}" _Enter'
-    result = send_command(sock, "run_command", {"command": command, "echo": False})
+def import_office_dxf(sock: socket.socket, path: Path, failures: list) -> None:
+    """Forsk's DXF import: Rhino's import, then every text rewritten from the
+    DXF source. Rhino's import alone stores B\\U+00F8ttekott as B00F8ttekott."""
+    result = send_command(sock, "dxf_import", {"path": str(path)})
+    print(f"    {result.get('message')} rewritten {'; '.join(result.get('rewritten') or []) or 'none'}")
     if result.get("success") is not True:
-        output = str(result.get("output") or "").strip()
-        raise SmokeError(f"DXF import failed: {output or result!r}")
+        raise SmokeError(f"DXF import failed: {result.get('message')} {result.get('warnings')}")
+    if result.get("unmatched") or result.get("warnings"):
+        failures.append(
+            f"dxf_import texts unmatched {len(result.get('unmatched') or [])}: "
+            f"{'; '.join((result.get('unmatched') or result.get('warnings'))[:2])}"
+        )
 
 
 def assert_import_span(summary: dict) -> None:
@@ -527,7 +533,7 @@ def main() -> int:
             if previous_units != ACAD_UNITS_MM:
                 print(f"    ACAD model_units {previous_units} -> {ACAD_UNITS_MM}")
                 write_acad_model_units(ACAD_UNITS_MM)
-            import_office_dxf(sock, dxf)
+            import_office_dxf(sock, dxf, failures)
             summary = send_command(sock, "get_document_summary", {})
             print(f"    objects={summary.get('object_count')}")
             assert_import_span(summary)

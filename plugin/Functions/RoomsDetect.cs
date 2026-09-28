@@ -166,7 +166,8 @@ public partial class RhinoMCPFunctions
         foreach (var warning in markers["warnings"] as JArray ?? new JArray())
             warnings.Add(warning);
 
-        var labels = RoomLabels(doc);
+        var suspect = new List<RoomDetect.Label>();
+        var labels = RoomLabels(doc, suspect);
         var detected = new JArray();
         for (var i = 0; i < found.Rooms.Count; i++)
         {
@@ -184,8 +185,24 @@ public partial class RhinoMCPFunctions
         foreach (var region in found.Open)
             open.Add(new JObject { ["reason"] = region.Reason, ["x"] = region.At.X, ["y"] = region.At.Y });
 
+        // Labels not imported by dxf_import that look mangled: which room each names.
+        var suspects = new JArray();
+        var suspectRooms = new List<string>();
+        foreach (var label in suspect)
+        {
+            var at = found.Rooms.FindIndex(r => RoomDetect.Contains(r.Ring, label.At));
+            var roomId = at >= 0 ? roomIds[at] : "";
+            suspects.Add(new JObject { ["text"] = label.Text, ["room_id"] = roomId, ["x"] = label.At.X, ["y"] = label.At.Y });
+            if (roomId.Length > 0 && !suspectRooms.Contains(roomId)) suspectRooms.Add(roomId);
+        }
+
         doc.Views.Redraw();
         var squareMetres = Math.Round(area / 1000000.0, 1, MidpointRounding.AwayFromZero);
+        var message = RoomsMessage(ids.Count, squareMetres, found.Open);
+        if (suspect.Count > 0)
+            message += " Labels suspect " + suspect.Count
+                + (suspectRooms.Count > 0 ? " (" + string.Join(" ", suspectRooms) + ")" : "")
+                + ": a DXF escape lost on import. Import the DXF with dxf_import.";
         return new JObject
         {
             ["ids"] = ids,
@@ -197,9 +214,10 @@ public partial class RhinoMCPFunctions
             ["slivers"] = found.Slivers,
             ["area_m2"] = squareMetres,
             ["open"] = open,
+            ["labels_suspect"] = suspects,
             ["layer"] = layer.Name,
             ["warnings"] = warnings,
-            ["message"] = RoomsMessage(ids.Count, squareMetres, found.Open)
+            ["message"] = message
         };
     }
 
@@ -227,9 +245,11 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// The texts on the label layer that name rooms, at their insertion points,
-    /// decoded once by LabelText (DXF escapes such as \U+00F8 included).
+    /// as stored: dxf_import has already decoded what it imported. A label it
+    /// did not import that looks like a mangled \U+ escape goes in
+    /// <paramref name="suspect"/> as is; it is reported, not guessed at.
     /// </summary>
-    private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc)
+    private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc, List<RoomDetect.Label> suspect = null)
     {
         var labels = new List<RoomDetect.Label>();
         foreach (var obj in EnumerateDocObjects(doc))
@@ -238,8 +258,11 @@ public partial class RhinoMCPFunctions
             var index = obj.Attributes.LayerIndex;
             if (index < 0 || index >= doc.Layers.Count) continue;
             if (!doc.Layers[index].Name.Equals(RoomLabelLayerName, StringComparison.OrdinalIgnoreCase)) continue;
-            labels.Add(new RoomDetect.Label(LabelText.Plain(text.RichText, text.PlainText), text.TextHeight,
-                new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y)));
+            var label = new RoomDetect.Label(text.PlainText, text.TextHeight,
+                new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y));
+            labels.Add(label);
+            if (suspect != null && obj.Attributes.GetUserString(LabelSourceKey) != "dxf" && DxfText.LooksMangled(label.Text))
+                suspect.Add(label);
         }
         return labels;
     }

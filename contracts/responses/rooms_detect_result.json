@@ -46,6 +46,21 @@
       },
       "description": "Regions left open: an undoored gap, or a space divider that meets no wall"
     },
+    "labels_suspect": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "room_id": { "type": "string", "description": "The detected room the label lies in, or empty" },
+          "x": { "type": "number" },
+          "y": { "type": "number" }
+        },
+        "required": ["text", "room_id", "x", "y"],
+        "additionalProperties": false
+      },
+      "description": "Labels not imported by dxf_import that look like a mangled DXF escape (B00F8ttekott). Reported as is, never guessed; the message says 'Labels suspect N (rd-..)'."
+    },
     "layer": { "type": "string" },
     "warnings": {
       "type": "array",

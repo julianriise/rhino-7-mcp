@@ -290,6 +290,7 @@ def test_new_commands():
         ("commands/panel_daylight.json", {"action": "run", "text": "run daylight"}),
         ("commands/panel_daylight.json", {"action": "rooms"}),
         ("commands/rooms_detect.json", {}),
+        ("commands/dxf_import.json", {"path": "/tmp/office_2D.dxf"}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
             "view": "south",
@@ -660,6 +661,20 @@ def test_responses():
     }):
         all_passed = False
 
+    print("  dxf_import_result:")
+    if not validate("responses/dxf_import_result.json", {
+        "success": True, "objects": 283, "texts": 16, "matched": 16,
+        "rewritten": ["B00F8ttekott -> Bøttekott"], "unmatched": [], "warnings": [],
+        "message": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten.",
+    }):
+        all_passed = False
+    if not validate("responses/rooms_detect_result.json", {
+        "ids": [], "count": 0, "detected": 0, "area_m2": 0.0, "open": [],
+        "labels_suspect": [{"text": "B00F8ttekott", "room_id": "rd-10", "x": 27257.5, "y": 17645.2}],
+        "message": "16 rooms, 399.5 m². Labels suspect 1 (rd-10): a DXF escape lost on import. Import the DXF with dxf_import.",
+    }):
+        all_passed = False
+
     print("  make2d_view_result:")
     guid = "12345678-1234-1234-1234-123456789012"
     make2d_result = {
@@ -857,6 +872,8 @@ def test_invalid_examples():
         ("commands/daylight_clear.json", {"all": True}, "daylight_clear unknown field"),
         ("commands/panel_daylight.json", {"action": "paint"}, "panel_daylight unknown action"),
         ("commands/rooms_detect.json", {"layer": "A-ROOM"}, "rooms_detect takes no parameters"),
+        ("commands/dxf_import.json", {}, "dxf_import needs a path"),
+        ("commands/dxf_import.json", {"path": "/tmp/a.dxf", "units": "mm"}, "dxf_import unknown field"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),
         # delete_object: unknown properties rejected

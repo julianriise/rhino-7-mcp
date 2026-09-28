@@ -90,21 +90,38 @@ public class OfficeRoomsTests
     static bool On(Entity e, string layer) => e.Layer.Equals(layer, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Rhino's PlainText for an imported DXF string. Rhino keeps the raw string
-    /// as the RichText and runs it through ON_RtfParser: ReadTag takes \U as a
-    /// control word and eats the + that ends it, so B\U+00F8ttekott reads
-    /// B00F8ttekott (the live office smoke printed exactly that).
+    /// The text Rhino's DXF import stores for a DXF string: it parses the string
+    /// as RTF and keeps the result. ON_RtfParser::ReadTag takes \U as a control
+    /// word and eats the + that ends it, so B\U+00F8ttekott is stored as
+    /// B00F8ttekott (the live office smoke printed exactly that, as rd-10).
     /// </summary>
     static string RhinoPlainText(string raw) => Regex.Replace(raw, @"\\[A-Za-z]+[0-9.\-]*[^\\{}]?", "");
 
-    /// <summary>A label as the plugin reads it from a Rhino text object.</summary>
-    static RoomDetect.Label ModelLabel(Entity e) =>
-        new RoomDetect.Label(LabelText.Plain(e.Text, RhinoPlainText(e.Text)), e.Height, e.Points[0]);
+    /// <summary>
+    /// The office labels as the plugin reads them after Forsk's DXF import:
+    /// Rhino's import makes each text object, then dxf_import rewrites it from
+    /// the DXF source through DxfText. Nothing here decodes the DXF itself.
+    /// </summary>
+    static List<RoomDetect.Label> ImportedLabels(List<Entity> entities)
+    {
+        var texts = entities.Where(e => (e.Type == "TEXT" || e.Type == "MTEXT") && e.Points.Count > 0).ToList();
+        var placed = texts
+            .Select(e => new DxfText.Placed(e.Layer, e.Points[0].X, e.Points[0].Y, RhinoPlainText(e.Text)))
+            .ToList();
+        var rewritten = DxfText.Rewrite(DxfText.Read(OfficePath), placed, 1.0);
+        return texts
+            .Select((e, i) => (Entity: e, Text: rewritten[i].Text))
+            .Where(t => On(t.Entity, "label"))
+            .Select(t => new RoomDetect.Label(t.Text, t.Entity.Height, t.Entity.Points[0]))
+            .ToList();
+    }
 
     /// <summary>
     /// The scene rooms_detect builds after the office bake: walls_from_layer
-    /// makes one wall from every ring on the wall layer, and the divider is the
-    /// space_divider line. Doors are cut in 3D; the wall rings have no gaps.
+    /// makes one wall of the outer ring and every ring inside it, the holes in
+    /// document order, which is newest first, so the DXF's order reversed. That
+    /// order gives the live run's ids. The divider is the space_divider line.
+    /// Doors are cut in 3D; the wall rings have no gaps.
     /// </summary>
     static (RoomDetect.Scene Scene, List<RoomDetect.Label> Labels, List<List<Pt>> Rings) Office()
     {
@@ -115,14 +132,11 @@ public class OfficeRoomsTests
             .Select(e => OpenRing(e.Points))
             .Where(r => r.Count >= 3)
             .ToList();
-        scene.Walls.Add(rings);
+        var outer = rings.OrderByDescending(r => Math.Abs(RoomDetect.Area(r))).First();
+        scene.Walls.Add(new[] { outer }.Concat(rings.Where(r => r != outer).Reverse()).ToList());
         foreach (var e in entities.Where(e => On(e, "space_divider") && e.Type == "LINE"))
             scene.Dividers.Add(new List<Pt> { e.Points[0], e.End });
-        var labels = entities
-            .Where(e => On(e, "label") && e.Type == "TEXT" && e.Points.Count > 0)
-            .Select(ModelLabel)
-            .ToList();
-        return (scene, labels, rings);
+        return (scene, ImportedLabels(entities), rings);
     }
 
     static double Clearance(double x, double y, List<Pt> ring)
@@ -155,16 +169,24 @@ public class OfficeRoomsTests
     }
 
     [Fact]
-    public void Office_TheOnlyEscapedLabel_ReadsBottekott_AndNamesItsRoom()
+    public void Office_AfterForskImport_Rd10IsBottekott()
     {
+        // The only escaped label. Rhino's import alone stores it as B00F8ttekott.
         var raw = Entities(OfficePath).Single(e => On(e, "label") && e.Text.Contains("\\U+"));
         Assert.Equal("B\\U+00F8ttekott", raw.Text);
         Assert.Equal("B00F8ttekott", RhinoPlainText(raw.Text));
-        Assert.Equal("Bøttekott", ModelLabel(raw).Text);
 
+        // The live run's ids, room by room (rd-10 is the room holding that label).
         var (scene, labels, _) = Office();
-        var room = RoomDetect.Detect(scene).Rooms.Single(r => RoomDetect.Contains(r.Ring, raw.Points[0]));
-        Assert.Equal("Bøttekott", RoomDetect.Name(labels, room.Ring));
+        var found = RoomDetect.Detect(scene);
+        var ids = RoomDetect.Match(found.Rooms, new List<KeyValuePair<string, List<Pt>>>(), "rd-");
+        var named = found.Rooms.Select((room, i) => ids[i] + "=" + RoomDetect.Name(labels, room.Ring));
+        Assert.Equal(
+            "rd-01=Kontor rd-02=Konferanserom rd-03=Wet Room rd-04=Data/arkiv rd-05=WC rd-06=Hall "
+            + "rd-07=Open Office rd-08=Rom rd-09=Fax/kopi/printer rd-10=Bøttekott rd-11=WC rd-12=WC "
+            + "rd-13=Kontor rd-14=Kontor rd-15=Kontorplasser rd-16=Konferanserom",
+            string.Join(" ", named));
+        Assert.True(RoomDetect.Contains(found.Rooms[Array.IndexOf(ids, "rd-10")].Ring, raw.Points[0]));
     }
 
     [Fact]
