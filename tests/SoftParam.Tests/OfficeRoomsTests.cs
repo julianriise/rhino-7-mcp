@@ -255,6 +255,74 @@ public class OfficeRoomsTests
             RoomDetect.TagName(detected[i], room.Area, noLabels, room.Ring, out _)).ToList());
     }
 
+    /// <summary>The DXF's door rectangles and window inserts, as the bake makes openings of them.</summary>
+    static List<Schedules.Opening> OfficeOpenings()
+    {
+        var openings = new List<Schedules.Opening>();
+        foreach (var e in Entities(OfficePath))
+        {
+            var door = On(e, "door") && e.Type == "LWPOLYLINE";
+            var window = On(e, "window") && e.Type == "INSERT";
+            if (!door && !window) continue;
+            Assert.True(OpeningTypes.TryRead(door ? "door" : "window", null, null, null, out var record, out _));
+            openings.Add(new Schedules.Opening
+            {
+                Id = openings.Count.ToString(CultureInfo.InvariantCulture),
+                Record = record,
+                X = e.Points.Average(p => p.X),
+                Y = e.Points.Average(p => p.Y),
+                Width = door ? e.Points.Max(p => p.X) - e.Points.Min(p => p.X) : 1200,
+                Sill = door ? 0 : 900,
+                Head = 2100
+            });
+        }
+        return openings;
+    }
+
+    [Fact]
+    public void Office_Schedules_MatchTheModel()
+    {
+        // The office smoke's model: 14 doors, 63 windows, the 16 detected rooms.
+        var openings = OfficeOpenings();
+        var next = new Dictionary<string, int>();
+        var marks = Schedules.AssignMarks(openings, next);
+        for (var i = 0; i < openings.Count; i++) openings[i].Mark = marks[i];
+        var doors = openings.Where(o => o.Record.Kind == "door").ToList();
+        var windows = openings.Where(o => o.Record.Kind == "window").ToList();
+        Assert.Equal(14, doors.Count);
+        Assert.Equal(63, windows.Count);
+        Assert.Equal(Enumerable.Range(1, 14).Select(n => Schedules.Format("D", n)), Schedules.DoorTable(doors).Ids);
+        Assert.Equal(Enumerable.Range(1, 63).Select(n => Schedules.Format("V", n)), Schedules.WindowTable(windows).Ids);
+
+        // The smoke deletes two windows and adds one back: 62 rows, no mark moves or repeats.
+        var kept = windows.Where(w => w.Mark != "V10" && w.Mark != "V20").ToList();
+        kept.Add(new Schedules.Opening { Id = "new", Record = windows[0].Record, X = 0, Y = 0, Width = 1200, Sill = 900, Head = 2100 });
+        var again = Schedules.AssignMarks(kept.Concat(doors).ToList(), next);
+        for (var i = 0; i < kept.Count - 1; i++) Assert.Equal(kept[i].Mark, again[i]);
+        Assert.Equal("V64", again[kept.Count - 1]);
+        Assert.Equal(62, again.Take(kept.Count).Distinct().Count());
+
+        // Rooms: every detected room once, named and sized as its plan tag.
+        var (scene, labels, _) = Office();
+        var found = RoomDetect.Detect(scene);
+        var ids = RoomDetect.Match(found.Rooms, new List<KeyValuePair<string, List<Pt>>>(), "rd-");
+        var rooms = found.Rooms.Select((room, i) => new Schedules.Room
+        {
+            Id = ids[i],
+            Name = RoomDetect.TagName(RoomDetect.Name(labels, room.Ring), room.Area, labels, room.Ring, out _),
+            AreaMm2 = room.Area
+        }).ToList();
+        var table = Schedules.RoomTable(rooms);
+        Assert.Equal(16, table.Rows.Count);
+        foreach (var room in rooms)
+        {
+            var row = table.Rows[table.Ids.IndexOf(room.Id)];
+            Assert.Equal(room.Name, row[0]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "ca. " + row[1]);
+        }
+        Assert.Equal(OpeningTypes.AreaText(RoomDetect.TotalArea(found.Rooms, new double[0])), table.Total[1]);
+    }
+
     [Fact]
     public void Office_TheDividerSplitsTheCorridor_TheHalvesKeepTheirOwnLabels()
     {

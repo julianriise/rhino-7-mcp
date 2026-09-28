@@ -417,7 +417,8 @@ public partial class RhinoMCPFunctions
         var type = marker?.Attributes?.GetUserString(OpeningTypes.TypeKey);
         var hand = marker?.Attributes?.GetUserString(OpeningTypes.HandKey);
         var swing = marker?.Attributes?.GetUserString(OpeningTypes.SwingKey);
-        if (OpeningTypes.TryRead(kind, type, hand, swing, out var record, out _))
+        var glazed = marker?.Attributes?.GetUserString(OpeningTypes.GlazedKey);
+        if (OpeningTypes.TryRead(kind, type, hand, swing, glazed, out var record, out _))
             return record;
         return OpeningTypes.DefaultRecord(kind);
     }

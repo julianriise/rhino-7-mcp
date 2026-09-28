@@ -22,7 +22,7 @@ def export_pdf(
 
     path is required and must be an absolute file ending in .pdf.
     This tool does not open a save dialog. Call layout_pack first.
-    layout may be a page name or a view token (plan, north, east, south, west).
+    layout may be a page name or a view token (plan, north, east, south, west, schedules).
     Omit layout to export every Forsk page.
 
     Returns:

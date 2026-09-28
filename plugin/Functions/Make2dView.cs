@@ -1118,6 +1118,7 @@ public partial class RhinoMCPFunctions
         public int RoomsNoOutline;
         public List<string> RoomsUntagged;
         public List<string> RoomsOverflowing;
+        public int Marks;
         public string SymbolNote;
         public string RoomText;
     }
@@ -1352,6 +1353,7 @@ public partial class RhinoMCPFunctions
                     result.RoomsNoOutline = planStats.RoomsNoOutline;
                     result.RoomsUntagged = planStats.RoomsUntagged;
                     result.RoomsOverflowing = planStats.RoomsOverflowing;
+                    result.Marks = planStats.Marks;
                     result.SymbolNote = planStats.Note;
                     result.RoomText = planStats.RoomText;
                 }

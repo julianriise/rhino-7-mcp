@@ -314,6 +314,8 @@ def test_new_commands():
             "date": "2026-09-21",
             "scale_label": "1:100",
         }),
+        ("commands/layout_pack.json", {"views": ["plan"], "schedules": "plan"}),
+        ("commands/layout_pack.json", {"schedules": "sheet", "schedule_kinds": ["door", "window", "room"]}),
         ("commands/layout_pack.json", {}),
         ("commands/layout_pack.json", {
             "paper": "A3",
@@ -1003,6 +1005,9 @@ def test_invalid_examples():
         ("commands/layout_pack.json", {"paper": "A1"}, "layout_pack paper not A3"),
         ("commands/layout_pack.json", {"scale": 0}, "layout_pack scale 0"),
         ("commands/layout_pack.json", {"bogus": 1}, "layout_pack unknown field"),
+        ("commands/layout_pack.json", {"schedules": "table"}, "layout_pack schedules not plan or sheet"),
+        ("commands/layout_pack.json", {"schedules": "sheet", "schedule_kinds": []}, "layout_pack no schedule kinds"),
+        ("commands/layout_pack.json", {"schedules": "sheet", "schedule_kinds": ["stair"]}, "layout_pack unknown schedule kind"),
         ("commands/export_pdf.json", {}, "export_pdf missing path"),
         ("commands/export_pdf.json", {"path": ""}, "export_pdf empty path"),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),

@@ -6,13 +6,16 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Opening type registry. No Rhino document. Lookup is by string id so a
-/// later kit can add an entry. Plan symbols are generated from the record.
+/// later kit can add an entry. Plan symbols and schedule rows are generated
+/// from the record.
 /// </summary>
 public static class OpeningTypes
 {
     public const string TypeKey = "forsk:opening_type";
     public const string HandKey = "forsk:hand";
     public const string SwingKey = "forsk:swing";
+    /// <summary>"true" on a door with glass in its leaf. A window is always glazed.</summary>
+    public const string GlazedKey = "forsk:glazed";
 
     public sealed class TypeDef
     {
@@ -24,6 +27,10 @@ public static class OpeningTypes
         public bool HasSwing;
         public string DefaultSwing;
         public string NoKeyName;
+        /// <summary>Norwegian name on the schedule row: Slagdør, Fastkarm.</summary>
+        public string ScheduleLabel;
+        /// <summary>Glass in the whole type. A door type is solid unless the record says glazed.</summary>
+        public bool Glazed;
     }
 
     public sealed class Record
@@ -32,6 +39,7 @@ public static class OpeningTypes
         public string Kind;
         public string Hand;
         public string Swing;
+        public bool Glazed;
         public TypeDef Def;
     }
 
@@ -61,13 +69,13 @@ public static class OpeningTypes
 
     static readonly TypeDef[] Catalog = new TypeDef[]
     {
-        Def("door.hinged_single", "door", "Hinged door", "hinged", true, true, "in", "Hinged doors"),
-        Def("door.hinged_double", "door", "Double door", "double", false, true, "in", "Double doors"),
-        Def("door.sliding", "door", "Sliding door", "sliding", true, false, null, "Sliding doors"),
-        Def("door.pocket", "door", "Pocket door", "pocket", true, false, null, "Pocket doors"),
-        Def("window.fixed", "window", "Fixed window", "fixed", false, false, null, "Fixed windows"),
-        Def("window.side_hung", "window", "Side-hung window", "side-hung", true, true, "in", "Side-hung windows"),
-        Def("window.top_hung", "window", "Top-hung window", "top-hung", false, true, "out", "Top-hung windows")
+        Def("door.hinged_single", "door", "Hinged door", "hinged", true, true, "in", "Hinged doors", "Slagdør"),
+        Def("door.hinged_double", "door", "Double door", "double", false, true, "in", "Double doors", "Pardør"),
+        Def("door.sliding", "door", "Sliding door", "sliding", true, false, null, "Sliding doors", "Skyvedør"),
+        Def("door.pocket", "door", "Pocket door", "pocket", true, false, null, "Pocket doors", "Lommedør"),
+        Def("window.fixed", "window", "Fixed window", "fixed", false, false, null, "Fixed windows", "Fastkarm"),
+        Def("window.side_hung", "window", "Side-hung window", "side-hung", true, true, "in", "Side-hung windows", "Sidehengslet"),
+        Def("window.top_hung", "window", "Top-hung window", "top-hung", false, true, "out", "Top-hung windows", "Topphengslet")
     };
 
     static readonly Dictionary<string, TypeDef> ById = Index(Catalog);
@@ -91,15 +99,27 @@ public static class OpeningTypes
         return null;
     }
 
+    public static bool TryRead(
+        string kind,
+        string typeRaw,
+        string handRaw,
+        string swingRaw,
+        out Record record,
+        out string error)
+    {
+        return TryRead(kind, typeRaw, handRaw, swingRaw, null, out record, out error);
+    }
+
     /// <summary>
     /// Missing type, hand, and swing become the defaults for the kind.
-    /// A key the type does not use is dropped.
+    /// A key the type does not use is dropped. glazedRaw "true" glazes a door.
     /// </summary>
     public static bool TryRead(
         string kind,
         string typeRaw,
         string handRaw,
         string swingRaw,
+        string glazedRaw,
         out Record record,
         out string error)
     {
@@ -150,7 +170,7 @@ public static class OpeningTypes
             }
         }
 
-        record = Make(def, hand, swing);
+        record = Make(def, hand, swing, IsTrue(glazedRaw));
         return true;
     }
 
@@ -163,13 +183,15 @@ public static class OpeningTypes
         string type = null;
         string hand = null;
         string swing = null;
+        string glazed = null;
         if (keys != null)
         {
             keys.TryGetValue(TypeKey, out type);
             keys.TryGetValue(HandKey, out hand);
             keys.TryGetValue(SwingKey, out swing);
+            keys.TryGetValue(GlazedKey, out glazed);
         }
-        return TryRead(kind, type, hand, swing, out record, out error);
+        return TryRead(kind, type, hand, swing, glazed, out record, out error);
     }
 
     public static Dictionary<string, string> ToKeys(Record record)
@@ -182,6 +204,8 @@ public static class OpeningTypes
             keys[HandKey] = record.Hand;
         if (!string.IsNullOrEmpty(record.Swing))
             keys[SwingKey] = record.Swing;
+        if (record.Glazed && (record.Def == null || !record.Def.Glazed))
+            keys[GlazedKey] = "true";
         return keys;
     }
 
@@ -255,7 +279,8 @@ public static class OpeningTypes
             }
         }
 
-        var after = Make(def, hand, swing);
+        // A glazed door stays glazed through a type swap.
+        var after = Make(def, hand, swing, current.Glazed);
         edit = new Edit
         {
             Before = current,
@@ -723,11 +748,20 @@ public static class OpeningTypes
         };
     }
 
+    /// <summary>Room tag area line: ca. 12,4 m².</summary>
     public static string RoomTag(double areaMm2)
     {
+        return "ca. " + AreaText(areaMm2);
+    }
+
+    /// <summary>
+    /// An area as the sheet prints it, one decimal, Norwegian comma: 12,4 m².
+    /// The room tag and the room schedule both print this.
+    /// </summary>
+    public static string AreaText(double areaMm2)
+    {
         var m2 = Math.Round(areaMm2 / 1000000.0, 1, MidpointRounding.AwayFromZero);
-        var text = m2.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',');
-        return "ca. " + text + " m²";
+        return m2.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',') + " m²";
     }
 
     /// <summary>Drawing title for the title block. The scale has its own cell.</summary>
@@ -899,7 +933,7 @@ public static class OpeningTypes
         return false;
     }
 
-    static Record Make(TypeDef def, string hand, string swing)
+    static Record Make(TypeDef def, string hand, string swing, bool glazed)
     {
         return new Record
         {
@@ -907,8 +941,17 @@ public static class OpeningTypes
             Kind = def.Kind,
             Hand = def.HasHand ? hand : null,
             Swing = def.HasSwing ? swing : null,
+            Glazed = def.Glazed || glazed,
             Def = def
         };
+    }
+
+    static bool IsTrue(string raw)
+    {
+        var value = raw?.Trim();
+        return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "1", StringComparison.Ordinal)
+            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
     static TypeDef DefaultDef(string kind)
@@ -932,7 +975,7 @@ public static class OpeningTypes
 
     static TypeDef Def(
         string id, string kind, string label, string shortName,
-        bool hand, bool swing, string defaultSwing, string noKeyName)
+        bool hand, bool swing, string defaultSwing, string noKeyName, string scheduleLabel)
     {
         return new TypeDef
         {
@@ -943,7 +986,9 @@ public static class OpeningTypes
             HasHand = hand,
             HasSwing = swing,
             DefaultSwing = defaultSwing,
-            NoKeyName = noKeyName
+            NoKeyName = noKeyName,
+            ScheduleLabel = scheduleLabel,
+            Glazed = kind == "window"
         };
     }
 

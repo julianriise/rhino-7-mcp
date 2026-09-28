@@ -1,0 +1,416 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+
+namespace RhinoMCPPlugin.Functions;
+
+/// <summary>
+/// Door, window and room schedules (F5.1) from the model's own records: the
+/// opening markers and the room markers the plan tags show. Each door and
+/// window carries a stable mark (D01, V01) that the plan prints beside it and
+/// the schedule prints on its row. Pure, no Rhino document, so it tests
+/// headless. Sizes are paper millimetres.
+/// </summary>
+public static class Schedules
+{
+    public const string MarkKey = "forsk:mark";
+    public const string DoorPrefix = "D";
+    public const string WindowPrefix = "V";
+
+    public const double TextMm = 2.0;
+    public const double TitleMm = 3.5;
+    public const double RowMm = 4.0;
+    /// <summary>Space the title takes above its table.</summary>
+    public const double TitleSpaceMm = 6.0;
+    public const double PadMm = 1.5;
+    /// <summary>Between two tables in a column, between columns, and beside the plan.</summary>
+    public const double GapMm = 8.0;
+    /// <summary>Glyph advance at TextMm, wide enough for capitals and digits.</summary>
+    const double CharMm = 0.62 * TextMm;
+    const double MinColumnMm = 8.0;
+
+    public sealed class Opening
+    {
+        public string Id;
+        public string Mark;
+        public OpeningTypes.Record Record;
+        public double X;
+        public double Y;
+        public double Width;
+        public double Sill;
+        public double Head;
+        /// <summary>Tagged room names on each side of the wall, null where there is none.</summary>
+        public string[] Rooms = new string[2];
+    }
+
+    public sealed class Room
+    {
+        public string Id;
+        public string Name;
+        public double AreaMm2;
+    }
+
+    public sealed class Table
+    {
+        public string Kind;
+        public string Title;
+        public string[] Heads;
+        public bool[] Right;
+        public double[] Widths;
+        /// <summary>Row id: the mark, or the room id.</summary>
+        public List<string> Ids = new List<string>();
+        public List<string[]> Rows = new List<string[]>();
+        public string[] Total;
+
+        public double Width
+        {
+            get
+            {
+                var width = 0.0;
+                foreach (var w in Widths) width += w;
+                return width;
+            }
+        }
+
+        /// <summary>Body lines: the rows, then the total.</summary>
+        public int Lines
+        {
+            get { return Rows.Count + (Total == null ? 0 : 1); }
+        }
+
+        /// <summary>Cells of body line i: a row, or the total after the last row.</summary>
+        public string[] Line(int i)
+        {
+            return i < Rows.Count ? Rows[i] : Total;
+        }
+
+        public string LineId(int i)
+        {
+            return i < Rows.Count ? Ids[i] : "total";
+        }
+    }
+
+    /// <summary>
+    /// Part of a table in one column. Top is measured down from the top of the
+    /// schedule area, X right from its left edge.
+    /// </summary>
+    public sealed class Block
+    {
+        public Table Table;
+        public int First;
+        public int Count;
+        public bool Continued;
+        public double X;
+        public double Top;
+
+        public string Title
+        {
+            get { return Continued ? Table.Title + " (forts.)" : Table.Title; }
+        }
+
+        /// <summary>Title, head row, and the body lines.</summary>
+        public double Height
+        {
+            get { return TitleSpaceMm + RowMm * (1 + Count); }
+        }
+    }
+
+    public static string Prefix(string kind)
+    {
+        return string.Equals(kind, "window", StringComparison.OrdinalIgnoreCase) ? WindowPrefix : DoorPrefix;
+    }
+
+    public static string Format(string prefix, int number)
+    {
+        return prefix + number.ToString("00", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The number of a mark with this prefix: D07 is 7. False for any other text.</summary>
+    public static bool TryNumber(string mark, string prefix, out int number)
+    {
+        number = 0;
+        if (string.IsNullOrEmpty(mark) || !mark.StartsWith(prefix, StringComparison.Ordinal)
+            || mark.Length == prefix.Length || mark.Length > prefix.Length + 6)
+            return false;
+        for (var i = prefix.Length; i < mark.Length; i++)
+            if (mark[i] < '0' || mark[i] > '9') return false;
+        number = int.Parse(mark.Substring(prefix.Length), CultureInfo.InvariantCulture);
+        return number > 0;
+    }
+
+    /// <summary>
+    /// The mark of each opening. A mark the opening already carries stays, so
+    /// it survives edits, rebuilds, and other openings coming and going. A
+    /// missing, foreign or repeated mark (a copied marker) takes the next free
+    /// number, in reading order: top of the plan first, then left to right.
+    /// Doors are D01…, windows V01…. next holds the next free number per
+    /// prefix from the last run and is updated, so a deleted mark is not given
+    /// to a new opening. With no mark of a prefix left, numbering starts at 01.
+    /// </summary>
+    public static string[] AssignMarks(IList<Opening> openings, IDictionary<string, int> next)
+    {
+        var marks = new string[openings.Count];
+        var order = ReadingOrder(openings);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var free = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var i in order)
+        {
+            var prefix = Prefix(openings[i].Record?.Kind);
+            if (!TryNumber(openings[i].Mark, prefix, out var number)) continue;
+            var mark = Format(prefix, number);
+            if (!used.Add(mark)) continue;
+            marks[i] = mark;
+            var stored = next != null && next.TryGetValue(prefix, out var n) ? n : 1;
+            free[prefix] = Math.Max(free.TryGetValue(prefix, out var f) ? f : stored, number + 1);
+        }
+        foreach (var i in order)
+        {
+            if (marks[i] != null) continue;
+            var prefix = Prefix(openings[i].Record?.Kind);
+            if (!free.ContainsKey(prefix)) free[prefix] = 1;
+            string mark;
+            do mark = Format(prefix, free[prefix]++);
+            while (!used.Add(mark));
+            marks[i] = mark;
+        }
+        if (next != null)
+        {
+            next.Clear();
+            foreach (var pair in free) next[pair.Key] = pair.Value;
+        }
+        return marks;
+    }
+
+    /// <summary>
+    /// The side of the wall, -1 or +1 across it in the symbol frame, that the
+    /// plan prints the mark on: a hinged door's on the side its leaf does not
+    /// swing into; any other opening's on the side with no room (outside);
+    /// between two rooms or none, +1.
+    /// </summary>
+    public static int MarkSide(OpeningTypes.Record record, int yInward, string[] rooms)
+    {
+        var id = record?.TypeId ?? "";
+        if (id == "door.hinged_single" || id == "door.hinged_double")
+            return -OpeningTypes.SwingSign(record, yInward);
+        var below = rooms != null && rooms.Length > 0 ? rooms[0] : null;
+        var above = rooms != null && rooms.Length > 1 ? rooms[1] : null;
+        return below == null && above != null ? -1 : 1;
+    }
+
+    static List<int> ReadingOrder(IList<Opening> openings)
+    {
+        var order = new List<int>();
+        for (var i = 0; i < openings.Count; i++) order.Add(i);
+        order.Sort((a, b) =>
+        {
+            var byRow = Math.Round(openings[b].Y).CompareTo(Math.Round(openings[a].Y));
+            if (byRow != 0) return byRow;
+            var byColumn = openings[a].X.CompareTo(openings[b].X);
+            return byColumn != 0 ? byColumn : a.CompareTo(b);
+        });
+        return order;
+    }
+
+    /// <summary>Dørliste: mark, type, width × height, hand and swing, the rooms either side.</summary>
+    public static Table DoorTable(IList<Opening> doors)
+    {
+        var table = new Table
+        {
+            Kind = "door",
+            Title = "Dørliste",
+            Heads = new[] { "Nr.", "Type", "B × H (mm)", "Slag", "Rom" },
+            Right = new[] { false, false, true, false, false }
+        };
+        foreach (var door in ByMark(doors))
+        {
+            table.Ids.Add(door.Mark);
+            table.Rows.Add(new[] { door.Mark, TypeText(door.Record), Size(door), Hand(door.Record), RoomText(door.Rooms) });
+        }
+        return Fit(table);
+    }
+
+    /// <summary>Vindusliste: mark, type, width × height, sill height, the room it lights.</summary>
+    public static Table WindowTable(IList<Opening> windows)
+    {
+        var table = new Table
+        {
+            Kind = "window",
+            Title = "Vindusliste",
+            Heads = new[] { "Nr.", "Type", "B × H (mm)", "Brystning (mm)", "Rom" },
+            Right = new[] { false, false, true, true, false }
+        };
+        foreach (var window in ByMark(windows))
+        {
+            table.Ids.Add(window.Mark);
+            table.Rows.Add(new[] { window.Mark, TypeText(window.Record), Size(window), Mm(window.Sill), RoomText(window.Rooms) });
+        }
+        return Fit(table);
+    }
+
+    /// <summary>
+    /// Romliste: each tagged room's name and area as its plan tag prints them,
+    /// in room id order, then the sum of the rooms' areas.
+    /// </summary>
+    public static Table RoomTable(IList<Room> rooms)
+    {
+        var table = new Table
+        {
+            Kind = "room",
+            Title = "Romliste",
+            Heads = new[] { "Rom", "Areal" },
+            Right = new[] { false, true }
+        };
+        var sorted = new List<Room>(rooms);
+        sorted.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+        var total = 0.0;
+        foreach (var room in sorted)
+        {
+            table.Ids.Add(room.Id);
+            table.Rows.Add(new[] { room.Name, OpeningTypes.AreaText(room.AreaMm2) });
+            total += room.AreaMm2;
+        }
+        if (sorted.Count > 0)
+            table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
+        return Fit(table);
+    }
+
+    /// <summary>Sheet title for the lists shown: Dørliste; Dør- og vindusliste; Dør-, vindus- og romliste.</summary>
+    public static string SheetTitle(IList<string> kinds)
+    {
+        var stems = new List<string>();
+        if (kinds.Contains("door")) stems.Add("Dør");
+        if (kinds.Contains("window")) stems.Add("vindus");
+        if (kinds.Contains("room")) stems.Add("rom");
+        if (stems.Count == 0) return "";
+        stems[0] = char.ToUpperInvariant(stems[0][0]) + stems[0].Substring(1);
+        if (stems.Count == 1) return stems[0] + "liste";
+        var head = string.Join("-, ", stems.GetRange(0, stems.Count - 1).ToArray());
+        return head + "- og " + stems[stems.Count - 1] + "liste";
+    }
+
+    /// <summary>
+    /// Stacks the tables down a column of the given height and flows on into
+    /// the next column when one runs out, repeating the title (forts.) and the
+    /// head. A table starts a new column rather than leave fewer than three of
+    /// its lines under a title. Columns step right by their widest table plus
+    /// GapMm; width is the whole extent. Null when the height cannot hold a
+    /// title, a head and one line.
+    /// </summary>
+    public static List<Block> Flow(IList<Table> tables, double height, out double width)
+    {
+        var blocks = new List<Block>();
+        width = 0;
+        double x = 0, y = 0, column = 0;
+        foreach (var table in tables)
+        {
+            if (table == null || table.Lines == 0) continue;
+            var first = 0;
+            while (first < table.Lines)
+            {
+                var room = (int)Math.Floor((height - y - TitleSpaceMm - RowMm) / RowMm + 1e-9);
+                var left = table.Lines - first;
+                if (room < Math.Min(3, left) && y > 0)
+                {
+                    x += column + GapMm;
+                    y = 0;
+                    column = 0;
+                    continue;
+                }
+                if (room < 1) return null;
+                var block = new Block
+                {
+                    Table = table,
+                    First = first,
+                    Count = Math.Min(room, left),
+                    Continued = first > 0,
+                    X = x,
+                    Top = y
+                };
+                blocks.Add(block);
+                column = Math.Max(column, table.Width);
+                y += block.Height + GapMm;
+                first += block.Count;
+                if (first < table.Lines)
+                {
+                    x += column + GapMm;
+                    y = 0;
+                    column = 0;
+                }
+            }
+        }
+        width = blocks.Count == 0 ? 0 : x + column;
+        return blocks;
+    }
+
+    static List<Opening> ByMark(IList<Opening> openings)
+    {
+        var sorted = new List<Opening>(openings);
+        sorted.Sort((a, b) =>
+        {
+            var na = MarkNumber(a);
+            var nb = MarkNumber(b);
+            return na != nb ? na.CompareTo(nb) : string.CompareOrdinal(a.Mark, b.Mark);
+        });
+        return sorted;
+    }
+
+    static int MarkNumber(Opening opening)
+    {
+        return TryNumber(opening.Mark, Prefix(opening.Record?.Kind), out var n) ? n : int.MaxValue;
+    }
+
+    static string TypeText(OpeningTypes.Record record)
+    {
+        var label = record?.Def?.ScheduleLabel ?? "";
+        var door = string.Equals(record?.Kind, "door", StringComparison.OrdinalIgnoreCase);
+        return door && record.Glazed ? label + " m/glass" : label;
+    }
+
+    static string Size(Opening opening)
+    {
+        return Mm(opening.Width) + " × " + Mm(opening.Head - opening.Sill);
+    }
+
+    static string Mm(double value)
+    {
+        return Math.Round(value, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Hand as V (venstre) or H (høyre), swing as inn or ut: V inn.</summary>
+    static string Hand(OpeningTypes.Record record)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(record?.Hand))
+            parts.Add(string.Equals(record.Hand, "R", StringComparison.OrdinalIgnoreCase) ? "H" : "V");
+        if (!string.IsNullOrEmpty(record?.Swing))
+            parts.Add(string.Equals(record.Swing, "out", StringComparison.OrdinalIgnoreCase) ? "ut" : "inn");
+        return parts.Count == 0 ? "–" : string.Join(" ", parts.ToArray());
+    }
+
+    static string RoomText(string[] rooms)
+    {
+        var names = new List<string>();
+        if (rooms != null)
+            foreach (var name in rooms)
+                if (!string.IsNullOrEmpty(name)) names.Add(name);
+        return names.Count == 0 ? "–" : string.Join(" / ", names.ToArray());
+    }
+
+    /// <summary>Column widths from the longest text in each column, head included.</summary>
+    static Table Fit(Table table)
+    {
+        table.Widths = new double[table.Heads.Length];
+        for (var c = 0; c < table.Heads.Length; c++)
+        {
+            var chars = table.Heads[c].Length;
+            for (var i = 0; i < table.Lines; i++)
+            {
+                var line = table.Line(i);
+                if (line != null && c < line.Length && line[c] != null)
+                    chars = Math.Max(chars, line[c].Length);
+            }
+            table.Widths[c] = Math.Max(MinColumnMm, Math.Ceiling(chars * CharMm + 2 * PadMm));
+        }
+        return table;
+    }
+}

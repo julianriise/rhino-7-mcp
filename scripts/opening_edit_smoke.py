@@ -893,10 +893,12 @@ def main() -> int:
                     break
             return rows
 
-        def check_plan(label: str, scale, pdf_name: str, openings: int) -> dict:
+        def check_plan(label: str, scale, pdf_name: str, openings: int, schedules=None) -> dict:
             params = {"views": ["plan"], "replace": True}
             if scale:
                 params["scale"] = scale
+            if schedules:
+                params["schedules"] = schedules
             packed = send_command(sock, "layout_pack", params)
             print(f"    {label} {packed.get('message')}")
             pages = packed.get("pages") or []
@@ -941,7 +943,17 @@ def main() -> int:
             plan_smoke.check_tag_names(rows, found, label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
             plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
-            pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
+            export = {"path": pdf_name, "layout": "plan"}
+            if schedules:
+                # F5.1: the lists on their own sheet, exported with the plan in one PDF.
+                sheet = next((item for item in pages if item.get("view") == "schedules"), None)
+                if sheet is None:
+                    failures.append(f"{label} schedules page missing: {packed.get('message')}")
+                else:
+                    markers = plan_smoke.opening_markers(lambda cmd, args: send_command(sock, cmd, args))
+                    plan_smoke.check_schedules(sheet.get("schedules"), rows, markers, page, label, failures)
+                export = {"path": pdf_name}
+            pdf = send_command(sock, "export_pdf", export)
             print(f"    {pdf.get('message')}")
             message = str(pdf.get("message") or "")
             capture_failed = (pdf.get("count") or 0) < 1 or "capture failed" in message.lower()
@@ -957,10 +969,12 @@ def main() -> int:
                 failures.append(f"{label} pdf {message}")
             elif f"Symbols {openings}" not in message:
                 failures.append(f"{label} export symbols {message}")
+            if schedules and "Forsk — Schedules" not in (pdf.get("pages") or []):
+                failures.append(f"{label} schedules page not in the PDF: {message}")
             return page
 
         openings_now = expected - 1 if baked else 0
-        check_plan("office fit", None, "/tmp/forsk-f5-office-fit.pdf", openings_now)
+        check_plan("office fit", None, "/tmp/forsk-f5-office-fit.pdf", openings_now, schedules="sheet")
         check_plan("office 1:200", 200, "/tmp/forsk-f5-office-200.pdf", openings_now)
     finally:
         sock.close()

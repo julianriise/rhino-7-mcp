@@ -76,6 +76,8 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "sheets") || HasWord(t, "sheet")) return true;
             if (t.Contains("make2d") || t.Contains("make 2d")) return true;
             if (HasWord(t, "drawings") || HasWord(t, "tegning") || HasWord(t, "tegninger")) return true;
+            if (HasWord(t, "schedule") || HasWord(t, "schedules")) return true;
+            if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
         }
 

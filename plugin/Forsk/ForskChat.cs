@@ -484,7 +484,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["scale_label"] = Str("Title scale text. Unset reads as 1:100.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default views are plan, north, east, south, and west.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default views are plan, north, east, south, and west. Door, window and room schedules (dørliste, vindusliste, romliste) come from the model with schedules: plan puts them beside the plan, sheet on their own page. Doors and windows get marks (D01, V01) on the plan and in their rows.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),
@@ -496,7 +496,23 @@ namespace RhinoMCPPlugin.Forsk
                         },
                         ["scale"] = Num("Requested scale denominator. 100 means 1:100."),
                         ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
-                        ["include_existing"] = Bool("Include X-EXIST in the greyscale drawing. Default true.")
+                        ["include_existing"] = Bool("Include X-EXIST in the greyscale drawing. Default true."),
+                        ["schedules"] = new JObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JArray("plan", "sheet"),
+                            ["description"] = "plan: schedules beside the plan on its page. sheet: their own page. Omit for none."
+                        },
+                        ["schedule_kinds"] = new JObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = new JObject
+                            {
+                                ["type"] = "string",
+                                ["enum"] = new JArray("door", "window", "room")
+                            },
+                            ["description"] = "Which schedules. Omit for door, window, and room."
+                        }
                     }),
                 Fn("export_pdf",
                     "Write Forsk Layout pages to a PDF. In this panel, omit path. A save dialog supplies the absolute .pdf path. Do not invent a path and do not ask the user to type one. Call layout_pack first.",
@@ -647,12 +663,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 return "Turn bias: Sheets. At most two sentences. No Target block on success. "
                     + "Prefer sheet_pack, make2d_view, clear_drawings. "
                     + "Layout pages and a PDF stay available: set_project_meta, layout_pack, export_pdf, clear_layouts. "
+                    + "Door, window or room schedules are layout_pack with schedules sheet, or plan when the user wants them on the plan sheet; schedule_kinds picks the lists. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
-                    + "layout_pack, export_pdf, clear_layouts. "
+                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules on their own sheet. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";
@@ -1350,7 +1367,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 if (!Ok(stored)) return FailLine(stored);
             }
 
-            var pack = Call("layout_pack", new JObject());
+            // The panel's set: plan, four elevations, and the schedules on their own sheet.
+            var pack = Call("layout_pack", new JObject { ["schedules"] = "sheet" });
             if (!Ok(pack)) return FailLine(pack);
 
             Report(progress, "Layouts ready — choose where to save.");

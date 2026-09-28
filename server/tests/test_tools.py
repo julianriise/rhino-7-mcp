@@ -3453,6 +3453,31 @@ class TestLayoutPackTool:
         mock_get_conn.assert_not_called()
 
     @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_schedules_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"pages": [], "count": 2, "scale": 125, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        layout_pack(ctx=None, views=["plan"], schedules="sheet", schedule_kinds=["door", "room"])
+        params = mock_conn.send_command.call_args[0][1]
+        assert params["schedules"] == "sheet"
+        assert params["schedule_kinds"] == ["door", "room"]
+        layout_pack(ctx=None)
+        assert "schedules" not in mock_conn.send_command.call_args[0][1]
+
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_rejects_bad_schedules(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        assert layout_pack(ctx=None, schedules="table")["success"] is False
+        assert layout_pack(ctx=None, views=["north"], schedules="plan")["success"] is False
+        assert layout_pack(ctx=None, schedules="sheet", schedule_kinds=[])["success"] is False
+        assert layout_pack(ctx=None, schedules="sheet", schedule_kinds=["stair"])["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
     def test_empty_detail_is_not_success(self, mock_get_conn):
         from rhinomcp.tools.layout_pack import layout_pack
 

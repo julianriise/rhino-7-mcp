@@ -20,6 +20,7 @@
     <Compile Include="..\..\plugin\Functions\OpeningTypes.cs" Link="OpeningTypes.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskIntent.cs" Link="ForskIntent.cs" />
     <Compile Include="..\..\plugin\Functions\RoomDetect.cs" Link="RoomDetect.cs" />
+    <Compile Include="..\..\plugin\Functions\Schedules.cs" Link="Schedules.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />
   </ItemGroup>
 

@@ -12,7 +12,7 @@
     },
     "layout": {
       "type": "string",
-      "description": "Optional page name (Forsk — Plan) or view token. Omit to export every Forsk layout."
+      "description": "Optional page name (Forsk — Plan) or view token (plan, north, east, south, west, schedules). Omit to export every Forsk layout."
     }
   },
   "required": ["path"],

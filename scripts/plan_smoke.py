@@ -511,3 +511,87 @@ def dxf_rooms(path) -> list:
         if names:
             rooms.append((names, ring))
     return rooms
+
+
+def layer_rows(send, layer: str) -> list:
+    """Every object on a layer, with attributes, through get_objects pages."""
+    rows, offset = [], 0
+    while offset <= 5000:
+        found = send("get_objects", {
+            "layer_filter": layer,
+            "limit": 200,
+            "offset": offset,
+            "include_geometry": False,
+            "include_attributes": True,
+        })
+        batch = found.get("objects") or []
+        rows.extend(batch)
+        if not found.get("has_more") or not batch:
+            break
+        offset += len(batch)
+    return rows
+
+
+def opening_markers(send) -> list:
+    return [
+        row for row in layer_rows(send, "A-OPEN")
+        if (row.get("attributes") or {}).get("forsk:kind") == "opening_marker"
+    ]
+
+
+def check_schedules(record, plan_rows, markers, page, label, failures) -> None:
+    """The schedules as layout_pack read them back from the page, against the
+    model: one door row per door marker and one window row per window marker,
+    under the mark (forsk:mark) the marker carries and the plan prints beside
+    it, every mark once; one room row per tagged room, with the name and the
+    area its plan tag prints (the tag is ca. and the row's area)."""
+    lists = (record or {}).get("lists") or {}
+
+    def rows(kind):
+        return (lists.get(kind) or {}).get("rows") or []
+
+    def attrs(obj):
+        return obj.get("attributes") or {}
+
+    doors = [m for m in markers if attrs(m).get("forsk:opening_kind") == "door"]
+    windows = [m for m in markers if attrs(m).get("forsk:opening_kind") == "window"]
+    door_ids = [row.get("id") for row in rows("door")]
+    window_ids = [row.get("id") for row in rows("window")]
+    marks = sorted(str(attrs(m).get("forsk:mark") or "") for m in doors + windows)
+    listed = sorted(door_ids + window_ids)
+    on_plan = sorted(str(obj.get("text") or "") for obj in plan_rows if attrs(obj).get("forsk:role") == "opening_mark")
+    bad = []
+    if len(door_ids) != len(doors) or len(window_ids) != len(windows):
+        bad.append(f"rows doors {len(door_ids)}/{len(doors)} windows {len(window_ids)}/{len(windows)}")
+    if "" in marks or len(set(marks)) != len(marks):
+        bad.append("a marker without a mark, or a mark twice")
+    elif listed != marks:
+        bad.append(f"row marks are not the markers' ({', '.join(sorted(set(listed) ^ set(marks))[:4])})")
+    if on_plan != marks:
+        bad.append(f"plan marks {len(on_plan)} are not the markers' {len(marks)}")
+
+    tags = {}
+    for obj in plan_rows:
+        attr = attrs(obj)
+        if attr.get("forsk:role") == "room_tag":
+            tags[(attr.get("forsk:room_id"), attr.get("forsk:tag"))] = obj.get("text")
+    tagged = int(page.get("room_tags") or 0)
+    wrong = []
+    for row in rows("room"):
+        rid, cells = row.get("id"), row.get("cells") or []
+        name, area = (cells + ["", ""])[:2]
+        if tags.get((rid, "name")) != name:
+            wrong.append(f"{rid} {name!r} tag {tags.get((rid, 'name'))!r}")
+        elif (rid, "area") in tags and tags[(rid, "area")] != f"ca. {area}":
+            wrong.append(f"{rid} {area!r} tag {tags[(rid, 'area')]!r}")
+    if len(rows("room")) != tagged:
+        bad.append(f"room rows {len(rows('room'))} for {tagged} tagged rooms")
+    if wrong:
+        bad.append("rooms not as tagged: " + "; ".join(wrong[:2]))
+    matched = len(set(on_plan) & set(listed))
+    print(
+        f"    {label} schedules doors {len(door_ids)} windows {len(window_ids)} rooms {len(rows('room'))} "
+        f"marks {matched}/{len(marks)}{'' if wrong else ', rooms as tagged'}"
+    )
+    if bad:
+        failures.append(f"{label} schedules: {'; '.join(bad[:3])}")
