@@ -33,7 +33,7 @@ class FakeRhino:
             deleted = len(self.rows)
             self.rows = [{"attributes": {"forsk:kind": "analysis", "forsk:role": "mesh"}}]
             return {"id": "m", "faces": len(params["faces"]), "vertices": len(params["vertices"]),
-                    "welded": True, "wires": "off", "layer": "A-ANALYSE",
+                    "wires": "off", "layer": "A-ANALYSE",
                     "deleted": deleted, "bbox": [200, 200, 7800, 3800]}
         if command == "get_objects":
             return {"objects": list(self.rows)}
@@ -56,14 +56,15 @@ def test_garage_step_prints_the_compare_lines(tmp_path, capsys):
     out = capsys.readouterr().out
     assert failures == []
     assert f"daylight spaces 1 windows 1 cells {GARAGE_CELLS} in " in out
+    assert " ms df mean " in out
     assert (
-        f"daylight mesh A-ANALYSE welded {GARAGE_VERTICES} vertices wires off gap 0 ramp sky overlays 1 "
-        f"painted {GARAGE_FACES} scope sky-vis-proxy"
+        f"daylight mesh A-ANALYSE flat {GARAGE_VERTICES} vertices wires off gap 0 ramp sky overlays 1 "
+        f"painted {GARAGE_FACES} scope df-estimate"
     ) in out
     assert "legend" not in out
     assert f"daylight rerun overlays 1 deleted 1 cells {GARAGE_CELLS}" in out
     assert "daylight clear remaining 0 overlays 0" in out
-    assert "not illuminance / EN 17037" in out
+    assert "Estimated daylight factor (CIE overcast), not a simulation" in out
     assert png.read_bytes() == PNG
 
 

@@ -1,4 +1,4 @@
-"""Daylight (sky-vis proxy) from tagged walls, openings, and rooms, painted on A-ANALYSE."""
+"""Estimated daylight factor from tagged walls, openings, and rooms, painted on A-ANALYSE."""
 
 from typing import Any, Dict
 
@@ -15,17 +15,21 @@ def daylight_from_model(
     cell_size: float = forsk_daylight.DEFAULT_CELL_MM,
 ) -> Dict[str, Any]:
     """
-    Score daylight on the floor as a sky-visibility proxy and paint it in the viewport.
+    Estimate the daylight factor on the floor and paint it in the viewport.
 
-    Reads Forsk-tagged walls (forsk:id, forsk:path, forsk:thickness), opening
-    markers (forsk:host_id, forsk:width, window or door), and room markers from
-    rooms_detect or rooms_from_layer. Runs the vendored Planwire tracer in this process and
-    paints one welded, smoothly coloured mesh on A-ANALYSE, 50 mm above the
-    floor (dark blue = low, near-white = high, Forsk sky ramp), with no mesh
-    wires. A rerun replaces it. It never prints; daylight_clear removes it.
+    Reads Forsk-tagged walls (forsk:id, forsk:path, forsk:thickness, height),
+    opening markers (forsk:host_id, forsk:width, forsk:sill, forsk:head, window
+    or door), the roof overhang, and room markers from rooms_detect or
+    rooms_from_layer. For each cell on an 850 mm work plane it adds the sky seen
+    in 3D through the facade windows under a CIE overcast sky (walls, sills,
+    heads, and the overhang block it) to the room's BRE split-flux reflected
+    light, times glass transmittance 0.7. Paints one mesh on A-ANALYSE, 50 mm
+    above the floor, one flat colour per cell on one DF scale for every room
+    (dark blue 0 %, near white 5 % and up, Forsk sky ramp), with no mesh wires.
+    A rerun replaces it. It never prints; daylight_clear removes it.
 
-    Scope: relative 0–1 sky visibility on a 2D grid. Not illuminance (lux),
-    not EN 17037 or TEK17, not a code check. No orientation or climate.
+    Scope: an estimated daylight factor (CIE overcast), not a simulation. Not
+    lux, not EN 17037 or TEK17, not a code check. No orientation or climate.
     Always tell the user the one-line disclaimer this tool returns.
 
     Parameters:
@@ -34,7 +38,7 @@ def daylight_from_model(
     - cell_size: grid cell in mm (default 400)
 
     Returns:
-    Dictionary with spaces, windows, cells, score_max, score_mean, scope,
+    Dictionary with spaces, windows, cells, df_max and df_mean (%), scope,
     disclaimer, id (mesh), deleted (old overlays), and message.
     """
     try:

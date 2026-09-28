@@ -1,4 +1,4 @@
-"""Forsk daylight adapter: Rhino scene (mm) -> DaylightRequest (cm) -> paint cells (mm)."""
+"""Forsk daylight: Rhino scene (mm) -> estimated daylight factor (%) -> paint cells (mm)."""
 
 from __future__ import annotations
 
@@ -12,13 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import forsk_daylight as fd
-from daylight.elements import request_to_elements
-from daylight.geom import point_in_polygon, point_to_segment_dist
-from daylight.portals import build_daylight_scene
-from daylight.ramp import score_to_rgb
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 # The garage smoke at its daylight step: 8×4 m band, 200 mm thick, one room on
-# the inner faces, the high window and four doors on the south wall.
+# the inner faces, the window and four doors on the south wall.
 GARAGE = {
     "walls": [{
         "id": "w01",
@@ -38,10 +36,42 @@ GARAGE = {
     "rooms": [{"id": "r01", "ring": [[200, 200], [7800, 200], [7800, 3800], [200, 3800]], "z": 0}],
     "selected_room_ids": [],
 }
-# Garage smoke baseline: daylight_windows / daylight_cells.
 GARAGE_WINDOWS = 1
-GARAGE_CELLS = 144
-GARAGE_VERTICES = 231
+# 20 × 10 lattice squares: 400 mm squares on multiples of 400, the room from 200 to 7800 × 200 to 3800.
+GARAGE_CELLS = 200
+GARAGE_VERTICES = 800
+
+
+def box(width=4000.0, depth=6000.0, window=1200.0, sill=900.0, head=2100.0, t=200.0, z1=3000.0) -> dict:
+    """One room, width × depth on the inner faces, one window centred in the south wall."""
+    return {
+        "walls": [{"id": "w01", "thickness": t, "z0": 0.0, "z1": z1, "rings": [
+            [[-t, -t], [width + t, -t], [width + t, depth + t], [-t, depth + t]],
+            [[0, 0], [width, 0], [width, depth], [0, depth]],
+        ]}],
+        "openings": [{"id": "window-01", "host_id": "w01", "kind": "window", "width": window,
+                      "center": [width / 2, -t / 2], "sill": sill, "head": head}],
+        "rooms": [{"id": "r01", "ring": [[0, 0], [width, 0], [width, depth], [0, depth]], "z": 0.0}],
+        "selected_room_ids": [],
+    }
+
+
+def stacked(partition: dict | None = None) -> dict:
+    """Room A (y 0–3000) with the south window, room B (y 3200–6000) behind a
+    200 mm partition, both 4000 wide. partition: an opening in it, or none."""
+    scene = box()
+    scene["walls"][0]["rings"] = [
+        [[-200, -200], [4200, -200], [4200, 6200], [-200, 6200]],
+        [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+        [[0, 3200], [4000, 3200], [4000, 6000], [0, 6000]],
+    ]
+    scene["rooms"] = [
+        {"id": "a", "ring": [[0, 0], [4000, 0], [4000, 3000], [0, 3000]], "z": 0.0},
+        {"id": "b", "ring": [[0, 3200], [4000, 3200], [4000, 6000], [0, 6000]], "z": 0.0},
+    ]
+    if partition:
+        scene["openings"].append({"id": "inner", "host_id": "w01", "width": 1200, "center": [2000, 3100], **partition})
+    return scene
 
 
 def two_rooms() -> dict:
@@ -69,34 +99,169 @@ def two_rooms() -> dict:
     }
 
 
-def portals(run):
-    return build_daylight_scene(request_to_elements(run.request)).portals
+def office() -> dict:
+    """The office smoke's model after its opening edits: one wall band, 62
+    windows, 14 doors, 15 rooms, flat roof (underside 2800, 500 overhang)."""
+    return json.loads((FIXTURES / "office_daylight_scene.json").read_text())
 
 
-def score_at(run, x_mm: float, y_mm: float) -> float:
-    grid = run.grid
-    best, best_d = None, float("inf")
-    for row in range(grid.rows):
-        for col in range(grid.cols):
-            idx = row * grid.cols + col
-            if not grid.usable_mask[idx]:
-                continue
-            d = (grid.x_coords[col] * 10 - x_mm) ** 2 + (grid.y_coords[row] * 10 - y_mm) ** 2
-            if d < best_d:
-                best, best_d = float(run.scores[idx]), d
-    return best
+def df_at(scene: dict, x: float, y: float) -> float:
+    model = fd.build_model(scene)
+    room = fd._room_at(x, y, model.rooms)
+    return float(fd.daylight_factor(model, [(x, y)], [room])[0])
+
+
+def sc_at(scene: dict, x: float, y: float, z: float = fd.WORK_PLANE_MM) -> float:
+    return float(fd.sky_component(fd.build_model(scene), [(x, y, z)])[0])
+
+
+def area_mean(run) -> float:
+    return sum(c.df * c.area for c in run.cells) / sum(c.area for c in run.cells)
+
+
+# --- The estimate against what a daylight factor must do ---------------------
+
+
+def test_an_open_half_sky_is_half_the_daylight_factor_sky():
+    """A window filling the half-space in front of the point: the CIE overcast
+    sky is symmetric about the zenith, so half of it lights 50 % of an open plane."""
+    scene = box(width=100000, depth=10000, window=99000, sill=850, head=200000, z1=300000)
+    assert sc_at(scene, 50000, 500) == pytest.approx(50.0, abs=1.0)
+
+
+def test_a_point_behind_a_solid_wall_sees_no_sky():
+    scene = stacked()
+    assert sc_at(scene, 2000, 1500) > 1.0
+    for x, y in [(2000, 3600), (400, 5800), (3600, 3400)]:
+        assert sc_at(scene, x, y) == 0.0
+    run = fd.run_scene(scene)
+    behind = [c.df for c in run.cells if c.room == 1]
+    # No window of its own, so no reflected light either.
+    assert behind and max(behind) == 0.0
+
+
+def test_df_falls_with_depth_and_is_symmetric_about_the_window_axis():
+    run = fd.run_scene(box())
+    cells = {(round(c.x, 3), round(c.y, 3)): c.df for c in run.cells}
+    assert len(cells) == 150
+    for (x, y), df in cells.items():
+        assert df == pytest.approx(cells[(round(4000 - x, 3), y)], rel=1e-9)
+    axis = [df for (x, y), df in sorted(cells.items(), key=lambda kv: kv[0][1]) if x == 2200]
+    assert len(axis) == 15
+    assert all(a > b for a, b in zip(axis, axis[1:]))
+    # Deep in the room the reflected light is what is left: DF stays above it.
+    assert axis[-1] > fd.GLASS_TRANSMITTANCE * fd.room_irc(run.model, 0) > 0
+
+
+def test_a_wider_window_raises_df_near_it():
+    assert df_at(box(window=2400), 2000, 1000) > 1.3 * df_at(box(window=1200), 2000, 1000)
+
+
+def test_sill_and_head_matter():
+    """The old sky-vis proxy scored a 100 mm slot like a 1.2 m window."""
+    deep = (2000, 5000)
+    assert sc_at(box(sill=1500, head=2700), *deep) > sc_at(box(sill=900, head=2100), *deep)
+    assert sc_at(box(sill=1900, head=2000), *deep) < 0.2 * sc_at(box(sill=900, head=2100), *deep)
+    # Glass below the work plane shows the ground, not the sky.
+    assert sc_at(box(sill=100, head=800), 2000, 1000) == 0.0
+
+
+def test_the_roof_overhang_cuts_high_sky_near_the_window():
+    scene = box()
+    near = sc_at(scene, 2000, 400)
+    scene["roofs"] = [{"z0": 2300, "overhang": 800}]
+    assert sc_at(scene, 2000, 400) < 0.9 * near
+
+
+def test_interior_glass_passes_sky_at_the_glass_transmittance():
+    """Room B sees A's window through a glazed partition: the same rays as
+    through an open hole of the same size, times the glass transmittance."""
+    glass = stacked({"kind": "window", "sill": 900, "head": 2100})
+    hole = stacked({"kind": "door", "sill": 900, "head": 2100})
+    seen = sc_at(hole, 2000, 3800)
+    assert seen > 0
+    assert sc_at(glass, 2000, 3800) == pytest.approx(fd.GLASS_TRANSMITTANCE * seen, rel=1e-9)
+    kinds = sorted((o.kind, o.role) for o in fd.build_model(glass).openings)
+    assert kinds == [("window", "facade"), ("window", "interior")]
+
+
+def test_df_is_stable_under_a_grid_shift():
+    base = fd.run_scene(box())
+    scene = box()
+    dx, dy = 130.0, 70.0
+    for ring in scene["walls"][0]["rings"] + [scene["rooms"][0]["ring"]]:
+        for point in ring:
+            point[0] += dx
+            point[1] += dy
+    scene["openings"][0]["center"] = [2000 + dx, -100 + dy]
+    moved = fd.run_scene(scene)
+    assert area_mean(moved) == pytest.approx(area_mean(base), rel=0.02)
+
+    def band(run, lo, hi, oy):
+        cells = [c for c in run.cells if lo <= c.y - oy < hi]
+        return sum(c.df * c.area for c in cells) / sum(c.area for c in cells)
+
+    for lo, hi in [(1000, 2000), (2000, 4000), (4000, 6000)]:
+        assert band(moved, lo, hi, dy) == pytest.approx(band(base, lo, hi, 0), rel=0.1)
+
+
+def test_facade_doors_are_shut_and_interior_doors_open():
+    model = fd.build_model(two_rooms())
+    roles = {o.id: (o.kind, o.role) for o in model.openings}
+    assert roles == {"window-01": ("window", "facade"), "window-02": ("window", "facade"),
+                     "door-01": ("door", "interior")}
+    garage = fd.build_model(GARAGE)
+    # Garage doors are on the facade: shut, so only the window's faces are cut.
+    assert sorted(set(garage.cuts.opening.tolist())) == [3]
+
+
+# --- The office: the dark spot -------------------------------------------------
+
+
+def test_office_dark_spot_gets_its_reflected_light():
+    """room-06's west arm, 6.5 m from its only south window (430 mm wide) and
+    around a corner from the east one. The old proxy scored 0.04 here: 3.7° of
+    horizontal sky through the 430 mm window, and nothing else, because it had
+    no reflected light and treated the window as a slot with no height."""
+    scene = office()
+    model = fd.build_model(scene)
+    room = fd._room_at(6880, 20820, model.rooms)
+    assert model.rooms[room].id == "room-06"
+    sc = float(fd.sky_component(model, [(6880, 20820, fd.WORK_PLANE_MM)])[0])
+    irc = fd.room_irc(model, room)
+    df = df_at(scene, 6880, 20820)
+    assert sc < 0.05 < irc
+    assert 0.15 < df < 1.0
+    # The east window lights the other end of the same room well.
+    assert df_at(scene, 10880, 15280) > 5 * df
+
+
+def test_office_counts_and_no_dark_cells_in_windowed_rooms():
+    run = fd.run_scene(office())
+    assert (run.spaces, run.windows, len(run.cells)) == (15, 62, 2875)
+    roles = {}
+    for o in run.model.openings:
+        roles[(o.kind, o.role)] = roles.get((o.kind, o.role), 0) + 1
+    assert roles == {("window", "facade"): 60, ("window", "interior"): 2,
+                     ("door", "interior"): 12, ("door", "facade"): 2}
+    for r in run.rooms:
+        floor = fd.GLASS_TRANSMITTANCE * fd.room_irc(run.model, r)
+        if floor > 0:
+            assert min(c.df for c in run.cells if c.room == r) >= floor
+    summary = run.summary()
+    assert 1.0 < summary["df_mean"] < 5.0 < summary["df_max"] < 40.0
+
+
+# --- Scene handling -------------------------------------------------------------
 
 
 def test_garage_counts_match_the_smoke_baseline():
     run = fd.run_scene(GARAGE)
-    assert (run.spaces, run.windows, run.cells) == (1, GARAGE_WINDOWS, GARAGE_CELLS)
-    assert run.request.grid.cellSizeCm == 40.0
-    assert all(p.kind == "outer" for p in portals(run))
+    assert (run.spaces, run.windows, len(run.cells)) == (1, GARAGE_WINDOWS, GARAGE_CELLS)
 
 
 def test_garage_is_brighter_at_the_window_than_at_the_back_wall():
-    run = fd.run_scene(GARAGE)
-    assert score_at(run, 4800, 500) > score_at(run, 4800, 3500)
+    assert df_at(GARAGE, 4800, 500) > df_at(GARAGE, 4800, 3500) > 0
 
 
 def test_rhino_noise_does_not_move_edge_cells():
@@ -105,44 +270,41 @@ def test_rhino_noise_does_not_move_edge_cells():
         for point in ring:
             point[0] += 1e-6
             point[1] -= 1e-6
-    assert fd.run_scene(noisy).cells == GARAGE_CELLS
+    assert len(fd.run_scene(noisy).cells) == GARAGE_CELLS
 
 
-def test_opening_punches_both_faces_and_sits_on_the_centreline():
-    run = fd.run_scene(GARAGE)
-    ids = [w.id for w in run.request.walls]
-    # South outer face (ring 0, edge 0) and south inner face (ring 1, edge 0) are split.
-    assert "w01.0.0" not in ids and "w01.0.0.0" in ids
-    assert "w01.1.0" not in ids and "w01.1.0.0" in ids
-    portal_walls = [w for w in run.request.walls if w.id.startswith("portal.")]
-    assert len(portal_walls) == len(GARAGE["openings"])
-    assert all(abs(p[1] - 10.0) < 1e-9 for w in portal_walls for p in w.segments)
+def test_opening_sits_on_the_centreline_and_cuts_both_faces():
+    model = fd.build_model(GARAGE)
+    window = next(o for o in model.openings if o.id == "window-03")
+    assert (window.my, window.half, window.role) == (100.0, 100.0, "facade")
+    assert (window.nx, window.ny) == (0.0, 1.0)
+    faces = model.cuts.face[model.cuts.opening == model.openings.index(window)]
+    assert len(faces) == 2
 
 
 def test_marker_off_the_centreline_still_lands_between_the_faces():
     scene = copy.deepcopy(GARAGE)
     scene["openings"][3]["center"] = [4800, 180]
-    run = fd.run_scene(scene)
-    window = next(w for w in run.request.walls if w.id == "portal.3")
-    assert all(abs(p[1] - 10.0) < 1e-9 for p in window.segments)
+    window = next(o for o in fd.build_model(scene).openings if o.id == "window-03")
+    assert window.my == 100.0
 
 
-def test_interior_door_is_a_hole_not_a_sky_source():
-    run = fd.run_scene(two_rooms())
-    kinds = sorted((p.kind, p.source) for p in portals(run))
-    assert kinds == [("outer", "window"), ("outer", "window")]
-    assert run.spaces == 2 and run.windows == 2
+def test_missing_sill_and_head_take_the_forsk_defaults_on_the_wall_base():
+    model = fd.build_model(GARAGE)
+    window = next(o for o in model.openings if o.kind == "window")
+    door = next(o for o in model.openings if o.kind == "door")
+    assert (window.sill, window.head) == (fd.WINDOW_SILL_MM, fd.WINDOW_HEAD_MM)
+    assert (door.sill, door.head) == (0.0, fd.DOOR_HEAD_MM)
 
 
-def test_selected_room_is_one_space_and_its_door_stays_a_hole():
+def test_selected_room_is_one_space():
     scene = two_rooms()
     scene["selected_room_ids"] = ["r02"]
     run = fd.run_scene(scene, target="selection")
     assert run.spaces == 1
-    assert [o.kind for o in run.request.openings] == ["WINDOW", "WINDOW"]
-    assert score_at(run, 7500, 4000) > 0
-    whole = fd.run_scene(two_rooms())
-    assert run.cells < whole.cells
+    assert {c.room for c in run.cells} == {1}
+    assert len(run.cells) < len(fd.run_scene(two_rooms()).cells)
+    assert min(c.df for c in run.cells) > 0
 
 
 def test_empty_selection_is_refused():
@@ -162,6 +324,19 @@ def test_doors_only_is_refused():
     scene["openings"] = [o for o in scene["openings"] if o["kind"] == "door"]
     with pytest.raises(fd.DaylightTargetError, match="No windows"):
         fd.run_scene(scene)
+
+
+def test_huge_grid_is_refused():
+    with pytest.raises(fd.DaylightTargetError, match="cell size"):
+        fd.run_scene(GARAGE, cell_mm=10)
+
+
+def test_unknown_host_is_noted_and_skipped():
+    scene = copy.deepcopy(GARAGE)
+    scene["openings"][0]["host_id"] = "w99"
+    run = fd.run_scene(scene)
+    assert len(run.model.openings) == len(GARAGE["openings"]) - 1
+    assert "w99" in run.notes[0]
 
 
 def test_panel_entry_scores_in_a_child_process_like_the_panel():
@@ -186,17 +361,7 @@ def test_panel_entry_refusal_is_a_message_not_a_crash():
     assert out["success"] is False and "A-ROOM" in out["message"] and "paint" not in out
 
 
-def test_huge_grid_is_refused():
-    with pytest.raises(fd.DaylightTargetError, match="cell size"):
-        fd.run_scene(GARAGE, cell_mm=10)
-
-
-def test_unknown_host_is_noted_and_skipped():
-    scene = copy.deepcopy(GARAGE)
-    scene["openings"][0]["host_id"] = "w99"
-    run = fd.run_scene(scene)
-    assert len(run.request.openings) == len(GARAGE["openings"]) - 1
-    assert "w99" in run.notes[0]
+# --- Paint ------------------------------------------------------------------------
 
 
 def mesh_area(params) -> float:
@@ -205,7 +370,7 @@ def mesh_area(params) -> float:
 
 def l_shape() -> dict:
     """An L room with a 200 mm wall stub poking into it and a notch: the cases a
-    grid-corner mesh cannot fill. One window on the south face."""
+    plain grid cannot fill. One window on the south face."""
     ring = [[200, 200], [6000, 200], [6000, 2000], [3100, 2000], [3100, 1400], [2900, 1400],
             [2900, 2000], [2000, 2000], [2000, 4000], [200, 4000]]
     return {
@@ -226,40 +391,38 @@ def test_mesh_fills_each_room_to_the_inner_faces(scene):
     assert mesh_area(params) == pytest.approx(sum(abs(fd._area2(r)) / 2 for r in rings), abs=1.0)
     assert run.mesh_gap_mm(params) <= 1.0
     for x, y in params["vertices"]:
-        inside = any(point_in_polygon(x, y, r) for r in rings)
-        on_face = any(point_to_segment_dist(x, y, *a, *b) <= 0.01 for r in rings for a, b in zip(r, r[1:] + r[:1]))
+        inside = any(fd.point_in_ring(x, y, r) for r in rings)
+        on_face = any(fd.segment_distance(x, y, *a, *b) <= 0.01 for r in rings for a, b in zip(r, r[1:] + r[:1]))
         assert inside or on_face
 
 
-def test_mesh_is_welded_with_no_inner_open_edges():
+def test_each_cell_is_one_flat_colour_of_its_own_df():
     run = fd.run_scene(l_shape())
     params = run.paint_params()
-    assert len({tuple(v) for v in params["vertices"]}) == len(params["vertices"])
-    assert len(params["colors"]) == len(params["vertices"])
+    colors = params["colors"]
+    assert len(colors) == len(params["vertices"])
     assert all(len(f) in (3, 4) for f in params["faces"])
-    # Every open edge lies on a room face: nothing inside the room is left unshared.
+    assert all(len({tuple(colors[i]) for i in f}) == 1 for f in params["faces"])
+    expected = {tuple(fd.display_rgb(c.df / fd.DF_FULL_SCALE)) for c in run.cells}
+    assert {tuple(c) for c in colors} == expected
+    # No crack inside the room: every open edge lies on a room face.
     assert run.mesh_gap_mm(params) < 0.02
+
+
+def test_a_wall_stub_keeps_its_two_sides_apart():
+    """The l-shape's stub (x 2900–3100 up from y 1400) sits inside lattice
+    squares: each side is its own cell with its own value."""
+    run = fd.run_scene(l_shape())
+    square = [c for c in run.cells if 2800 <= c.x < 3200 and 1600 <= c.y < 2000]
+    assert len(square) == 2
+    assert {c.x < 3000 for c in square} == {True, False}
 
 
 def test_garage_mesh_pins_the_smoke_vertex_count():
     params = fd.run_scene(GARAGE).paint_params()
     assert params["z"] == 50.0
-    # Lattice lines through cell centres, 20 × 10 pieces up to the faces.
-    assert len(params["faces"]) == 200
-    assert len(params["vertices"]) == GARAGE_VERTICES == 21 * 11
-
-
-def test_centre_vertex_takes_its_cell_score_and_edge_vertex_the_nearest():
-    run = fd.run_scene(GARAGE)
-    params = run.paint_params()
-    colour = {tuple(v): tuple(c) for v, c in zip(params["vertices"], params["colors"])}
-    grid = run.grid
-    row, col = grid.rows // 2, grid.cols // 2
-    x, y = grid.x_coords[col] * 10, grid.y_coords[row] * 10
-    assert colour[(round(x, 2), round(y, 2))] == fd.display_rgb(float(run.scores[row * grid.cols + col]))
-    # On the south face, straight below that centre: the nearest cell is the first usable row.
-    first = next(r for r in range(grid.rows) if grid.usable_mask[r * grid.cols + col])
-    assert colour[(round(x, 2), 200.0)] == fd.display_rgb(float(run.scores[first * grid.cols + col]))
+    assert len(params["faces"]) == GARAGE_CELLS
+    assert len(params["vertices"]) == GARAGE_VERTICES
 
 
 def test_sky_ramp_stops_and_clamp():
@@ -270,19 +433,14 @@ def test_sky_ramp_stops_and_clamp():
     assert fd.display_rgb(2) == fd.display_rgb(1) == (0xF2, 0xF8, 0xFD)
 
 
-def test_colours_stay_on_the_sky_ramp_and_scores_stay_planwire():
-    run = fd.run_scene(GARAGE)
-    ramp = {fd.display_rgb(i / 100000) for i in range(100001)}
-    assert all(tuple(c) in ramp for c in run.paint_params()["colors"])
-    # Planwire's own ramp is untouched: the display ramp is Forsk's only.
-    assert score_to_rgb(0) == (8, 42, 82)
-
-
-def test_summary_carries_the_proxy_scope():
+def test_summary_carries_the_estimate_label():
     summary = fd.run_scene(GARAGE).summary()
-    assert summary["scope"] == "sky-vis-proxy"
-    assert "not illuminance" in summary["disclaimer"] and "EN 17037" in summary["disclaimer"]
-    assert 0 < summary["score_mean"] <= summary["score_max"] <= 1
+    assert summary["scope"] == "df-estimate"
+    assert summary["disclaimer"].startswith("Estimated daylight factor (CIE overcast), not a simulation")
+    assert 0 < summary["df_mean"] <= summary["df_max"]
+
+
+# --- MCP tools --------------------------------------------------------------------
 
 
 def _conn(scene: dict) -> MagicMock:
@@ -292,7 +450,7 @@ def _conn(scene: dict) -> MagicMock:
         if command == "daylight_scene":
             return copy.deepcopy(scene)
         if command == "daylight_paint":
-            return {"id": "mesh-1", "cells": len(params["faces"]), "deleted": 1, "layer": "A-ANALYSE"}
+            return {"id": "mesh-1", "faces": len(params["faces"]), "deleted": 1, "layer": "A-ANALYSE"}
         raise AssertionError(command)
 
     conn.send_command.side_effect = send
@@ -309,7 +467,7 @@ def test_tool_reads_scene_paints_once_and_states_the_scope(mock_get_conn):
     assert commands == ["daylight_scene", "daylight_paint"]
     assert result["success"] is True
     assert (result["spaces"], result["windows"], result["cells"]) == (1, GARAGE_WINDOWS, GARAGE_CELLS)
-    assert result["scope"] == "sky-vis-proxy"
+    assert result["scope"] == "df-estimate"
     assert fd.DISCLAIMER in result["message"]
     assert result["deleted"] == 1
 

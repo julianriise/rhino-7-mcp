@@ -1,7 +1,7 @@
 """Daylight (F4) smoke step, shared by the garage and office smokes.
 
 Runs the same path as the daylight_from_model MCP tool: daylight_scene, the
-vendored tracer in this process, daylight_paint. Then it captures the Top
+daylight factor estimate in this process, daylight_paint. Then it captures the Top
 view zoomed to the mesh, clears it, and checks nothing is left for the
 Print checks. Prints indented `daylight …` lines only, no `==>` header, so
 the plan section the compare reads stays one section.
@@ -29,6 +29,12 @@ def on_ramp(colors: list) -> bool:
     """Every vertex colour is a colour of Forsk's sky display ramp."""
     ramp = {forsk_daylight.display_rgb(i / 100000) for i in range(100001)}
     return all(tuple(c) in ramp for c in colors)
+
+
+def flat(params: dict) -> bool:
+    """Every face is one colour: its cell's, never blended with a neighbour's."""
+    colors = params["colors"]
+    return all(len({tuple(colors[i]) for i in face}) == 1 for face in params["faces"])
 
 
 def analysis_objects(send: Send) -> list[dict]:
@@ -75,15 +81,20 @@ def capture(send: Send, png: str, bbox: list) -> str:
 def run_step(send: Send, png: str, spaces: int, failures: list, rerun: bool = False) -> None:
     try:
         run, params, painted, ms = paint(send)
-        print(f"    daylight spaces {run.spaces} windows {run.windows} cells {run.cells} in {ms} ms")
+        summary = run.summary()
+        cells = summary["cells"]
+        print(
+            f"    daylight spaces {run.spaces} windows {run.windows} cells {cells} in {ms} ms "
+            f"df mean {summary['df_mean']:g} max {summary['df_max']:g}"
+        )
         print(f"    {forsk_daylight.DISCLAIMER}")
         rows = analysis_objects(send)
         meshes = by_role(rows, "mesh")
-        welded = "welded" if painted.get("welded") else "unwelded"
+        shading = "flat" if flat(params) else "smooth"
         gap = round(run.mesh_gap_mm(params), 1)
         ramp = forsk_daylight.RAMP if on_ramp(params["colors"]) else "off"
         print(
-            f"    daylight mesh {painted.get('layer')} {welded} {painted.get('vertices')} vertices "
+            f"    daylight mesh {painted.get('layer')} {shading} {painted.get('vertices')} vertices "
             f"wires {painted.get('wires')} gap {gap:g} ramp {ramp} overlays {len(meshes)} "
             f"painted {painted.get('faces')} scope {forsk_daylight.SCOPE}"
         )
@@ -91,26 +102,26 @@ def run_step(send: Send, png: str, spaces: int, failures: list, rerun: bool = Fa
             failures.append(f"daylight overlay objects {len(rows)} expected {len(meshes)} mesh only")
         if run.spaces != spaces:
             failures.append(f"daylight spaces {run.spaces} expected {spaces}")
-        if run.windows < 1 or run.cells < 1:
-            failures.append(f"daylight windows {run.windows} cells {run.cells}")
+        if run.windows < 1 or cells < 1:
+            failures.append(f"daylight windows {run.windows} cells {cells}")
         if (
             len(meshes) != 1
             or painted.get("faces") != len(params["faces"])
-            or not painted.get("welded")
+            or shading != "flat"
             or painted.get("vertices") != len(params["vertices"])
             or painted.get("wires") != "off"
         ):
             failures.append(
                 f"daylight mesh overlays {len(meshes)} painted {painted.get('faces')} "
-                f"{welded} {painted.get('vertices')} wires {painted.get('wires')}"
+                f"{shading} {painted.get('vertices')} wires {painted.get('wires')}"
             )
         if gap > GAP_MM or ramp != forsk_daylight.RAMP:
             failures.append(f"daylight mesh gap {gap:g} ramp {ramp}")
         if rerun:
             again, _params, repainted, _ms = paint(send)
             rows = analysis_objects(send)
-            print(f"    daylight rerun overlays {len(rows)} deleted {repainted.get('deleted')} cells {again.cells}")
-            if len(rows) != 1 or repainted.get("deleted") != 1 or again.cells != run.cells:
+            print(f"    daylight rerun overlays {len(rows)} deleted {repainted.get('deleted')} cells {len(again.cells)}")
+            if len(rows) != 1 or repainted.get("deleted") != 1 or len(again.cells) != cells:
                 failures.append(f"daylight rerun overlays {len(rows)} deleted {repainted.get('deleted')}")
         print(f"    daylight capture {capture(send, png, painted.get('bbox'))} {png}")
     except Exception as exc:  # The Print checks below must still run.
