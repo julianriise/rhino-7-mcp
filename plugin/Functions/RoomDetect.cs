@@ -201,9 +201,24 @@ public static class RoomDetect
     }
 
     /// <summary>
-    /// The room's name from the labels inside it. Fixture labels do not name a
-    /// room over 20 m². Of the rest the tallest text wins, then the one nearest
-    /// the room's inside point. No label left: Rom.
+    /// The one place a room gets its name: the labels inside its ring, picked
+    /// by <see cref="PickLabel"/> with the ring's area and inside point. The
+    /// name depends on the ring alone, so rooms_detect and the plan tag, which
+    /// both call this with the same outline, give a room the same name.
+    /// </summary>
+    public static string Name(IList<Label> labels, List<Pt> ring)
+    {
+        var inside = new List<Label>();
+        foreach (var label in labels)
+            if (Contains(ring, label.At)) inside.Add(label);
+        TryInside(new List<List<Pt>> { ring }, out var at);
+        return PickLabel(inside, Math.Abs(Area(ring)), at);
+    }
+
+    /// <summary>
+    /// The rule <see cref="Name"/> applies to the labels inside a room. Fixture
+    /// labels do not name a room over 20 m². Of the rest the tallest text wins,
+    /// then the one nearest the room's inside point. No label left: Rom.
     /// </summary>
     public static string PickLabel(IList<Label> labels, double areaMm2, Pt inside)
     {

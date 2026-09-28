@@ -1110,10 +1110,12 @@ public partial class RhinoMCPFunctions
         public int SymbolArcs;
         public int SymbolDashed;
         public int RoofOutline;
+        // Room tag outcomes as PlanStats defines them.
         public int RoomTags;
-        public int RoomsUnbounded;
-        public int RoomsUnfit;
         public int RoomAreasDropped;
+        public int RoomsTooSmall;
+        public int RoomsUnbounded;
+        public List<string> RoomsUntagged;
         public string SymbolNote;
         public string RoomText;
     }
@@ -1342,9 +1344,10 @@ public partial class RhinoMCPFunctions
                     result.SymbolDashed = planStats.Dashed;
                     result.RoofOutline = planStats.Roof;
                     result.RoomTags = planStats.Rooms;
-                    result.RoomsUnbounded = planStats.RoomsUnbounded;
-                    result.RoomsUnfit = planStats.RoomsUnfit;
                     result.RoomAreasDropped = planStats.RoomAreasDropped;
+                    result.RoomsTooSmall = planStats.RoomsTooSmall;
+                    result.RoomsUnbounded = planStats.RoomsUnbounded;
+                    result.RoomsUntagged = planStats.RoomsUntagged;
                     result.SymbolNote = planStats.Note;
                     result.RoomText = planStats.RoomText;
                 }

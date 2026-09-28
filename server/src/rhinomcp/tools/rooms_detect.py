@@ -20,7 +20,7 @@ def rooms_detect(ctx: Context) -> Dict[str, Any]:
     rebuilt from every closed A-ROOM curve, as rooms_from_layer does.
 
     Returns:
-    Dictionary with ids (markers), rooms (id, area_m2, x, y), count,
+    Dictionary with ids (markers), rooms (id, name, area_m2, x, y), count,
     detected, area_m2, open (reason, x, y), warnings, and message.
     """
     try:

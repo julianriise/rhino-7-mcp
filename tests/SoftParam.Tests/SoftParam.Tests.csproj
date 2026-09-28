@@ -22,4 +22,8 @@
     <Compile Include="..\..\plugin\Functions\RoomDetect.cs" Link="RoomDetect.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

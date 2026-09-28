@@ -20,10 +20,17 @@ public partial class RhinoMCPFunctions
         public int Arcs;
         public int Dashed;
         public int Roof;
+        // Every room marker with an area ends in exactly one of three counts:
+        // Rooms (tagged: its name is on the sheet), RoomsTooSmall (bounded, but
+        // not even the name fits inside), RoomsUnbounded (open space or off the
+        // floor slab, not a room). RoomAreasDropped counts the tagged rooms
+        // whose ca. X m² line did not fit: they show the name alone.
+        // RoomsUntagged says why, by room id, for each room without a tag.
         public int Rooms;
-        public int RoomsUnbounded;
-        public int RoomsUnfit;
         public int RoomAreasDropped;
+        public int RoomsTooSmall;
+        public int RoomsUnbounded;
+        public List<string> RoomsUntagged;
         public int Skipped;
         public string Note;
         public string RoomText;
@@ -57,7 +64,7 @@ public partial class RhinoMCPFunctions
         ref int count,
         out PlanStats stats)
     {
-        stats = new PlanStats();
+        stats = new PlanStats { RoomsUntagged = new List<string>() };
         if (doc == null || layer == null || scale < 1) return false;
         var pattern = SolidPatternIndex(doc);
         if (pattern < 0) return false;
@@ -540,7 +547,7 @@ public partial class RhinoMCPFunctions
         var walls = new List<OpeningTypes.PlanRegion>();
         var floors = new List<OpeningTypes.PlanRegion>();
         var tol = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
-        var labels = new List<RoomDetect.Label>();
+        var labels = RoomLabels(doc);
         var dividers = new List<double[]>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
@@ -548,10 +555,7 @@ public partial class RhinoMCPFunctions
             var layerName = obj.Attributes.LayerIndex >= 0 && obj.Attributes.LayerIndex < doc.Layers.Count
                 ? doc.Layers[obj.Attributes.LayerIndex].Name
                 : "";
-            if (obj.Geometry is TextEntity text && layerName.Equals("label", StringComparison.OrdinalIgnoreCase))
-                labels.Add(new RoomDetect.Label(text.PlainText, text.TextHeight,
-                    new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y)));
-            else if (obj.Geometry is Curve divider && layerName.Equals(DividerLayerName, StringComparison.OrdinalIgnoreCase))
+            if (obj.Geometry is Curve divider && layerName.Equals(DividerLayerName, StringComparison.OrdinalIgnoreCase))
                 AddDividerSegments(PathPoints(divider), dividers);
             else if (string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
                 rooms.Add(obj);
@@ -562,9 +566,16 @@ public partial class RhinoMCPFunctions
         }
         foreach (var obj in rooms)
         {
+            var roomId = obj.Attributes.GetUserString(RoomIdKey);
+            var who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString();
+            // A marker with no outline to read is no bounded room either.
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
-            if (!area.HasValue || area.Value <= 0) continue;
-            if (!TryRoomPolygon(obj, out var worldRing)) continue;
+            if (!area.HasValue || area.Value <= 0 || !TryRoomPolygon(obj, out var worldRing))
+            {
+                stats.RoomsUnbounded++;
+                stats.RoomsUntagged.Add(who + ": no outline to tag");
+                continue;
+            }
             var xs = new double[worldRing.Count];
             var ys = new double[worldRing.Count];
             for (var i = 0; i < worldRing.Count; i++)
@@ -573,7 +584,13 @@ public partial class RhinoMCPFunctions
                 ys[i] = worldRing[i].Y;
             }
             double ix, iy;
-            if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy)) continue;
+            if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy))
+            {
+                stats.RoomsUnbounded++;
+                stats.RoomsUntagged.Add(who + ": no outline to tag");
+                continue;
+            }
+            var name = RoomDetect.Name(labels, PlanPoints(worldRing));
             // A room is a drawn space bounded by walls (or a space divider), on
             // the floor slab when there is one. A marker in open space gets no tag.
             var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm, dividers);
@@ -581,6 +598,10 @@ public partial class RhinoMCPFunctions
             if (bounded < RoomBoundedMin || !onFloor)
             {
                 stats.RoomsUnbounded++;
+                stats.RoomsUntagged.Add(who + " " + name + ": " + (onFloor
+                    ? "bounded " + bounded.ToString("0.00", CultureInfo.InvariantCulture)
+                        + " under " + RoomBoundedMin.ToString("0.0#", CultureInfo.InvariantCulture)
+                    : "off the floor slab"));
                 continue;
             }
             var stamps = new Dictionary<string, string>
@@ -588,7 +609,6 @@ public partial class RhinoMCPFunctions
                 ["forsk:bounded"] = bounded.ToString("0.00", CultureInfo.InvariantCulture),
                 ["forsk:footprint"] = floors.Count > 0 ? "floor" : "walls"
             };
-            var roomId = obj.Attributes.GetUserString(RoomIdKey);
             if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
             var at = new Point3d(ix, iy, 0);
             var ring = new List<Point3d>();
@@ -597,26 +617,44 @@ public partial class RhinoMCPFunctions
             var room = RoomStamp(ring);
             var origin = ToDrawing(at, worldToHld, delta);
 
-            // Every room gets its name and its area. A room too small for the
-            // area line keeps the name, and the dropped area is counted.
-            var inRoom = new List<RoomDetect.Label>();
-            foreach (var label in labels)
-                if (OpeningTypes.PointInPolygon(label.At.X, label.At.Y, xs, ys)) inRoom.Add(label);
-            var name = RoomDetect.PickLabel(inRoom, area.Value, new RoomDetect.Pt(ix, iy));
-            var nameStamps = new Dictionary<string, string>(stamps) { ["forsk:name"] = name };
-            var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-            var named = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, nameStamps, ref box, ref index, ref count);
-            if (named) added++;
+            // The tag is the name over ca. X m². A room too small for both shows
+            // its name alone, centred. Too small for the name, it has no tag.
             var line = OpeningTypes.RoomTag(area.Value);
-            var sized = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count);
-            if (sized)
+            var areaId = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count, out _);
+            var nameId = Guid.Empty;
+            var nameWidth = 0.0;
+            if (areaId != Guid.Empty)
             {
-                added++;
-                texts.Add(line);
+                var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
+                nameId = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, out nameWidth);
+                if (nameId == Guid.Empty && doc.Objects.Delete(areaId, true))
+                {
+                    areaId = Guid.Empty;
+                    index--;
+                    count--;
+                }
             }
-            if (named || sized) stats.Rooms++;
-            else stats.RoomsUnfit++;
-            if (named && !sized) stats.RoomAreasDropped++;
+            if (nameId == Guid.Empty)
+                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, out nameWidth);
+            if (nameId == Guid.Empty)
+            {
+                var span = new BoundingBox(ring);
+                stats.RoomsTooSmall++;
+                stats.RoomsUntagged.Add(who + " " + name + ": name "
+                    + (nameWidth / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m wide, room "
+                    + ((span.Max.X - span.Min.X) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " x "
+                    + ((span.Max.Y - span.Min.Y) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m");
+                continue;
+            }
+            stats.Rooms++;
+            added++;
+            if (areaId == Guid.Empty)
+            {
+                stats.RoomAreasDropped++;
+                continue;
+            }
+            added++;
+            texts.Add(line);
         }
         if (texts.Count > 0)
             stats.RoomText = string.Join(" | ", texts.ToArray());
@@ -750,7 +788,12 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static bool AddPlanText(
+    /// <summary>
+    /// Plan text inside <paramref name="room"/>. Returns its id, or Guid.Empty
+    /// when it was not placed; <paramref name="width"/> is the width Rhino
+    /// measured for it (0 when it never got that far).
+    /// </summary>
+    private static Guid AddPlanText(
         RhinoDoc doc,
         Layer layer,
         string text,
@@ -762,10 +805,12 @@ public partial class RhinoMCPFunctions
         IDictionary<string, string> stamps,
         ref BoundingBox box,
         ref int index,
-        ref int count)
+        ref int count,
+        out double width)
     {
+        width = 0;
         var height = OpeningTypes.PlanAnnotationHeight(scale);
-        if (string.IsNullOrWhiteSpace(text) || height <= 0) return false;
+        if (string.IsNullOrWhiteSpace(text) || height <= 0) return Guid.Empty;
         var plane = Plane.WorldXY;
         plane.Origin = origin;
         var stableId = FormatStableId("d", index);
@@ -781,18 +826,18 @@ public partial class RhinoMCPFunctions
         try
         {
             entity = PlanAnnotation(doc, text, plane, height);
-            if (entity == null) return false;
+            if (entity == null) return Guid.Empty;
             id = doc.Objects.AddText(entity, attr);
         }
         catch (Exception)
         {
             entity?.Dispose();
-            return false;
+            return Guid.Empty;
         }
         if (id == Guid.Empty)
         {
             entity?.Dispose();
-            return false;
+            return Guid.Empty;
         }
         var written = doc.Objects.FindId(id);
         var textBox = written?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
@@ -809,17 +854,18 @@ public partial class RhinoMCPFunctions
         }
         if (textBox.IsValid)
         {
-            var shortSide = Math.Min(textBox.Max.X - textBox.Min.X, textBox.Max.Y - textBox.Min.Y);
+            width = textBox.Max.X - textBox.Min.X;
+            var shortSide = Math.Min(width, textBox.Max.Y - textBox.Min.Y);
             if (shortSide > height * 2.0 || !RoomHolds(textBox, room))
             {
                 try { doc.Objects.Delete(id, true); } catch (Exception) { }
-                return false;
+                return Guid.Empty;
             }
             box.Union(textBox);
         }
         index++;
         count++;
-        return true;
+        return id;
     }
 
     /// <summary>

@@ -16,14 +16,15 @@
         "type": "object",
         "properties": {
           "id": { "type": "string", "description": "forsk:room_id (rd-01, …)" },
+          "name": { "type": "string", "description": "RoomDetect.Name: the label inside the room, else Rom. Its plan tag shows the same name." },
           "area_m2": { "type": "number" },
           "x": { "type": "number" },
           "y": { "type": "number" }
         },
-        "required": ["id", "area_m2", "x", "y"],
+        "required": ["id", "name", "area_m2", "x", "y"],
         "additionalProperties": false
       },
-      "description": "Detected outlines: stable id, area, and a point well inside"
+      "description": "Detected outlines: stable id, name, area, and a point well inside"
     },
     "count": { "type": "integer", "description": "Room markers" },
     "detected": { "type": "integer", "description": "Regions detected from the walls" },

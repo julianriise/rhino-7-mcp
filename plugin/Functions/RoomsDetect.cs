@@ -24,6 +24,7 @@ public partial class RhinoMCPFunctions
     private const string DetectedRoomSource = "detected";
     private const string DetectedRoomPrefix = "rd-";
     private const string DividerLayerName = "space_divider";
+    private const string RoomLabelLayerName = "label";
 
     [McpCommand("rooms_detect")]
     public JObject RoomsDetect(JObject parameters)
@@ -161,6 +162,7 @@ public partial class RhinoMCPFunctions
         foreach (var warning in markers["warnings"] as JArray ?? new JArray())
             warnings.Add(warning);
 
+        var labels = RoomLabels(doc);
         var detected = new JArray();
         for (var i = 0; i < found.Rooms.Count; i++)
         {
@@ -168,6 +170,7 @@ public partial class RhinoMCPFunctions
             detected.Add(new JObject
             {
                 ["id"] = roomIds[i],
+                ["name"] = RoomDetect.Name(labels, room.Ring),
                 ["area_m2"] = Math.Round(room.Area / 1000000.0, 2, MidpointRounding.AwayFromZero),
                 ["x"] = room.Inside.X,
                 ["y"] = room.Inside.Y
@@ -216,6 +219,22 @@ public partial class RhinoMCPFunctions
                 list.Add(obj);
         }
         return list;
+    }
+
+    /// <summary>The texts on the label layer that name rooms, at their insertion points.</summary>
+    private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc)
+    {
+        var labels = new List<RoomDetect.Label>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!(obj.Geometry is TextEntity text)) continue;
+            var index = obj.Attributes.LayerIndex;
+            if (index < 0 || index >= doc.Layers.Count) continue;
+            if (!doc.Layers[index].Name.Equals(RoomLabelLayerName, StringComparison.OrdinalIgnoreCase)) continue;
+            labels.Add(new RoomDetect.Label(text.PlainText, text.TextHeight,
+                new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y)));
+        }
+        return labels;
     }
 
     /// <summary>A marker made from a detected outline takes its stable id as forsk:id and name.</summary>
