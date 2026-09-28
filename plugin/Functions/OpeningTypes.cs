@@ -617,9 +617,12 @@ public static class OpeningTypes
     /// Share of probes just outside the room edges that land in a wall.
     /// Probes sit at a quarter, half, and three quarters of each edge,
     /// <paramref name="probe"/> mm outward. A drawn room scores 1; a
-    /// rectangle in open space scores 0.
+    /// rectangle in open space scores 0. An edge that runs along a space
+    /// divider (segments x0, y0, x1, y1) is bounded too: that is where a
+    /// detected room meets its open-plan neighbour.
     /// </summary>
-    public static double BoundedFraction(double[] xs, double[] ys, IList<PlanRegion> walls, double probe)
+    public static double BoundedFraction(double[] xs, double[] ys, IList<PlanRegion> walls, double probe,
+        IList<double[]> dividers = null)
     {
         var ring = CleanRing(xs, ys);
         if (ring.Count < 3 || walls == null || walls.Count == 0 || probe <= 0) return 0;
@@ -646,10 +649,28 @@ public static class OpeningTypes
             foreach (var t in new[] { 0.25, 0.5, 0.75 })
             {
                 total++;
-                if (InRegions(a[0] + dx * t + nx * probe, a[1] + dy * t + ny * probe, walls)) hits++;
+                if (InRegions(a[0] + dx * t + nx * probe, a[1] + dy * t + ny * probe, walls)
+                    || OnDivider(a[0] + dx * t, a[1] + dy * t, dividers, probe))
+                    hits++;
             }
         }
         return total == 0 ? 0 : (double)hits / total;
+    }
+
+    static bool OnDivider(double x, double y, IList<double[]> dividers, double within)
+    {
+        if (dividers == null) return false;
+        foreach (var s in dividers)
+        {
+            var dx = s[2] - s[0];
+            var dy = s[3] - s[1];
+            var len2 = dx * dx + dy * dy;
+            var t = len2 <= 1e-12 ? 0 : Math.Max(0, Math.Min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / len2));
+            var ex = s[0] + dx * t - x;
+            var ey = s[1] + dy * t - y;
+            if (ex * ex + ey * ey <= within * within) return true;
+        }
+        return false;
     }
 
     public static bool PointInPolygon(double px, double py, double[] xs, double[] ys)

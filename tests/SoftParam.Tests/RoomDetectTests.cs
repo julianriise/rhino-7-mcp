@@ -156,6 +156,54 @@ public class RoomDetectTests
         Assert.Equal(1, found.Slivers);
     }
 
+    static RoomDetect.Label Label(string text, double height, double x, double y) =>
+        new RoomDetect.Label(text, height, new Pt(x, y));
+
+    [Fact]
+    public void Label_ACupboardDoesNotNameABigRoom()
+    {
+        var corridor = new[] { Label("Brannskap", 250, 100, 100) };
+        Assert.Equal("Rom", RoomDetect.PickLabel(corridor, 92.6 * M2, new Pt(0, 0)));
+        Assert.Equal("Brannskap", RoomDetect.PickLabel(corridor, 1.5 * M2, new Pt(0, 0)));
+    }
+
+    [Fact]
+    public void Label_TallestTextWinsThenNearest()
+    {
+        var labels = new[]
+        {
+            Label("Kontor", 250, 5000, 0),
+            Label("Gang", 350, 9000, 0),
+            Label("Sluk", 400, 0, 0)
+        };
+        Assert.Equal("Gang", RoomDetect.PickLabel(labels, 40 * M2, new Pt(0, 0)));
+        var even = new[] { Label("Kontor", 250, 5000, 0), Label("Møterom", 250, 100, 0) };
+        Assert.Equal("Møterom", RoomDetect.PickLabel(even, 40 * M2, new Pt(0, 0)));
+    }
+
+    [Fact]
+    public void Label_NoneInside_IsRom()
+    {
+        Assert.Equal("Rom", RoomDetect.PickLabel(new RoomDetect.Label[0], 12.6 * M2, new Pt(0, 0)));
+    }
+
+    [Fact]
+    public void DividerEdge_CountsAsBounded()
+    {
+        // Room 0..4000 x 0..3000; walls on three sides, a divider along y = 3000.
+        var walls = new OpeningTypes.PlanRegion();
+        walls.Xs.Add(new double[] { -200, 4200, 4200, -200 });
+        walls.Ys.Add(new double[] { -200, -200, 3000, 3000 });
+        walls.Xs.Add(new double[] { 0, 4000, 4000, 0 });
+        walls.Ys.Add(new double[] { 0, 0, 3000, 3000 });
+        var xs = new double[] { 0, 4000, 4000, 0 };
+        var ys = new double[] { 0, 0, 3000, 3000 };
+        var regions = new List<OpeningTypes.PlanRegion> { walls };
+        Assert.Equal(0.75, OpeningTypes.BoundedFraction(xs, ys, regions, 50), 3);
+        var divider = new List<double[]> { new double[] { -300, 3000, 4300, 3000 } };
+        Assert.Equal(1.0, OpeningTypes.BoundedFraction(xs, ys, regions, 50, divider), 3);
+    }
+
     [Fact]
     public void RerunKeepsIds_NewRoomsTakeTheNextNumber()
     {

@@ -176,6 +176,56 @@ public static class RoomDetect
         return ids;
     }
 
+    /// <summary>Name for a room with no label inside it.</summary>
+    public const string DefaultRoomName = "Rom";
+    /// <summary>Fixture labels (a cupboard, a drain) name a room only up to this size.</summary>
+    public const double FixtureRoomMaxMm2 = 20000000.0;
+
+    static readonly string[] FixtureWords =
+    {
+        "brannskap", "sluk", "skap", "elskap", "el-skap", "sikringsskap", "brannslukker", "sprinkler"
+    };
+
+    public readonly struct Label
+    {
+        public readonly string Text;
+        public readonly double Height;
+        public readonly Pt At;
+
+        public Label(string text, double height, Pt at)
+        {
+            Text = text;
+            Height = height;
+            At = at;
+        }
+    }
+
+    /// <summary>
+    /// The room's name from the labels inside it. Fixture labels do not name a
+    /// room over 20 m². Of the rest the tallest text wins, then the one nearest
+    /// the room's inside point. No label left: Rom.
+    /// </summary>
+    public static string PickLabel(IList<Label> labels, double areaMm2, Pt inside)
+    {
+        string best = null;
+        var bestHeight = 0.0;
+        var bestDist = 0.0;
+        foreach (var label in labels)
+        {
+            var text = (label.Text ?? "").Trim();
+            if (text.Length == 0) continue;
+            if (areaMm2 > FixtureRoomMaxMm2 && Array.IndexOf(FixtureWords, text.ToLowerInvariant()) >= 0) continue;
+            var dist = Dist(label.At, inside);
+            var taller = label.Height > bestHeight + 1e-6;
+            var tie = Math.Abs(label.Height - bestHeight) <= 1e-6 && dist < bestDist;
+            if (best != null && !taller && !tie) continue;
+            best = text;
+            bestHeight = label.Height;
+            bestDist = dist;
+        }
+        return best ?? DefaultRoomName;
+    }
+
     public static double Area(IList<Pt> ring)
     {
         if (ring == null || ring.Count < 3) return 0;

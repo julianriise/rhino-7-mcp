@@ -23,6 +23,7 @@ public partial class RhinoMCPFunctions
         public int Rooms;
         public int RoomsUnbounded;
         public int RoomsUnfit;
+        public int RoomAreasDropped;
         public int Skipped;
         public string Note;
         public string RoomText;
@@ -539,10 +540,20 @@ public partial class RhinoMCPFunctions
         var walls = new List<OpeningTypes.PlanRegion>();
         var floors = new List<OpeningTypes.PlanRegion>();
         var tol = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
+        var labels = new List<RoomDetect.Label>();
+        var dividers = new List<double[]>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             var kind = GetForskKind(obj);
-            if (string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
+            var layerName = obj.Attributes.LayerIndex >= 0 && obj.Attributes.LayerIndex < doc.Layers.Count
+                ? doc.Layers[obj.Attributes.LayerIndex].Name
+                : "";
+            if (obj.Geometry is TextEntity text && layerName.Equals("label", StringComparison.OrdinalIgnoreCase))
+                labels.Add(new RoomDetect.Label(text.PlainText, text.TextHeight,
+                    new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y)));
+            else if (obj.Geometry is Curve divider && layerName.Equals(DividerLayerName, StringComparison.OrdinalIgnoreCase))
+                AddDividerSegments(PathPoints(divider), dividers);
+            else if (string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
                 rooms.Add(obj);
             else if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
                 AddSectionRegion(obj, true, tol, walls);
@@ -563,9 +574,9 @@ public partial class RhinoMCPFunctions
             }
             double ix, iy;
             if (!OpeningTypes.TryInteriorPoint(xs, ys, out ix, out iy)) continue;
-            // A room is a drawn space bounded by walls, on the floor slab when
-            // there is one. A marker in open space gets no tag.
-            var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm);
+            // A room is a drawn space bounded by walls (or a space divider), on
+            // the floor slab when there is one. A marker in open space gets no tag.
+            var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm, dividers);
             var onFloor = floors.Count == 0 || OpeningTypes.InRegions(ix, iy, floors);
             if (bounded < RoomBoundedMin || !onFloor)
             {
@@ -577,6 +588,8 @@ public partial class RhinoMCPFunctions
                 ["forsk:bounded"] = bounded.ToString("0.00", CultureInfo.InvariantCulture),
                 ["forsk:footprint"] = floors.Count > 0 ? "floor" : "walls"
             };
+            var roomId = obj.Attributes.GetUserString(RoomIdKey);
+            if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
             var at = new Point3d(ix, iy, 0);
             var ring = new List<Point3d>();
             foreach (var point in worldRing)
@@ -584,24 +597,26 @@ public partial class RhinoMCPFunctions
             var room = RoomStamp(ring);
             var origin = ToDrawing(at, worldToHld, delta);
 
-            var name = RoomLabelInside(obj);
-            if (!string.IsNullOrEmpty(name))
-            {
-                var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-                if (AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count))
-                    added++;
-            }
+            // Every room gets its name and its area. A room too small for the
+            // area line keeps the name, and the dropped area is counted.
+            var inRoom = new List<RoomDetect.Label>();
+            foreach (var label in labels)
+                if (OpeningTypes.PointInPolygon(label.At.X, label.At.Y, xs, ys)) inRoom.Add(label);
+            var name = RoomDetect.PickLabel(inRoom, area.Value, new RoomDetect.Pt(ix, iy));
+            var nameStamps = new Dictionary<string, string>(stamps) { ["forsk:name"] = name };
+            var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
+            var named = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, nameStamps, ref box, ref index, ref count);
+            if (named) added++;
             var line = OpeningTypes.RoomTag(area.Value);
-            if (AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count))
+            var sized = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count);
+            if (sized)
             {
                 added++;
-                stats.Rooms++;
                 texts.Add(line);
             }
-            else
-            {
-                stats.RoomsUnfit++;
-            }
+            if (named || sized) stats.Rooms++;
+            else stats.RoomsUnfit++;
+            if (named && !sized) stats.RoomAreasDropped++;
         }
         if (texts.Count > 0)
             stats.RoomText = string.Join(" | ", texts.ToArray());
@@ -720,28 +735,19 @@ public partial class RhinoMCPFunctions
         return string.Join(";", parts.ToArray());
     }
 
-    private static string RoomLabelInside(RhinoObject room)
+    /// <summary>Divider segments, stretched by the reach detection gives them.</summary>
+    private static void AddDividerSegments(List<RoomDetect.Pt> points, List<double[]> segments)
     {
-        if (!(room?.Geometry is Brep brep) || brep.Faces.Count == 0) return null;
-        var face = brep.Faces[0];
-        var doc = room.Document;
-        if (doc == null || face == null) return null;
-        foreach (var obj in EnumerateDocObjects(doc))
+        for (var i = 0; i + 1 < points.Count; i++)
         {
-            if (obj?.Attributes == null) continue;
-            var layer = doc.Layers[obj.Attributes.LayerIndex];
-            var name = layer?.Name ?? "";
-            if (!name.Equals("label", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!(obj.Geometry is TextEntity text)) continue;
-            var point = text.Plane.Origin;
-            double u, v;
-            if (!face.ClosestPoint(point, out u, out v)) continue;
-            if (face.IsPointOnFace(u, v) != PointFaceRelation.Interior) continue;
-            var plain = text.PlainText;
-            if (string.IsNullOrWhiteSpace(plain)) continue;
-            return plain.Trim();
+            var a = points[i];
+            var b = points[i + 1];
+            var len = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+            if (len < 1e-6) continue;
+            var ux = (b.X - a.X) / len * RoomDetect.ReachMm;
+            var uy = (b.Y - a.Y) / len * RoomDetect.ReachMm;
+            segments.Add(new[] { a.X - ux, a.Y - uy, b.X + ux, b.Y + uy });
         }
-        return null;
     }
 
     private static bool AddPlanText(

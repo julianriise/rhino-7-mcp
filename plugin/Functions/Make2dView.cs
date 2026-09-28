@@ -1113,6 +1113,7 @@ public partial class RhinoMCPFunctions
         public int RoomTags;
         public int RoomsUnbounded;
         public int RoomsUnfit;
+        public int RoomAreasDropped;
         public string SymbolNote;
         public string RoomText;
     }
@@ -1343,6 +1344,7 @@ public partial class RhinoMCPFunctions
                     result.RoomTags = planStats.Rooms;
                     result.RoomsUnbounded = planStats.RoomsUnbounded;
                     result.RoomsUnfit = planStats.RoomsUnfit;
+                    result.RoomAreasDropped = planStats.RoomAreasDropped;
                     result.SymbolNote = planStats.Note;
                     result.RoomText = planStats.RoomText;
                 }

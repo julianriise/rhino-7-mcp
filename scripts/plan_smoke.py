@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 FACE_PARTS = {"sill", "frame", "jamb"}
 
@@ -80,9 +81,10 @@ def _number(attr, key):
         return None
 
 
-def check_room_tags(rows, scale, expected, failures) -> None:
+def check_room_tags(rows, scale, expected, failures, dropped=0) -> None:
     """Room tags as PlanSymbols.AddPlanText makes them: role room_tag, one
-    area line per room, model height 2.5 mm x scale, printed 2.5 mm, inside."""
+    area line per tagged room except the rooms too small for it (dropped),
+    model height 2.5 mm x scale, printed 2.5 mm, inside."""
     expect = PAPER_TEXT_MM * float(scale)
     tags = [
         obj for obj in rows
@@ -95,8 +97,8 @@ def check_room_tags(rows, scale, expected, failures) -> None:
     if expect <= 0 or not tags:
         failures.append(f"room tags missing scale={scale} rows={len(rows)}")
         return
-    if len(areas) != int(expected or 0):
-        failures.append(f"room tag areas {len(areas)} expected {expected}")
+    if len(areas) != int(expected or 0) - int(dropped or 0):
+        failures.append(f"room tag areas {len(areas)} expected {expected} less {dropped} dropped")
         return
     bad = 0
     heights, papers = [], []
@@ -355,12 +357,46 @@ def check_footer(page, label, failures) -> None:
         )
 
 
+FIXTURE_WORDS = {"brannskap", "sluk", "skap", "elskap", "el-skap", "sikringsskap", "brannslukker", "sprinkler"}
+FIXTURE_ROOM_MAX_MM2 = 20_000_000.0
+
+
+def dxf_text(value: str) -> str:
+    """DXF unicode escapes (backslash U+00F8) to characters."""
+    return re.sub(r"\\U\+([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), value or "")
+
+
+def dxf_labels(path) -> list:
+    """Label texts of a DXF as (text, height, (x, y))."""
+    return [
+        (dxf_text(ent["text"]).strip(), float(ent.get("height") or 0.0), tuple(ent["points"][0]))
+        for ent in _dxf_entities(path)
+        if ent["layer"].lower() == "label" and ent["type"] in ("TEXT", "MTEXT") and ent["points"]
+    ]
+
+
+def pick_label(labels, area_mm2: float, inside) -> str:
+    """RoomDetect.PickLabel: no fixture label over 20 m², tallest text, then nearest; else Rom."""
+    best = None
+    for text, height, (x, y) in labels:
+        if not text or (area_mm2 > FIXTURE_ROOM_MAX_MM2 and text.lower() in FIXTURE_WORDS):
+            continue
+        key = (-height, (x - inside[0]) ** 2 + (y - inside[1]) ** 2)
+        if best is None or key < best[0]:
+            best = (key, text)
+    return best[1] if best else "Rom"
+
+
 def check_room_count(page, expected, label, failures) -> None:
     """Every drawn room is tagged or too small for its tag; none is unbounded."""
     found = int(page.get("room_tags") or 0)
     unfit = int(page.get("rooms_unfit") or 0)
     unbounded = int(page.get("rooms_unbounded") or 0)
-    print(f"    {label} room tags {found}/{expected} too small {unfit} unbounded {unbounded}")
+    dropped = int(page.get("room_areas_dropped") or 0)
+    print(
+        f"    {label} room tags {found}/{expected} too small {unfit} unbounded {unbounded} "
+        f"area dropped {dropped}"
+    )
     if found < 1 or found + unfit != expected or unbounded:
         failures.append(
             f"{label} room tags {found}/{expected} too small {unfit} unbounded {unbounded}"
@@ -395,6 +431,8 @@ def _dxf_entities(path):
             current["layer"] = value
         elif code == "1":
             current["text"] = value
+        elif code == "40":
+            current["height"] = float(value)
         elif code == "10":
             current["points"].append([float(value), 0.0])
         elif code == "20" and current["points"]:

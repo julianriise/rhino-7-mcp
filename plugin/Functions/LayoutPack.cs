@@ -323,6 +323,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["rooms_unbounded"] = drawn.RoomsUnbounded;
                 pageRecord["rooms_unfit"] = drawn.RoomsUnfit;
+                pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 if (!string.IsNullOrEmpty(drawn.RoomText))
