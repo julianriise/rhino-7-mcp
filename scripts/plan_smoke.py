@@ -81,24 +81,32 @@ def _number(attr, key):
         return None
 
 
-def check_room_tags(rows, scale, expected, failures, dropped=0) -> None:
-    """Room tags as PlanSymbols.AddPlanText makes them: role room_tag, one
-    area line per tagged room except the rooms too small for it (dropped),
-    model height 2.5 mm x scale, printed 2.5 mm, inside."""
-    expect = PAPER_TEXT_MM * float(scale)
-    tags = [
+def _tag_texts(rows, part: str) -> list:
+    return [
         obj for obj in rows
-        if str((obj.get("attributes") or {}).get("forsk:role") or "") == "room_tag"
+        if (obj.get("attributes") or {}).get("forsk:role") == "room_tag"
+        and (obj.get("attributes") or {}).get("forsk:tag") == part
     ]
-    areas = [
-        obj for obj in tags
-        if str((obj.get("attributes") or {}).get("forsk:tag") or "") == "area"
-    ]
+
+
+def check_room_tags(rows, page, failures) -> None:
+    """Room tag texts as PlanSymbols.AddPlanText makes them: a name for each
+    tagged room, an area line for each tagged room whose area was not dropped,
+    model height 2.5 mm x scale, printed 2.5 mm, inside its room."""
+    scale = int(page.get("scale") or 0)
+    tagged = int(page.get("room_tags") or 0)
+    dropped = int(page.get("room_areas_dropped") or 0)
+    expect = PAPER_TEXT_MM * float(scale)
+    names = _tag_texts(rows, "name")
+    areas = _tag_texts(rows, "area")
+    tags = names + areas
     if expect <= 0 or not tags:
         failures.append(f"room tags missing scale={scale} rows={len(rows)}")
         return
-    if len(areas) != int(expected or 0) - int(dropped or 0):
-        failures.append(f"room tag areas {len(areas)} expected {expected} less {dropped} dropped")
+    if len(names) != tagged or len(areas) != tagged - dropped:
+        failures.append(
+            f"room tag texts: {len(names)} names {len(areas)} areas for {tagged} tagged, {dropped} area dropped"
+        )
         return
     bad = 0
     heights, papers = [], []
@@ -143,10 +151,7 @@ def check_room_tags(rows, scale, expected, failures, dropped=0) -> None:
             failures.append(f"room tag outside its room bbox {[round(v) for v in box]}")
             bad += 1
     if bad == 0:
-        print(
-            f"    room tags {len(areas)} height {max(heights):.0f} "
-            f"paper {max(papers):g} inside"
-        )
+        print(f"    room tag text height {max(heights):.0f} paper {max(papers):g} inside")
 
 
 def check_symbol_faces(rows, failures) -> None:
@@ -357,50 +362,71 @@ def check_footer(page, label, failures) -> None:
         )
 
 
-FIXTURE_WORDS = {"brannskap", "sluk", "skap", "elskap", "el-skap", "sikringsskap", "brannslukker", "sprinkler"}
-FIXTURE_ROOM_MAX_MM2 = 20_000_000.0
-
-
 def dxf_text(value: str) -> str:
     """DXF unicode escapes (backslash U+00F8) to characters."""
     return re.sub(r"\\U\+([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), value or "")
 
 
-def dxf_labels(path) -> list:
-    """Label texts of a DXF as (text, height, (x, y))."""
-    return [
-        (dxf_text(ent["text"]).strip(), float(ent.get("height") or 0.0), tuple(ent["points"][0]))
-        for ent in _dxf_entities(path)
-        if ent["layer"].lower() == "label" and ent["type"] in ("TEXT", "MTEXT") and ent["points"]
+DEFAULT_ROOM_NAME = "Rom"  # RoomDetect.DefaultRoomName
+
+
+def check_room_names(rooms, dxf_rings, failures) -> None:
+    """The names rooms_detect returned, against the DXF: each is Rom or a label
+    that lies in the DXF room holding it, and each labelled DXF room gives one
+    of its labels to a room inside it. Which label wins is RoomDetect.Name's
+    rule, tested headless on this DXF (OfficeRoomsTests), not redone here."""
+    bad = []
+    for room in rooms:
+        name = room.get("name")
+        at = (room["x"], room["y"])
+        held = [texts for texts, ring in dxf_rings if _inside(at, ring, 0.0)]
+        if not name:
+            bad.append(f"{room['id']} has no name")
+        elif name != DEFAULT_ROOM_NAME and not any(name in texts for texts in held):
+            bad.append(f"{room['id']}={name!r} is no label of its DXF room {held}")
+    for texts, ring in dxf_rings:
+        inside = [room.get("name") for room in rooms if _inside((room["x"], room["y"]), ring, 0.0)]
+        if not any(name in texts for name in inside):
+            bad.append(f"DXF room {texts} names none of {inside}")
+    rom = sum(1 for room in rooms if room.get("name") == DEFAULT_ROOM_NAME)
+    print(f"    room names {len(rooms)} from DXF labels {len(rooms) - rom} Rom {rom} wrong {len(bad)}")
+    if bad:
+        failures.append(f"office room names wrong {len(bad)}: {'; '.join(bad[:3])}")
+
+
+def check_tag_names(rows, rooms, label, failures) -> None:
+    """Each name tag on the sheet shows the name rooms_detect gave its room."""
+    named = {room["id"]: room.get("name") for room in rooms}
+    tags = _tag_texts(rows, "name")
+    wrong = [
+        f"{rid}={obj.get('text')!r} detected {named.get(rid)!r}"
+        for obj in tags
+        for rid in [(obj.get("attributes") or {}).get("forsk:room_id")]
+        if rid not in named or obj.get("text") != named[rid]
     ]
-
-
-def pick_label(labels, area_mm2: float, inside) -> str:
-    """RoomDetect.PickLabel: no fixture label over 20 m², tallest text, then nearest; else Rom."""
-    best = None
-    for text, height, (x, y) in labels:
-        if not text or (area_mm2 > FIXTURE_ROOM_MAX_MM2 and text.lower() in FIXTURE_WORDS):
-            continue
-        key = (-height, (x - inside[0]) ** 2 + (y - inside[1]) ** 2)
-        if best is None or key < best[0]:
-            best = (key, text)
-    return best[1] if best else "Rom"
+    print(f"    {label} names {len(tags) - len(wrong)}/{len(tags)} as detected")
+    if wrong:
+        failures.append(f"{label} names not as detected: {'; '.join(wrong[:3])}")
 
 
 def check_room_count(page, expected, label, failures) -> None:
-    """Every drawn room is tagged or too small for its tag; none is unbounded."""
-    found = int(page.get("room_tags") or 0)
-    unfit = int(page.get("rooms_unfit") or 0)
-    unbounded = int(page.get("rooms_unbounded") or 0)
+    """One line per sheet, the counts as PlanStats defines them: every room is
+    tagged (its name is on the sheet), too small (not even the name fits), or
+    unbounded; area dropped counts tagged rooms showing the name alone. Each
+    untagged room is listed by id with the reason."""
+    tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
-    print(
-        f"    {label} room tags {found}/{expected} too small {unfit} unbounded {unbounded} "
-        f"area dropped {dropped}"
+    small = int(page.get("rooms_too_small") or 0)
+    unbounded = int(page.get("rooms_unbounded") or 0)
+    untagged = [str(item) for item in page.get("rooms_untagged") or []]
+    line = (
+        f"{label} room tags {tagged}/{expected} area dropped {dropped} "
+        f"too small {small} unbounded {unbounded}"
     )
-    if found < 1 or found + unfit != expected or unbounded:
-        failures.append(
-            f"{label} room tags {found}/{expected} too small {unfit} unbounded {unbounded}"
-        )
+    why = f": {'; '.join(untagged)}" if untagged else ""
+    print(f"    {line}{why}")
+    if tagged < 1 or tagged + small + unbounded != expected or unbounded or len(untagged) != small + unbounded:
+        failures.append(line + why)
 
 
 def _dxf_pairs(path):
@@ -431,8 +457,6 @@ def _dxf_entities(path):
             current["layer"] = value
         elif code == "1":
             current["text"] = value
-        elif code == "40":
-            current["height"] = float(value)
         elif code == "10":
             current["points"].append([float(value), 0.0])
         elif code == "20" and current["points"]:
@@ -456,8 +480,8 @@ def _open_ring(points, tol: float = 0.01) -> list:
 
 
 def dxf_rooms(path) -> list:
-    """Labelled inner wall-face rings of a thickness-wall DXF, as (label, ring).
-    Rings are open: no vertex repeats, the caller closes them."""
+    """Labelled inner wall-face rings of a thickness-wall DXF, as (label texts
+    inside, ring). Rings are open: no vertex repeats, the caller closes them."""
     rings, labels = [], []
     for ent in _dxf_entities(path):
         layer = ent["layer"].lower()
@@ -466,7 +490,7 @@ def dxf_rooms(path) -> list:
             if len(ring) >= 3:
                 rings.append(ring)
         elif layer == "label" and ent["type"] in ("TEXT", "MTEXT") and ent["points"]:
-            labels.append((ent["text"], tuple(ent["points"][0])))
+            labels.append((dxf_text(ent["text"]).strip(), tuple(ent["points"][0])))
     rooms = []
     for ring in rings:
         # The outer outline holds every other ring. Rooms hold none.
@@ -474,5 +498,5 @@ def dxf_rooms(path) -> list:
             continue
         names = [text for text, point in labels if _inside(point, ring, 0.0)]
         if names:
-            rooms.append((names[0], ring))
+            rooms.append((names, ring))
     return rooms

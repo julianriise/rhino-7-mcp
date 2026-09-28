@@ -745,10 +745,7 @@ def main() -> int:
         rows = plan_objects(sock)
         plan_smoke.check_fit(page, "sheet", failures)
         plan_smoke.check_footer(page, "sheet", failures)
-        plan_smoke.check_room_tags(
-            rows, int(page.get("scale") or 0), page.get("room_tags"), failures,
-            page.get("room_areas_dropped"),
-        )
+        plan_smoke.check_room_tags(rows, page, failures)
         plan_smoke.check_symbol_faces(rows, failures)
         plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
         groups = {

@@ -835,7 +835,7 @@ def main() -> int:
         rooms = send_command(sock, "rooms_detect", {})
         found = rooms.get("rooms") or []
         covered = sum(
-            1 for _name, ring in room_rings
+            1 for _names, ring in room_rings
             if any(plan_smoke._inside((room["x"], room["y"]), ring, 0.0) for room in found)
         )
         room_count = int(rooms.get("count") or 0)
@@ -847,46 +847,9 @@ def main() -> int:
             failures.append(f"office rooms detected {covered}/{len(room_rings)}: {rooms.get('message')}")
         if room_count < 1:
             failures.append("office room tag has no room")
-
-        # Each detected room's name: the DXF label inside it by RoomDetect's
-        # rule (no cupboard label on a big room, tallest text, else Rom).
-        outlines = send_command(sock, "get_objects", {
-            "layer_filter": "A-ROOM",
-            "limit": 200,
-            "include_geometry": True,
-            "include_attributes": True,
-        }).get("objects") or []
-        labels = plan_smoke.dxf_labels(office_dxf_path())
-        expected_names = {}
-        for room in found:
-            ring = next(
-                (
-                    [(p[0], p[1]) for p in ((obj.get("geometry") or {}).get("points") or [])]
-                    for obj in outlines
-                    if (obj.get("attributes") or {}).get("forsk:room_id") == room["id"]
-                ),
-                [],
-            )
-            inside = [label for label in labels if plan_smoke._inside(label[2], ring, 0.0)]
-            expected_names[room["id"]] = plan_smoke.pick_label(
-                inside, float(room["area_m2"]) * 1_000_000.0, (room["x"], room["y"])
-            )
-
-        def check_labels(rows: list, label: str) -> None:
-            names = [
-                obj.get("attributes") or {} for obj in rows
-                if (obj.get("attributes") or {}).get("forsk:role") == "room_tag"
-                and (obj.get("attributes") or {}).get("forsk:tag") == "name"
-            ]
-            wrong = [
-                f"{attr.get('forsk:room_id')}={attr.get('forsk:name')!r} expected "
-                f"{expected_names.get(attr.get('forsk:room_id'))!r}"
-                for attr in names
-                if expected_names.get(attr.get("forsk:room_id")) != attr.get("forsk:name")
-            ]
-            print(f"    {label} labels {len(names) - len(wrong)} matched, {len(wrong)} mismatched")
-            if wrong:
-                failures.append(f"{label} labels mismatched: {'; '.join(wrong[:3])}")
+        # The names rooms_detect returned, against the DXF labels. The sheets
+        # below must show the same names on the same room ids.
+        plan_smoke.check_room_names(found, room_rings, failures)
 
         # Daylight before Print: paint, capture, clear. The sheets below must not change.
         daylight_smoke.run_step(
@@ -959,12 +922,9 @@ def main() -> int:
             ]
             if frames:
                 failures.append(f"{label} frame curves in the plan pack")
-            plan_smoke.check_room_tags(
-                rows, int(page.get("scale") or 0), page.get("room_tags"), failures,
-                page.get("room_areas_dropped"),
-            )
+            plan_smoke.check_room_tags(rows, page, failures)
             plan_smoke.check_room_count(page, room_count, label, failures)
-            check_labels(rows, label)
+            plan_smoke.check_tag_names(rows, found, label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
             plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
             pdf = send_command(sock, "export_pdf", {"path": pdf_name, "layout": "plan"})
