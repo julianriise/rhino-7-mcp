@@ -22,10 +22,12 @@ def daylight_from_model(
     or door), the roof overhang, and room markers from rooms_detect or
     rooms_from_layer. For each cell on an 850 mm work plane it adds the sky seen
     in 3D through the facade windows under a CIE overcast sky (walls, sills,
-    heads, and the overhang block it) to the room's BRE split-flux reflected
-    light, times glass transmittance 0.7. Paints one mesh on A-ANALYSE, 50 mm
-    above the floor, one flat colour per cell on one DF scale for every room
-    (dark blue 0 %, near white 5 % and up, Forsk sky ramp), with no mesh wires.
+    heads, and the overhang block it; glass transmittance 0.7) to the light the
+    room's floor, walls and ceiling reflect after it bounces (radiosity),
+    including light passed through interior doors and glass. Paints one mesh on
+    A-ANALYSE, 50 mm above the floor, one flat colour per cell on one log DF
+    scale for every room (dark blue 0.1 % and below, near white 10 % and up,
+    Forsk sky ramp), with no mesh wires.
     A rerun replaces it. It never prints; daylight_clear removes it.
 
     Scope: an estimated daylight factor (CIE overcast), not a simulation. Not

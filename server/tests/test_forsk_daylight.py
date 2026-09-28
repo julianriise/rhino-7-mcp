@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 import forsk_daylight as fd
@@ -149,8 +150,9 @@ def test_df_falls_with_depth_and_is_symmetric_about_the_window_axis():
     axis = [df for (x, y), df in sorted(cells.items(), key=lambda kv: kv[0][1]) if x == 2200]
     assert len(axis) == 15
     assert all(a > b for a, b in zip(axis, axis[1:]))
-    # Deep in the room the reflected light is what is left: DF stays above it.
-    assert axis[-1] > fd.GLASS_TRANSMITTANCE * fd.room_irc(run.model, 0) > 0
+    # Deep in the room the reflected light is most of what is left.
+    direct, reflected = fd.daylight_components(run.model, [(2200, 5800)], [0])
+    assert reflected[0] > direct[0] > 0
 
 
 def test_a_wider_window_raises_df_near_it():
@@ -215,28 +217,106 @@ def test_facade_doors_are_shut_and_interior_doors_open():
     assert sorted(set(garage.cuts.opening.tolist())) == [3]
 
 
+# --- Reflected light ------------------------------------------------------------
+
+
+def bre_split_flux(width, depth, height, window_w, sill, head) -> float:
+    """BRE split-flux average IRC for a box room with one unobstructed window,
+    with the glass transmittance in place of BRE's 0.85 (clear glass)."""
+    floor = width * depth / 1e6
+    walls = 2 * (width + depth) / 1000 * height / 1000
+    glass = window_w * (head - sill) / 1e6
+    total = 2 * floor + walls
+    mean = (floor * fd.FLOOR_REFLECTANCE + floor * fd.CEILING_REFLECTANCE
+            + (walls - glass) * fd.WALL_REFLECTANCE + glass * fd.GLASS_REFLECTANCE) / total
+    mid = (sill + head) / 2000
+    below, above = 2 * (width + depth) / 1000 * mid, 2 * (width + depth) / 1000 * (height / 1000 - mid)
+    r_fw = (floor * fd.FLOOR_REFLECTANCE + below * fd.WALL_REFLECTANCE) / (floor + below)
+    r_cw = (floor * fd.CEILING_REFLECTANCE + above * fd.WALL_REFLECTANCE) / (floor + above)
+    return fd.GLASS_TRANSMITTANCE * glass / (total * (1 - mean)) * (39 * r_fw + 5 * r_cw)
+
+
+def test_a_closed_room_keeps_its_light():
+    """Every patch sees the room all round, so with every surface at ρ and a
+    uniform E, the bounce settles at B = ρ E / (1 − ρ)."""
+    model = fd.build_model(box())
+    patches = fd._patches(model, 0)
+    view = fd._view(patches.pos, patches.normal, patches, model.rooms[0])
+    assert view.sum(axis=1) == pytest.approx(1.0)
+    exitance = np.linalg.solve(np.eye(len(view)) - 0.5 * view, np.full(len(view), 0.5))
+    assert exitance == pytest.approx(1.0)
+    # The patches cover the floor, the ceiling and the walls once.
+    assert patches.area.sum() == pytest.approx(2 * 4000 * 6000 + 2 * 10000 * 3000)
+
+
+def test_reflected_light_agrees_with_bre_split_flux():
+    run = fd.run_scene(box())
+    _direct, reflected = fd.daylight_components(run.model, [(c.x, c.y) for c in run.cells], [0] * len(run.cells))
+    area = np.array([c.area for c in run.cells])
+    mean = float((reflected * area).sum() / area.sum())
+    assert mean == pytest.approx(bre_split_flux(4000, 6000, 3000, 1200, 900, 2100), rel=0.3)
+
+
+def test_reflected_light_reaches_deeper_than_the_sky():
+    model = fd.build_model(box())
+    direct, reflected = fd.daylight_components(model, [(2000, 1000), (2000, 5800)], [0, 0])
+    assert direct[1] < 0.02 * direct[0]
+    assert reflected[1] > 0.5 * reflected[0]
+
+
+def test_black_surfaces_reflect_nothing(monkeypatch):
+    for name in ("WALL_REFLECTANCE", "FLOOR_REFLECTANCE", "CEILING_REFLECTANCE", "GLASS_REFLECTANCE"):
+        monkeypatch.setattr(fd, name, 0.0)
+    model = fd.build_model(box())
+    direct, reflected = fd.daylight_components(model, [(2000, 1000), (2000, 5000)], [0, 0])
+    assert reflected.tolist() == [0.0, 0.0] and direct.min() > 0
+
+
+def test_a_brighter_ceiling_lights_the_back_of_the_room(monkeypatch):
+    back = (2000, 5500)
+    before = df_at(box(), *back)
+    monkeypatch.setattr(fd, "CEILING_REFLECTANCE", 0.9)
+    assert df_at(box(), *back) > 1.1 * before
+
+
+def test_light_passes_an_interior_door_into_a_windowless_room():
+    """Room B has no window. Through the door in the partition it sees a little
+    sky and gets A's reflected light, most near the door."""
+    run = fd.run_scene(stacked({"kind": "door", "sill": 0, "head": 2100}))
+    model = run.model
+    _direct, reflected = fd.daylight_components(model, [(2000, 3600), (200, 5800)], [1, 1])
+    assert reflected[0] > reflected[1] > 0
+    assert min(c.df for c in run.cells if c.room == 1) > 0
+
+
+def test_the_display_is_a_log_scale():
+    assert fd.df_shade(0.0) == fd.df_shade(fd.DF_LOW) == 0.0
+    assert fd.df_shade(1.0) == pytest.approx(0.5)
+    assert fd.df_shade(fd.DF_HIGH) == fd.df_shade(50.0) == 1.0
+    shades = [fd.df_shade(v / 10) for v in range(1, 200)]
+    assert shades == sorted(shades)
+
+
 # --- The office: the dark spot -------------------------------------------------
 
 
-def test_office_dark_spot_gets_its_reflected_light():
+def test_office_dark_spot_is_dim_for_a_reason():
     """room-06's west arm, 6.5 m from its only south window (430 mm wide) and
-    around a corner from the east one. The old proxy scored 0.04 here: 3.7° of
-    horizontal sky through the 430 mm window, and nothing else, because it had
-    no reflected light and treated the window as a slot with no height."""
-    scene = office()
-    model = fd.build_model(scene)
+    round a corner from the east one. The old proxy scored 0.04 here: 3.7° of
+    horizontal sky through the 430 mm window and nothing else, with no reflected
+    light and no window height. The sky it sees is still tiny; what light it gets
+    has bounced round the corner or come through the door from room-15."""
+    model = fd.build_model(office())
     room = fd._room_at(6880, 20820, model.rooms)
     assert model.rooms[room].id == "room-06"
-    sc = float(fd.sky_component(model, [(6880, 20820, fd.WORK_PLANE_MM)])[0])
-    irc = fd.room_irc(model, room)
-    df = df_at(scene, 6880, 20820)
-    assert sc < 0.05 < irc
-    assert 0.15 < df < 1.0
     # The east window lights the other end of the same room well.
-    assert df_at(scene, 10880, 15280) > 5 * df
+    direct, reflected = fd.daylight_components(model, [(6880, 20820), (10880, 15280)], [room, room])
+    assert direct[0] < 0.05 and reflected[0] > direct[0]
+    assert 0.03 < direct[0] + reflected[0] < 0.5
+    assert direct[1] + reflected[1] > 20 * (direct[0] + reflected[0])
 
 
-def test_office_counts_and_no_dark_cells_in_windowed_rooms():
+def test_office_counts_and_every_room_gets_some_light():
     run = fd.run_scene(office())
     assert (run.spaces, run.windows, len(run.cells)) == (15, 62, 2875)
     roles = {}
@@ -244,10 +324,11 @@ def test_office_counts_and_no_dark_cells_in_windowed_rooms():
         roles[(o.kind, o.role)] = roles.get((o.kind, o.role), 0) + 1
     assert roles == {("window", "facade"): 60, ("window", "interior"): 2,
                      ("door", "interior"): 12, ("door", "facade"): 2}
+    # Every interior door and pane passes light between its two rooms.
+    assert sum(len(patches.through) for patches, _b in run.model.light.values()) == 2 * 14
+    # Rooms with no window of their own still get light through their doors.
     for r in run.rooms:
-        floor = fd.GLASS_TRANSMITTANCE * fd.room_irc(run.model, r)
-        if floor > 0:
-            assert min(c.df for c in run.cells if c.room == r) >= floor
+        assert min(c.df for c in run.cells if c.room == r) > 0
     summary = run.summary()
     assert 1.0 < summary["df_mean"] < 5.0 < summary["df_max"] < 40.0
 
@@ -403,7 +484,7 @@ def test_each_cell_is_one_flat_colour_of_its_own_df():
     assert len(colors) == len(params["vertices"])
     assert all(len(f) in (3, 4) for f in params["faces"])
     assert all(len({tuple(colors[i]) for i in f}) == 1 for f in params["faces"])
-    expected = {tuple(fd.display_rgb(c.df / fd.DF_FULL_SCALE)) for c in run.cells}
+    expected = {tuple(fd.display_rgb(fd.df_shade(c.df))) for c in run.cells}
     assert {tuple(c) for c in colors} == expected
     # No crack inside the room: every open edge lies on a room face.
     assert run.mesh_gap_mm(params) < 0.02

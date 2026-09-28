@@ -4,8 +4,8 @@ Rhino scene in mm (the daylight_scene bridge command) -> DF % per floor cell
 -> one flat-coloured room mesh in mm (the daylight_paint bridge command). Pure
 Python and NumPy, so the MCP tool, the panel and the live smokes share it.
 
-DF = GLASS_TRANSMITTANCE * (SC + IRC), in percent of the open-sky horizontal
-illuminance, on the work plane.
+DF = GLASS_TRANSMITTANCE * SC + reflected light, in percent of the open-sky
+horizontal illuminance, on the work plane.
 
 SC, the sky component: each cell's work-plane point looks at each facade
 window's glass in patches. A patch counts when the ray to it, and on past it to
@@ -17,11 +17,14 @@ glass the ray must also clear the roof overhang. A patch weighs its solid angle
 by the CIE overcast luminance (1 + 2 sin θ) / 3 and by sin θ, the cosine of
 incidence on the horizontal work plane, over the 7π/9 of an open sky.
 
-IRC, the internally reflected component: the BRE split-flux formula per room,
-from its facade windows, floor, walls and ceiling, the same all over the room.
+Reflected light, a radiosity estimate: each room's floor, ceiling and walls in
+patches. Each patch takes the sky, and the outside ground below the horizon,
+through the facade glass the same way, then the light bounces between the
+patches until it settles. Interior doors and glass pass what reaches them on to
+the next room. Each work-plane point gathers what the surfaces above it send.
 
-Not a simulation: no light bounces between rooms, no outside reflections,
-no furniture, no window frames.
+Not a simulation: no outside reflections but the ground, no furniture, no
+window frames, and coarse patches.
 """
 
 from __future__ import annotations
@@ -44,12 +47,21 @@ WALL_REFLECTANCE = 0.5
 FLOOR_REFLECTANCE = 0.2
 CEILING_REFLECTANCE = 0.7
 GLASS_REFLECTANCE = 0.1
-# BRE split-flux C for a window with no outside obstruction.
-BRE_C_OPEN = 39.0
+GROUND_REFLECTANCE = 0.2
 # Horizontal illuminance of an open CIE overcast sky, in zenith luminances.
 OPEN_SKY = 7.0 * math.pi / 9.0
-# The display ramp's top: DF at or above this reads near white.
-DF_FULL_SCALE = 5.0
+# The ground under that sky, lit by it and reflecting it evenly.
+GROUND_LUMINANCE = GROUND_REFLECTANCE * OPEN_SKY / math.pi
+# Floor, ceiling and wall patches for the bounce: at least this size, and a
+# room's floor in at most this many.
+BOUNCE_PATCH_MM = 800.0
+BOUNCE_FLOOR_PATCHES = 300
+# Rounds of light passed between rooms through interior doors and glass.
+PORTAL_ROUNDS = 4
+# The display: DF on a log scale, as the eye sees light. DF_LOW and below reads
+# dark blue, DF_HIGH and up near white, one scale for every room.
+DF_LOW = 0.1
+DF_HIGH = 10.0
 # Heights when the scene has none: ForskDefaults in the plugin.
 WALL_HEIGHT_MM = 3000.0
 WINDOW_SILL_MM = 900.0
@@ -60,8 +72,8 @@ MAX_CELLS = 20_000
 SCOPE = "df-estimate"
 LABEL = "Estimated daylight factor (CIE overcast), not a simulation"
 DISCLAIMER = (
-    f"{LABEL}. DF % on an {WORK_PLANE_MM:g} mm work plane, dark blue 0 %, near white {DF_FULL_SCALE:g} % "
-    "and up. Not lux, not EN 17037, not a code check."
+    f"{LABEL}. DF % on an {WORK_PLANE_MM:g} mm work plane, log scale: dark blue {DF_LOW:g} % and below, "
+    f"mid blue 0.5 %, light blue 2 %, near white {DF_HIGH:g} % and up. Not lux, not EN 17037, not a code check."
 )
 
 PARALLEL_SIN = 0.02
@@ -76,7 +88,7 @@ MESH_EPS_MM = 0.01
 MIN_FACE_AREA2 = 1e-3
 
 # Forsk display ramp (F4.2): dark blue to near white, so it reads on the grey
-# viewport. t is DF / DF_FULL_SCALE.
+# viewport. t is df_shade(DF).
 RAMP = "sky"
 SKY_STOPS: tuple[tuple[float, int, int, int], ...] = (
     (0.0, 0x0B, 0x25, 0x45),
@@ -141,7 +153,7 @@ class Room:
     z: float
     ceiling: float
     area: float
-    perimeter: float
+    convex: bool
 
 
 @dataclass
@@ -159,6 +171,8 @@ class Model:
     z0: np.ndarray = field(init=False)
     z1: np.ndarray = field(init=False)
     cuts: "Cuts" = field(init=False)
+    # Each room's surfaces after the bounce, worked out once: room -> (patches, exitance %).
+    light: dict | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         self.ax = np.array([f.ax for f in self.faces], dtype=float)
@@ -238,7 +252,7 @@ class DaylightRun:
         _split_t_junctions([keys for cell in self.cells for keys in cell.polys], 0.0, 0.0, self.cell_mm)
         vertices, colors, faces = [], [], []
         for cell in self.cells:
-            rgb = list(display_rgb(cell.df / DF_FULL_SCALE))
+            rgb = list(display_rgb(df_shade(cell.df)))
             index: dict[tuple[float, float], int] = {}
             for keys in cell.polys:
                 for face in _faces_of(keys):
@@ -286,6 +300,13 @@ class DaylightRun:
             "disclaimer": DISCLAIMER,
             "notes": self.notes,
         }
+
+
+def df_shade(df: float) -> float:
+    """Where a DF % sits on the display ramp, 0–1: log from DF_LOW to DF_HIGH."""
+    if df <= DF_LOW:
+        return 0.0
+    return min(math.log(df / DF_LOW) / math.log(DF_HIGH / DF_LOW), 1.0)
 
 
 def display_rgb(t: float) -> tuple[int, int, int]:
@@ -444,8 +465,7 @@ def build_model(scene: dict) -> Model:
         z = float(r.get("z") or 0.0)
         rooms.append(Room(
             id=r.get("id"), ring=ring, z=z, ceiling=_ceiling(z, roofs, faces),
-            area=abs(_area2(ring)) / 2,
-            perimeter=sum(math.dist(a, b) for a, b in zip(ring, ring[1:] + ring[:1])),
+            area=abs(_area2(ring)) / 2, convex=len(_convex_pieces(ring)) == 1,
         ))
 
     notes: list[str] = []
@@ -485,36 +505,15 @@ def build_model(scene: dict) -> Model:
     return model
 
 
-def room_irc(model: Model, r: int) -> float:
-    """BRE split-flux internally reflected component, in % (before the glass
-    transmittance), from the room's facade windows."""
-    room = model.rooms[r]
-    glass = [o for o in model.openings if o.kind == "window" and o.role == "facade" and o.room == r]
-    window = sum(o.width * (o.head - o.sill) for o in glass) / 1e6
-    if window <= 0 or room.area <= 0:
-        return 0.0
-    height = max(room.ceiling - room.z, 1.0) / 1000.0
-    mid = sum(o.width * (o.head - o.sill) * ((o.sill + o.head) / 2 - room.z) for o in glass) / 1e6 / window / 1000.0
-    mid = min(max(mid, 0.0), height)
-    floor = room.area / 1e6
-    perimeter = room.perimeter / 1000.0
-    total = 2 * floor + perimeter * height
-    walls = max(perimeter * height - window, 0.0)
-    mean = (floor * FLOOR_REFLECTANCE + floor * CEILING_REFLECTANCE + walls * WALL_REFLECTANCE
-            + window * GLASS_REFLECTANCE) / total
-    below, above = perimeter * mid, perimeter * (height - mid)
-    r_fw = (floor * FLOOR_REFLECTANCE + below * WALL_REFLECTANCE) / (floor + below)
-    r_cw = (floor * CEILING_REFLECTANCE + above * WALL_REFLECTANCE) / (floor + above)
-    return 0.85 * window / (total * (1 - mean)) * (BRE_C_OPEN * r_fw + 5 * r_cw)
+# --- Light through the facade glass ------------------------------------------------
 
 
-# --- Sky component ------------------------------------------------------------
-
-
-def _patch_weights(depth, du, dz, pw: float, ph: float) -> np.ndarray:
-    """Each glass patch's exact solid angle times (1 + 2 sin θ) / 3 times sin θ.
-    depth (M,): distance to the glass plane; du (M,) and dz (M, R): the patch
-    centre from the point's foot on that plane, along the wall and up."""
+def _patch_weights(depth, du, dz, pw: float, ph: float, facing) -> np.ndarray:
+    """Each glass patch's exact solid angle, times the luminance behind it (CIE
+    overcast sky above the horizon, ground below), times the cosine on the
+    receiver. depth (M,): distance to the glass plane; du (M,) and dz (M, R): the
+    patch centre from the point's foot on that plane, along the wall and up.
+    facing (M, 3): the receiver's normal as (into the room, along, up)."""
     d = depth[:, None]
     u = du[:, None]
 
@@ -524,8 +523,11 @@ def _patch_weights(depth, du, dz, pw: float, ph: float) -> np.ndarray:
     u1, u2 = u - pw / 2, u + pw / 2
     z1, z2 = dz - ph / 2, dz + ph / 2
     omega = corner(u2, z2) - corner(u1, z2) - corner(u2, z1) + corner(u1, z1)
-    sin = dz / np.sqrt(d * d + u * u + dz * dz)
-    return np.where(sin > 0, omega * (1 + 2 * sin) / 3 * sin, 0.0)
+    r = np.sqrt(d * d + u * u + dz * dz)
+    cos = (-d * facing[:, 0:1] + u * facing[:, 1:2] + dz * facing[:, 2:3]) / r
+    sin = dz / r
+    luminance = np.where(sin > 0, (1 + 2 * sin) / 3, GROUND_LUMINANCE)
+    return np.where(cos > 0, omega * luminance * cos, 0.0)
 
 
 def _ray_blocks(model: Model, own: int, px, py, pz, qx: float, qy: float, zr):
@@ -554,6 +556,8 @@ def _ray_blocks(model: Model, own: int, px, py, pz, qx: float, qy: float, zr):
     in_face = (z > model.z0[face, None]) & (z < model.z1[face, None])
     in_hole = has[:, None] & (z >= cuts.z0[k, None]) & (z <= cuts.z1[k, None])
     block = in_face & ~(in_hole & (passes | pane)[:, None])
+    # A ray down through the glass sees the ground outside, whatever stands past it.
+    block &= ~((t[:, None] > 1) & (zr[None, :] < pz[point, None]))
     m, r = len(px), len(zr)
     flat = point[:, None] * r + np.arange(r)[None, :]
     blocked = np.bincount(flat.ravel(), weights=block.ravel(), minlength=m * r).reshape(m, r) > 0
@@ -565,11 +569,12 @@ def _ray_blocks(model: Model, own: int, px, py, pz, qx: float, qy: float, zr):
     return blocked, panes
 
 
-def sky_component(model: Model, points) -> np.ndarray:
-    """SC in % at points (x, y, z mm): the open-sky share each point sees
-    through facade glass. Interior glass on the way counts, the facade glass
-    itself does not (DF applies it)."""
+def _incident(model: Model, points, normals) -> np.ndarray:
+    """Illuminance in % of the open sky's at points (x, y, z mm) facing the
+    normals, from the sky and the ground seen through the facade glass.
+    Interior glass on the way counts, the facade glass itself does not."""
     pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    normals = np.asarray(normals, dtype=float).reshape(-1, 3)
     px, py, pz = pts[:, 0], pts[:, 1], pts[:, 2]
     total = np.zeros(len(pts))
     for own, o in model.sky_windows():
@@ -578,6 +583,8 @@ def sky_component(model: Model, points) -> np.ndarray:
         if not len(front) or o.head <= o.sill:
             continue
         fx, fy, fz, fd = px[front], py[front], pz[front], depth[front]
+        n = normals[front]
+        facing = np.stack([n[:, 0] * o.nx + n[:, 1] * o.ny, n[:, 0] * o.ux + n[:, 1] * o.uy, n[:, 2]], axis=1)
         cols = max(1, math.ceil(o.width / PATCH_MM))
         rows = max(1, math.ceil((o.head - o.sill) / PATCH_MM))
         pw, ph = o.width / cols, (o.head - o.sill) / rows
@@ -594,7 +601,7 @@ def sky_component(model: Model, points) -> np.ndarray:
         step = max(1, RAY_PAIRS // max(len(model.faces), 1))
         for j in range(cols):
             c = -o.width / 2 + (j + 0.5) * pw
-            weight = _patch_weights(fd, c - foot, dz, pw, ph) * open_sky
+            weight = _patch_weights(fd, c - foot, dz, pw, ph, facing) * open_sky
             live = np.nonzero((weight > 0).any(axis=1))[0]
             for lo in range(0, len(live), step):
                 part = live[lo:lo + step]
@@ -606,12 +613,213 @@ def sky_component(model: Model, points) -> np.ndarray:
     return 100.0 * total / OPEN_SKY
 
 
+def sky_component(model: Model, points) -> np.ndarray:
+    """SC in % at points (x, y, z mm) on a horizontal plane facing up: the
+    open-sky share each point sees through facade glass."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    return _incident(model, pts, np.tile((0.0, 0.0, 1.0), (len(pts), 1)))
+
+
+# --- Reflected light ----------------------------------------------------------------
+
+
+@dataclass
+class Patches:
+    """One room's floor, ceiling and walls in patches (mm)."""
+
+    pos: np.ndarray
+    normal: np.ndarray
+    area: np.ndarray
+    rho: np.ndarray
+    # Interior opening -> (patch indices, area of each it covers): light passes there.
+    through: dict[int, tuple[np.ndarray, np.ndarray]]
+
+
+def _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
+    return max(0.0, min(a1, b1) - max(a0, b0))
+
+
+def _open_reflectance(o: Opening) -> float:
+    """What an opening's area sends back into the room: a shut facade door is
+    wall, a doorway nothing (the light goes on), glass a little."""
+    if o.kind == "door":
+        return WALL_REFLECTANCE if o.role == "facade" else 0.0
+    return GLASS_REFLECTANCE
+
+
+def _patch_size(room: Room) -> float:
+    return max(BOUNCE_PATCH_MM, math.sqrt(room.area / BOUNCE_FLOOR_PATCHES))
+
+
+def _bands(room: Room, size: float) -> list[tuple[float, float]]:
+    """Wall bands from floor to ceiling, split at the work plane, so a work-plane
+    point sees only the bands above it."""
+    top = max(room.ceiling, room.z + 1.0)
+    levels = [room.z]
+    if room.z + WORK_PLANE_MM < top:
+        levels.append(room.z + WORK_PLANE_MM)
+    base = levels[-1]
+    count = max(1, math.ceil((top - base) / size))
+    levels += [base + (top - base) * (k + 1) / count for k in range(count)]
+    return list(zip(levels, levels[1:]))
+
+
+def _patches(model: Model, r: int) -> Patches:
+    room = model.rooms[r]
+    size = _patch_size(room)
+    pos, normal, area, rho = [], [], [], []
+    for cell in _cells(model, [r], size):
+        for z, up, reflectance in ((room.z, 1.0, FLOOR_REFLECTANCE), (room.ceiling, -1.0, CEILING_REFLECTANCE)):
+            pos.append((cell.x, cell.y, z))
+            normal.append((0.0, 0.0, up))
+            area.append(cell.area)
+            rho.append(reflectance)
+    bands = _bands(room, size)
+    through: dict[int, dict[int, float]] = {}
+    ring = room.ring
+    for a, b in zip(ring, ring[1:] + ring[:1]):
+        length = math.dist(a, b)
+        if length < 1.0:
+            continue
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        # Openings in this stretch of wall: parallel, on its faces, overlapping it.
+        on = [
+            (n, o) for n, o in enumerate(model.openings)
+            if abs(ux * o.uy - uy * o.ux) <= PARALLEL_SIN
+            and abs((o.mx - a[0]) * uy - (o.my - a[1]) * ux) <= o.half + 50.0
+            and _overlap(*sorted(((a[0] - o.mx) * o.ux + (a[1] - o.my) * o.uy,
+                                  (b[0] - o.mx) * o.ux + (b[1] - o.my) * o.uy)), -o.width / 2, o.width / 2) > 0
+        ]
+        count = max(1, math.ceil(length / size))
+        seg = length / count
+        for k in range(count):
+            cx, cy = a[0] + ux * (k + 0.5) * seg, a[1] + uy * (k + 0.5) * seg
+            for z0, z1 in bands:
+                whole = seg * (z1 - z0)
+                light = WALL_REFLECTANCE * whole
+                for n, o in on:
+                    along = (cx - o.mx) * o.ux + (cy - o.my) * o.uy
+                    cover = _overlap(along - seg / 2, along + seg / 2, -o.width / 2, o.width / 2) * \
+                        _overlap(z0, z1, o.sill, o.head)
+                    if cover <= 0:
+                        continue
+                    light += (_open_reflectance(o) - WALL_REFLECTANCE) * cover
+                    if o.role == "interior":
+                        through.setdefault(n, {})[len(pos)] = cover
+                # The ring runs counter-clockwise, so the room is on the left.
+                pos.append((cx, cy, (z0 + z1) / 2))
+                normal.append((-uy, ux, 0.0))
+                area.append(whole)
+                rho.append(max(light / whole, 0.0))
+    return Patches(
+        pos=np.array(pos, dtype=float).reshape(-1, 3),
+        normal=np.array(normal, dtype=float).reshape(-1, 3),
+        area=np.array(area, dtype=float),
+        rho=np.array(rho, dtype=float),
+        through={n: (np.array(list(c.keys())), np.array(list(c.values()))) for n, c in through.items()},
+    )
+
+
+def _unblocked(a, b, ring) -> np.ndarray:
+    """(M, N): the plan segment from a_i to b_j stays inside the room outline."""
+    dx = b[None, :, 0] - a[:, None, 0]
+    dy = b[None, :, 1] - a[:, None, 1]
+    ok = np.ones(dx.shape, dtype=bool)
+    for p, q in zip(ring, ring[1:] + ring[:1]):
+        ex, ey = q[0] - p[0], q[1] - p[1]
+        denom = dx * ey - dy * ex
+        rx = p[0] - a[:, None, 0]
+        ry = p[1] - a[:, None, 1]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t = (rx * ey - ry * ex) / denom
+            s = (rx * dy - ry * dx) / denom
+        ok &= ~((np.abs(denom) > 1e-9) & (t > 1e-6) & (t < 1 - 1e-6) & (s >= 0) & (s <= 1))
+    return ok
+
+
+def _view(pos, normal, p: Patches, room: Room) -> np.ndarray:
+    """(M, N): each receiver's share of its view on each patch, rows summing to
+    1 because the room encloses it. Disk approximation cos·cos·A / (π r² + A)."""
+    d = p.pos[None, :, :] - pos[:, None, :]
+    r2 = np.einsum("ijk,ijk->ij", d, d)
+    r = np.sqrt(np.maximum(r2, 1e-9))
+    near = np.einsum("ijk,ik->ij", d, normal) / r
+    far = -np.einsum("ijk,jk->ij", d, p.normal) / r
+    f = np.clip(near, 0.0, None) * np.clip(far, 0.0, None) * p.area / (np.pi * r2 + p.area)
+    if not room.convex:
+        f *= _unblocked(pos[:, :2], p.pos[:, :2], room.ring)
+    total = f.sum(axis=1, keepdims=True)
+    return np.divide(f, total, out=np.zeros_like(f), where=total > 0)
+
+
+def _bounce(model: Model) -> dict[int, tuple[Patches, np.ndarray]]:
+    """Every room's surfaces after the light has bounced: room -> (patches,
+    exitance in %). Direct light from the sky and the ground through the glass,
+    B = ρ (E + F B) + S per room, and S the light that reaches an interior door
+    or pane from the other side."""
+    if model.light is not None:
+        return model.light
+    rooms = range(len(model.rooms))
+    patches = {r: _patches(model, r) for r in rooms}
+    start = np.cumsum([0] + [len(patches[r].area) for r in rooms])
+    direct = GLASS_TRANSMITTANCE * _incident(
+        model,
+        np.concatenate([patches[r].pos for r in rooms]),
+        np.concatenate([patches[r].normal for r in rooms]),
+    )
+    view = {r: _view(patches[r].pos, patches[r].normal, patches[r], model.rooms[r]) for r in rooms}
+    solve = {r: np.linalg.inv(np.eye(len(patches[r].area)) - patches[r].rho[:, None] * view[r]) for r in rooms}
+    reflected = {r: patches[r].rho * direct[start[r]:start[r + 1]] for r in rooms}
+    sides = {n: [r for r in rooms if n in patches[r].through] for n in range(len(model.openings))}
+    source = {r: np.zeros(len(patches[r].area)) for r in rooms}
+    for _round in range(PORTAL_ROUNDS + 1):
+        exitance = {r: solve[r] @ (reflected[r] + source[r]) for r in rooms}
+        source = {r: np.zeros(len(patches[r].area)) for r in rooms}
+        for n, pair in sides.items():
+            if len(pair) != 2:
+                continue
+            o = model.openings[n]
+            tau = 1.0 if o.kind == "door" else GLASS_TRANSMITTANCE
+            for src, dst in (pair, pair[::-1]):
+                idx, cover = patches[src].through[n]
+                flux = tau * (view[src][idx] @ exitance[src]) @ cover
+                into, spread = patches[dst].through[n]
+                source[dst][into] += flux * spread / spread.sum() / patches[dst].area[into]
+    model.light = {r: (patches[r], exitance[r]) for r in rooms}
+    return model.light
+
+
+def reflected_light(model: Model, points, rooms: list[int]) -> np.ndarray:
+    """Reflected light in % at work-plane points (x, y, z mm) of the given rooms:
+    what the room's surfaces above each point send it."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    out = np.zeros(len(pts))
+    light = _bounce(model)
+    rooms = np.asarray(rooms)
+    for r in set(rooms.tolist()):
+        patches, exitance = light[r]
+        idx = np.nonzero(rooms == r)[0]
+        step = max(1, RAY_PAIRS // max(len(patches.area), 1))
+        for lo in range(0, len(idx), step):
+            part = idx[lo:lo + step]
+            up = np.tile((0.0, 0.0, 1.0), (len(part), 1))
+            out[part] = _view(pts[part], up, patches, model.rooms[r]) @ exitance
+    return out
+
+
+def daylight_components(model: Model, points, rooms: list[int]) -> tuple[np.ndarray, np.ndarray]:
+    """(direct, reflected) DF % at points (x, y mm) on the work plane of the given
+    rooms: the sky through the glass, and the light the room's surfaces send."""
+    pts = [(x, y, model.rooms[r].z + WORK_PLANE_MM) for (x, y), r in zip(points, rooms)]
+    if not pts:
+        return np.zeros(0), np.zeros(0)
+    return GLASS_TRANSMITTANCE * sky_component(model, pts), reflected_light(model, pts, rooms)
+
+
 def daylight_factor(model: Model, points, rooms: list[int]) -> np.ndarray:
     """DF % at points (x, y mm) on the work plane of the given rooms."""
-    pts = [(x, y, model.rooms[r].z + WORK_PLANE_MM) for (x, y), r in zip(points, rooms)]
-    sc = sky_component(model, pts) if pts else np.zeros(0)
-    irc = {r: room_irc(model, r) for r in set(rooms)}
-    return GLASS_TRANSMITTANCE * (sc + np.array([irc[r] for r in rooms]))
+    direct, reflected = daylight_components(model, points, rooms)
+    return direct + reflected
 
 
 # --- Cells and mesh -----------------------------------------------------------
