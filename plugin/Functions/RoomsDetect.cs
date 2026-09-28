@@ -21,6 +21,7 @@ public partial class RhinoMCPFunctions
 {
     private const string RoomSourceKey = "forsk:room_source";
     private const string RoomIdKey = "forsk:room_id";
+    private const string RoomNameKey = "forsk:room_name";
     private const string DetectedRoomSource = "detected";
     private const string DetectedRoomPrefix = "rd-";
     private const string DividerLayerName = "space_divider";
@@ -118,6 +119,11 @@ public partial class RhinoMCPFunctions
         var layer = EnsureLayer(doc, roomLayer?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
         if (z == double.MaxValue) z = 0;
 
+        // Each detected room is named once; the marker carries the name to the plan tag.
+        var suspect = new List<RoomDetect.Label>();
+        var labels = RoomLabels(doc, suspect);
+        var names = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToArray();
+
         var reused = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < found.Rooms.Count; i++)
         {
@@ -158,7 +164,7 @@ public partial class RhinoMCPFunctions
         {
             var marker = doc.Objects.FindId(Guid.Parse(token.ToString()));
             if (marker == null) continue;
-            var room = NameDetectedMarker(doc, marker, found.Rooms, roomIds);
+            var room = NameDetectedMarker(doc, marker, found.Rooms, roomIds, names);
             if (room != null) named.Add(room);
             else drawn.Add(ParseMm(marker.Attributes.GetUserString("forsk:area")) ?? 0);
         }
@@ -166,8 +172,6 @@ public partial class RhinoMCPFunctions
         foreach (var warning in markers["warnings"] as JArray ?? new JArray())
             warnings.Add(warning);
 
-        var suspect = new List<RoomDetect.Label>();
-        var labels = RoomLabels(doc, suspect);
         var detected = new JArray();
         for (var i = 0; i < found.Rooms.Count; i++)
         {
@@ -175,7 +179,7 @@ public partial class RhinoMCPFunctions
             detected.Add(new JObject
             {
                 ["id"] = roomIds[i],
-                ["name"] = RoomDetect.Name(labels, room.Ring),
+                ["name"] = names[i],
                 ["area_m2"] = Math.Round(room.Area / 1000000.0, 2, MidpointRounding.AwayFromZero),
                 ["x"] = room.Inside.X,
                 ["y"] = room.Inside.Y
@@ -269,10 +273,11 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// A marker made from a detected outline takes its stable id as forsk:id and
-    /// name, and the room's net area as forsk:area. Returns that room, or null
-    /// for a marker from an outline drawn by hand.
+    /// name, the room's name as forsk:room_name, and its net area as
+    /// forsk:area. Returns that room, or null for a marker from an outline
+    /// drawn by hand.
     /// </summary>
-    private static RoomDetect.Room NameDetectedMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms, string[] roomIds)
+    private static RoomDetect.Room NameDetectedMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms, string[] roomIds, string[] names)
     {
         if (!TryRoomPolygon(marker, out var polygon)) return null;
         if (!RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { PlanPoints(polygon) }, out var at)) return null;
@@ -283,6 +288,7 @@ public partial class RhinoMCPFunctions
             attr.Name = roomIds[i];
             attr.SetUserString("forsk:id", roomIds[i]);
             attr.SetUserString(RoomIdKey, roomIds[i]);
+            attr.SetUserString(RoomNameKey, names[i]);
             attr.SetUserString("forsk:area", FormatMm(rooms[i].Area));
             doc.Objects.ModifyAttributes(marker.Id, attr, true);
             return rooms[i];

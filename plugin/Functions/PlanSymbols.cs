@@ -22,7 +22,7 @@ public partial class RhinoMCPFunctions
         public int Roof;
         // Every room marker ends in exactly one of three counts: Rooms (tagged:
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
-        // RoomsUnbounded (open space, off the floor slab, or no outline). Of the
+        // RoomsUnbounded (no outline to read). Of the
         // tagged rooms, RoomAreasDropped show the name alone (the ca. X m² line
         // did not fit), and RoomsOverflow are those whose name runs past the
         // room edge. RoomsUntagged says why, by room id, for each room without
@@ -42,10 +42,6 @@ public partial class RhinoMCPFunctions
     private const double PlanCutMm = 0.50;
     private const double PlanBeyondMm = 0.18;
     private const double PlanThinMm = 0.13;
-    // Room tags: probe 50 mm past each room edge into the wall section,
-    // taken 50 mm under the wall top so door and window voids stay out.
-    private const double RoomProbeMm = 50;
-    private const double RoomBoundedMin = 0.9;
 
     /// <summary>
     /// Replace plan centre-lines with width ribbons, then add symbols, the
@@ -546,32 +542,13 @@ public partial class RhinoMCPFunctions
         var added = 0;
         var texts = new List<string>();
         var height = OpeningTypes.PlanAnnotationHeight(scale);
-        var rooms = new List<RhinoObject>();
-        var walls = new List<OpeningTypes.PlanRegion>();
-        var floors = new List<OpeningTypes.PlanRegion>();
-        var tol = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
         var labels = RoomLabels(doc);
-        var dividers = new List<double[]>();
-        foreach (var obj in EnumerateDocObjects(doc))
-        {
-            var kind = GetForskKind(obj);
-            var layerName = obj.Attributes.LayerIndex >= 0 && obj.Attributes.LayerIndex < doc.Layers.Count
-                ? doc.Layers[obj.Attributes.LayerIndex].Name
-                : "";
-            if (obj.Geometry is Curve divider && layerName.Equals(DividerLayerName, StringComparison.OrdinalIgnoreCase))
-                AddDividerSegments(PathPoints(divider), dividers);
-            else if (string.Equals(kind, "room", StringComparison.OrdinalIgnoreCase))
-                rooms.Add(obj);
-            else if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
-                AddSectionRegion(obj, true, tol, walls);
-            else if (string.Equals(kind, "floor", StringComparison.OrdinalIgnoreCase))
-                AddSectionRegion(obj, false, tol, floors);
-        }
-        foreach (var obj in rooms)
+        // Tags are added as we go, so collect the markers first.
+        foreach (var obj in RoomMarkers(doc))
         {
             var roomId = obj.Attributes.GetUserString(RoomIdKey);
             var who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString();
-            // A marker with no outline to read is no bounded room either.
+            // A marker with no outline to read gets no tag.
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
             if (!area.HasValue || area.Value <= 0 || !TryRoomPolygon(obj, out var worldRing))
             {
@@ -593,33 +570,17 @@ public partial class RhinoMCPFunctions
                 stats.RoomsUntagged.Add(who + ": no outline to tag");
                 continue;
             }
-            var name = RoomDetect.Name(labels, PlanPoints(worldRing));
-            // Under the 1 m² room cutoff (RoomDetect.MinAreaMm2) a marker gets no tag.
-            if (area.Value < RoomDetect.MinAreaMm2)
+            // rooms_detect decided which regions are rooms and named them; the
+            // tag shows that. An outline drawn by hand is a room as drawn.
+            var name = RoomDetect.TagName(obj.Attributes.GetUserString(RoomNameKey), area.Value,
+                labels, PlanPoints(worldRing), out var untagged);
+            if (untagged != null)
             {
                 stats.RoomsTooSmall++;
-                stats.RoomsUntagged.Add(who + " " + name + ": "
-                    + (area.Value / 1000000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m² under 1 m²");
+                stats.RoomsUntagged.Add(who + " " + name + ": " + untagged);
                 continue;
             }
-            // A room is a drawn space bounded by walls (or a space divider), on
-            // the floor slab when there is one. A marker in open space gets no tag.
-            var bounded = OpeningTypes.BoundedFraction(xs, ys, walls, RoomProbeMm, dividers);
-            var onFloor = floors.Count == 0 || OpeningTypes.InRegions(ix, iy, floors);
-            if (bounded < RoomBoundedMin || !onFloor)
-            {
-                stats.RoomsUnbounded++;
-                stats.RoomsUntagged.Add(who + " " + name + ": " + (onFloor
-                    ? "bounded " + bounded.ToString("0.00", CultureInfo.InvariantCulture)
-                        + " under " + RoomBoundedMin.ToString("0.0#", CultureInfo.InvariantCulture)
-                    : "off the floor slab"));
-                continue;
-            }
-            var stamps = new Dictionary<string, string>
-            {
-                ["forsk:bounded"] = bounded.ToString("0.00", CultureInfo.InvariantCulture),
-                ["forsk:footprint"] = floors.Count > 0 ? "floor" : "walls"
-            };
+            var stamps = new Dictionary<string, string>();
             if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
             var at = new Point3d(ix, iy, 0);
             var ring = new List<Point3d>();
@@ -681,60 +642,6 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
-    /// <summary>
-    /// Plan section of a wall (50 mm under its top) or a floor (mid-depth)
-    /// as one even-odd region.
-    /// </summary>
-    private static void AddSectionRegion(RhinoObject obj, bool nearTop, double tol, List<OpeningTypes.PlanRegion> regions)
-    {
-        if (!(obj?.Geometry is Brep brep)) return;
-        var bb = brep.GetBoundingBox(true);
-        if (!bb.IsValid || bb.Max.Z - bb.Min.Z < 1) return;
-        var z = nearTop
-            ? Math.Max(bb.Max.Z - RoomProbeMm, (bb.Min.Z + bb.Max.Z) / 2)
-            : (bb.Min.Z + bb.Max.Z) / 2;
-        Curve[] cuts;
-        Point3d[] points;
-        try
-        {
-            if (!Rhino.Geometry.Intersect.Intersection.BrepPlane(
-                    brep, new Plane(new Point3d(0, 0, z), Vector3d.ZAxis), tol, out cuts, out points))
-                return;
-        }
-        catch (Exception) { return; }
-        if (cuts == null || cuts.Length == 0) return;
-        var joined = Curve.JoinCurves(cuts, tol * 10) ?? cuts;
-        var region = new OpeningTypes.PlanRegion();
-        foreach (var curve in joined)
-        {
-            if (curve == null || !curve.IsClosed) continue;
-            var ring = new List<Point3d>();
-            Polyline poly;
-            if (curve.TryGetPolyline(out poly) && poly != null && poly.Count >= 4)
-            {
-                foreach (var point in poly) ring.Add(point);
-            }
-            else
-            {
-                var ts = curve.DivideByCount(Math.Min(Math.Max(curve.SpanCount * 4, 16), 256), true);
-                if (ts != null)
-                    foreach (var t in ts) ring.Add(curve.PointAt(t));
-            }
-            if (ring.Count < 3) continue;
-            var xs = new double[ring.Count];
-            var ys = new double[ring.Count];
-            for (var i = 0; i < ring.Count; i++)
-            {
-                xs[i] = ring[i].X;
-                ys[i] = ring[i].Y;
-            }
-            region.Xs.Add(xs);
-            region.Ys.Add(ys);
-        }
-        foreach (var curve in joined) curve?.Dispose();
-        if (region.Xs.Count > 0) regions.Add(region);
-    }
-
     private static bool TryRoomPolygon(RhinoObject room, out List<Point3d> polygon)
     {
         polygon = new List<Point3d>();
@@ -791,21 +698,6 @@ public partial class RhinoMCPFunctions
                 + "," + ring[i].Y.ToString("0.###", CultureInfo.InvariantCulture));
         }
         return string.Join(";", parts.ToArray());
-    }
-
-    /// <summary>Divider segments, stretched by the reach detection gives them.</summary>
-    private static void AddDividerSegments(List<RoomDetect.Pt> points, List<double[]> segments)
-    {
-        for (var i = 0; i + 1 < points.Count; i++)
-        {
-            var a = points[i];
-            var b = points[i + 1];
-            var len = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
-            if (len < 1e-6) continue;
-            var ux = (b.X - a.X) / len * RoomDetect.ReachMm;
-            var uy = (b.Y - a.Y) / len * RoomDetect.ReachMm;
-            segments.Add(new[] { a.X - ux, a.Y - uy, b.X + ux, b.Y + uy });
-        }
     }
 
     /// <summary>

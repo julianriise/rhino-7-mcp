@@ -122,7 +122,7 @@ def test_room_count_line_names_overflowing_rooms_by_id(capsys):
     {"room_tags": 15, "rooms_too_small": 1},            # too small with no reason
     {"rooms_overflow": 1},                              # an overflow not listed
     {"rooms_overflow": 5, "room_areas_dropped": 4},     # overflow keeps no area line
-    {"rooms_unbounded": 1, "room_tags": 15, "rooms_untagged": ["rd-01 Rom: off the floor slab"]},
+    {"rooms_unbounded": 1, "room_tags": 15, "rooms_untagged": ["rd-01: no outline to tag"]},
 ])
 def test_room_count_line_fails_when_the_counts_do_not_add_up(change):
     failures = []
@@ -133,8 +133,8 @@ def test_room_count_line_fails_when_the_counts_do_not_add_up(change):
 def tag(part, box, ring, overflow=False):
     attributes = {
         "forsk:role": "room_tag", "forsk:tag": part, "forsk:room_id": "rd-07",
-        "forsk:text_height": "312.5", "forsk:paper_height": "2.5", "forsk:bounded": "1.00",
-        "forsk:footprint": "floor", "forsk:room": ";".join(f"{x},{y}" for x, y in ring),
+        "forsk:text_height": "312.5", "forsk:paper_height": "2.5",
+        "forsk:room": ";".join(f"{x},{y}" for x, y in ring),
     }
     if overflow:
         attributes["forsk:overflow"] = "1"

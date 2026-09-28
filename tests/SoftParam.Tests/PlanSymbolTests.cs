@@ -287,43 +287,6 @@ public class PlanSymbolTests
         Assert.False(OpeningTypes.PocketHand("L", 1, 900, 900, reach, out _));
     }
 
-    static OpeningTypes.PlanRegion Band()
-    {
-        // 8 x 4 m garage band, 200 mm walls: outer ring plus the room hole.
-        var band = new OpeningTypes.PlanRegion();
-        band.Xs.Add(new double[] { 0, 8000, 8000, 0 });
-        band.Ys.Add(new double[] { 0, 0, 4000, 4000 });
-        band.Xs.Add(new double[] { 200, 7800, 7800, 200 });
-        band.Ys.Add(new double[] { 200, 200, 3800, 3800 });
-        return band;
-    }
-
-    [Fact]
-    public void Room_BoundedByWalls()
-    {
-        var walls = new[] { Band() };
-        Assert.True(OpeningTypes.InRegions(100, 2000, walls));
-        Assert.False(OpeningTypes.InRegions(4000, 2000, walls));
-        Assert.False(OpeningTypes.InRegions(9000, 2000, walls));
-
-        var room = new[] { 200.0, 7800, 7800, 200 };
-        var roomY = new[] { 200.0, 200, 3800, 3800 };
-        Assert.Equal(1.0, OpeningTypes.BoundedFraction(room, roomY, walls, 50), 9);
-        // Clockwise input scores the same.
-        Assert.Equal(1.0, OpeningTypes.BoundedFraction(
-            room.Reverse().ToArray(), roomY.Reverse().ToArray(), walls, 50), 9);
-
-        // The old office fixture: a 4 x 5 m rectangle in open space.
-        var loose = new[] { 9500.0, 13500, 13500, 9500 };
-        var looseY = new[] { 1500.0, 1500, 6500, 6500 };
-        Assert.Equal(0.0, OpeningTypes.BoundedFraction(loose, looseY, walls, 50), 9);
-
-        // Half inside the room: two sides float, so it is not a room.
-        var half = new[] { 1000.0, 3000, 3000, 1000 };
-        var halfY = new[] { 200.0, 200, 2000, 2000 };
-        Assert.True(OpeningTypes.BoundedFraction(half, halfY, walls, 50) < 0.9);
-    }
-
     [Theory]
     [InlineData(100, 250)]
     [InlineData(200, 500)]

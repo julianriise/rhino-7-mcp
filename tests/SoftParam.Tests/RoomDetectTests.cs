@@ -202,20 +202,15 @@ public class RoomDetectTests
     }
 
     [Fact]
-    public void DividerEdge_CountsAsBounded()
+    public void TagName_DrawnOutline_IsNamedByItsLabel_TooSmallIsUntagged()
     {
-        // Room 0..4000 x 0..3000; walls on three sides, a divider along y = 3000.
-        var walls = new OpeningTypes.PlanRegion();
-        walls.Xs.Add(new double[] { -200, 4200, 4200, -200 });
-        walls.Ys.Add(new double[] { -200, -200, 3000, 3000 });
-        walls.Xs.Add(new double[] { 0, 4000, 4000, 0 });
-        walls.Ys.Add(new double[] { 0, 0, 3000, 3000 });
-        var xs = new double[] { 0, 4000, 4000, 0 };
-        var ys = new double[] { 0, 0, 3000, 3000 };
-        var regions = new List<OpeningTypes.PlanRegion> { walls };
-        Assert.Equal(0.75, OpeningTypes.BoundedFraction(xs, ys, regions, 50), 3);
-        var divider = new List<double[]> { new double[] { -300, 3000, 4300, 3000 } };
-        Assert.Equal(1.0, OpeningTypes.BoundedFraction(xs, ys, regions, 50, divider), 3);
+        // A hand-drawn outline has no rooms_detect stamp: its label names it.
+        var ring = new List<Pt> { new Pt(0, 0), new Pt(3000, 0), new Pt(3000, 2000), new Pt(0, 2000) };
+        var labels = new[] { new RoomDetect.Label("Bad", 250, new Pt(1500, 1000)) };
+        Assert.Equal("Bad", RoomDetect.TagName(null, 6 * M2, labels, ring, out var untagged));
+        Assert.Null(untagged);
+        Assert.Equal("Bad", RoomDetect.TagName("", 0.5 * M2, labels, ring, out untagged));
+        Assert.Equal("0.50 m² under 1 m²", untagged);
     }
 
     [Fact]

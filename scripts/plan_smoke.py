@@ -59,7 +59,6 @@ def _inside(point, ring, tol: float = 2.0) -> bool:
 
 
 PAPER_TEXT_MM = 2.5
-BOUNDED_MIN = 0.9  # PlanSymbols.RoomBoundedMin
 # Glyph extents run from the comma descender to the top of "m²", so the
 # bbox short side is taller than the cap height (303 for 250 at 1:100).
 GLYPH_BOX = (0.9, 1.5)
@@ -139,13 +138,6 @@ def check_room_tags(rows, page, failures) -> None:
         low, high = GLYPH_BOX
         if not low * height <= short <= high * height:
             failures.append(f"room tag bbox {short:.0f} for height {height:.0f}")
-            bad += 1
-        bounded = _number(attr, "forsk:bounded")
-        if bounded is None or bounded < BOUNDED_MIN:
-            failures.append(f"room tag bounded by walls {bounded} < {BOUNDED_MIN}")
-            bad += 1
-        if attr.get("forsk:footprint") not in ("floor", "walls"):
-            failures.append(f"room tag footprint {attr.get('forsk:footprint')!r}")
             bad += 1
         ring = _pairs(attr.get("forsk:room"))
         if attr.get("forsk:overflow") == "1":
@@ -417,9 +409,9 @@ def check_tag_names(rows, rooms, label, failures) -> None:
 def check_room_count(page, expected, label, failures) -> None:
     """One line per sheet, the counts as PlanStats defines them: every room is
     tagged (its name is on the sheet), too small (under the 1 m² cutoff), or
-    unbounded. Of the tagged, area dropped show the name alone and overflow
-    are the names that run past their room. Then the overflowing and the
-    untagged rooms by id, each on its own line."""
+    unbounded (no outline to read). Of the tagged, area dropped show the name
+    alone and overflow are the names that run past their room. Then the
+    overflowing and the untagged rooms by id, each on its own line."""
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
     overflow = int(page.get("rooms_overflow") or 0)

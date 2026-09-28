@@ -203,8 +203,8 @@ public static class RoomDetect
     /// <summary>
     /// The one place a room gets its name: the labels inside its ring, picked
     /// by <see cref="PickLabel"/> with the ring's area and inside point. The
-    /// name depends on the ring alone, so rooms_detect and the plan tag, which
-    /// both call this with the same outline, give a room the same name.
+    /// name depends on the ring alone. rooms_detect names each detected room
+    /// here once and stamps it on the marker; the plan tag shows that stamp.
     /// </summary>
     public static string Name(IList<Label> labels, List<Pt> ring)
     {
@@ -213,6 +213,23 @@ public static class RoomDetect
             if (Contains(ring, label.At)) inside.Add(label);
         TryInside(new List<List<Pt>> { ring }, out var at);
         return PickLabel(inside, Math.Abs(Area(ring)), at);
+    }
+
+    /// <summary>
+    /// What the plan tag shows for one room marker, from rooms_detect's result.
+    /// A detected room is bounded by construction (detection only closes a
+    /// region that walls, doors or a space divider bound) and shows the name
+    /// rooms_detect stamped on it. An outline drawn by hand is the user's word,
+    /// named by <see cref="Name"/>. Under <see cref="MinAreaMm2"/> neither is
+    /// tagged: <paramref name="untagged"/> says why, else it is null.
+    /// </summary>
+    public static string TagName(string detectedName, double areaMm2, IList<Label> labels, List<Pt> ring, out string untagged)
+    {
+        var name = string.IsNullOrEmpty(detectedName) ? Name(labels, ring) : detectedName;
+        untagged = areaMm2 < MinAreaMm2
+            ? (areaMm2 / 1000000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m² under 1 m²"
+            : null;
+        return name;
     }
 
     /// <summary>

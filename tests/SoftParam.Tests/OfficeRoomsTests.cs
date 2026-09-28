@@ -234,6 +234,29 @@ public class OfficeRoomsTests
     }
 
     [Fact]
+    public void Office_PlanTags_ShowWhatRoomsDetectFound()
+    {
+        // rooms_detect names each room once and stamps the name on its marker.
+        var (scene, labels, _) = Office();
+        var found = RoomDetect.Detect(scene);
+        var detected = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToList();
+
+        // The plan tag reads the marker: that stamp, the net area, the outline.
+        // All 16 are tagged with rooms_detect's name, the two corridor halves
+        // along the space divider included; no wall is probed at print.
+        var tags = found.Rooms.Select((room, i) =>
+            RoomDetect.TagName(detected[i], room.Area, labels, room.Ring, out var untagged)
+            + (untagged == null ? "" : " untagged: " + untagged)).ToList();
+        Assert.Equal(16, tags.Count);
+        Assert.Equal(detected, tags);
+
+        // The stamp is the name: labels read at print do not rename a detected room.
+        var noLabels = new List<RoomDetect.Label>();
+        Assert.Equal(detected, found.Rooms.Select((room, i) =>
+            RoomDetect.TagName(detected[i], room.Area, noLabels, room.Ring, out _)).ToList());
+    }
+
+    [Fact]
     public void Office_TheDividerSplitsTheCorridor_TheHalvesKeepTheirOwnLabels()
     {
         var (scene, labels, rings) = Office();
