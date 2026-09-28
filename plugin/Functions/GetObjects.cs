@@ -129,7 +129,7 @@ public partial class RhinoMCPFunctions
             if (includeAttributes)
                 row["attributes"] = Serializer.RhinoObjectAttributes(obj);
             if (obj.Geometry is TextEntity text)
-                row["text"] = text.PlainText;
+                row["text"] = LabelText.Plain(text.RichText, text.PlainText);
             objectsArray.Add(row);
         }
 

@@ -60,8 +60,7 @@ public class OfficeRoomsTests
             switch (code)
             {
                 case "8": current.Layer = value; break;
-                case "1": current.Text = Regex.Replace(value, @"\\U\+([0-9A-Fa-f]{4})",
-                    m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString()); break;
+                case "1": current.Text = value; break;
                 case "40": current.Height = number; break;
                 case "10": current.Points.Add(new Pt(number, 0)); break;
                 case "20":
@@ -91,6 +90,18 @@ public class OfficeRoomsTests
     static bool On(Entity e, string layer) => e.Layer.Equals(layer, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Rhino's PlainText for an imported DXF string. Rhino keeps the raw string
+    /// as the RichText and runs it through ON_RtfParser: ReadTag takes \U as a
+    /// control word and eats the + that ends it, so B\U+00F8ttekott reads
+    /// B00F8ttekott (the live office smoke printed exactly that).
+    /// </summary>
+    static string RhinoPlainText(string raw) => Regex.Replace(raw, @"\\[A-Za-z]+[0-9.\-]*[^\\{}]?", "");
+
+    /// <summary>A label as the plugin reads it from a Rhino text object.</summary>
+    static RoomDetect.Label ModelLabel(Entity e) =>
+        new RoomDetect.Label(LabelText.Plain(e.Text, RhinoPlainText(e.Text)), e.Height, e.Points[0]);
+
+    /// <summary>
     /// The scene rooms_detect builds after the office bake: walls_from_layer
     /// makes one wall from every ring on the wall layer, and the divider is the
     /// space_divider line. Doors are cut in 3D; the wall rings have no gaps.
@@ -109,9 +120,51 @@ public class OfficeRoomsTests
             scene.Dividers.Add(new List<Pt> { e.Points[0], e.End });
         var labels = entities
             .Where(e => On(e, "label") && e.Type == "TEXT" && e.Points.Count > 0)
-            .Select(e => new RoomDetect.Label(e.Text, e.Height, e.Points[0]))
+            .Select(ModelLabel)
             .ToList();
         return (scene, labels, rings);
+    }
+
+    static double Clearance(double x, double y, List<Pt> ring)
+    {
+        var best = double.MaxValue;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+        {
+            var dx = ring[i].X - ring[j].X;
+            var dy = ring[i].Y - ring[j].Y;
+            var t = Math.Max(0, Math.Min(1, ((x - ring[j].X) * dx + (y - ring[j].Y) * dy) / (dx * dx + dy * dy)));
+            best = Math.Min(best, Math.Sqrt(Math.Pow(ring[j].X + dx * t - x, 2) + Math.Pow(ring[j].Y + dy * t - y, 2)));
+        }
+        return best;
+    }
+
+    [Fact]
+    public void Office_TagPoints_SitWellInsideEveryRoom()
+    {
+        // The tag sits at the room's interior point. Hall is an L: its centroid
+        // lies 200 mm from the inner corner, and its 0.68 m name did not fit.
+        var (scene, _, _) = Office();
+        foreach (var room in RoomDetect.Detect(scene).Rooms)
+        {
+            Assert.True(OpeningTypes.TryInteriorPoint(
+                room.Ring.Select(p => p.X).ToArray(), room.Ring.Select(p => p.Y).ToArray(), out var x, out var y));
+            var clear = Clearance(x, y, room.Ring);
+            var hall = RoomDetect.Contains(room.Ring, new Pt(7618.35, 17752.5));
+            Assert.True(clear >= (hall ? 1500 : 500), $"tag at {x:0},{y:0} is {clear:0} mm from the room edge");
+        }
+    }
+
+    [Fact]
+    public void Office_TheOnlyEscapedLabel_ReadsBottekott_AndNamesItsRoom()
+    {
+        var raw = Entities(OfficePath).Single(e => On(e, "label") && e.Text.Contains("\\U+"));
+        Assert.Equal("B\\U+00F8ttekott", raw.Text);
+        Assert.Equal("B00F8ttekott", RhinoPlainText(raw.Text));
+        Assert.Equal("Bøttekott", ModelLabel(raw).Text);
+
+        var (scene, labels, _) = Office();
+        var room = RoomDetect.Detect(scene).Rooms.Single(r => RoomDetect.Contains(r.Ring, raw.Points[0]));
+        Assert.Equal("Bøttekott", RoomDetect.Name(labels, room.Ring));
     }
 
     [Fact]

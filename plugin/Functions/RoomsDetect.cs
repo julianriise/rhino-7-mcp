@@ -146,19 +146,23 @@ public partial class RhinoMCPFunctions
                 removed++;
         }
 
-        // Markers follow the outlines: one per closed A-ROOM curve, detected ones named by their id.
+        // Markers follow the outlines: one per closed A-ROOM curve, detected ones
+        // named by their id and carrying the room's net area (holes subtracted).
         foreach (var marker in RoomMarkers(doc))
             doc.Objects.Delete(marker.Id, true);
         var markers = RoomsFromLayer(new JObject { ["layer"] = layer.Name });
         var ids = markers["ids"] as JArray ?? new JArray();
-        var area = 0.0;
+        var named = new List<RoomDetect.Room>();
+        var drawn = new List<double>();
         foreach (var token in ids)
         {
             var marker = doc.Objects.FindId(Guid.Parse(token.ToString()));
             if (marker == null) continue;
-            area += ParseMm(marker.Attributes.GetUserString("forsk:area")) ?? 0;
-            NameDetectedMarker(doc, marker, found.Rooms, roomIds);
+            var room = NameDetectedMarker(doc, marker, found.Rooms, roomIds);
+            if (room != null) named.Add(room);
+            else drawn.Add(ParseMm(marker.Attributes.GetUserString("forsk:area")) ?? 0);
         }
+        var area = RoomDetect.TotalArea(named, drawn);
         foreach (var warning in markers["warnings"] as JArray ?? new JArray())
             warnings.Add(warning);
 
@@ -221,7 +225,10 @@ public partial class RhinoMCPFunctions
         return list;
     }
 
-    /// <summary>The texts on the label layer that name rooms, at their insertion points.</summary>
+    /// <summary>
+    /// The texts on the label layer that name rooms, at their insertion points,
+    /// decoded once by LabelText (DXF escapes such as \U+00F8 included).
+    /// </summary>
     private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc)
     {
         var labels = new List<RoomDetect.Label>();
@@ -231,17 +238,21 @@ public partial class RhinoMCPFunctions
             var index = obj.Attributes.LayerIndex;
             if (index < 0 || index >= doc.Layers.Count) continue;
             if (!doc.Layers[index].Name.Equals(RoomLabelLayerName, StringComparison.OrdinalIgnoreCase)) continue;
-            labels.Add(new RoomDetect.Label(text.PlainText, text.TextHeight,
+            labels.Add(new RoomDetect.Label(LabelText.Plain(text.RichText, text.PlainText), text.TextHeight,
                 new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y)));
         }
         return labels;
     }
 
-    /// <summary>A marker made from a detected outline takes its stable id as forsk:id and name.</summary>
-    private static void NameDetectedMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms, string[] roomIds)
+    /// <summary>
+    /// A marker made from a detected outline takes its stable id as forsk:id and
+    /// name, and the room's net area as forsk:area. Returns that room, or null
+    /// for a marker from an outline drawn by hand.
+    /// </summary>
+    private static RoomDetect.Room NameDetectedMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms, string[] roomIds)
     {
-        if (!TryRoomPolygon(marker, out var polygon)) return;
-        if (!RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { PlanPoints(polygon) }, out var at)) return;
+        if (!TryRoomPolygon(marker, out var polygon)) return null;
+        if (!RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { PlanPoints(polygon) }, out var at)) return null;
         for (var i = 0; i < rooms.Count; i++)
         {
             if (!RoomDetect.Contains(rooms[i].Ring, at)) continue;
@@ -249,9 +260,11 @@ public partial class RhinoMCPFunctions
             attr.Name = roomIds[i];
             attr.SetUserString("forsk:id", roomIds[i]);
             attr.SetUserString(RoomIdKey, roomIds[i]);
+            attr.SetUserString("forsk:area", FormatMm(rooms[i].Area));
             doc.Objects.ModifyAttributes(marker.Id, attr, true);
-            return;
+            return rooms[i];
         }
+        return null;
     }
 
     private static PolylineCurve RoomOutline(List<RoomDetect.Pt> ring, double z)

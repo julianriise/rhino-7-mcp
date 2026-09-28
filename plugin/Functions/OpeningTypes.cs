@@ -520,9 +520,15 @@ public static class OpeningTypes
         y = oy + dy * shift;
     }
 
+    /// <summary>A tag point this close to the edge, next to the roomiest point, moves there.</summary>
+    public const double TagPointCramped = 0.5;
+
     /// <summary>
-    /// Centroid when it lies in the polygon, otherwise the inside sample
-    /// nearest the centroid.
+    /// Where a room's tag goes: the centroid, unless it lies outside the room
+    /// or has under half the edge clearance of the roomiest point (the inside
+    /// point farthest from every edge). Then that roomiest point. A rectangle
+    /// keeps its centre; an L-shaped room gets its tag in the open part, not
+    /// at the inner corner its centroid falls next to.
     /// </summary>
     public static bool TryInteriorPoint(double[] xs, double[] ys, out double x, out double y)
     {
@@ -553,13 +559,6 @@ public static class OpeningTypes
             gx = cx / (3.0 * area2);
             gy = cy / (3.0 * area2);
         }
-        if (PointInPolygon(gx, gy, ring))
-        {
-            x = gx;
-            y = gy;
-            return true;
-        }
-
         double minX = ring[0][0], maxX = ring[0][0], minY = ring[0][1], maxY = ring[0][1];
         foreach (var p in ring)
         {
@@ -568,27 +567,56 @@ public static class OpeningTypes
             if (p[1] < minY) minY = p[1];
             if (p[1] > maxY) maxY = p[1];
         }
-        var bestD = double.MaxValue;
-        var found = false;
-        const int steps = 8;
-        for (var ix = 0; ix <= steps; ix++)
+        // The roomiest point: the best clearance on a 32-step grid, refined by
+        // halving the step around it.
+        double bx = 0, by = 0, best = 0;
+        var step = Math.Max(maxX - minX, maxY - minY) / 32.0;
+        if (step <= 0) return false;
+        for (var sx = minX + step / 2; sx < maxX; sx += step)
+            for (var sy = minY + step / 2; sy < maxY; sy += step)
+                Roomier(sx, sy, ring, ref bx, ref by, ref best);
+        for (var k = 0; k < 12 && best > 0; k++)
         {
-            for (var iy = 0; iy <= steps; iy++)
-            {
-                var sx = minX + (maxX - minX) * ix / steps;
-                var sy = minY + (maxY - minY) * iy / steps;
-                if (!PointInPolygon(sx, sy, ring)) continue;
-                var d = (sx - gx) * (sx - gx) + (sy - gy) * (sy - gy);
-                if (d < bestD)
-                {
-                    bestD = d;
-                    x = sx;
-                    y = sy;
-                    found = true;
-                }
-            }
+            step /= 2;
+            double cx0 = bx, cy0 = by;
+            for (var i = -2; i <= 2; i++)
+                for (var j = -2; j <= 2; j++)
+                    Roomier(cx0 + i * step, cy0 + j * step, ring, ref bx, ref by, ref best);
         }
-        return found;
+        if (best <= 0) return false;
+        var keep = PointInPolygon(gx, gy, ring) && EdgeClearance(gx, gy, ring) >= TagPointCramped * best;
+        x = keep ? gx : bx;
+        y = keep ? gy : by;
+        return true;
+    }
+
+    static void Roomier(double px, double py, List<double[]> ring, ref double bx, ref double by, ref double best)
+    {
+        if (!PointInPolygon(px, py, ring)) return;
+        var d = EdgeClearance(px, py, ring);
+        if (d <= best) return;
+        best = d;
+        bx = px;
+        by = py;
+    }
+
+    /// <summary>Distance from (x, y) to the nearest edge of ring.</summary>
+    static double EdgeClearance(double x, double y, List<double[]> ring)
+    {
+        var best = double.MaxValue;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            var dx = b[0] - a[0];
+            var dy = b[1] - a[1];
+            var len2 = dx * dx + dy * dy;
+            var t = len2 <= 1e-12 ? 0 : Math.Max(0, Math.Min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / len2));
+            var ex = a[0] + dx * t - x;
+            var ey = a[1] + dy * t - y;
+            best = Math.Min(best, Math.Sqrt(ex * ex + ey * ey));
+        }
+        return best;
     }
 
     /// <summary>Plan section of one solid: its rings, read even-odd.</summary>

@@ -156,6 +156,20 @@ public class RoomDetectTests
         Assert.Equal(1, found.Slivers);
     }
 
+    [Fact]
+    public void TotalArea_SubtractsHoles_AsEachRoomDoes()
+    {
+        // A 3800 x 3800 room with a free-standing 400 x 400 column in it.
+        var scene = OneRoom();
+        scene.Walls.Add(Wall(Rect(1900, 1900, 2300, 2300)));
+        var room = Assert.Single(RoomDetect.Detect(scene).Rooms);
+        Assert.Equal(1, room.Holes);
+        Assert.Equal(14.28 * M2, room.Area, 3);
+        // rooms_detect's total is the same net area, plus any outline drawn by hand.
+        Assert.Equal(14.28 * M2, RoomDetect.TotalArea(new[] { room }, new double[0]), 3);
+        Assert.Equal(19.28 * M2, RoomDetect.TotalArea(new[] { room }, new[] { 5 * M2 }), 3);
+    }
+
     static RoomDetect.Label Label(string text, double height, double x, double y) =>
         new RoomDetect.Label(text, height, new Pt(x, y));
 

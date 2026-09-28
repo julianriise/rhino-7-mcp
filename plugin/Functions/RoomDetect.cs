@@ -241,6 +241,18 @@ public static class RoomDetect
         return best ?? DefaultRoomName;
     }
 
+    /// <summary>
+    /// Total area of the rooms in mm², holes subtracted as each room's own area
+    /// is, plus the outlines drawn by hand.
+    /// </summary>
+    public static double TotalArea(IList<Room> rooms, IEnumerable<double> drawnMm2)
+    {
+        var total = 0.0;
+        foreach (var room in rooms) total += room.Area;
+        foreach (var area in drawnMm2) total += area;
+        return total;
+    }
+
     public static double Area(IList<Pt> ring)
     {
         if (ring == null || ring.Count < 3) return 0;
