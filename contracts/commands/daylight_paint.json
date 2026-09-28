@@ -33,7 +33,7 @@
         "minItems": 3,
         "maxItems": 3
       },
-      "description": "One Forsk sky ramp colour per vertex, the same for every vertex of a cell: DF / 5 %."
+      "description": "One Forsk sky ramp colour per vertex, the same for every vertex of a cell: DF on a log scale, 0.1 % dark blue to 10 % near white."
     },
     "faces": {
       "type": "array",
