@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_paint.json",
   "title": "DaylightPaint Command",
-  "description": "Replace the daylight overlay: delete forsk:kind=analysis objects, then add one welded vertex-coloured mesh on A-ANALYSE that fills each room to its inner wall faces. Display mode 'Forsk Analysis': mesh wires off, unlit vertex colours. The layer is off in every layout detail and does not print. Sky-vis proxy, not lux.",
+  "description": "Replace the daylight overlay: delete forsk:kind=analysis objects, then add one vertex-coloured mesh on A-ANALYSE that fills each room to its inner wall faces, one flat colour per cell (a cell's vertices are its own). Display mode 'Forsk Analysis': mesh wires off, unlit vertex colours. The layer is off in every layout detail and does not print. An estimated daylight factor, not a simulation.",
   "type": "object",
   "properties": {
     "z": {
@@ -19,7 +19,7 @@
         "minItems": 2,
         "maxItems": 2
       },
-      "description": "Mesh vertices [x, y] in mm, each once: cell centres inside rooms and points on the room outlines."
+      "description": "Mesh vertices [x, y] in mm: each cell's own corners, on the lattice and on the room outlines."
     },
     "colors": {
       "type": "array",
@@ -33,7 +33,7 @@
         "minItems": 3,
         "maxItems": 3
       },
-      "description": "One Forsk sky ramp colour per vertex (display only; scores are Planwire's)."
+      "description": "One Forsk sky ramp colour per vertex, the same for every vertex of a cell: DF / 5 %."
     },
     "faces": {
       "type": "array",

@@ -632,17 +632,20 @@ def test_responses():
 
     print("  daylight results:")
     scene = {
-        "walls": [{"id": "w01", "thickness": 200, "rings": [[[0, 0], [8000, 0], [8000, 4000], [0, 4000]]]}],
-        "openings": [{"id": "window-01", "host_id": "w01", "kind": "window", "width": 1200, "center": [4800, 100]}],
+        "walls": [{"id": "w01", "thickness": 200, "z0": 0, "z1": 3000,
+                   "rings": [[[0, 0], [8000, 0], [8000, 4000], [0, 4000]]]}],
+        "openings": [{"id": "window-01", "host_id": "w01", "kind": "window", "width": 1200, "center": [4800, 100],
+                      "sill": 900, "head": 2100}],
         "rooms": [{"id": "12345678-1234-1234-1234-123456789012", "name": "room-01",
                    "ring": [[200, 200], [7800, 200], [7800, 3800], [200, 3800]], "z": 0}],
+        "roofs": [{"z0": 2800, "overhang": 500}],
         "selected_room_ids": [],
         "warnings": [],
     }
     if not validate("responses/daylight_scene_result.json", scene):
         all_passed = False
-    painted = {"id": "12345678-1234-1234-1234-123456789012", "faces": 200, "vertices": 231,
-               "welded": True, "wires": "off", "layer": "A-ANALYSE", "deleted": 1,
+    painted = {"id": "12345678-1234-1234-1234-123456789012", "faces": 200, "vertices": 800,
+               "wires": "off", "layer": "A-ANALYSE", "deleted": 1,
                "bbox": [200, 200, 7800, 3800], "message": "Painted 200 daylight faces on A-ANALYSE."}
     if not validate("responses/daylight_paint_result.json", painted):
         all_passed = False

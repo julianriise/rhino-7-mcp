@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_scene_result.json",
   "title": "DaylightSceneResult",
-  "description": "Tagged plan geometry for daylight, model mm. Rings are open (no repeated first point).",
+  "description": "Tagged geometry for daylight, model mm. Rings are open (no repeated first point). Heights (wall z0/z1, opening sill/head, roof z0) are world Z.",
   "type": "object",
   "$defs": {
     "xy": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
@@ -16,9 +16,11 @@
         "properties": {
           "id": { "type": "string" },
           "thickness": { "type": "number" },
+          "z0": { "type": "number", "description": "Wall base." },
+          "z1": { "type": "number", "description": "Wall top." },
           "rings": { "type": "array", "items": { "$ref": "#/$defs/ring" } }
         },
-        "required": ["id", "thickness", "rings"],
+        "required": ["id", "thickness", "z0", "z1", "rings"],
         "additionalProperties": false
       }
     },
@@ -31,9 +33,11 @@
           "host_id": { "type": "string" },
           "kind": { "type": "string" },
           "width": { "type": "number" },
-          "center": { "$ref": "#/$defs/xy" }
+          "center": { "$ref": "#/$defs/xy" },
+          "sill": { "type": "number" },
+          "head": { "type": "number" }
         },
-        "required": ["id", "host_id", "kind", "width", "center"],
+        "required": ["id", "host_id", "kind", "width", "center", "sill", "head"],
         "additionalProperties": false
       }
     },
@@ -51,9 +55,21 @@
         "additionalProperties": false
       }
     },
+    "roofs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "z0": { "type": "number", "description": "Underside at the eave." },
+          "overhang": { "type": "number", "minimum": 0, "description": "forsk:overhang past the wall faces." }
+        },
+        "required": ["z0", "overhang"],
+        "additionalProperties": false
+      }
+    },
     "selected_room_ids": { "type": "array", "items": { "type": "string" } },
     "warnings": { "type": "array", "items": { "type": "string" } }
   },
-  "required": ["walls", "openings", "rooms", "selected_room_ids", "warnings"],
+  "required": ["walls", "openings", "rooms", "roofs", "selected_room_ids", "warnings"],
   "additionalProperties": false
 }

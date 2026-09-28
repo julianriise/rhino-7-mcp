@@ -11,9 +11,9 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Daylight (F4) geometry I/O only. The sky-vis proxy runs in the Python MCP
-/// server: daylight_scene reads tagged walls, openings, and rooms in mm, and
-/// daylight_paint draws the rooms as one coloured mesh on A-ANALYSE.
+/// Daylight (F4) geometry I/O only. The daylight factor estimate runs in the
+/// Python MCP server: daylight_scene reads tagged walls, openings, roofs, and
+/// rooms in mm, and daylight_paint draws the rooms as one coloured mesh on A-ANALYSE.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -28,6 +28,7 @@ public partial class RhinoMCPFunctions
         var walls = new JArray();
         var openings = new JArray();
         var rooms = new JArray();
+        var roofs = new JArray();
         var warnings = new JArray();
         var wallIdByGuid = new Dictionary<Guid, string>();
         var markers = new List<RhinoObject>();
@@ -51,11 +52,23 @@ public partial class RhinoMCPFunctions
                 foreach (var hole in holes)
                     rings.Add(XyRing(LoopPoints(hole, tol)));
                 wallIdByGuid[obj.Id] = id;
+                var extent = obj.Geometry.GetBoundingBox(true);
                 walls.Add(new JObject
                 {
                     ["id"] = id,
                     ["thickness"] = ParseMm(obj.Attributes.GetUserString("forsk:thickness")) ?? 200.0,
+                    ["z0"] = extent.Min.Z,
+                    ["z1"] = extent.Max.Z,
                     ["rings"] = rings
+                });
+            }
+            else if (kind.Equals("roof", StringComparison.OrdinalIgnoreCase))
+            {
+                // The eave's underside, and how far it reaches past the walls, shade the windows.
+                roofs.Add(new JObject
+                {
+                    ["z0"] = obj.Geometry.GetBoundingBox(true).Min.Z,
+                    ["overhang"] = ParseMm(obj.Attributes.GetUserString("forsk:overhang")) ?? 0.0
                 });
             }
             else if (kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase))
@@ -90,13 +103,16 @@ public partial class RhinoMCPFunctions
                 wallIdByGuid.TryGetValue(hostGuid, out host);
             var box = marker.Geometry.GetBoundingBox(true);
             var width = ParseMm(marker.Attributes.GetUserString("forsk:width"));
+            // Sill and head are world Z, as the opening cutter uses them.
             openings.Add(new JObject
             {
                 ["id"] = marker.Attributes.Name ?? marker.Id.ToString(),
                 ["host_id"] = host ?? "",
                 ["kind"] = marker.Attributes.GetUserString("forsk:opening_kind") ?? "",
                 ["width"] = width ?? Math.Max(box.Max.X - box.Min.X, box.Max.Y - box.Min.Y),
-                ["center"] = new JArray(box.Center.X, box.Center.Y)
+                ["center"] = new JArray(box.Center.X, box.Center.Y),
+                ["sill"] = ParseMm(marker.Attributes.GetUserString("forsk:sill")) ?? box.Min.Z,
+                ["head"] = ParseMm(marker.Attributes.GetUserString("forsk:head")) ?? box.Max.Z
             });
         }
 
@@ -125,6 +141,7 @@ public partial class RhinoMCPFunctions
             ["walls"] = walls,
             ["openings"] = openings,
             ["rooms"] = rooms,
+            ["roofs"] = roofs,
             ["selected_room_ids"] = selected,
             ["warnings"] = warnings
         };
@@ -151,7 +168,6 @@ public partial class RhinoMCPFunctions
 
         var id = Guid.Empty;
         var vertexCount = 0;
-        var welded = false;
         if (faces.Count > 0)
         {
             var mesh = new Mesh();
@@ -171,8 +187,6 @@ public partial class RhinoMCPFunctions
             }
             mesh.Normals.ComputeNormals();
             vertexCount = mesh.Vertices.Count;
-            // One vertex per corner: no two vertices share a location.
-            welded = mesh.TopologyVertices.Count == vertexCount;
             id = doc.Objects.AddMesh(mesh, AnalysisAttributes(layer, "mesh", "daylight", mode));
             if (id == Guid.Empty)
                 throw new InvalidOperationException("Could not add the daylight mesh.");
@@ -189,7 +203,6 @@ public partial class RhinoMCPFunctions
             ["id"] = id == Guid.Empty ? "" : id.ToString(),
             ["faces"] = faces.Count,
             ["vertices"] = vertexCount,
-            ["welded"] = welded,
             ["wires"] = wiresOff ? "off" : "on",
             ["layer"] = AnalysisLayerName,
             ["deleted"] = deleted,

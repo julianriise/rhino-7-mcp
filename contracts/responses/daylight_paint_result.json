@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "daylight_paint_result.json",
   "title": "DaylightPaintResult",
-  "description": "The overlay mesh id (empty when no faces), faces and welded vertices painted, wires state, the mesh bbox, and old overlay objects deleted first.",
+  "description": "The overlay mesh id (empty when no faces), faces and vertices painted, wires state, the mesh bbox, and old overlay objects deleted first.",
   "type": "object",
   "properties": {
     "id": {
@@ -27,9 +27,6 @@
       "type": "integer",
       "minimum": 0
     },
-    "welded": {
-      "type": "boolean"
-    },
     "wires": {
       "type": "string",
       "enum": [
@@ -49,7 +46,6 @@
     "id",
     "faces",
     "vertices",
-    "welded",
     "wires",
     "layer",
     "deleted",
