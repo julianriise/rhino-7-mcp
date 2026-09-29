@@ -92,7 +92,8 @@ def check_room_tags(rows, page, failures) -> None:
     """Room tag texts as PlanSymbols.AddPlanText makes them: a name for each
     tagged room, an area line for each tagged room whose area was not dropped,
     model height 2.5 mm x scale, printed 2.5 mm, inside its room. A name
-    stamped forsk:overflow may run past the room edge; its centre is inside."""
+    stamped forsk:overflow may run past the room edge; its centre is inside.
+    A tag stamped forsk:leader sits outside on a leader (check_leaders)."""
     scale = int(page.get("scale") or 0)
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
@@ -140,6 +141,8 @@ def check_room_tags(rows, page, failures) -> None:
             failures.append(f"room tag bbox {short:.0f} for height {height:.0f}")
             bad += 1
         ring = _pairs(attr.get("forsk:room"))
+        if attr.get("forsk:leader") == "1":
+            continue
         if attr.get("forsk:overflow") == "1":
             points = (((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),)
         else:
@@ -410,20 +413,26 @@ def check_room_count(page, expected, label, failures) -> None:
     """One line per sheet, the counts as PlanStats defines them: every room is
     tagged (its name is on the sheet), too small (under the 1 m² cutoff), or
     without an outline to read. Of the tagged, area dropped show the name
-    alone and overflow are the names that run past their room. Then the
-    overflowing and the untagged rooms by id, each on its own line."""
+    alone, leader have the tag outside the room on a leader (the name did not
+    fit), and overflow are names that run past their room (no clear spot for
+    a leader either; F5.2 makes that a failure). Then the leader, overflowing
+    and untagged rooms by id, each on its own line."""
     tagged = int(page.get("room_tags") or 0)
     dropped = int(page.get("room_areas_dropped") or 0)
+    leader = int(page.get("rooms_leader") or 0)
     overflow = int(page.get("rooms_overflow") or 0)
     small = int(page.get("rooms_too_small") or 0)
     no_outline = int(page.get("rooms_no_outline") or 0)
     untagged = [str(item) for item in page.get("rooms_untagged") or []]
+    leading = [str(item) for item in page.get("rooms_leading") or []]
     overflowing = [str(item) for item in page.get("rooms_overflowing") or []]
     line = (
-        f"{label} room tags {tagged}/{expected} area dropped {dropped} overflow {overflow} "
+        f"{label} room tags {tagged}/{expected} area dropped {dropped} leader {leader} overflow {overflow} "
         f"too small {small} no outline {no_outline}"
     )
     print(f"    {line}")
+    if leading:
+        print(f"    {label} room tags leader {'; '.join(leading)}")
     if overflowing:
         print(f"    {label} room tags overflow {'; '.join(overflowing)}")
     if untagged:
@@ -432,9 +441,12 @@ def check_room_count(page, expected, label, failures) -> None:
         tagged < 1
         or tagged + small + no_outline != expected
         or no_outline
+        or overflow
         or len(untagged) != small + no_outline
+        or len(leading) != leader
         or len(overflowing) != overflow
         or not overflow <= dropped <= tagged
+        or leader + dropped > tagged
     ):
         ids = " ".join(item.split(" ", 1)[0] for item in untagged)
         failures.append(line + (f", untagged {ids}" if ids else ""))
@@ -703,3 +715,185 @@ def check_marks(rows, page, label, failures) -> None:
     print(f"    {label} marks {len(marks)} paper {paper:g} clear of tags {clear}/{len(marks)}")
     if bad:
         failures.append(f"{label} marks: {'; '.join(bad)}")
+
+
+DIM_PAPER_MM = 1.8
+# Symbol lines layout_pack keeps a facade chain's lines off; a room's may
+# cross a door swing's box no more than it crosses the room.
+DIM_TOUCH_ROLES = ("room_tag", "opening_mark", "symbol", "room_leader")
+
+
+def _attrs(obj) -> dict:
+    return obj.get("attributes") or {}
+
+
+def _touch(a, b) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def check_dimensions(rows, page, label, failures, markers=()) -> dict:
+    """F5.2 dimensions as layout_pack baked them on the plan, read back
+    against the model. Every chain adds up to its total, and every value is
+    the length it spans in the model to the mm. The overalls are the poché's
+    extents. A facade chain's point at an opening is that opening's centre
+    (its marker's). Every opening in an outer wall is on a chain. Values
+    print 1.8 mm. No value touches a tag, a mark, a symbol, a leader or any
+    other dimension; no dimension line or witness touches a tag or a mark,
+    and a facade, jog or overall line no symbol. Returns the counts."""
+    dims = [obj for obj in rows if _attrs(obj).get("forsk:role") == "dimension"]
+    texts = [obj for obj in dims if _attrs(obj).get("forsk:symbol") == "text"]
+    strokes = [obj for obj in dims if _attrs(obj).get("forsk:symbol") != "text"]
+    info = page.get("dimensions") or {}
+    bad = []
+    chains = {}
+    for obj in texts:
+        chains.setdefault(_attrs(obj).get("forsk:dim_chain"), []).append(obj)
+    kinds = {chain: _attrs(items[0]).get("forsk:dim_kind") for chain, items in chains.items()}
+    exterior = [chain for chain, kind in kinds.items() if kind != "room"]
+    counts = {
+        "chains": len(chains),
+        "exterior": len(exterior),
+        "exterior_values": sum(len(chains[chain]) for chain in exterior),
+        "room": len(chains) - len(exterior),
+    }
+    if not texts:
+        failures.append(f"{label} dims: no dimensions on the plan")
+        print(f"    {label} dims missing")
+        return counts
+
+    sums = 0
+    for chain, items in chains.items():
+        total = _number(_attrs(items[0]), "forsk:dim_total")
+        values = [_number(_attrs(obj), "forsk:dim_value") for obj in items]
+        if total is not None and None not in values and abs(sum(values) - total) < 0.5:
+            sums += 1
+        else:
+            bad.append(f"{chain} adds {values} to {total}")
+
+    spans = 0
+    for obj in texts:
+        attr = _attrs(obj)
+        ends = _pairs(attr.get("forsk:dim_span"))
+        value = _number(attr, "forsk:dim_value")
+        length = math.dist(ends[0], ends[1]) if len(ends) == 2 else None
+        if length is not None and value is not None and abs(length - value) <= 1.0:
+            spans += 1
+        else:
+            bad.append(f"{attr.get('forsk:dim_chain')} {value} spans {length}")
+
+    fills = [_box(obj) for obj in rows if _attrs(obj).get("forsk:role") == "section_fill"]
+    fills = [box for box in fills if box]
+    overall = {
+        _attrs(obj).get("forsk:dim_side"): _number(_attrs(obj), "forsk:dim_value")
+        for obj in texts if _attrs(obj).get("forsk:dim_kind") == "overall"
+    }
+    width = height = None
+    if fills:
+        width = max(b[2] for b in fills) - min(b[0] for b in fills)
+        height = max(b[3] for b in fills) - min(b[1] for b in fills)
+    extents = {"S": width, "N": width, "E": height, "W": height}
+    if sorted(overall) != ["E", "N", "S", "W"] or any(
+        extents[side] is None or abs(overall[side] - extents[side]) > 1.0 for side in overall
+    ):
+        shown = " ".join(f"{side} {overall[side]:.0f}" for side in sorted(overall))
+        poche = f"{width:.0f} x {height:.0f}" if width is not None else "missing"
+        bad.append(f"overall {shown}, poché {poche}")
+
+    by_id = {str(item.get("id") or "").lower(): item for item in markers or []}
+    centres, ends_at = 0, 0
+    for obj in texts:
+        attr = _attrs(obj)
+        ends = _pairs(attr.get("forsk:dim_span"))
+        for key, end in (("forsk:dim_from", 0), ("forsk:dim_to", 1)):
+            marker_id = str(attr.get(key) or "").lower()
+            if not marker_id or len(ends) != 2:
+                continue
+            ends_at += 1
+            box = _box(by_id.get(marker_id) or {})
+            length = math.dist(ends[0], ends[1])
+            if box is None or length < 1:
+                bad.append(f"{attr.get('forsk:dim_chain')} point at {marker_id[:8]}: no marker")
+                continue
+            ux, uy = (ends[1][0] - ends[0][0]) / length, (ends[1][1] - ends[0][1]) / length
+            cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+            off = (cx - ends[end][0]) * ux + (cy - ends[end][1]) * uy
+            if abs(off) <= 2.0:
+                centres += 1
+            else:
+                bad.append(f"{attr.get('forsk:dim_chain')} point {off:.0f} mm off {marker_id[:8]}'s centre")
+
+    openings = int(info.get("openings") or 0)
+    shown = int(info.get("openings_shown") or 0)
+    if shown != openings or openings < 1:
+        bad.append(f"openings on a chain {shown}/{openings}")
+    if int(info.get("collisions") or 0):
+        bad.append(f"{info.get('collisions')} values with no clear spot")
+    papers = sorted({_number(_attrs(obj), "forsk:paper_height") for obj in texts} - {None})
+    if not papers or any(abs(paper - DIM_PAPER_MM) > DIM_PAPER_MM * 0.10 for paper in papers):
+        bad.append(f"value paper {papers} mm expected {DIM_PAPER_MM:g}")
+
+    others = {role: [b for b in (_box(o) for o in rows if _attrs(o).get("forsk:role") == role) if b] for role in DIM_TOUCH_ROLES}
+    text_boxes = [(obj, _box(obj)) for obj in texts]
+    stroke_boxes = [(obj, _box(obj)) for obj in strokes]
+    hits = []
+    for i, (obj, box) in enumerate(text_boxes):
+        if box is None:
+            continue
+        name = f"{_attrs(obj).get('forsk:dim_chain')} {obj.get('text')}"
+        for role, boxes in others.items():
+            if any(_touch(box, other) for other in boxes):
+                hits.append(f"{name} on a {role}")
+        if any(other and _touch(box, other) for _o, other in text_boxes[i + 1:]):
+            hits.append(f"{name} on a value")
+        if any(other and _touch(box, other) for _o, other in stroke_boxes):
+            hits.append(f"{name} on a dimension line")
+    for obj, box in stroke_boxes:
+        attr = _attrs(obj)
+        if box is None or attr.get("forsk:symbol") == "tick":
+            continue
+        roles = ("room_tag", "opening_mark") + (("symbol",) if attr.get("forsk:dim_kind") != "room" else ())
+        for role in roles:
+            if any(_touch(box, other) for other in others[role]):
+                hits.append(f"{attr.get('forsk:dim_chain')} {attr.get('forsk:symbol')} on a {role}")
+    if hits:
+        bad.append(f"{len(hits)} touching: {'; '.join(hits[:3])}")
+
+    paper = papers[-1] if papers else 0
+    size = f"{width:.0f}x{height:.0f}" if width is not None else "none"
+    print(
+        f"    {label} dims chains {counts['chains']} exterior {counts['exterior']} values {counts['exterior_values']} "
+        f"room {counts['room']}, sums {sums}/{len(chains)}, spans {spans}/{len(texts)}, overall {size}, "
+        f"centres {centres}/{ends_at}, openings {shown}/{openings}, paper {paper:g}, "
+        f"{'clear' if not hits else 'touching'}"
+    )
+    if bad:
+        failures.append(f"{label} dims: {'; '.join(bad[:4])}")
+    return counts
+
+
+def check_leaders(rows, label, failures) -> int:
+    """F5.2: a room tag on a leader (forsk:leader) sits outside its room,
+    and a leader line of the same room runs from inside the room to within
+    1 mm on paper plus the text gap of the tag."""
+    tags = [obj for obj in rows if _attrs(obj).get("forsk:role") == "room_tag" and _attrs(obj).get("forsk:leader") == "1"]
+    lines = [obj for obj in rows if _attrs(obj).get("forsk:role") == "room_leader" and _attrs(obj).get("forsk:symbol") == "line"]
+    rooms = {}
+    for obj in tags:
+        rooms.setdefault(_attrs(obj).get("forsk:room_id"), []).append(obj)
+    bad = []
+    for room_id, items in rooms.items():
+        ring = _pairs(_attrs(items[0]).get("forsk:room"))
+        mine = [obj for obj in lines if _attrs(obj).get("forsk:room_id") == room_id]
+        ends = _pairs(_attrs(mine[0]).get("forsk:line")) if mine else []
+        if len(ends) != 2 or not _inside(ends[0], ring):
+            bad.append(f"{room_id} leader {'does not start in the room' if ends else 'missing'}")
+            continue
+        boxes = [b for b in (_box(obj) for obj in items) if b]
+        block = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+        gap = max(block[0] - ends[1][0], ends[1][0] - block[2], block[1] - ends[1][1], ends[1][1] - block[3], 0.0)
+        centre = ((block[0] + block[2]) / 2, (block[1] + block[3]) / 2)
+        if _inside(centre, ring, 0.0) or gap > 0.5 * _number(_attrs(items[0]), "forsk:text_height"):
+            bad.append(f"{room_id} tag {'in its room' if _inside(centre, ring, 0.0) else f'{gap:.0f} mm off its leader'}")
+    if bad:
+        failures.append(f"{label} leaders: {'; '.join(bad[:3])}")
+    return len(rooms)

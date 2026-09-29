@@ -312,3 +312,117 @@ def test_a_mark_layout_pack_could_not_place_goes_red():
     failures = []
     plan_smoke.check_marks(rows, page, "office fit", failures)
     assert failures and "no clear spot for D10" in failures[0]
+
+
+def _dims_case():
+    """An 8 x 4 m plan at 1:100 with one door at x 1200 on the south wall:
+    its facade chain, the four overalls, the poché, a room tag and the
+    door's mark, as layout_pack stamps them."""
+    door = "0f0e0d0c-0000-4000-8000-000000000001"
+
+    def obj(role, box, text=None, **attrs):
+        attributes = {"forsk:role": role, **{f"forsk:{k}": str(v) for k, v in attrs.items()}}
+        row = {"attributes": attributes, "bounding_box": [[box[0], box[1], 0], [box[2], box[3], 0]]}
+        if text is not None:
+            row["text"] = text
+        return row
+
+    def value(chain, kind, side, number, total, span, box, **ends):
+        spans = ";".join(f"{x},{y}" for x, y in span)
+        return obj("dimension", box, str(number), symbol="text", dim_chain=chain, dim_kind=kind, dim_side=side,
+                   dim_value=number, dim_total=total, dim_span=spans, paper_height=1.8, **ends)
+
+    rows = [
+        obj("section_fill", (0, 0, 8000, 4000)),
+        obj("room_tag", (3500, 1800, 4500, 2300), "Rom"),
+        obj("opening_mark", (1100, -260, 1300, -130), "D01"),
+        obj("symbol", (750, -900, 1650, 0)),
+        value("facade-S-1", "facade", "S", 1200, 8000, [(0, 0), (1200, 0)], (450, -1100, 750, -960), dim_to=door),
+        value("facade-S-1", "facade", "S", 6800, 8000, [(1200, 0), (8000, 0)], (4400, -1100, 4800, -960), dim_from=door),
+        value("overall-S-2", "overall", "S", 8000, 8000, [(0, 0), (8000, 0)], (3800, -1800, 4200, -1660)),
+        value("overall-N-3", "overall", "N", 8000, 8000, [(0, 4000), (8000, 4000)], (3800, 4660, 4200, 4800)),
+        value("overall-E-4", "overall", "E", 4000, 4000, [(8000, 0), (8000, 4000)], (8560, 1800, 8700, 2200)),
+        value("overall-W-5", "overall", "W", 4000, 4000, [(0, 0), (0, 4000)], (-700, 1800, -560, 2200)),
+        obj("dimension", (0, -1200, 8000, -1200), symbol="line", dim_chain="facade-S-1", dim_kind="facade"),
+        obj("dimension", (0, -1450, 8000, -1450), symbol="line", dim_chain="overall-S-2", dim_kind="overall"),
+    ]
+    markers = [{"id": door, "bounding_box": [[750, 0, 0], [1650, 200, 2100]]}]
+    page = {"dimensions": {"openings": 1, "openings_shown": 1, "collisions": 0}}
+    return rows, page, markers
+
+
+def test_dimensions_read_back_as_the_model(capsys):
+    rows, page, markers = _dims_case()
+    failures = []
+    counts = plan_smoke.check_dimensions(rows, page, "sheet", failures, markers)
+    assert failures == []
+    assert counts == {"chains": 5, "exterior": 5, "exterior_values": 6, "room": 0}
+    assert capsys.readouterr().out == (
+        "    sheet dims chains 5 exterior 5 values 6 room 0, sums 5/5, spans 6/6, overall 8000x4000, "
+        "centres 2/2, openings 1/1, paper 1.8, clear\n"
+    )
+
+
+def _set(row, key, value):
+    row["attributes"][f"forsk:{key}"] = str(value)
+
+
+@pytest.mark.parametrize(
+    "break_it, reason",
+    [
+        (lambda rows: _set(rows[4], "dim_value", 1300), "facade-S-1 adds [1300.0, 6800.0] to 8000.0"),
+        (lambda rows: _set(rows[5], "dim_span", "1200,0;7900,0"), "facade-S-1 6800.0 spans 6700.0"),
+        (lambda rows: rows[0].update(bounding_box=[[0, 0, 0], [8200, 4000, 0]]), "poché 8200 x 4000"),
+        (lambda rows: _set(rows[4], "dim_span", "0,0;1500,0") or _set(rows[4], "dim_value", 1500)
+         or _set(rows[5], "dim_value", 6500) or _set(rows[5], "dim_span", "1500,0;8000,0"), "mm off 0f0e0d0c's centre"),
+        (lambda rows: rows[2].update(bounding_box=[[450, -1100, 0], [700, -980, 0]]), "facade-S-1 1200 on a opening_mark"),
+        (lambda rows: rows[7].update(bounding_box=[[3800, -1500, 0], [4200, -1400, 0]]), "overall-N-3 8000 on a dimension line"),
+        (lambda rows: _set(rows[6], "paper_height", 2.5), "value paper [1.8, 2.5] mm expected 1.8"),
+    ],
+)
+def test_dimensions_that_drift_or_touch_go_red(break_it, reason):
+    rows, page, markers = _dims_case()
+    break_it(rows)
+    failures = []
+    plan_smoke.check_dimensions(rows, page, "sheet", failures, markers)
+    assert failures and reason in failures[0], failures
+
+
+def test_an_opening_off_every_chain_or_a_stuck_value_goes_red():
+    rows, page, markers = _dims_case()
+    page["dimensions"].update(openings=2, collisions=1)
+    failures = []
+    plan_smoke.check_dimensions(rows, page, "sheet", failures, markers)
+    assert failures and "openings on a chain 1/2" in failures[0] and "1 values with no clear spot" in failures[0]
+
+
+def test_no_dimensions_on_the_plan_goes_red(capsys):
+    failures = []
+    plan_smoke.check_dimensions([], {}, "office fit", failures)
+    assert failures == ["office fit dims: no dimensions on the plan"]
+
+
+def _leader_case():
+    ring = "0,0;1300,0;1300,1100;0,1100"
+
+    def tag(part, box):
+        return {"attributes": {"forsk:role": "room_tag", "forsk:tag": part, "forsk:room_id": "rd-03", "forsk:leader": "1",
+                               "forsk:room": ring, "forsk:text_height": "312.5"},
+                "bounding_box": [[box[0], box[1], 0], [box[2], box[3], 0]]}
+
+    line = {"attributes": {"forsk:role": "room_leader", "forsk:symbol": "line", "forsk:room_id": "rd-03",
+                           "forsk:line": "650,550;1925,550"}, "bounding_box": [[650, 550, 0], [1925, 550, 0]]}
+    return [tag("name", (2000, 560, 3700, 900)), tag("area", (2000, 200, 3600, 480)), line]
+
+
+def test_a_leader_tag_outside_its_room_passes():
+    failures = []
+    assert plan_smoke.check_leaders(_leader_case(), "office fit", failures) == 1
+    assert failures == []
+
+
+def test_a_leader_tag_without_its_leader_goes_red():
+    rows = _leader_case()[:2]
+    failures = []
+    plan_smoke.check_leaders(rows, "office fit", failures)
+    assert failures == ["office fit leaders: rd-03 leader missing"]

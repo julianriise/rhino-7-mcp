@@ -942,11 +942,14 @@ def main() -> int:
             plan_smoke.check_tag_names(rows, found, label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
             plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
+            # F5.2: the dimensions read back against the model, and the room tags on leaders.
+            markers = plan_smoke.opening_markers(lambda cmd, args: send_command(sock, cmd, args))
+            plan_smoke.check_dimensions(rows, page, label, failures, markers)
+            plan_smoke.check_leaders(rows, label, failures)
             export = {"path": pdf_name, "layout": "plan"}
             if schedules:
                 # F5.1: the lists on their own page, exported with the plan in one PDF.
                 sheets = [item for item in pages if item.get("view") == "schedules"]
-                markers = plan_smoke.opening_markers(lambda cmd, args: send_command(sock, cmd, args))
                 plan_smoke.check_schedules(sheets, rows, markers, page, label, failures)
                 plan_smoke.check_opening_rooms(sheets, markers, found, room_rings, label, failures)
                 export = {"path": pdf_name}

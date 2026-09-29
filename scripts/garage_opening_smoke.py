@@ -127,7 +127,7 @@ def all_objects(sock: socket.socket) -> list:
     return rows
 
 
-PLAN_ROLES = {"section_fill", "cut", "greyscale", "roof_outline", "symbol", "room_tag"}
+PLAN_ROLES = {"section_fill", "cut", "greyscale", "roof_outline", "symbol", "room_tag", "dimension", "room_leader"}
 
 
 def outside_plan(rows: list, failures: list) -> None:
@@ -758,6 +758,9 @@ def main() -> int:
         sheets = [item for item in packed.get("pages") or [] if item.get("view") == "schedules"]
         markers = plan_smoke.opening_markers(lambda cmd, params: send_command(sock, cmd, params))
         plan_smoke.check_schedules(sheets, rows, markers, page, "sheet", failures)
+        # F5.2: the dimensions read back against the model, and any room tag on a leader.
+        plan_smoke.check_dimensions(rows, page, "sheet", failures, markers)
+        plan_smoke.check_leaders(rows, "sheet", failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),
             "flip": symbol_attrs(rows, flip_id),
