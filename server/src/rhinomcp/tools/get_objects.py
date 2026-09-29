@@ -14,6 +14,7 @@ def get_objects(
     type_filter: Optional[str] = None,
     bbox_filter: Optional[list] = None,
     include_geometry: bool = True,
+    include_hidden: bool = False,
 ) -> str:
     """
     Query objects in the Rhino document with filtering and pagination.
@@ -30,6 +31,8 @@ def get_objects(
         BOX, SPHERE, CONE, CYLINDER, SURFACE, BREP, EXTRUSION, MESH
     - bbox_filter: Return objects within bounding box [[min_x,min_y,min_z],[max_x,max_y,max_z]]
     - include_geometry: Include detailed geometry data (default: true, false for lightweight listing)
+    - include_hidden: Also return hidden objects and objects on layers that are off,
+      such as the opening markers on A-OPEN (default: false)
 
     Returns:
     - objects: Array of object information
@@ -52,6 +55,8 @@ def get_objects(
             "limit": limit,
             "include_geometry": include_geometry,
         }
+        if include_hidden:
+            params["include_hidden"] = True
 
         if layer_filter is not None:
             params["layer_filter"] = layer_filter

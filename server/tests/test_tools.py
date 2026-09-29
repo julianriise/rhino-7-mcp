@@ -3783,3 +3783,18 @@ class TestPrintGuards:
         assert '"wall"' not in remover
         assert '"drawing"' not in remover
 
+
+
+class TestGetObjectsTool:
+    @patch("rhinomcp.tools.get_objects.get_rhino_connection")
+    def test_include_hidden_is_sent_only_when_asked(self, mock_get_conn):
+        from rhinomcp.tools.get_objects import get_objects
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"objects": [], "total_matching": 0}
+        mock_get_conn.return_value = mock_conn
+
+        get_objects(ctx=None, layer_filter="A-OPEN", include_hidden=True)
+        assert mock_conn.send_command.call_args[0][1]["include_hidden"] is True
+        get_objects(ctx=None, layer_filter="A-OPEN")
+        assert "include_hidden" not in mock_conn.send_command.call_args[0][1]

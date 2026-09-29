@@ -464,6 +464,8 @@ def test_other_commands():
         all_passed = False
     if not validate("commands/get_objects.json", {"limit": 100, "offset": 0}):
         all_passed = False
+    if not validate("commands/get_objects.json", {"layer_filter": "A-OPEN", "include_hidden": True}):
+        all_passed = False
     if not validate("commands/get_objects.json", {"layer_filter": "Default", "type_filter": "CURVE"}):
         all_passed = False
 

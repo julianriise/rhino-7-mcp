@@ -34,6 +34,11 @@
       "type": "boolean",
       "default": true,
       "description": "Whether to include detailed geometry data (false for lightweight listing)"
+    },
+    "include_hidden": {
+      "type": "boolean",
+      "default": false,
+      "description": "Also return hidden objects and objects on layers that are off, such as the opening markers on A-OPEN"
     }
   },
   "additionalProperties": false

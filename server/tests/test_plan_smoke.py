@@ -177,3 +177,41 @@ def test_schedules_that_drift_from_the_model_fail(break_it, reason):
     failures = []
     plan_smoke.check_schedules(*case, "sheet", failures)
     assert len(failures) == 1 and reason in failures[0], failures
+
+
+def test_a_marker_without_its_plan_mark_goes_red():
+    """The plan dropped V01's label: the schedule row is there, the mark on the plan is not."""
+    sheets, plan_rows, markers, page = _schedule_case()
+    plan_rows = [row for row in plan_rows if row.get("text") != "V01"]
+    failures = []
+    plan_smoke.check_schedules(sheets, plan_rows, markers, page, "sheet", failures)
+    assert failures and "plan marks 2 are not the markers' 3" in failures[0]
+
+
+def test_a_marker_that_never_got_a_mark_goes_red():
+    sheets, plan_rows, markers, page = _schedule_case()
+    del markers[2]["attributes"]["forsk:mark"]
+    failures = []
+    plan_smoke.check_schedules(sheets, plan_rows, markers, page, "sheet", failures)
+    assert failures and "a marker without a mark" in failures[0]
+
+
+def test_no_markers_read_says_so():
+    sheets, plan_rows, _, page = _schedule_case()
+    failures = []
+    plan_smoke.check_schedules(sheets, plan_rows, [], page, "sheet", failures)
+    assert failures and "read 0 opening markers from A-OPEN" in failures[0]
+
+
+def test_opening_markers_asks_for_the_hidden_layer():
+    """Rhino's default object list skips A-OPEN, which Forsk keeps off: the
+    garage smoke read 0 markers. The fake answers like Rhino does."""
+    marker = {"id": "m1", "attributes": {"forsk:kind": "opening_marker", "forsk:mark": "D01"}}
+    block = {"id": "b1", "attributes": {"forsk:kind": "opening"}}
+
+    def send(command, params):
+        assert command == "get_objects" and params["layer_filter"] == "A-OPEN"
+        visible = params.get("include_hidden") is True
+        return {"objects": [marker, block] if visible else [], "has_more": False}
+
+    assert plan_smoke.opening_markers(send) == [marker]

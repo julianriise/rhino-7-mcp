@@ -30,6 +30,17 @@ public partial class RhinoMCPFunctions
         JToken bboxFilter = parameters["bbox_filter"];
         bool includeGeometry = parameters["include_geometry"]?.ToObject<bool>() ?? true;
         bool includeAttributes = parameters["include_attributes"]?.ToObject<bool>() ?? false;
+        // Rhino's default object list skips hidden objects and objects on layers
+        // that are off, such as A-OPEN with the opening markers.
+        bool includeHidden = parameters["include_hidden"]?.ToObject<bool>() ?? false;
+        var source = includeHidden
+            ? doc.Objects.GetObjectList(new ObjectEnumeratorSettings
+            {
+                NormalObjects = true,
+                LockedObjects = true,
+                HiddenObjects = true
+            })
+            : doc.Objects;
 
         // Parse bbox filter if provided
         BoundingBox? filterBbox = null;
@@ -54,7 +65,7 @@ public partial class RhinoMCPFunctions
         // Build filtered object list
         var allObjects = new List<RhinoObject>();
 
-        foreach (var obj in doc.Objects)
+        foreach (var obj in source)
         {
             // Layer filter
             if (!string.IsNullOrEmpty(layerFilter))

@@ -513,17 +513,21 @@ def dxf_rooms(path) -> list:
     return rooms
 
 
-def layer_rows(send, layer: str) -> list:
-    """Every object on a layer, with attributes, through get_objects pages."""
+def layer_rows(send, layer: str, hidden: bool = False) -> list:
+    """Every object on a layer, with attributes, through get_objects pages.
+    hidden also returns objects on a layer that is off."""
     rows, offset = [], 0
     while offset <= 5000:
-        found = send("get_objects", {
+        params = {
             "layer_filter": layer,
             "limit": 200,
             "offset": offset,
             "include_geometry": False,
             "include_attributes": True,
-        })
+        }
+        if hidden:
+            params["include_hidden"] = True
+        found = send("get_objects", params)
         batch = found.get("objects") or []
         rows.extend(batch)
         if not found.get("has_more") or not batch:
@@ -533,8 +537,10 @@ def layer_rows(send, layer: str) -> list:
 
 
 def opening_markers(send) -> list:
+    """The opening markers. A-OPEN is off by default, and Rhino's default
+    object list skips a layer that is off, so ask for hidden objects."""
     return [
-        row for row in layer_rows(send, "A-OPEN")
+        row for row in layer_rows(send, "A-OPEN", hidden=True)
         if (row.get("attributes") or {}).get("forsk:kind") == "opening_marker"
     ]
 
@@ -573,7 +579,9 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
     bad = []
     if not sheets:
         bad.append("no schedules page")
-    if len(door_ids) != len(doors) or len(window_ids) != len(windows):
+    if not markers:
+        bad.append("read 0 opening markers from A-OPEN")
+    elif len(door_ids) != len(doors) or len(window_ids) != len(windows):
         bad.append(f"rows doors {len(door_ids)}/{len(doors)} windows {len(window_ids)}/{len(windows)}")
     if "" in marks or len(set(marks)) != len(marks):
         bad.append("a marker without a mark, or a mark twice")
