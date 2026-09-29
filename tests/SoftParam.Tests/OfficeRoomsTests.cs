@@ -323,6 +323,46 @@ public class OfficeRoomsTests
         Assert.Equal(OpeningTypes.AreaText(RoomDetect.TotalArea(found.Rooms, new double[0])), table.Total[1]);
     }
 
+    /// <summary>
+    /// D08, the door from the Hall into Wet Room (1.31 x 1.10 m). Wet Room's
+    /// name overflows its room (2.02 m wide at 1:125, 3.23 m at 1:200, as the
+    /// live office smoke measured it) and covers the door and the Hall beside
+    /// it. The live run found no clear spot for D08 on either sheet. The mark
+    /// starts on the Wet Room side, as it did live.
+    /// </summary>
+    [Theory]
+    [InlineData(125, 2020.0)]
+    [InlineData(200, 3230.0)]
+    public void Office_D08_FindsAClearSpotBesideWetRoom(int scale, double nameWidth)
+    {
+        var (scene, labels, _) = Office();
+        var wet = RoomDetect.Detect(scene).Rooms.Single(room => RoomDetect.Name(labels, room.Ring) == "Wet Room");
+        Assert.True(RoomDetect.TryInside(new List<List<Pt>> { wet.Ring }, out var tagAt));
+        var cap = 2.5 * scale;
+        var name = new RoomDetect.Box(tagAt.X - nameWidth / 2, tagAt.Y - 0.625 * cap, tagAt.X + nameWidth / 2, tagAt.Y + 0.625 * cap);
+
+        var door = Entities(OfficePath).Single(e => On(e, "door") && e.Type == "LWPOLYLINE"
+            && e.Points.All(p => p.X >= 9859 && p.X <= 9961 && p.Y >= 18934 && p.Y <= 19786));
+        var markCap = Schedules.MarkMm * scale;
+        var spot = new Schedules.MarkSpot
+        {
+            At = new Pt(door.Points.Average(p => p.X), door.Points.Average(p => p.Y)),
+            Along = new Pt(0, 1),
+            Out = new Pt(1, 0),
+            HalfThick = 50,
+            HalfWidth = 425,
+            Hx = 1.1 * markCap,
+            Hy = 0.6 * markCap,
+            Gap = scale
+        };
+        Assert.True(Schedules.PlaceMark(spot, new[] { name }, scene.Walls, out var at), $"no clear spot at 1:{scale}");
+        var box = Schedules.MarkBox(at, spot.Hx, spot.Hy);
+        Assert.False(Schedules.Overlaps(box, name, spot.Gap), "D08 on Wet Room");
+        Assert.False(Schedules.OnWalls(box, scene.Walls), "D08 on a wall");
+        Assert.True(at.X < 9860, "on the Hall side of the door");
+        Assert.True(Math.Abs(at.Y - spot.At.Y) <= spot.HalfWidth, "beside its opening");
+    }
+
     [Fact]
     public void Office_TheDividerSplitsTheCorridor_TheHalvesKeepTheirOwnLabels()
     {

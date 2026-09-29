@@ -227,16 +227,23 @@ public static class Schedules
         public double Gap;
     }
 
+    /// <summary>How many steps away from the wall a mark may go to find a clear spot.</summary>
+    public const int MarkSteps = 3;
+
     /// <summary>
     /// Where a mark's centre goes. First choice: at the opening's centre, the
-    /// gap clear of the wall face on its side. If the text would come within
-    /// the gap of a room tag or a mark already placed (in taken), the first
-    /// clear spot of: slid along the wall, staying beside its opening; a step
-    /// further out on its side, slid the same way; then the other face. Tags
-    /// are placed first and keep their place. None clear: the first choice,
-    /// and false.
+    /// gap clear of the wall face on its side (MarkSide). If a room tag or a
+    /// mark already placed (taken, kept the gap away) or wall poché (walls,
+    /// each wall's rings read even-odd) is in the way, the mark steps away
+    /// from the wall, one mark height and a gap at a time, up to MarkSteps;
+    /// at each step it tries its own face, then the other, each slid along
+    /// the wall within the opening's width. A door into a tiny room whose
+    /// name overflows it so takes the other room's side, as a drafter would.
+    /// Tags are placed first and keep their place. None clear: the first
+    /// choice, and false.
     /// </summary>
-    public static bool PlaceMark(MarkSpot spot, IList<RoomDetect.Box> taken, out RoomDetect.Pt centre)
+    public static bool PlaceMark(
+        MarkSpot spot, IList<RoomDetect.Box> taken, List<List<List<RoomDetect.Pt>>> walls, out RoomDetect.Pt centre)
     {
         var across = Math.Abs(spot.Out.X) * spot.Hx + Math.Abs(spot.Out.Y) * spot.Hy;
         var along = Math.Abs(spot.Along.X) * spot.Hx + Math.Abs(spot.Along.Y) * spot.Hy;
@@ -248,24 +255,72 @@ public static class Schedules
             shifts.Add(-k * slide);
         }
         var near = spot.HalfThick + spot.Gap + across;
-        var tries = new List<(int Side, double Reach, double Shift)>();
-        foreach (var step in new[] { 0, 1, 2 })
-            foreach (var shift in shifts)
-                tries.Add((1, near + step * (2.0 * across + spot.Gap), shift));
-        foreach (var shift in shifts)
-            tries.Add((-1, near, shift));
-
-        centre = Spot(spot, tries[0].Side, tries[0].Reach, tries[0].Shift);
-        foreach (var (side, reach, shift) in tries)
+        var step = 2.0 * across + spot.Gap;
+        centre = Spot(spot, 1, near, 0.0);
+        for (var k = 0; k <= MarkSteps; k++)
         {
-            var at = Spot(spot, side, reach, shift);
-            if (Clear(at, spot, taken))
+            foreach (var side in new[] { 1, -1 })
             {
-                centre = at;
-                return true;
+                foreach (var shift in shifts)
+                {
+                    var at = Spot(spot, side, near + k * step, shift);
+                    if (!Clear(at, spot, taken, walls)) continue;
+                    centre = at;
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// True when the box touches wall poché: a wall edge crosses it, or its
+    /// centre lies inside a wall (even-odd over that wall's rings).
+    /// </summary>
+    public static bool OnWalls(RoomDetect.Box box, List<List<List<RoomDetect.Pt>>> walls)
+    {
+        if (walls == null) return false;
+        var centre = new RoomDetect.Pt((box.MinX + box.MaxX) / 2.0, (box.MinY + box.MaxY) / 2.0);
+        foreach (var wall in walls)
+        {
+            if (wall == null) continue;
+            var inside = false;
+            foreach (var ring in wall)
+            {
+                if (ring == null || ring.Count < 2) continue;
+                if (RoomDetect.Contains(ring, centre)) inside = !inside;
+                for (var i = 0; i < ring.Count; i++)
+                    if (SegmentHitsBox(ring[i], ring[(i + 1) % ring.Count], box)) return true;
+            }
+            if (inside) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Liang-Barsky: does segment a-b cross or lie in the box.</summary>
+    static bool SegmentHitsBox(RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Box box)
+    {
+        double t0 = 0, t1 = 1;
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        bool Clip(double p, double q)
+        {
+            if (Math.Abs(p) < 1e-12) return q >= 0;
+            var r = q / p;
+            if (p < 0)
+            {
+                if (r > t1) return false;
+                if (r > t0) t0 = r;
+            }
+            else
+            {
+                if (r < t0) return false;
+                if (r < t1) t1 = r;
+            }
+            return true;
+        }
+        return Clip(-dx, a.X - box.MinX) && Clip(dx, box.MaxX - a.X)
+            && Clip(-dy, a.Y - box.MinY) && Clip(dy, box.MaxY - a.Y);
     }
 
     static RoomDetect.Pt Spot(MarkSpot spot, int side, double reach, double shift)
@@ -275,13 +330,13 @@ public static class Schedules
             spot.At.Y + side * spot.Out.Y * reach + spot.Along.Y * shift);
     }
 
-    static bool Clear(RoomDetect.Pt at, MarkSpot spot, IList<RoomDetect.Box> taken)
+    static bool Clear(RoomDetect.Pt at, MarkSpot spot, IList<RoomDetect.Box> taken, List<List<List<RoomDetect.Pt>>> walls)
     {
-        if (taken == null) return true;
         var box = MarkBox(at, spot.Hx, spot.Hy);
-        foreach (var other in taken)
-            if (Overlaps(box, other, spot.Gap)) return false;
-        return true;
+        if (taken != null)
+            foreach (var other in taken)
+                if (Overlaps(box, other, spot.Gap)) return false;
+        return !OnWalls(box, walls);
     }
 
     /// <summary>The box of a mark text centred at at.</summary>

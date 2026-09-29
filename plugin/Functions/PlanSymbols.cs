@@ -125,7 +125,8 @@ public partial class RhinoMCPFunctions
         var tagBoxes = new List<RoomDetect.Box>();
         added += BakeRoomTags(
             doc, layer, scale, worldToHld, delta, rooms, tagBoxes, ref box, ref index, ref count, ref stats);
-        added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, ref box, ref index, ref count, ref stats);
+        added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, PocheRings(fillGroups, tol),
+            ref box, ref index, ref count, ref stats);
 
         foreach (var rect in openings)
             rect?.Dispose();
@@ -259,15 +260,52 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
+    /// The section fill loops as rings in drawing mm, one list per wall mass
+    /// (its outer loop and holes, read even-odd): the poché a mark must not
+    /// sit on.
+    /// </summary>
+    private static List<List<List<RoomDetect.Pt>>> PocheRings(List<List<Curve>> fillGroups, double tol)
+    {
+        var walls = new List<List<List<RoomDetect.Pt>>>();
+        if (fillGroups == null) return walls;
+        foreach (var group in fillGroups)
+        {
+            var rings = new List<List<RoomDetect.Pt>>();
+            foreach (var curve in group ?? new List<Curve>())
+            {
+                if (curve == null || !curve.IsClosed) continue;
+                var ring = new List<RoomDetect.Pt>();
+                if (curve.TryGetPolyline(out Polyline poly) && poly != null && poly.Count >= 3)
+                {
+                    foreach (var point in poly) ring.Add(new RoomDetect.Pt(point.X, point.Y));
+                }
+                else
+                {
+                    var ts = curve.DivideByCount(Math.Min(Math.Max(curve.SpanCount * 4, 16), 128), true);
+                    if (ts == null) continue;
+                    foreach (var t in ts)
+                    {
+                        var point = curve.PointAt(t);
+                        ring.Add(new RoomDetect.Pt(point.X, point.Y));
+                    }
+                }
+                if (ring.Count >= 3) rings.Add(ring);
+            }
+            if (rings.Count > 0) walls.Add(rings);
+        }
+        return walls;
+    }
+
+    /// <summary>
     /// The marks beside their openings, Schedules.MarkMm tall on paper, each
-    /// at the first spot Schedules.PlaceMark finds clear of the room tags and
-    /// of the marks placed before it, 1 mm on paper. A mark with no clear
-    /// spot keeps its first choice and is listed in MarksOnTags when it
-    /// touches a tag.
+    /// at the first spot Schedules.PlaceMark finds clear of the room tags, of
+    /// the marks placed before it (1 mm on paper), and of the wall poché. A
+    /// mark with no clear spot keeps its first choice and is listed in
+    /// MarksOnTags when it touches a tag.
     /// </summary>
     private static int BakeMarks(
         RhinoDoc doc, Layer layer, int scale, Transform worldToHld, Vector3d delta,
-        List<PendingMark> pending, List<RoomDetect.Box> tagBoxes,
+        List<PendingMark> pending, List<RoomDetect.Box> tagBoxes, List<List<List<RoomDetect.Pt>>> poche,
         ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
     {
         var height = Schedules.MarkMm * scale;
@@ -303,7 +341,7 @@ public partial class RhinoMCPFunctions
                     Hy = extent.IsValid ? (extent.Max.Y - extent.Min.Y) / 2.0 : 0.75 * height,
                     Gap = gap
                 };
-                Schedules.PlaceMark(spot, taken, out var centre);
+                Schedules.PlaceMark(spot, taken, poche, out var centre);
                 // The text is centred on its plane origin, which is at.
                 entity.Translate(new Vector3d(centre.X - at.X, centre.Y - at.Y, 0));
                 placed = Schedules.MarkBox(centre, spot.Hx, spot.Hy);
