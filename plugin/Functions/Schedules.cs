@@ -298,7 +298,7 @@ public static class Schedules
     }
 
     /// <summary>Liang-Barsky: does segment a-b cross or lie in the box.</summary>
-    static bool SegmentHitsBox(RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Box box)
+    public static bool SegmentHitsBox(RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Box box)
     {
         double t0 = 0, t1 = 1;
         var dx = b.X - a.X;

@@ -112,6 +112,25 @@ public class PlanDimsTests
         AssertNothingTouches(result, scene.Taken, scene.Walls);
     }
 
+    [Theory]
+    [InlineData(125)]
+    [InlineData(200)]
+    public void BesideValue_KeepsOffTheNextTick_AtEveryScale(int scale)
+    {
+        // A short segment's value goes past a tick, over the next segment;
+        // that one's far tick must not be under it (office 1:200: facade-E-1 1080).
+        for (var near = 300; near <= 1400; near += 50)
+        for (var next = 600; next <= 2000; next += 50)
+        {
+            var scene = new PlanDims.Scene { Scale = scale };
+            scene.Outlines.Add(Rect(0, 0, 20000, 10000));
+            scene.Walls.Add(new List<List<Pt>> { Rect(0, 0, 20000, 10000), Rect(200, 200, 19800, 9800) });
+            foreach (var x in new[] { 5000.0, 5000 + near, 5000 + near + next })
+                scene.Openings.Add(new PlanDims.Opening { Id = "o" + x, Centre = P(x, 100), Along = P(1, 0), HalfThick = 100 });
+            AssertNothingTouches(PlanDims.Layout(scene), scene.Taken, scene.Walls);
+        }
+    }
+
     [Fact]
     public void RoomTooSmallForItsValues_GetsNone()
     {
@@ -168,6 +187,46 @@ public class PlanDimsTests
         var ring = Rect(0, 0, 1300, 1100);
         var taken = new List<PlanDims.Obstacle> { new PlanDims.Obstacle(new Box(-9000, -9000, 9000, 9000), PlanDims.Kind.Text) };
         Assert.False(PlanDims.PlaceLeader(P(650, 550), ring, 800, 400, 125, taken, new List<List<List<Pt>>>(), out _, out _));
+    }
+
+    /// <summary>
+    /// The office smoke's rooms whose names did not fit, with the name widths
+    /// the live run measured: each gets a leader, none overflows. rd-10's only
+    /// clear side is the corridor, about 0.5 mm wider on paper at 1:200 than
+    /// the tag and its clearance.
+    /// </summary>
+    [Theory]
+    [InlineData(125, "rd-03 2020 rd-10 1710")]
+    [InlineData(200, "rd-03 3230 rd-04 3070 rd-16 4650 rd-10 2730")]
+    public void Office_EveryTagThatDoesNotFit_GetsALeader(int scale, string names)
+    {
+        var (scene, _, _) = Office(scale);
+        var (rooms, _, _) = OfficeRoomsTests.Office();
+        var found = RoomDetect.Detect(rooms);
+        var ids = RoomDetect.Match(found.Rooms, new List<KeyValuePair<string, List<Pt>>>(), "rd-");
+        var parts = names.Split(' ');
+        var loose = Enumerable.Range(0, parts.Length / 2)
+            .Select(i => (Id: parts[2 * i], Width: double.Parse(parts[2 * i + 1]), Ring: found.Rooms[Array.IndexOf(ids, parts[2 * i])].Ring))
+            .ToList();
+        // Their own tags are not down; the other rooms' are.
+        var taken = scene.Taken
+            .Where(o => !loose.Any(l => RoomDetect.Contains(l.Ring, P((o.Box.MinX + o.Box.MaxX) / 2, (o.Box.MinY + o.Box.MaxY) / 2))))
+            .ToList();
+        // A tag is its name over ca. X m², 2.5 mm text 1.15 heights apart.
+        var hy = (2.5 * 1.15 + 2.5) * scale / 2.0;
+        foreach (var (id, width, ring) in loose)
+        {
+            Assert.True(RoomDetect.TryInside(new List<List<Pt>> { ring }, out var inside));
+            Assert.True(PlanDims.PlaceLeader(inside, ring, width / 2.0, hy, scale, taken, scene.Walls, out var centre, out var leader),
+                $"{id} at 1:{scale} has no leader");
+            var box = new Box(centre.X - width / 2.0, centre.Y - hy, centre.X + width / 2.0, centre.Y + hy);
+            Assert.DoesNotContain(taken, o => Schedules.Overlaps(box, o.Box, 0));
+            Assert.False(Schedules.OnWalls(box, scene.Walls), $"{id} on the poché");
+            Assert.False(RoomDetect.Contains(ring, centre), $"{id} in its room");
+            Assert.True(RoomDetect.Contains(ring, leader.A));
+            taken.Add(new PlanDims.Obstacle(box, PlanDims.Kind.Text));
+            taken.Add(new PlanDims.Obstacle(PlanDims.SegBox(leader), PlanDims.Kind.Line));
+        }
     }
 
     /// <summary>

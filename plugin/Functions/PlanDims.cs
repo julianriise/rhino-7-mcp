@@ -54,6 +54,8 @@ public static class PlanDims
     public const double InsetMm = 3.0;
     /// <summary>How far past its room a room tag on a leader may go.</summary>
     public const double LeaderReachMm = 40.0;
+    /// <summary>Paper step between the spots tried for a tag on a leader.</summary>
+    public const double LeaderStepMm = 0.25;
 
     /// <summary>
     /// What a drawn thing is to a dimension: text that nothing may touch; a
@@ -354,11 +356,14 @@ public static class PlanDims
     }
 
     /// <summary>
-    /// Where a room tag that does not fit its room goes: straight out of the
-    /// room from its inside point along a drawing axis, at the nearest spot
-    /// where the tag (half extents hx, hy) clears everything drawn so far and
-    /// the poché, with a leader to its near edge that touches no text. False
-    /// when nothing within LeaderReachMm past the room is clear.
+    /// Where a room tag that does not fit its room goes: outside the room, at
+    /// the spot with the shortest leader where the tag (half extents hx, hy)
+    /// clears everything drawn so far and the poché, its centre within
+    /// LeaderReachMm of the room. The spots are a LeaderStepMm grid about the
+    /// inside point, in any direction, so a corridor barely wider than the tag
+    /// still holds it. The leader runs straight from the inside point to the
+    /// tag's nearest point, stops TextGapMm short, and touches no text. False
+    /// when no spot is clear.
     /// </summary>
     public static bool PlaceLeader(
         Pt inside, IList<Pt> ring, double hx, double hy, int scale,
@@ -369,27 +374,44 @@ public static class PlanDims
         if (ring == null || ring.Count < 3 || scale < 1) return false;
         var s = (double)scale;
         var clear = ClearMm * s;
-        var best = double.MaxValue;
-        foreach (var dir in new[] { new Pt(1, 0), new Pt(-1, 0), new Pt(0, 1), new Pt(0, -1) })
+        var gap = TextGapMm * s;
+        var step = LeaderStepMm * s;
+        var room = new List<List<List<Pt>>> { new List<List<Pt>> { ring.ToList() } };
+        var region = Grow(new Box(ring.Min(p => p.X), ring.Min(p => p.Y), ring.Max(p => p.X), ring.Max(p => p.Y)), LeaderReachMm * s);
+        var near = (taken ?? new List<Obstacle>()).Where(o => Schedules.Overlaps(o.Box, Grow(region, hx + hy), clear)).ToList();
+        var texts = near.Where(o => o.Kind == Kind.Text).Select(o => Grow(o.Box, clear)).ToList();
+
+        var nx = (int)Math.Ceiling(Math.Max(inside.X - region.MinX, region.MaxX - inside.X) / step);
+        var ny = (int)Math.Ceiling(Math.Max(inside.Y - region.MinY, region.MaxY - inside.Y) / step);
+        var spots = new List<(double Lead, int Off, Pt At)>();
+        for (var i = -nx; i <= nx; i++)
         {
-            var exit = Exit(inside, dir, ring);
-            if (double.IsInfinity(exit)) continue;
-            var half = Math.Abs(dir.X) > 0 ? hx : hy;
-            for (var t = exit + clear + half; t <= exit + half + LeaderReachMm * s && t < best; t += StepMm * s)
+            for (var j = -ny; j <= ny; j++)
             {
-                var at = Add(inside, Mul(dir, t));
-                var box = new Box(at.X - hx, at.Y - hy, at.X + hx, at.Y + hy);
-                if (Blocked(box, taken, clear, true) || Schedules.OnWalls(Grow(box, clear), walls)) continue;
-                var lead = new Seg(inside, Add(inside, Mul(dir, t - half - TextGapMm * s)));
-                if (taken != null && taken.Any(o => o.Kind == Kind.Text && Schedules.Overlaps(SegBox(lead), o.Box, clear)))
-                    continue;
-                best = t;
-                centre = at;
-                leader = lead;
-                break;
+                var at = new Pt(inside.X + i * step, inside.Y + j * step);
+                if (at.X < region.MinX || at.X > region.MaxX || at.Y < region.MinY || at.Y > region.MaxY) continue;
+                var dx = Math.Max(Math.Abs(at.X - inside.X) - hx, 0.0);
+                var dy = Math.Max(Math.Abs(at.Y - inside.Y) - hy, 0.0);
+                spots.Add((Math.Sqrt(dx * dx + dy * dy), i * i + j * j, at));
             }
         }
-        return best < double.MaxValue;
+        foreach (var spot in spots.OrderBy(p => p.Lead).ThenBy(p => p.Off))
+        {
+            var at = spot.At;
+            var box = new Box(at.X - hx, at.Y - hy, at.X + hx, at.Y + hy);
+            var grown = Grow(box, clear);
+            if (Schedules.OnWalls(grown, room) || Schedules.OnWalls(grown, walls) || Blocked(box, near, clear, true)) continue;
+            var end = new Pt(Math.Max(box.MinX, Math.Min(box.MaxX, inside.X)), Math.Max(box.MinY, Math.Min(box.MaxY, inside.Y)));
+            var toward = Sub(end, inside);
+            var length = Math.Sqrt(Dot(toward, toward));
+            if (length <= gap) continue;
+            var lead = new Seg(inside, Sub(end, Mul(toward, gap / length)));
+            if (texts.Any(t => Schedules.SegmentHitsBox(lead.A, lead.B, t))) continue;
+            centre = at;
+            leader = lead;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>The box of a segment.</summary>
@@ -548,7 +570,9 @@ public static class PlanDims
         foreach (var t in chain.Stops)
         {
             var at = At(chain, t, d);
-            attempt.Ticks.Add(new Seg(Sub(at, Mul(tilt, tick)), Add(at, Mul(tilt, tick))));
+            var mark = new Seg(Sub(at, Mul(tilt, tick)), Add(at, Mul(tilt, tick)));
+            attempt.Ticks.Add(mark);
+            own.Add(SegBox(mark));
         }
 
         var height = TextMm * s;
@@ -787,25 +811,6 @@ public static class PlanDims
             pieces = next;
         }
         return pieces.Where(p => p.Value - p.Key > 1.0).ToList();
-    }
-
-    /// <summary>Distance along dir from p to where the ray leaves the ring.</summary>
-    static double Exit(Pt p, Pt dir, IList<Pt> ring)
-    {
-        var best = double.PositiveInfinity;
-        for (var i = 0; i < ring.Count; i++)
-        {
-            var a = ring[i];
-            var b = ring[(i + 1) % ring.Count];
-            var ex = b.X - a.X;
-            var ey = b.Y - a.Y;
-            var den = dir.X * ey - dir.Y * ex;
-            if (Math.Abs(den) < 1e-12) continue;
-            var t = ((a.X - p.X) * ey - (a.Y - p.Y) * ex) / den;
-            var k = ((a.X - p.X) * dir.Y - (a.Y - p.Y) * dir.X) / den;
-            if (t > 1e-9 && k >= -1e-9 && k <= 1 + 1e-9) best = Math.Min(best, t);
-        }
-        return best;
     }
 
     /// <summary>A value reads left to right, or bottom to top on a vertical chain.</summary>
