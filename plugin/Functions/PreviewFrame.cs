@@ -25,6 +25,19 @@ public static class PreviewFrame
     public const int InkFloor = 400;
     /// <summary>Where a blank frame is saved. The garage smoke copies these into forsk's .smoke-preview/.</summary>
     public const string DebugPngPrefix = "/tmp/forsk-print-";
+    /// <summary>
+    /// A page's time for reads, in ms. A read without the per-pixel copy is
+    /// about a second (wake, idle, preview, copy, check, pause), so a blank
+    /// page gets some fifteen reads, and a two-page export that never paints
+    /// still ends inside the 300 s MCP command. Two reads used to take ~165 s.
+    /// </summary>
+    public const int ReadBudgetMs = 20000;
+    /// <summary>Reads a blank page always gets, the old two, so a slow first read still gets a second.</summary>
+    public const int MinReads = 2;
+
+    /// <summary>After a blank read: read again while the page has had fewer than MinReads, or time left in its budget.</summary>
+    public static bool ReadAgain(int reads, long elapsedMs)
+        => reads < MinReads || elapsedMs < ReadBudgetMs;
 
     /// <summary>
     /// What a read gave. None: no bitmap. Empty: mostly unpainted pixels
@@ -188,7 +201,8 @@ public static class PreviewFrame
     /// (drawn once and locked), raw (copy failed, raw kept) or none (no
     /// frame). Idle is false when an
     /// idle wait ran into its cap. Png is the saved blank frame, failed:Type,
-    /// or - for a sheet or no frame.
+    /// or - for a sheet, no frame, or a blank frame between a page's first
+    /// and last (not kept). Of is how many reads the page had.
     /// </summary>
     public sealed class Attempt
     {

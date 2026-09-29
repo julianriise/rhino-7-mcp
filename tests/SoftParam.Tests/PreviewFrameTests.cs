@@ -383,6 +383,21 @@ public class PreviewFrameTests
         Assert.Equal(blank, PreviewFrame.Classify(2480, 1754, dark, 0) != PreviewFrame.Kind.Ink);
     }
 
+    [Theory]
+    // A slow first read (the old 15 s wake) still gets its second.
+    [InlineData(1, 0, true)]
+    [InlineData(1, 90000, true)]
+    [InlineData(2, 900, true)]
+    [InlineData(2, 19999, true)]
+    [InlineData(14, 19999, true)]
+    [InlineData(2, 20000, false)]
+    [InlineData(15, 20400, false)]
+    public void ReadAgain_UntilTheBudgetButNeverUnderTwoReads(int reads, long ms, bool again)
+    {
+        Assert.Equal(20000, PreviewFrame.ReadBudgetMs);
+        Assert.Equal(again, PreviewFrame.ReadAgain(reads, ms));
+    }
+
     [Fact]
     public void DebugPngPath_NamesExportPageAndAttempt()
     {

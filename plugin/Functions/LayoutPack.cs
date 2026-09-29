@@ -29,7 +29,8 @@ namespace RhinoMCPPlugin.Functions;
 /// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
 /// wrote a white sheet, so Mac export activates each layout, redraws, waits,
 /// then draws GetPreviewImage into the PDF. A blank frame is a paint race:
-/// that page is activated again, MacPreviewAttempts reads in all. Pages that
+/// that page is activated and read again until it paints or its read budget
+/// (PreviewFrame.ReadAgain) runs out. Pages that
 /// have ink are still written. Each export appends a line to
 /// /tmp/forsk-print.log, and one capture line per read (PreviewFrame); a
 /// blank frame is saved as a PNG beside it. AddPageView width and height are millimetres
@@ -58,10 +59,6 @@ public partial class RhinoMCPFunctions
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
     private const string EmptyPdfMessage = "PDF detail is empty. The sheet does not show the drawing.";
     private const string CaptureFailedPrefix = "capture failed after activate/Wait";
-    // Two reads. Each A3 preview takes about a minute, and five black
-    // frames run past the 300s garage command. The rest of the smoke
-    // then never starts.
-    private const int MacPreviewAttempts = 2;
     private const string PlanCutRole = "plan_cut";
     private const string ForskPenName = "Forsk Pen";
     private const int PenEdgePx = 1;
@@ -887,25 +884,32 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Read the page until a frame is a sheet. Every read goes into reads for
-    /// the print log; a blank frame is kept there for its debug PNG. On a
-    /// miss, attempt is the number of reads made and ink is 0.
+    /// Read the page until a frame is a sheet or PreviewFrame.ReadAgain says
+    /// its time is up. Every read goes into reads for the print log; the
+    /// first and the latest blank frame are kept there for their debug PNGs.
+    /// Attempt is the number of reads made; on a miss ink is 0.
     /// </summary>
     private Bitmap CapturePageAfterWait(
         RhinoPageView page, int pageNumber, string pdfPath, int dotsW, int dotsH,
         List<PreviewRead> reads, out int ink, out int attempt)
     {
         var size = new Size(dotsW, dotsH);
+        var budget = Stopwatch.StartNew();
+        int firstRead = reads.Count;
+        PreviewRead firstBlank = null;
+        PreviewRead lastBlank = null;
+        Bitmap sheet = null;
         ink = 0;
-        for (attempt = 1; attempt <= MacPreviewAttempts; attempt++)
+        attempt = 0;
+        do
         {
+            attempt++;
             var log = new PreviewFrame.Attempt
             {
                 Pdf = Path.GetFileName(pdfPath),
                 Page = pageNumber,
                 PageName = ShortPageName(page),
-                Number = attempt,
-                Of = MacPreviewAttempts
+                Number = attempt
             };
             PrepareMacPage(page, log);
             if (attempt > 1)
@@ -928,16 +932,32 @@ public partial class RhinoMCPFunctions
             if (!log.Blank)
             {
                 ink = log.Dark;
-                return bmp;
+                sheet = bmp;
+                break;
             }
             if (bmp != null)
             {
                 read.Frame = bmp;
                 log.Png = PreviewFrame.DebugPngPath(pdfPath, pageNumber, attempt);
+                if (firstBlank == null)
+                    firstBlank = read;
+                else
+                {
+                    // A frame is 17 MB. Keep the first and the latest.
+                    if (lastBlank != null)
+                    {
+                        lastBlank.Frame.Dispose();
+                        lastBlank.Frame = null;
+                        lastBlank.Log.Png = "-";
+                    }
+                    lastBlank = read;
+                }
             }
         }
-        attempt = MacPreviewAttempts;
-        return null;
+        while (PreviewFrame.ReadAgain(attempt, budget.ElapsedMilliseconds));
+        for (int i = firstRead; i < reads.Count; i++)
+            reads[i].Log.Of = attempt;
+        return sheet;
     }
 
     /// <summary>One GetPreviewImage, copied and counted, each step timed into the log.</summary>

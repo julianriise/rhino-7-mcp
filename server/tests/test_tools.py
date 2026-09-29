@@ -3733,7 +3733,13 @@ class TestPrintGuards:
         assert "PreviewFrame.DebugPngPath" in src
         assert 'DebugPngPrefix = "/tmp/forsk-print-"' in frame
         assert "InkFloor = 400" in frame
-        assert "MacPreviewAttempts = 2" in src
+        assert "MacPreviewAttempts" not in src
+        assert "ReadBudgetMs = 20000" in frame
+        assert "MinReads = 2" in frame
+        assert "PreviewFrame.ReadAgain" in src
+        copy = src[src.index("private static Bitmap CopyPreview"):src.index("private static int CountDarkSamples")]
+        assert "Graphics.FromImage" in copy
+        assert "GetPixel" not in copy
         symbols = self._text("plugin", "Functions", "PlanSymbols.cs")
         assert "OpenRibbon" in symbols
         ribbon = symbols[symbols.index("private static int AddRibbon"):symbols.index("private static bool BoxHolds")]
