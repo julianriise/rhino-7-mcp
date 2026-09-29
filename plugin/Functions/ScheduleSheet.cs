@@ -344,11 +344,16 @@ public partial class RhinoMCPFunctions
         return lists;
     }
 
-    /// <summary>Where a page's schedules sit and which lists, kept so export can draw them again.</summary>
-    private static void RememberSchedules(RhinoDoc doc, RhinoPageView page, string place, IList<string> kinds, string stableId)
+    /// <summary>
+    /// Where a page's schedules sit, which lists, and how wide they were laid
+    /// out, kept so export can draw them again in the same place.
+    /// </summary>
+    private static void RememberSchedules(
+        RhinoDoc doc, RhinoPageView page, string place, IList<string> kinds, string stableId, double width)
     {
         doc.Strings.SetString(ScheduleMetaSection, page.PageName,
-            place + ";" + string.Join(",", kinds.ToArray()) + ";" + stableId);
+            place + ";" + string.Join(",", kinds.ToArray()) + ";" + stableId + ";"
+            + width.ToString("0.###", CultureInfo.InvariantCulture));
     }
 
     private static void ForgetSchedules(RhinoDoc doc, string pageName)
@@ -384,7 +389,9 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Export draws a page's schedules again from the model, as it bakes the
-    /// plan again, so an edit after layout_pack still shows. Null, or why not.
+    /// plan again, so an edit after layout_pack still shows. Null, or why not:
+    /// lists that grew past the strip beside the plan would run into the
+    /// detail, and a sheet with nothing left to list would print blank.
     /// </summary>
     private string RefreshSchedules(RhinoDoc doc, RhinoPageView page)
     {
@@ -394,13 +401,19 @@ public partial class RhinoMCPFunctions
         var place = parts[0];
         var kinds = parts.Length > 1 ? parts[1].Split(',').ToList() : new List<string>(ScheduleKinds);
         var stableId = parts.Length > 2 ? parts[2] : "";
+        var laidOut = parts.Length > 3 && double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var w)
+            ? w
+            : double.MaxValue;
         foreach (var obj in ScheduleObjects(doc, page))
             doc.Objects.Delete(obj.Id, true);
         var tables = ScheduleTables(doc, kinds);
-        if (tables.Count == 0) return null;
+        if (tables.Count == 0)
+            return place == "sheet" ? "No doors, windows or rooms left to schedule. Run layout_pack again." : null;
         var detailW = A3WidthMm - 2.0 * LayoutMarginMm;
         var blocks = PlaceSchedules(tables, place, detailW, ScheduleAreaHeight, out var width, out var why);
         if (blocks == null) return why;
+        if (place == "plan" && width > laidOut + 0.5)
+            return "The schedules grew past the space beside the plan. Run layout_pack again.";
         var view = place == "plan" ? "plan" : SchedulesView;
         DrawSchedules(doc, page, view, stableId, ScheduleLeft(place, width), A3HeightMm - LayoutMarginMm, blocks, new JArray());
         return null;

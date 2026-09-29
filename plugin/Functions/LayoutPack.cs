@@ -366,7 +366,7 @@ public partial class RhinoMCPFunctions
                 {
                     DrawSchedules(doc, page, spec.View, stableId, ScheduleLeft(schedulePlace, scheduleWidth),
                         A3HeightMm - LayoutMarginMm, scheduleBlocks, ids);
-                    RememberSchedules(doc, page, schedulePlace, scheduleKinds, stableId);
+                    RememberSchedules(doc, page, schedulePlace, scheduleKinds, stableId, scheduleWidth);
                     pageRecord["schedules"] = ScheduleRecord(doc, page, schedulePlace, scheduleWidth);
                 }
                 _lastPlanStats = new PlanStats
@@ -445,7 +445,7 @@ public partial class RhinoMCPFunctions
         var footer = new JObject();
         var ids = AddSheetFooter(doc, page, spec, stableId, 0, title, false, footer);
         DrawSchedules(doc, page, SchedulesView, stableId, ScheduleLeft("sheet", width), A3HeightMm - LayoutMarginMm, blocks, ids);
-        RememberSchedules(doc, page, "sheet", kinds, stableId);
+        RememberSchedules(doc, page, "sheet", kinds, stableId, width);
         return new JObject
         {
             ["view"] = SchedulesView,
