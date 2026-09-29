@@ -25,8 +25,12 @@ public static class Schedules
     public const double PadMm = 1.5;
     /// <summary>Between two tables in a column, between columns, and beside the plan.</summary>
     public const double GapMm = 8.0;
-    /// <summary>Glyph advance at TextMm, wide enough for capitals and digits.</summary>
-    const double CharMm = 0.62 * TextMm;
+    /// <summary>
+    /// Glyph advance at TextMm when Rhino cannot measure the text: generous,
+    /// since a cell must hold its text (Sidehengslet ran into the next column
+    /// at 0.62 × the height).
+    /// </summary>
+    const double CharMm = 0.8 * TextMm;
     const double MinColumnMm = 8.0;
 
     public sealed class Opening
@@ -102,6 +106,8 @@ public static class Schedules
         public bool Continued;
         public double X;
         public double Top;
+        /// <summary>0 for the first schedules page, 1 for the next, and on.</summary>
+        public int Page;
 
         public string Title
         {
@@ -183,18 +189,21 @@ public static class Schedules
 
     /// <summary>
     /// The side of the wall, -1 or +1 across it in the symbol frame, that the
-    /// plan prints the mark on: a hinged door's on the side its leaf does not
-    /// swing into; any other opening's on the side with no room (outside);
-    /// between two rooms or none, +1.
+    /// plan prints the mark on. One rule for doors and windows: outside, the
+    /// side with no room, whichever way a leaf swings. Between two rooms (or
+    /// with no room found) a hinged door's mark takes the side its leaf does
+    /// not swing into, anything else +1.
     /// </summary>
     public static int MarkSide(OpeningTypes.Record record, int yInward, string[] rooms)
     {
+        var below = rooms != null && rooms.Length > 0 ? rooms[0] : null;
+        var above = rooms != null && rooms.Length > 1 ? rooms[1] : null;
+        if ((below == null) != (above == null))
+            return below == null ? -1 : 1;
         var id = record?.TypeId ?? "";
         if (id == "door.hinged_single" || id == "door.hinged_double")
             return -OpeningTypes.SwingSign(record, yInward);
-        var below = rooms != null && rooms.Length > 0 ? rooms[0] : null;
-        var above = rooms != null && rooms.Length > 1 ? rooms[1] : null;
-        return below == null && above != null ? -1 : 1;
+        return 1;
     }
 
     static List<int> ReadingOrder(IList<Opening> openings)
@@ -226,7 +235,7 @@ public static class Schedules
             table.Ids.Add(door.Mark);
             table.Rows.Add(new[] { door.Mark, TypeText(door.Record), Size(door), Hand(door.Record), RoomText(door.Rooms) });
         }
-        return Fit(table);
+        return Fit(table, null);
     }
 
     /// <summary>Vindusliste: mark, type, width × height, sill height, the room it lights.</summary>
@@ -244,7 +253,7 @@ public static class Schedules
             table.Ids.Add(window.Mark);
             table.Rows.Add(new[] { window.Mark, TypeText(window.Record), Size(window), Mm(window.Sill), RoomText(window.Rooms) });
         }
-        return Fit(table);
+        return Fit(table, null);
     }
 
     /// <summary>
@@ -271,7 +280,7 @@ public static class Schedules
         }
         if (sorted.Count > 0)
             table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
-        return Fit(table);
+        return Fit(table, null);
     }
 
     /// <summary>Sheet title for the lists shown: Dørliste; Dør- og vindusliste; Dør-, vindus- og romliste.</summary>
@@ -291,22 +300,31 @@ public static class Schedules
     /// <summary>
     /// Stacks the tables down a column of the given height and flows on into
     /// the next column when one runs out, repeating the title (forts.) and the
-    /// head. A table starts a new column rather than leave fewer than three of
-    /// its lines under a title. Columns step right by their widest table plus
-    /// GapMm; width is the whole extent. Null when the height cannot hold a
-    /// title, a head and one line.
+    /// head. A column that would run past the page width starts the next page,
+    /// so long lists take as many pages as they need. A table starts a new
+    /// column rather than leave fewer than three of its lines under a title.
+    /// Columns step right by their widest table plus GapMm. Null when a page
+    /// cannot hold a title, a head and one line, or a table is wider than it.
     /// </summary>
-    public static List<Block> Flow(IList<Table> tables, double height, out double width)
+    public static List<Block> Flow(IList<Table> tables, double width, double height)
     {
         var blocks = new List<Block>();
-        width = 0;
+        var page = 0;
         double x = 0, y = 0, column = 0;
         foreach (var table in tables)
         {
             if (table == null || table.Lines == 0) continue;
+            if (table.Width > width + 1e-9) return null;
             var first = 0;
             while (first < table.Lines)
             {
+                if (x + table.Width > width + 1e-9)
+                {
+                    page++;
+                    x = 0;
+                    y = 0;
+                    column = 0;
+                }
                 var room = (int)Math.Floor((height - y - TitleSpaceMm - RowMm) / RowMm + 1e-9);
                 var left = table.Lines - first;
                 if (room < Math.Min(3, left) && y > 0)
@@ -324,7 +342,8 @@ public static class Schedules
                     Count = Math.Min(room, left),
                     Continued = first > 0,
                     X = x,
-                    Top = y
+                    Top = y,
+                    Page = page
                 };
                 blocks.Add(block);
                 column = Math.Max(column, table.Width);
@@ -338,8 +357,15 @@ public static class Schedules
                 }
             }
         }
-        width = blocks.Count == 0 ? 0 : x + column;
         return blocks;
+    }
+
+    /// <summary>How many pages the blocks take.</summary>
+    public static int Pages(IList<Block> blocks)
+    {
+        var pages = 0;
+        foreach (var block in blocks) pages = Math.Max(pages, block.Page + 1);
+        return pages;
     }
 
     static List<Opening> ByMark(IList<Opening> openings)
@@ -396,21 +422,33 @@ public static class Schedules
         return names.Count == 0 ? "–" : string.Join(" / ", names.ToArray());
     }
 
-    /// <summary>Column widths from the longest text in each column, head included.</summary>
-    static Table Fit(Table table)
+    /// <summary>
+    /// Column widths from the widest text in each column, head included, plus
+    /// the cell padding. measure gives a text's printed width in paper mm at
+    /// TextMm (Rhino's layout); without it, or when it gives nothing, the width
+    /// is estimated from the character count.
+    /// </summary>
+    public static Table Fit(Table table, Func<string, double> measure)
     {
         table.Widths = new double[table.Heads.Length];
         for (var c = 0; c < table.Heads.Length; c++)
         {
-            var chars = table.Heads[c].Length;
+            var widest = TextWidth(table.Heads[c], measure);
             for (var i = 0; i < table.Lines; i++)
             {
                 var line = table.Line(i);
                 if (line != null && c < line.Length && line[c] != null)
-                    chars = Math.Max(chars, line[c].Length);
+                    widest = Math.Max(widest, TextWidth(line[c], measure));
             }
-            table.Widths[c] = Math.Max(MinColumnMm, Math.Ceiling(chars * CharMm + 2 * PadMm));
+            table.Widths[c] = Math.Max(MinColumnMm, Math.Ceiling(widest + 2 * PadMm));
         }
         return table;
+    }
+
+    static double TextWidth(string text, Func<string, double> measure)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        var measured = measure == null ? 0 : measure(text);
+        return measured > 0 ? measured : text.Length * CharMm;
     }
 }

@@ -88,20 +88,26 @@ public class SchedulesTests
     }
 
     [Fact]
-    public void MarkSide_HingedAwayFromTheSwing_OthersOutside()
+    public void MarkSide_OutsideFirst_ForEveryDoorAndWindow()
     {
+        // The garage wall: every opening has its room on one side only. The
+        // flipped door swings out, and its mark still goes outside with the rest.
         Assert.True(OpeningTypes.TryRead("door", "door.hinged_single", "L", "in", out var swingIn, out _));
         Assert.True(OpeningTypes.TryRead("door", "door.hinged_single", "L", "out", out var swingOut, out _));
+        Assert.True(OpeningTypes.TryRead("door", "door.sliding", null, null, out var sliding, out _));
+        Assert.True(OpeningTypes.TryRead("window", null, null, null, out var window, out _));
+        var roomAbove = new[] { null, "Rom" };
+        foreach (var record in new[] { swingIn, swingOut, sliding, window })
+        {
+            Assert.Equal(-1, Schedules.MarkSide(record, 1, roomAbove));
+            Assert.Equal(-1, Schedules.MarkSide(record, -1, roomAbove));
+            Assert.Equal(1, Schedules.MarkSide(record, 1, new[] { "Rom", null }));
+        }
+
+        // Between two rooms a hinged door keeps its mark off the leaf's side.
         var between = new[] { "Kontor", "Gang" };
-        // The leaf swings to +yInward for "in": the mark sits on the other side.
         Assert.Equal(-1, Schedules.MarkSide(swingIn, 1, between));
         Assert.Equal(1, Schedules.MarkSide(swingOut, 1, between));
-        Assert.Equal(1, Schedules.MarkSide(swingIn, -1, between));
-
-        Assert.True(OpeningTypes.TryRead("window", null, null, null, out var window, out _));
-        Assert.Equal(-1, Schedules.MarkSide(window, 1, new[] { null, "Stue" }));
-        Assert.Equal(1, Schedules.MarkSide(window, 1, new[] { "Stue", null }));
-        Assert.True(OpeningTypes.TryRead("door", "door.sliding", null, null, out var sliding, out _));
         Assert.Equal(1, Schedules.MarkSide(sliding, -1, between));
     }
 
@@ -202,18 +208,10 @@ public class SchedulesTests
         return kind == "window" ? Schedules.WindowTable(openings) : Schedules.DoorTable(openings);
     }
 
-    [Fact]
-    public void Flow_OfficeLists_FitOneSheet_EveryLineOnce()
+    /// <summary>Every line of every table exactly once, each block inside its page, none overlapping.</summary>
+    static void AssertFlowed(IList<Schedules.Table> tables, List<Schedules.Block> blocks, double width, double height)
     {
-        // 14 doors, 62 windows and 16 rooms above the footer of an A3 sheet.
-        var rooms = Enumerable.Range(1, 16)
-            .Select(i => new Schedules.Room { Id = $"rd-{i:00}", Name = "Konferanserom", AreaMm2 = 20000000 })
-            .ToList();
-        var tables = new[] { Rows("door", 14), Rows("window", 62), Schedules.RoomTable(rooms) };
-        const double height = 254;
-        var blocks = Schedules.Flow(tables, height, out var width);
         Assert.NotNull(blocks);
-        Assert.True(width <= 400, $"schedules {width} mm wide");
         foreach (var table in tables)
         {
             var mine = blocks.Where(b => b.Table == table).ToList();
@@ -222,10 +220,37 @@ public class SchedulesTests
             Assert.All(mine.Skip(1), b => Assert.EndsWith("(forts.)", b.Title));
         }
         foreach (var block in blocks)
+        {
             Assert.True(block.Top + block.Height <= height + 1e-9, $"{block.Title} runs off the column");
+            Assert.True(block.X + block.Table.Width <= width + 1e-9, $"{block.Title} runs off page {block.Page + 1}");
+        }
         foreach (var a in blocks)
-            foreach (var b in blocks.Where(b => b != a && b.X == a.X))
+            foreach (var b in blocks.Where(b => b != a && b.Page == a.Page && b.X == a.X))
                 Assert.True(a.Top + a.Height <= b.Top || b.Top + b.Height <= a.Top, "two blocks overlap");
+    }
+
+    [Fact]
+    public void Flow_OfficeLists_FitOnePage_EveryLineOnce()
+    {
+        // 14 doors, 62 windows and 16 rooms above the footer of an A3 sheet.
+        var rooms = Enumerable.Range(1, 16)
+            .Select(i => new Schedules.Room { Id = $"rd-{i:00}", Name = "Konferanserom", AreaMm2 = 20000000 })
+            .ToList();
+        var tables = new[] { Rows("door", 14), Rows("window", 62), Schedules.RoomTable(rooms) };
+        var blocks = Schedules.Flow(tables, 400, 254);
+        AssertFlowed(tables, blocks, 400, 254);
+        Assert.Equal(1, Schedules.Pages(blocks));
+    }
+
+    [Fact]
+    public void Flow_LongLists_RunOntoMorePages()
+    {
+        // 40 doors and 400 windows do not fit one A3: the lists carry on over pages.
+        var tables = new[] { Rows("door", 40), Rows("window", 400) };
+        var blocks = Schedules.Flow(tables, 400, 254);
+        AssertFlowed(tables, blocks, 400, 254);
+        Assert.True(Schedules.Pages(blocks) >= 2, $"{Schedules.Pages(blocks)} page");
+        Assert.Equal(Enumerable.Range(0, Schedules.Pages(blocks)), blocks.Select(b => b.Page).Distinct().OrderBy(p => p));
     }
 
     [Fact]
@@ -233,16 +258,29 @@ public class SchedulesTests
     {
         var rooms = new[] { new Schedules.Room { Id = "rd-01", Name = "Rom", AreaMm2 = 27400000 } };
         var tables = new[] { Rows("door", 4), Rows("window", 1), Schedules.RoomTable(rooms) };
-        var blocks = Schedules.Flow(tables, 254, out var width);
+        var blocks = Schedules.Flow(tables, 400, 254);
         Assert.Equal(3, blocks.Count);
         Assert.All(blocks, b => Assert.Equal(0, b.X));
-        Assert.Equal(tables.Max(t => t.Width), width);
+        Assert.Equal(1, Schedules.Pages(blocks));
     }
 
     [Fact]
-    public void Flow_TooShortForOneLine_IsNull()
+    public void Flow_TooShortForOneLine_OrTooWide_IsNull()
     {
-        Assert.Null(Schedules.Flow(new[] { Rows("door", 2) }, Schedules.TitleSpaceMm + Schedules.RowMm, out _));
+        Assert.Null(Schedules.Flow(new[] { Rows("door", 2) }, 400, Schedules.TitleSpaceMm + Schedules.RowMm));
+        Assert.Null(Schedules.Flow(new[] { Rows("door", 2) }, 20, 254));
+    }
+
+    [Fact]
+    public void Fit_ColumnsHoldTheWidestTextAsMeasured()
+    {
+        // Rhino measures Sidehengslet wider than the old 0.62 × height guess.
+        var table = Rows("window", 1);
+        Schedules.Fit(table, text => text == "Sidehengslet" ? 17.9 : text.Length * 1.0);
+        Assert.Equal(Math.Ceiling(17.9 + 2 * Schedules.PadMm), table.Widths[1]);
+        // No measure: the estimate still clears Sidehengslet's 17.9 mm.
+        Schedules.Fit(table, null);
+        Assert.True(table.Widths[1] >= 17.9 + 2 * Schedules.PadMm, $"type column {table.Widths[1]} mm");
     }
 }
 

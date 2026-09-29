@@ -380,8 +380,11 @@ public partial class RhinoMCPFunctions
                 scheduleNote = " No doors, windows or rooms to schedule.";
             else
             {
-                pages.Add(AddSchedulesPage(doc, scheduleKinds, scheduleTables, pages.Count + 1));
-                scheduleNote = " Schedules: " + ScheduleCounts(scheduleTables) + ".";
+                var added = AddSchedulesPages(doc, scheduleKinds, scheduleTables, pages.Count + 1);
+                foreach (var record in added)
+                    pages.Add(record);
+                scheduleNote = " Schedules: " + ScheduleCounts(scheduleTables)
+                    + (added.Count > 1 ? " on " + added.Count.ToString(CultureInfo.InvariantCulture) + " pages." : ".");
             }
         }
 
@@ -407,40 +410,55 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    /// <summary>The schedules' own A3 page: the tables from the top-left margin, the footer without scale or north.</summary>
-    private JObject AddSchedulesPage(RhinoDoc doc, List<string> kinds, List<Schedules.Table> tables, int number)
+    /// <summary>
+    /// The schedules' own A3 pages: the tables from the top-left margin, as
+    /// many pages as they need, each with the footer without scale or north.
+    /// </summary>
+    private List<JObject> AddSchedulesPages(RhinoDoc doc, List<string> kinds, List<Schedules.Table> tables, int number)
     {
-        var blocks = SheetBlocks(tables, out var width, out var why);
+        var blocks = SheetBlocks(tables, out var why);
         if (blocks == null)
             throw new InvalidOperationException(why);
-        var page = doc.Views.AddPageView(SchedulesPageName, A3WidthMm, A3HeightMm);
-        if (page == null)
-            throw new InvalidOperationException(LayoutDetailFailedMessage);
-        page.SetPageAsActive();
-        ApplyPaperDisplay(page);
-        var spec = new LayoutViewSpec { View = SchedulesView, PageName = SchedulesPageName };
-        var stableId = FormatStableId("l", number);
+        var count = Schedules.Pages(blocks);
         var title = Schedules.SheetTitle(tables.Select(t => t.Kind).ToList());
-        var footer = new JObject();
-        var ids = AddSheetFooter(doc, page, spec, stableId, 0, title, false, footer);
-        DrawSchedules(doc, page, stableId, blocks, ids);
-        RememberSchedules(doc, page, kinds, stableId);
-        return new JObject
+        var records = new List<JObject>();
+        for (var i = 0; i < count; i++)
         {
-            ["view"] = SchedulesView,
-            ["page"] = SchedulesPageName,
-            ["scale"] = 0,
-            ["page_scale"] = 0,
-            ["detail_count"] = 0,
-            ["ids"] = ids,
-            ["footer"] = footer,
-            ["view_title"] = title,
-            ["schedules"] = new JObject
+            var name = SchedulesPageNameFor(i + 1);
+            var page = doc.Views.AddPageView(name, A3WidthMm, A3HeightMm);
+            if (page == null)
+                throw new InvalidOperationException(LayoutDetailFailedMessage);
+            page.SetPageAsActive();
+            ApplyPaperDisplay(page);
+            var spec = new LayoutViewSpec { View = SchedulesView, PageName = name };
+            var stableId = FormatStableId("l", number + i);
+            var pageTitle = count > 1
+                ? title + " (" + (i + 1).ToString(CultureInfo.InvariantCulture) + "/" + count.ToString(CultureInfo.InvariantCulture) + ")"
+                : title;
+            var footer = new JObject();
+            var ids = AddSheetFooter(doc, page, spec, stableId, 0, pageTitle, false, footer);
+            DrawSchedules(doc, page, stableId, blocks.Where(b => b.Page == i).ToList(), ids);
+            RememberSchedules(doc, page, kinds, stableId);
+            records.Add(new JObject
             {
-                ["width_mm"] = Math.Round(width, 1),
-                ["lists"] = ReadSchedules(doc, page)
-            }
-        };
+                ["view"] = SchedulesView,
+                ["page"] = name,
+                ["scale"] = 0,
+                ["page_scale"] = 0,
+                ["detail_count"] = 0,
+                ["ids"] = ids,
+                ["footer"] = footer,
+                ["view_title"] = pageTitle,
+                ["schedules"] = new JObject
+                {
+                    ["page"] = i + 1,
+                    ["pages"] = count,
+                    ["lists"] = ReadSchedules(doc, page),
+                    ["cells_over"] = new JArray(CellsOver(doc, page).ToArray())
+                }
+            });
+        }
+        return records;
     }
 
     [McpCommand("export_pdf")]
@@ -734,13 +752,17 @@ public partial class RhinoMCPFunctions
         UseModelView(doc);
         RestorePrintColors(doc);
         List<RhinoObject> clay = null;
+        var schedulesDrawn = false;
         foreach (var page in pages)
         {
             var view = ViewKeyForPage(page);
             if (string.IsNullOrEmpty(view)) continue;
             if (view == SchedulesView)
             {
-                var stale = RefreshSchedules(doc, page);
+                // All schedules pages at once: rows can move from one page to the next.
+                if (schedulesDrawn) continue;
+                schedulesDrawn = true;
+                var stale = RefreshSchedules(doc);
                 if (stale != null) return stale;
                 continue;
             }
@@ -794,7 +816,7 @@ public partial class RhinoMCPFunctions
     private static string ViewKeyForPage(RhinoPageView page)
     {
         if (page == null) return null;
-        if (string.Equals(page.PageName, SchedulesPageName, StringComparison.OrdinalIgnoreCase))
+        if (IsSchedulesPage(page))
             return SchedulesView;
         foreach (var name in new[] { "plan", "north", "east", "south", "west" })
         {
@@ -2724,7 +2746,7 @@ public partial class RhinoMCPFunctions
             page.PageName.Equals(layout.Trim(), StringComparison.OrdinalIgnoreCase))
             return true;
         if (layout.Trim().Equals(SchedulesView, StringComparison.OrdinalIgnoreCase))
-            return string.Equals(page?.PageName, SchedulesPageName, StringComparison.OrdinalIgnoreCase);
+            return IsSchedulesPage(page);
         if (!TryGetLayoutView(layout, out var spec)) return false;
         return page != null &&
                string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase);
@@ -2804,8 +2826,7 @@ public partial class RhinoMCPFunctions
     {
         foreach (var view in viewSet)
         {
-            if (string.Equals(view, SchedulesView, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(page.PageName, SchedulesPageName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(view, SchedulesView, StringComparison.OrdinalIgnoreCase) && IsSchedulesPage(page))
                 return true;
             if (!TryGetLayoutView(view, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))

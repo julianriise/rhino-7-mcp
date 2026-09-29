@@ -180,7 +180,31 @@ public partial class RhinoMCPFunctions
                 AreaMm2 = r.Area
             }).ToList()));
         }
+        // Column widths from Rhino's own layout of each text, not a glyph guess.
+        var style = OneToOneTextStyle(
+            doc, "Forsk paper " + Schedules.TextMm.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, Schedules.TextMm));
+        foreach (var table in tables)
+            Schedules.Fit(table, text => PaperTextWidth(doc, style, text));
         return tables.Where(t => t.Rows.Count > 0).ToList();
+    }
+
+    /// <summary>Printed width in paper mm of text on the cells' paper style. 0 when Rhino cannot say.</summary>
+    private static double PaperTextWidth(RhinoDoc doc, DimensionStyle style, string text)
+    {
+        if (string.IsNullOrEmpty(text) || style == null) return 0;
+        try
+        {
+            using (var entity = TextEntity.Create(text, Plane.WorldXY, style, false, 0, 0))
+            {
+                var box = entity?.GetBoundingBox(true) ?? BoundingBox.Empty;
+                var mm = MmToPage(doc, 1.0);
+                return box.IsValid && mm > 0 ? (box.Max.X - box.Min.X) / mm : 0;
+            }
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     private static List<string> ReadScheduleKinds(JObject parameters)
@@ -200,8 +224,9 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Draw the blocks in page space from the sheet's top-left margin. Every
-    /// cell is its own text, stamped with its list, line and column, so the
-    /// smoke reads back what the page shows.
+    /// cell is its own text, stamped with its list, line, column, and the
+    /// column's width, so the smoke reads back what the page shows and the
+    /// page can tell a text that runs past its cell.
     /// </summary>
     private void DrawSchedules(RhinoDoc doc, RhinoPageView page, string stableId, List<Schedules.Block> blocks, JArray ids)
     {
@@ -257,6 +282,7 @@ public partial class RhinoMCPFunctions
                         attr.SetUserString("forsk:row", id);
                         attr.SetUserString("forsk:line", line.ToString(CultureInfo.InvariantCulture));
                         attr.SetUserString("forsk:col", c.ToString(CultureInfo.InvariantCulture));
+                        attr.SetUserString("forsk:cell_mm", table.Widths[c].ToString("0.###", CultureInfo.InvariantCulture));
                         AddPaperText(doc, ids, text,
                             right ? cx + table.Widths[c] - Schedules.PadMm : cx + Schedules.PadMm, y, Schedules.TextMm,
                             right ? TextHorizontalAlignment.Right : TextHorizontalAlignment.Left,
@@ -346,39 +372,104 @@ public partial class RhinoMCPFunctions
         if (!string.IsNullOrEmpty(pageName)) doc.Strings.Delete(ScheduleMetaSection, pageName);
     }
 
-    /// <summary>The tables flowed over the sheet above the footer. Null with a reason when they do not fit.</summary>
-    private static List<Schedules.Block> SheetBlocks(List<Schedules.Table> tables, out double width, out string why)
+    /// <summary>
+    /// The tables flowed over as many sheets as they need, above the footer.
+    /// Null with a reason when a table cannot fit a sheet at all.
+    /// </summary>
+    private static List<Schedules.Block> SheetBlocks(List<Schedules.Table> tables, out string why)
     {
         why = null;
-        var blocks = Schedules.Flow(tables, ScheduleAreaHeight, out width);
+        var blocks = Schedules.Flow(tables, A3WidthMm - 2.0 * LayoutMarginMm, ScheduleAreaHeight);
         if (blocks == null)
-            why = "The schedules do not fit the sheet's height.";
-        else if (width > A3WidthMm - 2.0 * LayoutMarginMm)
-            why = "The schedules need " + width.ToString("0", CultureInfo.InvariantCulture)
-                + " mm, wider than one A3 sheet.";
-        return why == null ? blocks : null;
+            why = "A schedule is wider than an A3 sheet, or the sheet cannot hold one of its lines.";
+        return blocks;
+    }
+
+    /// <summary>Page name of schedules page number (1-based): Forsk — Schedules, Forsk — Schedules 2, …</summary>
+    private static string SchedulesPageNameFor(int number)
+    {
+        return number <= 1 ? SchedulesPageName : SchedulesPageName + " " + number.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsSchedulesPage(RhinoPageView page)
+    {
+        var name = page?.PageName ?? "";
+        return string.Equals(name, SchedulesPageName, StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith(SchedulesPageName + " ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int SchedulesPageNumber(RhinoPageView page)
+    {
+        var name = page?.PageName ?? "";
+        if (name.Length <= SchedulesPageName.Length) return 1;
+        return int.TryParse(name.Substring(SchedulesPageName.Length).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : 1;
+    }
+
+    /// <summary>The document's schedules pages, first to last.</summary>
+    private static List<RhinoPageView> SchedulePages(RhinoDoc doc)
+    {
+        var pages = (doc.Views.GetPageViews() ?? new RhinoPageView[0]).Where(IsSchedulesPage).ToList();
+        pages.Sort((a, b) => SchedulesPageNumber(a).CompareTo(SchedulesPageNumber(b)));
+        return pages;
     }
 
     /// <summary>
-    /// Export draws the schedules page again from the model, as it bakes the
-    /// plan again, so an edit after layout_pack still shows. Null, or why not:
-    /// a page with nothing left to list would print blank.
+    /// Cell texts on the page that Rhino laid out wider than their column
+    /// allows (the column less its padding), as "text w/cell mm". None when
+    /// every cell holds its text.
     /// </summary>
-    private string RefreshSchedules(RhinoDoc doc, RhinoPageView page)
+    private static List<string> CellsOver(RhinoDoc doc, RhinoPageView page)
     {
-        var raw = doc.Strings.GetValue(ScheduleMetaSection, page.PageName);
-        if (string.IsNullOrEmpty(raw)) return null;
-        var parts = raw.Split(';');
-        var kinds = parts[0].Split(',').ToList();
-        var stableId = parts.Length > 1 ? parts[1] : "";
+        var over = new List<string>();
+        var mm = MmToPage(doc, 1.0);
         foreach (var obj in ScheduleObjects(doc, page))
-            doc.Objects.Delete(obj.Id, true);
+        {
+            if (!(obj.Geometry is TextEntity text) || mm <= 0) continue;
+            if (!double.TryParse(obj.Attributes.GetUserString("forsk:cell_mm"), NumberStyles.Float, CultureInfo.InvariantCulture, out var cell))
+                continue;
+            var box = text.GetBoundingBox(true);
+            if (!box.IsValid) continue;
+            var width = (box.Max.X - box.Min.X) / mm;
+            if (width + 2 * Schedules.PadMm > cell + 0.05)
+                over.Add(text.PlainText + " " + width.ToString("0.0", CultureInfo.InvariantCulture)
+                    + "/" + cell.ToString("0.#", CultureInfo.InvariantCulture) + " mm");
+        }
+        return over;
+    }
+
+    /// <summary>
+    /// Export draws the schedules pages again from the model, as it bakes the
+    /// plan again, so an edit after layout_pack still shows. Null, or why not:
+    /// lists that now need a different number of pages, or nothing left to
+    /// list, need layout_pack again.
+    /// </summary>
+    private string RefreshSchedules(RhinoDoc doc)
+    {
+        var pages = SchedulePages(doc);
+        if (pages.Count == 0) return null;
+        var raw = doc.Strings.GetValue(ScheduleMetaSection, pages[0].PageName);
+        if (string.IsNullOrEmpty(raw)) return null;
+        var kinds = raw.Split(';')[0].Split(',').ToList();
         var tables = ScheduleTables(doc, kinds);
         if (tables.Count == 0)
             return "No doors, windows or rooms left to schedule. Run layout_pack again.";
-        var blocks = SheetBlocks(tables, out _, out var why);
+        var blocks = SheetBlocks(tables, out var why);
         if (blocks == null) return why;
-        DrawSchedules(doc, page, stableId, blocks, new JArray());
+        var need = Schedules.Pages(blocks);
+        if (need != pages.Count)
+            return "The schedules need " + need.ToString(CultureInfo.InvariantCulture) + " page(s) now, not "
+                + pages.Count.ToString(CultureInfo.InvariantCulture) + ". Run layout_pack again.";
+        for (var i = 0; i < pages.Count; i++)
+        {
+            var own = doc.Strings.GetValue(ScheduleMetaSection, pages[i].PageName) ?? "";
+            var parts = own.Split(';');
+            var stableId = parts.Length > 1 ? parts[1] : "";
+            foreach (var obj in ScheduleObjects(doc, pages[i]))
+                doc.Objects.Delete(obj.Id, true);
+            DrawSchedules(doc, pages[i], stableId, blocks.Where(b => b.Page == i).ToList(), new JArray());
+        }
         return null;
     }
 
