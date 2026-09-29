@@ -184,10 +184,9 @@ public partial class RhinoMCPFunctions
         var views = ReadLayoutViews(parameters);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
         var replace = ReadBoolParam(parameters, "replace", true);
-        var schedulePlace = ReadSchedulePlace(parameters);
+        // The schedules are a page of their own, not a drawing view.
+        var withSchedules = views.RemoveAll(v => string.Equals(v, SchedulesView, StringComparison.OrdinalIgnoreCase)) > 0;
         var scheduleKinds = ReadScheduleKinds(parameters);
-        if (schedulePlace == "plan" && !views.Any(v => string.Equals(v, "plan", StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Schedules beside the plan need the plan view.");
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
         if (!hasWall)
@@ -218,29 +217,6 @@ public partial class RhinoMCPFunctions
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
         var detailH = A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
 
-        // Schedules beside the plan take a strip off the right of the plan detail.
-        List<Schedules.Table> scheduleTables = null;
-        List<Schedules.Block> scheduleBlocks = null;
-        var scheduleWidth = 0.0;
-        var scheduleNote = "";
-        if (schedulePlace != null)
-        {
-            scheduleTables = ScheduleTables(doc, scheduleKinds);
-            if (scheduleTables.Count == 0)
-            {
-                scheduleNote = " No doors, windows or rooms to schedule.";
-                schedulePlace = null;
-            }
-            else
-            {
-                scheduleBlocks = PlaceSchedules(scheduleTables, schedulePlace, detailW, detailH, out scheduleWidth, out var why);
-                if (scheduleBlocks == null)
-                    throw new InvalidOperationException(why);
-                scheduleNote = " Schedules: " + ScheduleCounts(scheduleTables)
-                    + (schedulePlace == "plan" ? " beside the plan." : " on their own sheet.");
-            }
-        }
-        var planW = schedulePlace == "plan" ? detailW - scheduleWidth - Schedules.GapMm : detailW;
         var pages = new JArray();
         var applied = new List<int>();
         var drawingNotes = new List<string>();
@@ -261,14 +237,13 @@ public partial class RhinoMCPFunctions
                 clip = planClip;
             var strokeScale = 0;
             double fitNeed = 0;
-            var areaW = plan ? planW : detailW;
             if (plan)
-                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), areaW, detailH, fitPlan);
+                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH, fitPlan);
             var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
             if (plan)
             {
-                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), areaW, detailH);
-                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), areaW, detailH, fitPlan);
+                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
+                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitPlan);
                 if (fitted != strokeScale)
                 {
                     drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
@@ -302,7 +277,7 @@ public partial class RhinoMCPFunctions
             try
             {
                 detail = AddClayDetail(
-                    doc, page, spec, drawn.Box, scale, drawn.Layer, areaW, out scaleLocked);
+                    doc, page, spec, drawn.Box, scale, drawn.Layer, out scaleLocked);
             }
             catch
             {
@@ -349,7 +324,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["roof_outline"] = drawn.RoofOutline;
                 pageRecord["fit_need"] = Math.Round(fitNeed, 2);
                 pageRecord["fitted"] = fitPlan || scale != requestedScale;
-                pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), areaW, detailH) * 0.9 / scale, 3);
+                pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH) * 0.9 / scale, 3);
                 pageRecord["opening_marks"] = drawn.Marks;
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
@@ -362,13 +337,6 @@ public partial class RhinoMCPFunctions
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 if (!string.IsNullOrEmpty(drawn.RoomText))
                     pageRecord["room_tag_text"] = drawn.RoomText;
-                if (schedulePlace == "plan")
-                {
-                    DrawSchedules(doc, page, spec.View, stableId, ScheduleLeft(schedulePlace, scheduleWidth),
-                        A3HeightMm - LayoutMarginMm, scheduleBlocks, ids);
-                    RememberSchedules(doc, page, schedulePlace, scheduleKinds, stableId, scheduleWidth);
-                    pageRecord["schedules"] = ScheduleRecord(doc, page, schedulePlace, scheduleWidth);
-                }
                 _lastPlanStats = new PlanStats
                 {
                     Symbols = drawn.Symbols,
@@ -402,8 +370,20 @@ public partial class RhinoMCPFunctions
             }
             pages.Add(pageRecord);
         }
-        if (schedulePlace == "sheet")
-            pages.Add(AddSchedulesPage(doc, replace, scheduleKinds, scheduleTables, scheduleBlocks, scheduleWidth, pages.Count + 1));
+        var scheduleNote = "";
+        if (withSchedules)
+        {
+            var scheduleTables = ScheduleTables(doc, scheduleKinds);
+            if (replace)
+                RemoveLayoutPages(doc, SchedulesView, false);
+            if (scheduleTables.Count == 0)
+                scheduleNote = " No doors, windows or rooms to schedule.";
+            else
+            {
+                pages.Add(AddSchedulesPage(doc, scheduleKinds, scheduleTables, pages.Count + 1));
+                scheduleNote = " Schedules: " + ScheduleCounts(scheduleTables) + ".";
+            }
+        }
 
         doc.Views.Redraw();
         var reported = applied.Count > 0 ? applied[0] : requestedScale;
@@ -428,12 +408,11 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>The schedules' own A3 page: the tables from the top-left margin, the footer without scale or north.</summary>
-    private JObject AddSchedulesPage(
-        RhinoDoc doc, bool replace, List<string> kinds, List<Schedules.Table> tables,
-        List<Schedules.Block> blocks, double width, int number)
+    private JObject AddSchedulesPage(RhinoDoc doc, List<string> kinds, List<Schedules.Table> tables, int number)
     {
-        if (replace)
-            RemoveLayoutPages(doc, SchedulesView, false);
+        var blocks = SheetBlocks(tables, out var width, out var why);
+        if (blocks == null)
+            throw new InvalidOperationException(why);
         var page = doc.Views.AddPageView(SchedulesPageName, A3WidthMm, A3HeightMm);
         if (page == null)
             throw new InvalidOperationException(LayoutDetailFailedMessage);
@@ -444,8 +423,8 @@ public partial class RhinoMCPFunctions
         var title = Schedules.SheetTitle(tables.Select(t => t.Kind).ToList());
         var footer = new JObject();
         var ids = AddSheetFooter(doc, page, spec, stableId, 0, title, false, footer);
-        DrawSchedules(doc, page, SchedulesView, stableId, ScheduleLeft("sheet", width), A3HeightMm - LayoutMarginMm, blocks, ids);
-        RememberSchedules(doc, page, "sheet", kinds, stableId, width);
+        DrawSchedules(doc, page, stableId, blocks, ids);
+        RememberSchedules(doc, page, kinds, stableId);
         return new JObject
         {
             ["view"] = SchedulesView,
@@ -456,17 +435,11 @@ public partial class RhinoMCPFunctions
             ["ids"] = ids,
             ["footer"] = footer,
             ["view_title"] = title,
-            ["schedules"] = ScheduleRecord(doc, page, "sheet", width)
-        };
-    }
-
-    private static JObject ScheduleRecord(RhinoDoc doc, RhinoPageView page, string place, double width)
-    {
-        return new JObject
-        {
-            ["place"] = place,
-            ["width_mm"] = Math.Round(width, 1),
-            ["lists"] = ReadSchedules(doc, page)
+            ["schedules"] = new JObject
+            {
+                ["width_mm"] = Math.Round(width, 1),
+                ["lists"] = ReadSchedules(doc, page)
+            }
         };
     }
 
@@ -749,8 +722,8 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Elevations rebuild only when their curves are missing. The plan pack
-    /// rebuilds on every export so a type swap changes the symbol, and the
-    /// schedules are drawn again from the model with it.
+    /// rebuilds on every export so a type swap changes the symbol. The
+    /// schedules page is drawn again from the model too.
     /// </summary>
     private string EnsureGreyscaleDrawings(RhinoDoc doc, List<RhinoPageView> pages)
     {
@@ -793,11 +766,6 @@ public partial class RhinoMCPFunctions
                 return string.IsNullOrEmpty(drawn.Error)
                     ? "No visible curves for " + view + "."
                     : drawn.Error;
-            }
-            if (plan)
-            {
-                var stale = RefreshSchedules(doc, page);
-                if (stale != null) return stale;
             }
         }
         return null;
@@ -1192,7 +1160,13 @@ public partial class RhinoMCPFunctions
             viewSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in requested)
             {
-                if (!TryGetLayoutView(token?.ToString(), out var spec))
+                var name = token?.ToString()?.Trim();
+                if (string.Equals(name, SchedulesView, StringComparison.OrdinalIgnoreCase))
+                {
+                    viewSet.Add(SchedulesView);
+                    continue;
+                }
+                if (!TryGetLayoutView(name, out var spec))
                     throw new InvalidOperationException(UnknownViewMessage);
                 viewSet.Add(spec.View);
             }
@@ -1260,6 +1234,7 @@ public partial class RhinoMCPFunctions
         views.Add("east");
         views.Add("south");
         views.Add("west");
+        views.Add(SchedulesView);
         return views;
     }
 
@@ -1368,13 +1343,12 @@ public partial class RhinoMCPFunctions
         BoundingBox bbox,
         int scale,
         string drawLayerPath,
-        double widthMm,
         out bool scaleLocked)
     {
         scaleLocked = false;
         var left = MmToPage(doc, LayoutMarginMm);
         var bottom = MmToPage(doc, LayoutMarginMm + FooterReserveMm);
-        var right = MmToPage(doc, LayoutMarginMm + widthMm);
+        var right = MmToPage(doc, A3WidthMm - LayoutMarginMm);
         var top = MmToPage(doc, A3HeightMm - LayoutMarginMm);
         var detail = page.AddDetailView(
             spec.View,

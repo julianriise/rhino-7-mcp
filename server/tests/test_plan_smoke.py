@@ -148,12 +148,12 @@ def _schedule_case():
         {"text": "Kontor", "attributes": {"forsk:role": "room_tag", "forsk:tag": "name", "forsk:room_id": "rd-01"}},
         {"text": "ca. 12,4 m²", "attributes": {"forsk:role": "room_tag", "forsk:tag": "area", "forsk:room_id": "rd-01"}},
     ]
-    record = {"place": "plan", "lists": {
+    sheets = [{"view": "schedules", "schedules": {"lists": {
         "door": {"rows": [{"id": "D01", "cells": ["D01"]}, {"id": "D02", "cells": ["D02"]}]},
         "window": {"rows": [{"id": "V01", "cells": ["V01"]}]},
         "room": {"rows": [{"id": "rd-01", "cells": ["Kontor", "12,4 m²"]}], "total": ["Sum", "12,4 m²"]},
-    }}
-    return record, plan_rows, markers, {"room_tags": 1}
+    }}}]
+    return sheets, plan_rows, markers, {"room_tags": 1}
 
 
 def test_schedules_match_the_model(capsys):
@@ -165,9 +165,10 @@ def test_schedules_match_the_model(capsys):
 
 @pytest.mark.parametrize("break_it, reason", [
     (lambda r, p, m, g: p.pop(0), "plan marks 2 are not the markers' 3"),
-    (lambda r, p, m, g: r["lists"]["door"]["rows"].pop(), "rows doors 1/2"),
+    (lambda r, p, m, g: r[0]["schedules"]["lists"]["door"]["rows"].pop(), "rows doors 1/2"),
     (lambda r, p, m, g: m[1]["attributes"].update({"forsk:mark": "D01"}), "a mark twice"),
-    (lambda r, p, m, g: r["lists"]["room"]["rows"][0].update({"cells": ["Kontor", "12,5 m²"]}), "rooms not as tagged"),
+    (lambda r, p, m, g: r[0]["schedules"]["lists"]["room"]["rows"][0].update({"cells": ["Kontor", "12,5 m²"]}),
+     "rooms not as tagged"),
     (lambda r, p, m, g: g.update({"room_tags": 2}), "room rows 1 for 2 tagged rooms"),
 ])
 def test_schedules_that_drift_from_the_model_fail(break_it, reason):

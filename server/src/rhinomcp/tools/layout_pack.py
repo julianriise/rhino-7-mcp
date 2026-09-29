@@ -5,10 +5,9 @@ from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import Context
 from rhinomcp.server import get_rhino_connection, mcp, logger
 
-_VIEWS = ("plan", "north", "east", "south", "west")
-_SCHEDULES = ("plan", "sheet")
+_VIEWS = ("plan", "north", "east", "south", "west", "schedules")
 _SCHEDULE_KINDS = ("door", "window", "room")
-_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, or west."
+_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, or schedules."
 _UNKNOWN_PAPER = "Unknown paper. Use A3."
 
 
@@ -20,7 +19,6 @@ def layout_pack(
     scale: Optional[int] = None,
     replace: bool = True,
     include_existing: bool = True,
-    schedules: Optional[str] = None,
     schedule_kinds: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
@@ -33,19 +31,19 @@ def layout_pack(
 
     Parameters:
     - paper: A3 only (default A3)
-    - views: Optional list of plan, north, east, south, west.
-      Omit for plan plus four elevations.
+    - views: Optional list of plan, north, east, south, west, schedules.
+      Omit for plan, four elevations, and schedules. schedules is its own
+      A3 page with the door, window and room lists (dørliste, vindusliste,
+      romliste) from the model; every door and window gets a stable mark
+      (D01, V01) shown on the plan and on its row. Export draws the lists
+      again from the model.
     - scale: Requested denominator, 100 means 1:100. Rounded up to a
       standard step if the drawing does not fit the detail. Omit to fit:
       the plan takes the largest scale that fits (elevations 1:100).
     - replace: Replace existing Forsk layouts for these views (default true)
     - include_existing: Include X-EXIST in the greyscale drawing (default true)
-    - schedules: Door, window and room schedules (dørliste, vindusliste,
-      romliste) from the model. "plan" puts them beside the plan on its page
-      (the plan fits the rest); "sheet" adds their own A3 page. Omit for none.
-      Every door and window gets a stable mark (D01, V01) shown on the plan
-      and on its row. Export draws them again from the model.
-    - schedule_kinds: Which lists: door, window, room. Omit for all three.
+    - schedule_kinds: Which lists the schedules page shows: door, window,
+      room. Omit for all three.
 
     Returns:
     Dictionary with pages, count, scale, and message.
@@ -63,10 +61,6 @@ def layout_pack(
             return {"success": False, "message": "replace must be a boolean."}
         if not isinstance(include_existing, bool):
             return {"success": False, "message": "include_existing must be a boolean."}
-        if schedules is not None and schedules not in _SCHEDULES:
-            return {"success": False, "message": "schedules must be plan or sheet."}
-        if schedules == "plan" and views is not None and "plan" not in views:
-            return {"success": False, "message": "Schedules beside the plan need the plan view."}
         if schedule_kinds is not None and (
             not isinstance(schedule_kinds, list)
             or len(schedule_kinds) == 0
@@ -84,8 +78,6 @@ def layout_pack(
             params["views"] = views
         if scale is not None:
             params["scale"] = scale
-        if schedules is not None:
-            params["schedules"] = schedules
         if schedule_kinds is not None:
             params["schedule_kinds"] = schedule_kinds
 

@@ -6,8 +6,8 @@ from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 from rhinomcp.server import get_rhino_connection, mcp, logger
 
-_VIEWS = ("plan", "north", "east", "south", "west")
-_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, or west."
+_VIEWS = ("plan", "north", "east", "south", "west", "schedules")
+_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, or schedules."
 
 
 @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
@@ -24,7 +24,7 @@ def clear_layouts(
     sheet-cache curves on S-PLAN / S-ELEV-*. clear_generated also leaves layouts.
 
     Parameters:
-    - views: Optional filter (plan, north, east, south, west).
+    - views: Optional filter (plan, north, east, south, west, schedules).
       Omit to delete every Forsk layout.
     - dry_run: List matching pages without deleting (default false)
 

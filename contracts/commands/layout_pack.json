@@ -12,12 +12,12 @@
     },
     "views": {
       "type": "array",
-      "description": "Views to lay out, in order. Default plan, north, east, south, west.",
+      "description": "Pages to lay out, in order. Default plan, north, east, south, west, schedules. schedules is its own A3 page (Forsk — Schedules) with the door, window and room lists from the model; each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws the lists again from the model.",
       "items": {
         "type": "string",
-        "enum": ["plan", "north", "east", "south", "west"]
+        "enum": ["plan", "north", "east", "south", "west", "schedules"]
       },
-      "default": ["plan", "north", "east", "south", "west"]
+      "default": ["plan", "north", "east", "south", "west", "schedules"]
     },
     "scale": {
       "type": "integer",
@@ -34,14 +34,9 @@
       "default": true,
       "description": "Include X-EXIST in the greyscale drawing."
     },
-    "schedules": {
-      "type": "string",
-      "enum": ["plan", "sheet"],
-      "description": "Door, window and room schedules from the model. plan: beside the plan on its page, which then fits the rest (needs the plan view). sheet: their own A3 page, Forsk — Schedules. Omit for none. Each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws them again from the model."
-    },
     "schedule_kinds": {
       "type": "array",
-      "description": "Which schedules. Default door, window, room.",
+      "description": "Which lists the schedules page shows. Default door, window, room.",
       "items": {
         "type": "string",
         "enum": ["door", "window", "room"]

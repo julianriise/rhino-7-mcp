@@ -13,9 +13,9 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// F5.1 schedules on paper: the door, window and room lists drawn as tables
-/// in page space, beside the plan or on their own sheet, from the same room
-/// and opening records the plan draws. Marks are stamped on the opening
-/// markers here. Export draws the tables again, so they follow the model.
+/// in page space on their own sheet, from the same room and opening records
+/// the plan draws. Marks are stamped on the opening markers here. Export
+/// draws the tables again, so they follow the model.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -183,15 +183,6 @@ public partial class RhinoMCPFunctions
         return tables.Where(t => t.Rows.Count > 0).ToList();
     }
 
-    /// <summary>schedules: plan (beside the plan) or sheet (their own page). Null for none.</summary>
-    private static string ReadSchedulePlace(JObject parameters)
-    {
-        var raw = parameters?["schedules"]?.ToString()?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(raw) || raw == "none") return null;
-        if (raw == "plan" || raw == "sheet") return raw;
-        throw new InvalidOperationException("schedules must be plan or sheet.");
-    }
-
     private static List<string> ReadScheduleKinds(JObject parameters)
     {
         var token = parameters?["schedule_kinds"] as JArray;
@@ -208,19 +199,19 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Draw the blocks in page space with the top-left of the schedule area at
-    /// (left, top) paper mm. Every cell is its own text, stamped with its list,
-    /// line and column, so the smoke reads back what the page shows.
+    /// Draw the blocks in page space from the sheet's top-left margin. Every
+    /// cell is its own text, stamped with its list, line and column, so the
+    /// smoke reads back what the page shows.
     /// </summary>
-    private void DrawSchedules(
-        RhinoDoc doc, RhinoPageView page, string view, string stableId, double left, double top,
-        List<Schedules.Block> blocks, JArray ids)
+    private void DrawSchedules(RhinoDoc doc, RhinoPageView page, string stableId, List<Schedules.Block> blocks, JArray ids)
     {
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
         var pageId = page.MainViewport.Id;
+        const double left = LayoutMarginMm;
+        const double top = A3HeightMm - LayoutMarginMm;
         ObjectAttributes Attr(string role, string kind)
         {
-            var attr = LayoutAttr(layer.Index, pageId, view, stableId);
+            var attr = LayoutAttr(layer.Index, pageId, SchedulesView, stableId);
             attr.SetUserString("forsk:role", role);
             attr.SetUserString("forsk:schedule", kind);
             return attr;
@@ -344,16 +335,10 @@ public partial class RhinoMCPFunctions
         return lists;
     }
 
-    /// <summary>
-    /// Where a page's schedules sit, which lists, and how wide they were laid
-    /// out, kept so export can draw them again in the same place.
-    /// </summary>
-    private static void RememberSchedules(
-        RhinoDoc doc, RhinoPageView page, string place, IList<string> kinds, string stableId, double width)
+    /// <summary>Which lists a schedules page shows, kept so export can draw them again.</summary>
+    private static void RememberSchedules(RhinoDoc doc, RhinoPageView page, IList<string> kinds, string stableId)
     {
-        doc.Strings.SetString(ScheduleMetaSection, page.PageName,
-            place + ";" + string.Join(",", kinds.ToArray()) + ";" + stableId + ";"
-            + width.ToString("0.###", CultureInfo.InvariantCulture));
+        doc.Strings.SetString(ScheduleMetaSection, page.PageName, string.Join(",", kinds.ToArray()) + ";" + stableId);
     }
 
     private static void ForgetSchedules(RhinoDoc doc, string pageName)
@@ -361,61 +346,39 @@ public partial class RhinoMCPFunctions
         if (!string.IsNullOrEmpty(pageName)) doc.Strings.Delete(ScheduleMetaSection, pageName);
     }
 
-    /// <summary>
-    /// Lay the tables out for a place: beside the plan they hug the right
-    /// margin, on their own sheet they start at the left one. Null with a
-    /// reason when they do not fit.
-    /// </summary>
-    private static List<Schedules.Block> PlaceSchedules(
-        List<Schedules.Table> tables, string place, double areaWidth, double areaHeight, out double width, out string why)
+    /// <summary>The tables flowed over the sheet above the footer. Null with a reason when they do not fit.</summary>
+    private static List<Schedules.Block> SheetBlocks(List<Schedules.Table> tables, out double width, out string why)
     {
         why = null;
-        var blocks = Schedules.Flow(tables, areaHeight, out width);
+        var blocks = Schedules.Flow(tables, ScheduleAreaHeight, out width);
         if (blocks == null)
             why = "The schedules do not fit the sheet's height.";
-        else if (place == "plan" && width + Schedules.GapMm > areaWidth / 2.0)
-            why = "The schedules need " + width.ToString("0", CultureInfo.InvariantCulture)
-                + " mm beside the plan, over half the sheet. Put them on their own sheet (schedules: sheet).";
-        else if (place == "sheet" && width > areaWidth)
+        else if (width > A3WidthMm - 2.0 * LayoutMarginMm)
             why = "The schedules need " + width.ToString("0", CultureInfo.InvariantCulture)
                 + " mm, wider than one A3 sheet.";
         return why == null ? blocks : null;
     }
 
-    private static double ScheduleLeft(string place, double width)
-    {
-        return place == "plan" ? A3WidthMm - LayoutMarginMm - width : LayoutMarginMm;
-    }
-
     /// <summary>
-    /// Export draws a page's schedules again from the model, as it bakes the
+    /// Export draws the schedules page again from the model, as it bakes the
     /// plan again, so an edit after layout_pack still shows. Null, or why not:
-    /// lists that grew past the strip beside the plan would run into the
-    /// detail, and a sheet with nothing left to list would print blank.
+    /// a page with nothing left to list would print blank.
     /// </summary>
     private string RefreshSchedules(RhinoDoc doc, RhinoPageView page)
     {
         var raw = doc.Strings.GetValue(ScheduleMetaSection, page.PageName);
         if (string.IsNullOrEmpty(raw)) return null;
         var parts = raw.Split(';');
-        var place = parts[0];
-        var kinds = parts.Length > 1 ? parts[1].Split(',').ToList() : new List<string>(ScheduleKinds);
-        var stableId = parts.Length > 2 ? parts[2] : "";
-        var laidOut = parts.Length > 3 && double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var w)
-            ? w
-            : double.MaxValue;
+        var kinds = parts[0].Split(',').ToList();
+        var stableId = parts.Length > 1 ? parts[1] : "";
         foreach (var obj in ScheduleObjects(doc, page))
             doc.Objects.Delete(obj.Id, true);
         var tables = ScheduleTables(doc, kinds);
         if (tables.Count == 0)
-            return place == "sheet" ? "No doors, windows or rooms left to schedule. Run layout_pack again." : null;
-        var detailW = A3WidthMm - 2.0 * LayoutMarginMm;
-        var blocks = PlaceSchedules(tables, place, detailW, ScheduleAreaHeight, out var width, out var why);
+            return "No doors, windows or rooms left to schedule. Run layout_pack again.";
+        var blocks = SheetBlocks(tables, out _, out var why);
         if (blocks == null) return why;
-        if (place == "plan" && width > laidOut + 0.5)
-            return "The schedules grew past the space beside the plan. Run layout_pack again.";
-        var view = place == "plan" ? "plan" : SchedulesView;
-        DrawSchedules(doc, page, view, stableId, ScheduleLeft(place, width), A3HeightMm - LayoutMarginMm, blocks, new JArray());
+        DrawSchedules(doc, page, stableId, blocks, new JArray());
         return null;
     }
 

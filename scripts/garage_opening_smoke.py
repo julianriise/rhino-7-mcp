@@ -726,8 +726,8 @@ def main() -> int:
                 failures.append("panel daylight " + "; ".join(reasons))
 
         # No scale: the sheet fits the plan (8 x 4 m lands well under 1:100).
-        # F5.1: the door, window and room lists sit beside it on the same sheet.
-        packed = send_command(sock, "layout_pack", {"views": ["plan"], "replace": True, "schedules": "plan"})
+        # F5.1: the door, window and room lists on their own page after it.
+        packed = send_command(sock, "layout_pack", {"views": ["plan", "schedules"], "replace": True})
         print(f"    sheet {packed.get('message')}")
         page = (packed.get("pages") or [{}])[0]
         if page.get("north_arrow") is not True:
@@ -754,11 +754,9 @@ def main() -> int:
         plan_smoke.check_room_tags(rows, page, failures)
         plan_smoke.check_symbol_faces(rows, failures)
         plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
-        schedules = page.get("schedules") or {}
+        sheets = [item for item in packed.get("pages") or [] if item.get("view") == "schedules"]
         markers = plan_smoke.opening_markers(lambda cmd, params: send_command(sock, cmd, params))
-        plan_smoke.check_schedules(schedules, rows, markers, page, "sheet", failures)
-        if schedules.get("place") != "plan":
-            failures.append(f"sheet schedules place={schedules.get('place')} expected beside the plan")
+        plan_smoke.check_schedules(sheets, rows, markers, page, "sheet", failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),
             "flip": symbol_attrs(rows, flip_id),

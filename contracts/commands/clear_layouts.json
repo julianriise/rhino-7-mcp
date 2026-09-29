@@ -10,7 +10,7 @@
       "description": "If set, only these views. Omit to delete every Forsk layout.",
       "items": {
         "type": "string",
-        "enum": ["plan", "north", "east", "south", "west"]
+        "enum": ["plan", "north", "east", "south", "west", "schedules"]
       }
     },
     "dry_run": {

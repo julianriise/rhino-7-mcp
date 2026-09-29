@@ -539,16 +539,26 @@ def opening_markers(send) -> list:
     ]
 
 
-def check_schedules(record, plan_rows, markers, page, label, failures) -> None:
-    """The schedules as layout_pack read them back from the page, against the
-    model: one door row per door marker and one window row per window marker,
-    under the mark (forsk:mark) the marker carries and the plan prints beside
-    it, every mark once; one room row per tagged room, with the name and the
-    area its plan tag prints (the tag is ca. and the row's area)."""
-    lists = (record or {}).get("lists") or {}
+def schedule_rows(sheets) -> dict:
+    """Rows per list over the schedules pages, in page order."""
+    merged = {}
+    for sheet in sheets or []:
+        for kind, found in (((sheet or {}).get("schedules") or {}).get("lists") or {}).items():
+            merged.setdefault(kind, []).extend((found or {}).get("rows") or [])
+    return merged
+
+
+def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
+    """The schedules as layout_pack read them back from its schedules pages,
+    against the model: one door row per door marker and one window row per
+    window marker, under the mark (forsk:mark) the marker carries and the
+    plan prints beside it, every mark once; one room row per tagged room,
+    with the name and the area its plan tag prints (the tag is ca. and the
+    row's area)."""
+    lists = schedule_rows(sheets)
 
     def rows(kind):
-        return (lists.get(kind) or {}).get("rows") or []
+        return lists.get(kind) or []
 
     def attrs(obj):
         return obj.get("attributes") or {}
@@ -561,6 +571,8 @@ def check_schedules(record, plan_rows, markers, page, label, failures) -> None:
     listed = sorted(door_ids + window_ids)
     on_plan = sorted(str(obj.get("text") or "") for obj in plan_rows if attrs(obj).get("forsk:role") == "opening_mark")
     bad = []
+    if not sheets:
+        bad.append("no schedules page")
     if len(door_ids) != len(doors) or len(window_ids) != len(windows):
         bad.append(f"rows doors {len(door_ids)}/{len(doors)} windows {len(window_ids)}/{len(windows)}")
     if "" in marks or len(set(marks)) != len(marks):
