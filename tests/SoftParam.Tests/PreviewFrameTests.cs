@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 
@@ -21,29 +22,28 @@ public class PreviewFrameTests
     {
         public byte[] Pixels;
         public int Stride;
-        public int Bpp;
     }
 
-    // A preview buffer as GetPreviewImage hands it over: BGRA or BGR rows, padded.
-    static Frame Fill(byte b, byte g, byte r, byte a, int bpp = 4)
+    // A locked preview buffer: BGRA rows, padded.
+    static Frame Fill(byte b, byte g, byte r, byte a)
     {
-        var stride = W * bpp + 8;
+        var stride = W * 4 + 8;
         var pixels = new byte[stride * H];
         for (int y = 0; y < H; y++)
         {
             for (int x = 0; x < W; x++)
-                Set(pixels, stride, bpp, x, y, b, g, r, a);
+                Set(pixels, stride, x, y, b, g, r, a);
         }
-        return new Frame { Pixels = pixels, Stride = stride, Bpp = bpp };
+        return new Frame { Pixels = pixels, Stride = stride };
     }
 
-    static void Set(byte[] pixels, int stride, int bpp, int x, int y, byte b, byte g, byte r, byte a)
+    static void Set(byte[] pixels, int stride, int x, int y, byte b, byte g, byte r, byte a)
     {
-        int i = y * stride + x * bpp;
+        int i = y * stride + x * 4;
         pixels[i] = b;
         pixels[i + 1] = g;
         pixels[i + 2] = r;
-        if (bpp == 4) pixels[i + 3] = a;
+        pixels[i + 3] = a;
     }
 
     // Opaque black ink on every grid sample in the first rows, `samples` in all.
@@ -53,14 +53,14 @@ public class PreviewFrameTests
         {
             int x = (n % (W / PreviewFrame.InkStep)) * PreviewFrame.InkStep;
             int y = (n / (W / PreviewFrame.InkStep)) * PreviewFrame.InkStep;
-            Set(frame.Pixels, frame.Stride, frame.Bpp, x, y, 0, 0, 0, 255);
+            Set(frame.Pixels, frame.Stride, x, y, 0, 0, 0, 255);
         }
     }
 
     static PreviewFrame.Attempt Read(Frame frame)
     {
         var copy = new byte[W * 4 * H];
-        var clear = PreviewFrame.CopyOpaque(frame.Pixels, frame.Stride, frame.Bpp, copy, W * 4, W, H);
+        var clear = PreviewFrame.CopyOpaque(frame.Pixels, frame.Stride, copy, W * 4, W, H);
         var dark = PreviewFrame.CountDark(copy, W * 4, 4, W, H, PreviewFrame.InkStep);
         return new PreviewFrame.Attempt { Width = W, Height = H, Dark = dark, Clear = clear };
     }
@@ -99,16 +99,6 @@ public class PreviewFrameTests
     }
 
     [Fact]
-    public void Classify_BlackRgbWithoutAlpha_IsKeptAsInk()
-    {
-        // A 24 bit frame has no alpha: black there is paint, never unpainted.
-        var read = Read(Fill(0, 0, 0, 0, bpp: 3));
-
-        Assert.Equal(0, read.Clear);
-        Assert.Equal(PreviewFrame.Kind.Black, read.Frame);
-    }
-
-    [Fact]
     public void Classify_FewLinesOnPaper_IsPartialAndBlank()
     {
         var frame = Fill(255, 255, 255, 255);
@@ -127,7 +117,7 @@ public class PreviewFrameTests
         for (int y = H / 2; y < H; y++)
         {
             for (int x = 0; x < W; x++)
-                Set(frame.Pixels, frame.Stride, frame.Bpp, x, y, 0, 0, 0, 0);
+                Set(frame.Pixels, frame.Stride, x, y, 0, 0, 0, 0);
         }
         Ink(frame, 120);
         var read = Read(frame);
@@ -156,6 +146,227 @@ public class PreviewFrameTests
 
         Assert.Equal(PreviewFrame.Kind.None, read.Frame);
         Assert.True(read.Blank);
+    }
+
+    // Rhino 7 Mac System.Drawing, the CoreGraphics build in RhCore.framework.
+    // The preview bitmap holds premultiplied RGBA, stride W * 4. GetPixel
+    // hands a pixel over as those bytes. LockBits hands the frame over as
+    // BGRA with the colour un-premultiplied through this table
+    // (ConversionHelpers.CalculateTables).
+    static byte MacUnpremultiply(int alpha, int c)
+        => (byte)(alpha == 0 ? c : Math.Min(255, (255 * c + alpha / 2) / alpha));
+
+    static byte[] MacLockBits(byte[] rgba)
+    {
+        var bgra = new byte[rgba.Length];
+        for (int i = 0; i < rgba.Length; i += 4)
+        {
+            int a = rgba[i + 3];
+            bgra[i] = a < 255 ? MacUnpremultiply(a, rgba[i + 2]) : rgba[i + 2];
+            bgra[i + 1] = a < 255 ? MacUnpremultiply(a, rgba[i + 1]) : rgba[i + 1];
+            bgra[i + 2] = a < 255 ? MacUnpremultiply(a, rgba[i]) : rgba[i];
+            bgra[i + 3] = (byte)a;
+        }
+        return bgra;
+    }
+
+    // SetPixel fills with a generic RGB colour, and the device RGB bitmap
+    // colour-matches it: on the Mac grey 128 lands as 146, black and white
+    // stay. This curve stands in for it.
+    static int SetPixelColour(int rgb)
+    {
+        int Channel(int shift) => (int)Math.Round(255 * Math.Pow(((rgb >> shift) & 255) / 255.0, 1.8 / 2.2));
+        return Channel(0) | (Channel(8) << 8) | (Channel(16) << 16);
+    }
+
+    // copy=pixel, the old path: GetPixel each pixel, unpainted to white, the
+    // rest opaque, SetPixel into the 32bpp ARGB copy. Returns the copy's BGRA.
+    static byte[] PixelPath(byte[] rgba, out long clear)
+    {
+        var bgra = new byte[rgba.Length];
+        clear = 0;
+        for (int i = 0; i < rgba.Length; i += 4)
+        {
+            // Color.FromArgb(d[3], d[0], d[1], d[2])
+            int r = rgba[i], g = rgba[i + 1], b = rgba[i + 2], a = rgba[i + 3];
+            if (PreviewFrame.IsUnpainted(r, g, b, a))
+            {
+                r = g = b = 255;
+                clear++;
+            }
+            int put = SetPixelColour(b | (g << 8) | (r << 16));
+            bgra[i] = (byte)put;
+            bgra[i + 1] = (byte)(put >> 8);
+            bgra[i + 2] = (byte)(put >> 16);
+            bgra[i + 3] = 255;
+        }
+        return bgra;
+    }
+
+    // copy=fast: the frame drawn 1:1 into a 32bpp ARGB bitmap and locked,
+    // copied opaque, each colour SetPixel once.
+    static byte[] FastPath(byte[] rgba, out long clear)
+    {
+        var bgra = new byte[rgba.Length];
+        clear = PreviewFrame.CopyOpaque(MacLockBits(rgba), W * 4, bgra, W * 4, W, H);
+        PreviewFrame.WriteColours(bgra, W * 4, W, H, all => all.Select(SetPixelColour).ToArray());
+        return bgra;
+    }
+
+    static void Paint(byte[] rgba, int x, int y, int r, int g, int b, int a)
+    {
+        int i = (y * W + x) * 4;
+        rgba[i] = (byte)r;
+        rgba[i + 1] = (byte)g;
+        rgba[i + 2] = (byte)b;
+        rgba[i + 3] = (byte)a;
+    }
+
+    static byte[] Native(int r, int g, int b, int a)
+    {
+        var rgba = new byte[W * H * 4];
+        for (int y = 0; y < H; y++)
+        {
+            for (int x = 0; x < W; x++)
+                Paint(rgba, x, y, r, g, b, a);
+        }
+        return rgba;
+    }
+
+    // Wall lines every 8 rows, a grey hatch and an anti-aliased edge between.
+    static void Draw(byte[] rgba, int rows, int lines)
+    {
+        for (int n = 0; n < lines; n++)
+        {
+            int y = (n * 8) % rows;
+            int x0 = (n * 8) / rows * 100;
+            for (int x = x0; x < x0 + 96 && x < W; x++)
+            {
+                Paint(rgba, x, y, 0, 0, 0, 255);
+                Paint(rgba, x, y + 1, 128, 128, 128, 255);
+                Paint(rgba, x, y + 2, 246, 246, 246, 255);
+                Paint(rgba, x, y + 3, 247, 247, 247, 255);
+            }
+        }
+    }
+
+    static byte[] Fixture(string name)
+    {
+        switch (name)
+        {
+            case "sheet":
+            {
+                var rgba = Native(255, 255, 255, 255);
+                Draw(rgba, H, 40);
+                return rgba;
+            }
+            case "black":
+                return Native(0, 0, 0, 255);
+            case "grey band":
+            {
+                // cap3: a light grey copy of the plan over part of the sheet.
+                var rgba = Native(255, 255, 255, 255);
+                Draw(rgba, H, 40);
+                for (int y = 0; y < H * 3 / 5; y++)
+                {
+                    for (int x = 0; x < W; x++)
+                        Paint(rgba, x, y, 231, 231, 231, 255);
+                }
+                return rgba;
+            }
+            case "partly painted":
+            {
+                // The top third painted, the rest the unpainted buffer, and
+                // the rows between half covered: premultiplied, alpha under 255.
+                var rgba = Native(0, 0, 0, 0);
+                for (int y = 0; y < H / 3; y++)
+                {
+                    for (int x = 0; x < W; x++)
+                        Paint(rgba, x, y, 255, 255, 255, 255);
+                }
+                Draw(rgba, H / 3 - 8, 3);
+                for (int x = 0; x < W; x++)
+                {
+                    int a = 1 + (x * 253 / (W - 1));
+                    Paint(rgba, x, H / 3, a, a, a, a);
+                    Paint(rgba, x, H / 3 + 1, 0, 0, 0, a);
+                    Paint(rgba, x, H / 3 + 2, a / 2, a / 3, a / 4, a);
+                    Paint(rgba, x, H / 3 + 3, Math.Min(a, 7), Math.Min(a, 7), Math.Min(a, 7), a);
+                }
+                return rgba;
+            }
+            case "empty":
+                return Native(0, 0, 0, 0);
+            default:
+            {
+                // Any premultiplied pixel: colour never over alpha.
+                var random = new Random(52);
+                var rgba = new byte[W * H * 4];
+                for (int i = 0; i < rgba.Length; i += 4)
+                {
+                    int a = random.Next(3) == 0 ? 255 : random.Next(256);
+                    rgba[i] = (byte)random.Next(a + 1);
+                    rgba[i + 1] = (byte)random.Next(a + 1);
+                    rgba[i + 2] = (byte)random.Next(a + 1);
+                    rgba[i + 3] = (byte)a;
+                }
+                return rgba;
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("sheet", PreviewFrame.Kind.Ink)]
+    [InlineData("black", PreviewFrame.Kind.Black)]
+    [InlineData("grey band", PreviewFrame.Kind.Black)]
+    [InlineData("partly painted", PreviewFrame.Kind.Partial)]
+    [InlineData("empty", PreviewFrame.Kind.Empty)]
+    [InlineData("random", PreviewFrame.Kind.Black)]
+    public void FastCopy_GivesThePixelCopysPixelsAndInk(string fixture, PreviewFrame.Kind kind)
+    {
+        var rgba = Fixture(fixture);
+
+        var pixel = PixelPath(rgba, out var pixelClear);
+        var fast = FastPath(rgba, out var fastClear);
+
+        Assert.Equal(pixel, fast);
+        Assert.Equal(pixelClear, fastClear);
+        int pixelInk = PreviewFrame.CountDark(pixel, W * 4, 4, W, H, PreviewFrame.InkStep);
+        int fastInk = PreviewFrame.CountDark(fast, W * 4, 4, W, H, PreviewFrame.InkStep);
+        Assert.Equal(pixelInk, fastInk);
+        Assert.Equal(kind, PreviewFrame.Classify(W, H, fastInk, fastClear));
+    }
+
+    [Fact]
+    public void Premultiply_UndoesTheMacLockBitsForEveryPremultipliedColour()
+    {
+        for (int a = 0; a < 256; a++)
+        {
+            for (int c = 0; c <= a; c++)
+                Assert.Equal(c, PreviewFrame.Premultiply(a, MacUnpremultiply(a, c)));
+        }
+    }
+
+    [Fact]
+    public void WriteColours_HandsEachColourOverOnce()
+    {
+        var rgba = Fixture("sheet");
+        var bgra = new byte[rgba.Length];
+        PreviewFrame.CopyOpaque(MacLockBits(rgba), W * 4, bgra, W * 4, W, H);
+        int calls = 0;
+        int[] seen = null;
+
+        var count = PreviewFrame.WriteColours(bgra, W * 4, W, H, all =>
+        {
+            calls++;
+            seen = all;
+            return all;
+        });
+
+        Assert.Equal(1, calls);
+        Assert.Equal(5, count);
+        // First seen first: row 0 starts on a wall line.
+        Assert.Equal(new[] { 0x000000, 0xFFFFFF, 0x808080, 0xF6F6F6, 0xF7F7F7 }, seen);
     }
 
     [Theory]

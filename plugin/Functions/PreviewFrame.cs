@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -8,7 +9,8 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// The Mac page preview as bytes. CopyOpaque makes the frame the PDF draws:
 /// a zero-alpha black pixel is an unpainted buffer and turns white, any other
-/// pixel is kept opaque. CountDark samples its ink on a grid. IsBlank is the
+/// pixel is kept opaque. WriteColours puts each colour through SetPixel once,
+/// as the old per-pixel copy did. CountDark samples its ink on a grid. IsBlank is the
 /// retry rule: under InkFloor dark samples, or dark over two fifths of the
 /// grid, is a missed paint, not a sheet. Classify names what a frame was, and
 /// Attempt is one read of a page as a line in /tmp/forsk-print.log. No
@@ -38,10 +40,19 @@ public static class PreviewFrame
     public static bool IsDark(int b0, int b1, int b2) => (b0 + b1 + b2) / 3 < 248;
 
     /// <summary>
-    /// Copy 3 or 4 byte pixels into opaque 4 byte pixels, row by row. Returns
-    /// how many unpainted pixels turned white.
+    /// Colour times alpha, rounded as the Mac System.Drawing rounds it. It
+    /// undoes that library's LockBits un-premultiply for every colour not
+    /// over its alpha, the only colours a CoreGraphics bitmap holds.
     /// </summary>
-    public static long CopyOpaque(byte[] src, int srcStride, int bpp, byte[] dst, int dstStride, int width, int height)
+    public static byte Premultiply(int alpha, int c) => (byte)Math.Min(255, (c * alpha + 127) / 255);
+
+    /// <summary>
+    /// Copy locked BGRA pixels into opaque BGRA pixels, row by row. The Mac
+    /// LockBits un-premultiplies the colour, and GetPixel, which the copy
+    /// used to read, does not, so under full alpha the colour is multiplied
+    /// back first. Returns how many unpainted pixels turned white.
+    /// </summary>
+    public static long CopyOpaque(byte[] src, int srcStride, byte[] dst, int dstStride, int width, int height)
     {
         long clear = 0;
         for (int y = 0; y < height; y++)
@@ -50,13 +61,19 @@ public static class PreviewFrame
             int drow = y * dstStride;
             for (int x = 0; x < width; x++)
             {
-                int s = srow + (x * bpp);
+                int s = srow + (x * 4);
                 int d = drow + (x * 4);
-                if (s + 2 >= src.Length || d + 3 >= dst.Length) continue;
+                if (s + 3 >= src.Length || d + 3 >= dst.Length) continue;
                 byte b0 = src[s];
                 byte b1 = src[s + 1];
                 byte b2 = src[s + 2];
-                byte alpha = bpp == 4 && s + 3 < src.Length ? src[s + 3] : (byte)255;
+                byte alpha = src[s + 3];
+                if (alpha < 255)
+                {
+                    b0 = Premultiply(alpha, b0);
+                    b1 = Premultiply(alpha, b1);
+                    b2 = Premultiply(alpha, b2);
+                }
                 if (IsUnpainted(b0, b1, b2, alpha))
                 {
                     b0 = b1 = b2 = 255;
@@ -70,6 +87,55 @@ public static class PreviewFrame
         }
         return clear;
     }
+
+    /// <summary>
+    /// Hand each colour of an opaque BGRA frame to write, once and as
+    /// 0xRRGGBB, and put the colour it gives back on every pixel of that
+    /// colour. Returns how many colours the frame has.
+    /// </summary>
+    public static int WriteColours(byte[] frame, int stride, int width, int height, Func<int[], int[]> write)
+    {
+        var index = new Dictionary<int, int>();
+        var colours = new List<int>();
+        int last = -1;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * stride + (x * 4);
+                if (i + 2 >= frame.Length) continue;
+                int rgb = Rgb(frame, i);
+                if (rgb == last) continue;
+                last = rgb;
+                if (index.ContainsKey(rgb)) continue;
+                index[rgb] = colours.Count;
+                colours.Add(rgb);
+            }
+        }
+        var written = write(colours.ToArray());
+        last = -1;
+        int put = 0;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * stride + (x * 4);
+                if (i + 2 >= frame.Length) continue;
+                int rgb = Rgb(frame, i);
+                if (rgb != last)
+                {
+                    last = rgb;
+                    put = written[index[rgb]];
+                }
+                frame[i] = (byte)put;
+                frame[i + 1] = (byte)(put >> 8);
+                frame[i + 2] = (byte)(put >> 16);
+            }
+        }
+        return colours.Count;
+    }
+
+    static int Rgb(byte[] frame, int i) => frame[i] | (frame[i + 1] << 8) | (frame[i + 2] << 16);
 
     /// <summary>Dark samples on a grid of the given step.</summary>
     public static int CountDark(byte[] buffer, int stride, int bpp, int width, int height, int step)
@@ -119,8 +185,8 @@ public static class PreviewFrame
     /// <summary>
     /// One read of a page preview. Raw is what GetPreviewImage returned; the
     /// checked frame is the copy (or raw, when the copy failed). Copy is fast
-    /// (locked buffer), pixel (GetPixel per pixel, for an unexpected format),
-    /// raw (copy failed, raw kept) or none (no frame). Idle is false when an
+    /// (drawn once and locked), raw (copy failed, raw kept) or none (no
+    /// frame). Idle is false when an
     /// idle wait ran into its cap. Png is the saved blank frame, failed:Type,
     /// or - for a sheet or no frame.
     /// </summary>

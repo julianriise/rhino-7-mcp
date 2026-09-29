@@ -1046,105 +1046,105 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Own the preview pixels. A zero-alpha black sample is an unpainted
-    /// buffer, not ink; any other sample is kept opaque so the PDF draw
-    /// cannot drop it. Path is fast (locked buffer), pixel (GetPixel, for an
-    /// unexpected format), raw (the copy failed, source returned) or none.
-    /// Clear counts the unpainted pixels that turned white.
+    /// Own the preview pixels, the ones the PDF has always drawn: a zero-alpha
+    /// black sample is an unpainted buffer and turns white, any other is kept
+    /// opaque. Rhino 7 Mac makes the preview from an NSImage, so its
+    /// PixelFormat is Undefined and LockBits throws on it; the copy used to
+    /// GetPixel and SetPixel every pixel, ~75 s a page, and left an NSData per
+    /// pixel for the next wake to release (~15 s). Now the preview is drawn
+    /// 1:1 into a 32bpp ARGB bitmap, an exact CoreGraphics copy, and locked
+    /// once; PreviewFrame makes it opaque, and each colour goes through
+    /// SetPixel once for the same colour match as before. Path is fast, raw
+    /// (the copy failed, source returned) or none. Clear counts the unpainted
+    /// pixels that turned white.
     /// </summary>
     private static Bitmap CopyPreview(Bitmap source, out string path, out long clear)
     {
         clear = 0;
         path = source == null ? "none" : "raw";
         if (source == null || source.Width < 2 || source.Height < 2) return source;
-        var copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        BitmapData srcData = null;
-        BitmapData dstData = null;
+        int width = source.Width;
+        int height = source.Height;
+        Bitmap copy = null;
         try
         {
-            var format = source.PixelFormat;
-            int bpp = 0;
-            if (format == PixelFormat.Format24bppRgb) bpp = 3;
-            else if (format == PixelFormat.Format32bppArgb
-                || format == PixelFormat.Format32bppRgb
-                || format == PixelFormat.Format32bppPArgb) bpp = 4;
-            if (bpp == 0)
+            byte[] frame;
+            int stride;
+            using (var known = new Bitmap(width, height, PixelFormat.Format32bppArgb))
             {
-                var pixels = CopyPreviewPixels(source, copy, out clear);
-                if (!ReferenceEquals(pixels, source))
-                    path = "pixel";
-                return pixels;
+                using (var graphics = Graphics.FromImage(known))
+                    graphics.DrawImage(source, 0, 0, width, height);
+                frame = LockedBytes(known, PixelFormat.Format32bppArgb, out stride);
             }
-
-            var rect = new Rectangle(0, 0, source.Width, source.Height);
-            srcData = source.LockBits(rect, ImageLockMode.ReadOnly, format);
-            dstData = copy.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            int height = source.Height;
-            int width = source.Width;
-            int srcAbs = Math.Abs(srcData.Stride);
-            int dstAbs = Math.Abs(dstData.Stride);
-            var srcBuf = new byte[srcAbs * height];
-            var dstBuf = new byte[dstAbs * height];
-            var srcOrigin = srcData.Stride >= 0
-                ? srcData.Scan0
-                : IntPtr.Add(srcData.Scan0, srcData.Stride * (height - 1));
-            Marshal.Copy(srcOrigin, srcBuf, 0, srcBuf.Length);
-            var unpainted = PreviewFrame.CopyOpaque(srcBuf, srcAbs, bpp, dstBuf, dstAbs, width, height);
-            var dstOrigin = dstData.Stride >= 0
-                ? dstData.Scan0
-                : IntPtr.Add(dstData.Scan0, dstData.Stride * (height - 1));
-            Marshal.Copy(dstBuf, 0, dstOrigin, dstBuf.Length);
+            var opaque = new byte[width * 4 * height];
+            var unpainted = PreviewFrame.CopyOpaque(frame, stride, opaque, width * 4, width, height);
+            PreviewFrame.WriteColours(opaque, width * 4, width, height, SetPixelColours);
+            copy = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            var rect = new Rectangle(0, 0, width, height);
+            var data = copy.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                for (int y = 0; y < height; y++)
+                    Marshal.Copy(opaque, y * width * 4, IntPtr.Add(data.Scan0, y * data.Stride), width * 4);
+            }
+            finally
+            {
+                copy.UnlockBits(data);
+            }
             clear = unpainted;
             path = "fast";
-            return copy;
+            var done = copy;
+            copy = null;
+            return done;
         }
         catch (Exception)
         {
-            copy.Dispose();
             return source;
         }
         finally
         {
-            if (srcData != null)
-            {
-                try { source.UnlockBits(srcData); } catch (Exception) { }
-            }
-            if (dstData != null)
-            {
-                try { copy.UnlockBits(dstData); } catch (Exception) { }
-            }
+            copy?.Dispose();
         }
     }
 
-    private static Bitmap CopyPreviewPixels(Bitmap source, Bitmap copy, out long clear)
+    /// <summary>
+    /// Each 0xRRGGBB colour as SetPixel writes it. SetPixel fills with a
+    /// generic RGB colour and the Mac bitmap colour-matches it (grey 128
+    /// lands as 146), so the PDF keeps the pixels the per-pixel copy wrote.
+    /// </summary>
+    private static int[] SetPixelColours(int[] colours)
     {
-        clear = 0;
+        using (var scratch = new Bitmap(colours.Length, 1, PixelFormat.Format32bppArgb))
+        {
+            for (int i = 0; i < colours.Length; i++)
+            {
+                int rgb = colours[i];
+                scratch.SetPixel(i, 0, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255));
+            }
+            var bgra = LockedBytes(scratch, PixelFormat.Format32bppArgb, out _);
+            var written = new int[colours.Length];
+            for (int i = 0; i < written.Length; i++)
+                written[i] = bgra[i * 4] | (bgra[(i * 4) + 1] << 8) | (bgra[(i * 4) + 2] << 16);
+            return written;
+        }
+    }
+
+    /// <summary>The bitmap's rows in the given format, top row first.</summary>
+    private static byte[] LockedBytes(Bitmap bmp, PixelFormat format, out int stride)
+    {
+        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, format);
         try
         {
-            for (int y = 0; y < source.Height; y++)
-            {
-                for (int x = 0; x < source.Width; x++)
-                {
-                    Color color;
-                    try { color = source.GetPixel(x, y); }
-                    catch (Exception) { color = Color.White; }
-                    if (PreviewFrame.IsUnpainted(color.R, color.G, color.B, color.A))
-                    {
-                        color = Color.White;
-                        clear++;
-                    }
-                    else
-                        color = Color.FromArgb(255, color.R, color.G, color.B);
-                    copy.SetPixel(x, y, color);
-                }
-            }
-            return copy;
+            stride = Math.Abs(data.Stride);
+            var buffer = new byte[stride * bmp.Height];
+            for (int y = 0; y < bmp.Height; y++)
+                Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), buffer, y * stride, stride);
+            return buffer;
         }
-        catch (Exception)
+        finally
         {
-            copy.Dispose();
-            clear = 0;
-            return source;
+            bmp.UnlockBits(data);
         }
     }
 
@@ -1186,27 +1186,8 @@ public partial class RhinoMCPFunctions
         else
             return -1;
 
-        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
-        BitmapData data = null;
-        try
-        {
-            data = bmp.LockBits(rect, ImageLockMode.ReadOnly, format);
-            int stride = data.Stride;
-            int height = bmp.Height;
-            int width = bmp.Width;
-            int absStride = Math.Abs(stride);
-            var buffer = new byte[absStride * height];
-            IntPtr origin = stride >= 0
-                ? data.Scan0
-                : IntPtr.Add(data.Scan0, stride * (height - 1));
-            Marshal.Copy(origin, buffer, 0, buffer.Length);
-            return PreviewFrame.CountDark(buffer, absStride, bpp, width, height, step);
-        }
-        finally
-        {
-            if (data != null)
-                bmp.UnlockBits(data);
-        }
+        var buffer = LockedBytes(bmp, format, out var stride);
+        return PreviewFrame.CountDark(buffer, stride, bpp, bmp.Width, bmp.Height, step);
     }
 
     private static int CountDarkPixels(Bitmap bmp, int step)
