@@ -263,3 +263,52 @@ def test_opening_rooms_placeholder_or_wrong_room_goes_red(row, cell, reason):
     failures = []
     plan_smoke.check_opening_rooms(sheets, markers, rooms, rings, "office fit", failures)
     assert failures and reason in failures[0], failures
+
+
+def _marks_case():
+    def text(role, value, box, paper=None):
+        attributes = {"forsk:role": role}
+        if paper is not None:
+            attributes["forsk:paper_height"] = str(paper)
+        return {"text": value, "attributes": attributes, "bounding_box": [[box[0], box[1], 0], [box[2], box[3], 0]]}
+
+    rows = [
+        text("room_tag", "Wet Room", (1000, 1000, 3000, 1300)),
+        text("room_tag", "ca. 1,4 m²", (1200, 700, 2800, 950)),
+        text("opening_mark", "D08", (1000, 200, 1300, 360), 1.25),
+        text("opening_mark", "V01", (5000, 200, 5300, 360), 1.25),
+    ]
+    return rows, {"marks_on_tags": []}
+
+
+def test_marks_clear_of_tags(capsys):
+    rows, page = _marks_case()
+    failures = []
+    plan_smoke.check_marks(rows, page, "office fit", failures)
+    assert failures == []
+    assert capsys.readouterr().out == "    office fit marks 2 paper 1.25 clear of tags 2/2\n"
+
+
+def test_a_mark_on_a_room_tag_goes_red():
+    """D08 printed over Wet Room's name, as on the office sheet."""
+    rows, page = _marks_case()
+    rows[2]["bounding_box"] = [[1500, 1100, 0], [1800, 1260, 0]]
+    failures = []
+    plan_smoke.check_marks(rows, page, "office fit", failures)
+    assert failures and "1 marks on room tags: D08 on 'Wet Room'" in failures[0]
+
+
+def test_a_full_size_mark_goes_red():
+    rows, page = _marks_case()
+    rows[3]["attributes"]["forsk:paper_height"] = "2.5"
+    failures = []
+    plan_smoke.check_marks(rows, page, "office fit", failures)
+    assert failures and "mark paper [1.25, 2.5] mm expected 1.25" in failures[0]
+
+
+def test_a_mark_layout_pack_could_not_place_goes_red():
+    rows, page = _marks_case()
+    page["marks_on_tags"] = ["D10"]
+    failures = []
+    plan_smoke.check_marks(rows, page, "office fit", failures)
+    assert failures and "no clear spot for D10" in failures[0]

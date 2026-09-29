@@ -668,3 +668,38 @@ def check_opening_rooms(sheets, markers, rooms, rings, label, failures) -> None:
     print(f"    {label} opening rooms {len(markers) - len(wrong)}/{len(markers)} as the plan")
     if wrong:
         failures.append(f"{label} opening rooms: {'; '.join(wrong[:3])}")
+
+
+MARK_PAPER_MM = 1.25  # Schedules.MarkMm, half the room tags' 2.5 mm
+
+
+def check_marks(rows, page, label, failures) -> None:
+    """Door and window marks on the plan: printed at half the tag height,
+    and no mark's box overlaps a room tag's (name or area line)."""
+    marks = [obj for obj in rows if (obj.get("attributes") or {}).get("forsk:role") == "opening_mark"]
+    tags = [obj for obj in rows if (obj.get("attributes") or {}).get("forsk:role") == "room_tag"]
+    bad = []
+    papers = sorted({_number(obj.get("attributes") or {}, "forsk:paper_height") for obj in marks} - {None})
+    if not marks:
+        bad.append("no marks on the plan")
+    elif any(abs(paper - MARK_PAPER_MM) > MARK_PAPER_MM * 0.10 for paper in papers) or not papers:
+        bad.append(f"mark paper {papers} mm expected {MARK_PAPER_MM:g}")
+    hits = []
+    for mark in marks:
+        box = _box(mark)
+        if box is None:
+            continue
+        for tag in tags:
+            other = _box(tag)
+            if other and box[0] < other[2] and other[0] < box[2] and box[1] < other[3] and other[1] < box[3]:
+                hits.append(f"{mark.get('text')} on {tag.get('text')!r}")
+    if hits:
+        bad.append(f"{len(hits)} marks on room tags: {'; '.join(hits[:3])}")
+    listed = page.get("marks_on_tags") or []
+    if listed:
+        bad.append(f"layout_pack found no clear spot for {' '.join(listed[:4])}")
+    clear = len(marks) - len({hit.split(' on ')[0] for hit in hits})
+    paper = papers[-1] if papers else 0
+    print(f"    {label} marks {len(marks)} paper {paper:g} clear of tags {clear}/{len(marks)}")
+    if bad:
+        failures.append(f"{label} marks: {'; '.join(bad)}")

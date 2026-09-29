@@ -752,6 +752,7 @@ def main() -> int:
         plan_smoke.check_fit(page, "sheet", failures)
         plan_smoke.check_footer(page, "sheet", failures)
         plan_smoke.check_room_tags(rows, page, failures)
+        plan_smoke.check_marks(rows, page, "sheet", failures)
         plan_smoke.check_symbol_faces(rows, failures)
         plan_smoke.check_symbols_on_wall(rows, int(page.get("scale") or 0), failures)
         sheets = [item for item in packed.get("pages") or [] if item.get("view") == "schedules"]

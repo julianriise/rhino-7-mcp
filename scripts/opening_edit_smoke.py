@@ -937,6 +937,7 @@ def main() -> int:
             if frames:
                 failures.append(f"{label} frame curves in the plan pack")
             plan_smoke.check_room_tags(rows, page, failures)
+            plan_smoke.check_marks(rows, page, label, failures)
             plan_smoke.check_room_count(page, room_count, label, failures)
             plan_smoke.check_tag_names(rows, found, label, failures)
             plan_smoke.check_symbol_faces(rows, failures)
