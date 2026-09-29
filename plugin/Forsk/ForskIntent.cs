@@ -78,7 +78,19 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "drawings") || HasWord(t, "tegning") || HasWord(t, "tegninger")) return true;
             if (HasWord(t, "schedule") || HasWord(t, "schedules")) return true;
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
+            if (IsDimensions(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
+        }
+
+        /// <summary>The plan's dimensions, unless a door or window is named: its size is an edit.</summary>
+        static bool IsDimensions(string t)
+        {
+            var words = HasWord(t, "dimension") || HasWord(t, "dimensions") || HasWord(t, "dims")
+                || HasWord(t, "målsett") || HasWord(t, "målsetting") || HasWord(t, "målkjede") || HasWord(t, "målkjeder");
+            if (!words) return false;
+            foreach (var opening in new[] { "window", "windows", "door", "doors", "opening", "vindu", "vinduet", "dør", "døra", "døren", "åpning" })
+                if (HasWord(t, opening)) return false;
+            return true;
         }
 
         static bool IsEdit(string t)

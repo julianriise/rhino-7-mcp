@@ -495,7 +495,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["scale_label"] = Str("Title scale text. Unset reads as 1:100.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default pages are plan, north, east, south, west, and schedules. The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default pages are plan, north, east, south, west, and schedules. The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),
@@ -669,12 +669,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Prefer sheet_pack, make2d_view, clear_drawings. "
                     + "Layout pages and a PDF stay available: set_project_meta, layout_pack, export_pdf, clear_layouts. "
                     + "Door, window or room schedules are the schedules page: layout_pack views schedules; schedule_kinds picks the lists. "
+                    + "Dimensions are on the plan sheet: layout_pack views plan draws them from the model. Never draw or type dimensions. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
-                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page. "
+                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page and the plan's dimensions. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";

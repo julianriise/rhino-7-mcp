@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
@@ -24,21 +25,36 @@ public partial class RhinoMCPFunctions
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
         // RoomsNoOutline (no outline to read). Of the
         // tagged rooms, RoomAreasDropped show the name alone (the ca. X m² line
-        // did not fit), and RoomsOverflow are those whose name runs past the
-        // room edge. RoomsUntagged says why, by room id, for each room without
-        // a tag; RoomsOverflowing gives the overflowing names and widths.
+        // did not fit), RoomsLeader have their tag outside the room on a
+        // leader (the name did not fit), and RoomsOverflow are those whose name
+        // runs past the room edge (no clear spot for a leader either).
+        // RoomsUntagged says why, by room id, for each room without a tag;
+        // RoomsLeading and RoomsOverflowing give those names and widths.
         public int Rooms;
         public int RoomAreasDropped;
+        public int RoomsLeader;
         public int RoomsOverflow;
         public int RoomsTooSmall;
         public int RoomsNoOutline;
         public List<string> RoomsUntagged;
+        public List<string> RoomsLeading;
         public List<string> RoomsOverflowing;
         public int Skipped;
         // Openings whose mark (forsk:mark) is printed beside them, and those
         // that found no spot clear of the room tags ("D08 on Wet Room").
         public int Marks;
         public List<string> MarksOnTags;
+        // F5.2: chains drawn (exterior and room), their values, chains with no
+        // clear place (left out), values with no clear spot, and the openings
+        // in an outer wall with those on a drawn facade chain.
+        public int Dims;
+        public int DimsExterior;
+        public int DimsRoom;
+        public int DimTexts;
+        public int DimsSkipped;
+        public int DimsCollisions;
+        public int DimOpenings;
+        public int DimOpeningsShown;
         public string Note;
         public string RoomText;
     }
@@ -70,6 +86,7 @@ public partial class RhinoMCPFunctions
         stats = new PlanStats
         {
             RoomsUntagged = new List<string>(),
+            RoomsLeading = new List<string>(),
             RoomsOverflowing = new List<string>(),
             MarksOnTags = new List<string>()
         };
@@ -110,11 +127,14 @@ public partial class RhinoMCPFunctions
                 "cut", null, null, null, ref box, ref index, ref count);
         }
 
-        // One read of the rooms for the tags and the marks' sides; the marks
-        // are stamped before the symbols queue them. Tags go down first, then
-        // each mark takes the first spot clear of them.
+        // One read of the rooms for the tags, the marks' sides and the room
+        // dimensions; the marks are stamped before the symbols queue them.
+        // Tags go down first (a name too wide for its room on a leader), then
+        // each mark takes the first spot clear of them, then the dimensions
+        // go around all of it.
         var rooms = PlanRooms(doc);
         ScheduleOpenings(doc, rooms);
+        var poche = PocheRings(fillGroups, tol);
         var pending = new List<PendingMark>();
         added += BakeOpeningSymbols(
             doc, layer, scale, cutZ, worldToHld, delta, pattern, tol, rooms, pending,
@@ -123,9 +143,13 @@ public partial class RhinoMCPFunctions
             doc, layer, scale, worldToHld, delta, pattern, tol,
             ref box, ref index, ref count, ref stats);
         var tagBoxes = new List<RoomDetect.Box>();
+        var leaders = new List<RoomDetect.Box>();
         added += BakeRoomTags(
-            doc, layer, scale, worldToHld, delta, rooms, tagBoxes, ref box, ref index, ref count, ref stats);
-        added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, PocheRings(fillGroups, tol),
+            doc, layer, scale, worldToHld, delta, rooms, poche, pattern, tol, tagBoxes, leaders,
+            ref box, ref index, ref count, ref stats);
+        added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, leaders, poche,
+            ref box, ref index, ref count, ref stats);
+        added += BakeDimensions(doc, layer, scale, worldToHld, delta, pending, rooms, poche, pattern, tol,
             ref box, ref index, ref count, ref stats);
 
         foreach (var rect in openings)
@@ -298,20 +322,22 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// The marks beside their openings, Schedules.MarkMm tall on paper, each
-    /// at the first spot Schedules.PlaceMark finds clear of the room tags, of
-    /// the marks placed before it (1 mm on paper), and of the wall poché. A
-    /// mark with no clear spot keeps its first choice and is listed in
-    /// MarksOnTags when it touches a tag.
+    /// at the first spot Schedules.PlaceMark finds clear of the room tags and
+    /// their leaders, of the marks placed before it (1 mm on paper), and of
+    /// the wall poché. A mark with no clear spot keeps its first choice and is
+    /// listed in MarksOnTags when it touches a tag.
     /// </summary>
     private static int BakeMarks(
         RhinoDoc doc, Layer layer, int scale, Transform worldToHld, Vector3d delta,
-        List<PendingMark> pending, List<RoomDetect.Box> tagBoxes, List<List<List<RoomDetect.Pt>>> poche,
+        List<PendingMark> pending, List<RoomDetect.Box> tagBoxes, List<RoomDetect.Box> leaders,
+        List<List<List<RoomDetect.Pt>>> poche,
         ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
     {
         var height = Schedules.MarkMm * scale;
         if (height <= 0) return 0;
         var gap = 1.0 * scale;
         var taken = new List<RoomDetect.Box>(tagBoxes);
+        taken.AddRange(leaders);
         var added = 0;
         foreach (var item in pending)
         {
@@ -586,16 +612,23 @@ public partial class RhinoMCPFunctions
             + b.Y.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Wall faces and clear wall run at one opening, drawing coordinates.</summary>
+    /// <summary>
+    /// Wall faces and clear wall run at one opening, drawing coordinates; or,
+    /// on any stroke, extra stamps (a dimension's chain).
+    /// </summary>
     private sealed class SymbolStamp
     {
         public string Faces;
         public string Run;
+        public IDictionary<string, string> Extra;
     }
 
     private static void StampSymbolLine(ObjectAttributes attr, Curve curve, string part, SymbolStamp faces)
     {
         if (attr == null || curve == null) return;
+        if (faces?.Extra != null)
+            foreach (var pair in faces.Extra)
+                attr.SetUserString(pair.Key, pair.Value);
         if (part != "sill" && part != "frame" && part != "jamb") return;
         var a = curve.PointAtStart;
         var b = curve.PointAtEnd;
@@ -705,7 +738,11 @@ public partial class RhinoMCPFunctions
         Transform worldToHld,
         Vector3d delta,
         List<PlanRoom> rooms,
+        List<List<List<RoomDetect.Pt>>> poche,
+        int pattern,
+        double tol,
         List<RoomDetect.Box> tagBoxes,
+        List<RoomDetect.Box> leaders,
         ref BoundingBox box,
         ref int index,
         ref int count,
@@ -714,6 +751,7 @@ public partial class RhinoMCPFunctions
         var added = 0;
         var texts = new List<string>();
         var height = OpeningTypes.PlanAnnotationHeight(scale);
+        var loose = new List<PlanRoom>();
         foreach (var planRoom in rooms)
         {
             var roomId = planRoom.RoomId;
@@ -732,30 +770,23 @@ public partial class RhinoMCPFunctions
                 stats.RoomsUntagged.Add(who + " " + name + ": " + planRoom.Untagged);
                 continue;
             }
-            var worldRing = planRoom.Ring;
             var inside = planRoom.Inside;
-            var area = planRoom.Area;
-            var stamps = new Dictionary<string, string>();
-            if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
+            var stamps = RoomStamps(roomId);
             var at = new Point3d(inside.X, inside.Y, 0);
-            var ring = new List<Point3d>();
-            foreach (var point in worldRing)
-                ring.Add(ToDrawing(point, worldToHld, delta));
-            var room = RoomStamp(ring);
+            var room = RoomStamp(planRoom.Ring.Select(p => ToDrawing(p, worldToHld, delta)).ToList());
             var origin = ToDrawing(at, worldToHld, delta);
 
             // The tag is the name over ca. X m². A room too small for both shows
-            // its name alone, centred. A name wider than its room is still
-            // placed, centred, and runs past the room edge (overflow). Text
-            // stays 2.5 mm on paper; leader lines come with F5.2.
-            var line = OpeningTypes.RoomTag(area);
+            // its name alone, centred. A name wider than its room goes outside
+            // on a leader once every tag that fits is down. Text stays 2.5 mm
+            // on paper.
+            var line = OpeningTypes.RoomTag(planRoom.Area);
             var areaId = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, stamps, ref box, ref index, ref count, false, out _);
             var nameId = Guid.Empty;
-            var nameWidth = 0.0;
             if (areaId != Guid.Empty)
             {
                 var nameAt = ToDrawing(at + new Vector3d(0, height * 1.15, 0), worldToHld, delta);
-                nameId = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out nameWidth);
+                nameId = AddPlanText(doc, layer, name, nameAt, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out _);
                 if (nameId == Guid.Empty && doc.Objects.Delete(areaId, true))
                 {
                     areaId = Guid.Empty;
@@ -764,44 +795,183 @@ public partial class RhinoMCPFunctions
                 }
             }
             if (nameId == Guid.Empty)
-                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out nameWidth);
+                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, stamps, ref box, ref index, ref count, false, out _);
             if (nameId == Guid.Empty)
             {
-                var overflow = new Dictionary<string, string>(stamps) { ["forsk:overflow"] = "1" };
-                nameId = AddPlanText(doc, layer, name, origin, scale, "room_tag", "name", room, overflow, ref box, ref index, ref count, true, out nameWidth);
-                if (nameId == Guid.Empty)
-                {
-                    // Rhino made no text at all. It is in no count, so the sheet's counts fail.
-                    stats.RoomsUntagged.Add(who + " " + name + ": text not placed");
-                    continue;
-                }
-                var span = new BoundingBox(ring);
-                stats.RoomsOverflow++;
-                stats.RoomsOverflowing.Add(who + " " + name + ": name "
-                    + (nameWidth / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m wide, room "
-                    + ((span.Max.X - span.Min.X) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " x "
-                    + ((span.Max.Y - span.Min.Y) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m");
-            }
-            stats.Rooms++;
-            added++;
-            foreach (var tagId in new[] { nameId, areaId })
-            {
-                var tagBox = tagId == Guid.Empty
-                    ? BoundingBox.Empty
-                    : doc.Objects.FindId(tagId)?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
-                if (tagBox.IsValid)
-                    tagBoxes.Add(new RoomDetect.Box(tagBox.Min.X, tagBox.Min.Y, tagBox.Max.X, tagBox.Max.Y));
-            }
-            if (areaId == Guid.Empty)
-            {
-                stats.RoomAreasDropped++;
+                loose.Add(planRoom);
                 continue;
             }
-            added++;
-            texts.Add(line);
+            added += TagDown(doc, planRoom, nameId, areaId, line, tagBoxes, texts, ref stats);
         }
+        foreach (var planRoom in loose)
+            added += BakeLeaderTag(doc, layer, scale, worldToHld, delta, planRoom, poche, pattern, tol,
+                tagBoxes, leaders, texts, ref box, ref index, ref count, ref stats);
         if (texts.Count > 0)
             stats.RoomText = string.Join(" | ", texts.ToArray());
+        return added;
+    }
+
+    private static Dictionary<string, string> RoomStamps(string roomId)
+    {
+        var stamps = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
+        return stamps;
+    }
+
+    /// <summary>Counts a placed tag and keeps its boxes for the marks and dimensions.</summary>
+    private static int TagDown(
+        RhinoDoc doc, PlanRoom planRoom, Guid nameId, Guid areaId, string line,
+        List<RoomDetect.Box> tagBoxes, List<string> texts, ref PlanStats stats)
+    {
+        stats.Rooms++;
+        foreach (var tagId in new[] { nameId, areaId })
+        {
+            var tagBox = tagId == Guid.Empty
+                ? BoundingBox.Empty
+                : doc.Objects.FindId(tagId)?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            if (tagBox.IsValid)
+                tagBoxes.Add(new RoomDetect.Box(tagBox.Min.X, tagBox.Min.Y, tagBox.Max.X, tagBox.Max.Y));
+        }
+        if (areaId == Guid.Empty)
+        {
+            stats.RoomAreasDropped++;
+            return 1;
+        }
+        texts.Add(line);
+        return 2;
+    }
+
+    /// <summary>
+    /// A room whose name does not fit it: the whole tag (name over ca. X m²)
+    /// outside, at the nearest spot PlanDims.PlaceLeader finds clear of what
+    /// is drawn, with a leader from a dot at the room's tag point. With no
+    /// clear spot the name is still placed, centred, and runs past the room
+    /// edge (overflow).
+    /// </summary>
+    private int BakeLeaderTag(
+        RhinoDoc doc, Layer layer, int scale, Transform worldToHld, Vector3d delta, PlanRoom planRoom,
+        List<List<List<RoomDetect.Pt>>> poche, int pattern, double tol,
+        List<RoomDetect.Box> tagBoxes, List<RoomDetect.Box> leaders, List<string> texts,
+        ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
+    {
+        var height = OpeningTypes.PlanAnnotationHeight(scale);
+        var name = planRoom.Name;
+        var line = OpeningTypes.RoomTag(planRoom.Area);
+        var ring = planRoom.Ring.Select(p => ToDrawing(p, worldToHld, delta)).ToList();
+        var room = RoomStamp(ring);
+        var inside = ToDrawing(new Point3d(planRoom.Inside.X, planRoom.Inside.Y, 0), worldToHld, delta);
+        var span = new BoundingBox(ring);
+        var sizes = (TextWidthOf(doc, name, height) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m wide, room "
+            + ((span.Max.X - span.Min.X) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " x "
+            + ((span.Max.Y - span.Min.Y) / 1000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m";
+        var who = planRoom.Who + " " + name + ": name " + sizes;
+        var stamps = RoomStamps(planRoom.RoomId);
+
+        // The block as Rhino sets it: the name 1.15 heights over the area line.
+        var block = TagBlock(doc, name, line, height);
+        if (block.IsValid && PlanDims.PlaceLeader(
+                new RoomDetect.Pt(inside.X, inside.Y), ring.Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList(),
+                (block.Max.X - block.Min.X) / 2.0, (block.Max.Y - block.Min.Y) / 2.0, scale,
+                PlanObstacles(doc, layer), poche, out var centre, out var lead))
+        {
+            var origin = new Point3d(centre.X - block.Center.X, centre.Y - block.Center.Y, 0);
+            var onLeader = new Dictionary<string, string>(stamps) { ["forsk:leader"] = "1" };
+            var areaId = AddPlanText(doc, layer, line, origin, scale, "room_tag", "area", room, onLeader, ref box, ref index, ref count, true, out _);
+            var nameId = AddPlanText(doc, layer, name, origin + new Vector3d(0, height * 1.15, 0), scale, "room_tag", "name", room, onLeader,
+                ref box, ref index, ref count, true, out _);
+            if (nameId != Guid.Empty)
+            {
+                var ends = new Dictionary<string, string>(stamps)
+                {
+                    ["forsk:line"] = FaceStamp(DrawingPoint(lead.A), DrawingPoint(lead.B))
+                };
+                var added = TagDown(doc, planRoom, nameId, areaId, line, tagBoxes, texts, ref stats);
+                using (var curve = new LineCurve(DrawingPoint(lead.A), DrawingPoint(lead.B)))
+                    added += AddStroke(doc, layer, curve, PlanThinMm, scale, false, pattern, tol,
+                        "room_leader", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = ends });
+                added += AddLeaderDot(doc, layer, DrawingPoint(lead.A), scale, pattern, tol, ends, ref box, ref index, ref count);
+                leaders.Add(PlanDims.SegBox(lead));
+                stats.RoomsLeader++;
+                stats.RoomsLeading.Add(who);
+                return added;
+            }
+            if (areaId != Guid.Empty && doc.Objects.Delete(areaId, true))
+            {
+                index--;
+                count--;
+            }
+        }
+
+        var overflow = new Dictionary<string, string>(stamps) { ["forsk:overflow"] = "1" };
+        var id = AddPlanText(doc, layer, name, inside, scale, "room_tag", "name", room, overflow, ref box, ref index, ref count, true, out _);
+        if (id == Guid.Empty)
+        {
+            // Rhino made no text at all. It is in no count, so the sheet's counts fail.
+            stats.RoomsUntagged.Add(planRoom.Who + " " + name + ": text not placed");
+            return 0;
+        }
+        stats.RoomsOverflow++;
+        stats.RoomsOverflowing.Add(who);
+        return TagDown(doc, planRoom, id, Guid.Empty, line, tagBoxes, texts, ref stats);
+    }
+
+    /// <summary>The name over the area line, as Rhino sets them, about the area line's origin.</summary>
+    private static BoundingBox TagBlock(RhinoDoc doc, string name, string line, double height)
+    {
+        var block = BoundingBox.Empty;
+        foreach (var (text, y) in new[] { (line, 0.0), (name, height * 1.15) })
+        {
+            var plane = Plane.WorldXY;
+            plane.Origin = new Point3d(0, y, 0);
+            using (var entity = PlanAnnotation(doc, text, plane, height))
+            {
+                var part = entity?.GetBoundingBox(true) ?? BoundingBox.Empty;
+                if (!part.IsValid) return BoundingBox.Empty;
+                block.Union(part);
+            }
+        }
+        return block;
+    }
+
+    private static double TextWidthOf(RhinoDoc doc, string text, double height)
+    {
+        using (var entity = PlanAnnotation(doc, text, Plane.WorldXY, height))
+        {
+            var bbox = entity?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            return bbox.IsValid ? bbox.Max.X - bbox.Min.X : 0;
+        }
+    }
+
+    /// <summary>The filled dot a leader starts from.</summary>
+    private static int AddLeaderDot(
+        RhinoDoc doc, Layer layer, Point3d at, int scale, int pattern, double tol, IDictionary<string, string> stamps,
+        ref BoundingBox box, ref int index, ref int count)
+    {
+        Hatch[] hatches;
+        using (var circle = new ArcCurve(new Circle(at, LeaderDotMm * scale / 2.0)))
+        {
+            try { hatches = Hatch.Create(circle, pattern, 0.0, 1.0, Math.Max(tol, 0.01)); }
+            catch (Exception) { hatches = null; }
+        }
+        if (hatches == null) return 0;
+        var added = 0;
+        foreach (var hatch in hatches)
+        {
+            if (hatch == null) continue;
+            var attr = DrawAttr(layer, FormatStableId("d", index), "room_leader", "dot", null);
+            foreach (var pair in stamps)
+                attr.SetUserString(pair.Key, pair.Value);
+            Guid id;
+            try { id = doc.Objects.AddHatch(hatch, attr); }
+            catch (Exception) { id = Guid.Empty; }
+            var dot = hatch.GetBoundingBox(true);
+            hatch.Dispose();
+            if (id == Guid.Empty) continue;
+            if (dot.IsValid) box.Union(dot);
+            index++;
+            count++;
+            added++;
+        }
         return added;
     }
 
@@ -858,10 +1028,11 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Plan text inside <paramref name="room"/>, or running past its edge when
-    /// <paramref name="overflow"/>. Returns its id, or Guid.Empty when it was
-    /// not placed; <paramref name="width"/> is the width Rhino measured for it
-    /// (0 when it never got that far).
+    /// Plan text inside <paramref name="room"/>, or anywhere when
+    /// <paramref name="overflow"/> (running past its edge, or outside on a
+    /// leader). Returns its id, or Guid.Empty when it was not placed;
+    /// <paramref name="width"/> is the width Rhino measured for it (0 when it
+    /// never got that far).
     /// </summary>
     private static Guid AddPlanText(
         RhinoDoc doc,

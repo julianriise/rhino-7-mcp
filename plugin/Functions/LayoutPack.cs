@@ -242,13 +242,18 @@ public partial class RhinoMCPFunctions
             var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
             if (plan)
             {
-                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
-                var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitPlan);
-                if (fitted != strokeScale)
+                // Tags, marks and dimensions keep their paper size, so the
+                // drawing grows with the scale: bake again at the scale the
+                // last bake needs until it holds. After the first round the
+                // scale only goes up, so it cannot swing between two steps.
+                for (var round = 0; round < 4; round++)
                 {
+                    var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitPlan);
+                    if (fitted == strokeScale || (round > 0 && fitted < strokeScale)) break;
                     drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
                     strokeScale = fitted;
                 }
+                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
             }
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
             {
@@ -329,11 +334,24 @@ public partial class RhinoMCPFunctions
                 pageRecord["marks_on_tags"] = new JArray(drawn.MarksOnTags ?? new List<string>());
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
+                pageRecord["rooms_leader"] = drawn.RoomsLeader;
                 pageRecord["rooms_overflow"] = drawn.RoomsOverflow;
                 pageRecord["rooms_too_small"] = drawn.RoomsTooSmall;
                 pageRecord["rooms_no_outline"] = drawn.RoomsNoOutline;
                 pageRecord["rooms_untagged"] = new JArray(drawn.RoomsUntagged ?? new List<string>());
+                pageRecord["rooms_leading"] = new JArray(drawn.RoomsLeading ?? new List<string>());
                 pageRecord["rooms_overflowing"] = new JArray(drawn.RoomsOverflowing ?? new List<string>());
+                pageRecord["dimensions"] = new JObject
+                {
+                    ["chains"] = drawn.Dims.Dims,
+                    ["exterior"] = drawn.Dims.DimsExterior,
+                    ["rooms"] = drawn.Dims.DimsRoom,
+                    ["values"] = drawn.Dims.DimTexts,
+                    ["skipped"] = drawn.Dims.DimsSkipped,
+                    ["collisions"] = drawn.Dims.DimsCollisions,
+                    ["openings"] = drawn.Dims.DimOpenings,
+                    ["openings_shown"] = drawn.Dims.DimOpeningsShown
+                };
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 if (!string.IsNullOrEmpty(drawn.RoomText))
@@ -365,6 +383,8 @@ public partial class RhinoMCPFunctions
                     + drawn.RoofOutline.ToString(CultureInfo.InvariantCulture)
                     + ", room tags "
                     + drawn.RoomTags.ToString(CultureInfo.InvariantCulture)
+                    + ", dimensions "
+                    + drawn.Dims.Dims.ToString(CultureInfo.InvariantCulture)
                     + "."
                     + (string.IsNullOrEmpty(drawn.SymbolNote) ? "" : " " + drawn.SymbolNote);
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());

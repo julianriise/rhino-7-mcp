@@ -422,7 +422,7 @@ public static class RoomDetect
     }
 
     /// <summary>Drops repeated and straight-through vertices.</summary>
-    static List<Pt> Simplify(List<Pt> ring, double tol)
+    public static List<Pt> Simplify(List<Pt> ring, double tol)
     {
         var pts = new List<Pt>(ring);
         var changed = true;

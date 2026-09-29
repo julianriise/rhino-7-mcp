@@ -26,8 +26,12 @@ def layout_pack(
 
     Each page has one parallel Detail of black curves on S-DRAW and a title
     block at the bottom-right. The plan is a cut 1200 mm above the floor.
-    Requires generated walls. replace removes previous Forsk pages for those
-    views so a re-run does not duplicate tabs. Not a PDF.
+    The plan carries dimensions made from the model each time: a chain
+    outside each facade with openings (corner, opening centres, corner), the
+    jogs and overall per side, and each rectangular room's width and depth.
+    A room name too wide for its room sits outside on a leader. Never draw
+    dimensions yourself. Requires generated walls. replace removes previous
+    Forsk pages for those views so a re-run does not duplicate tabs. Not a PDF.
 
     Parameters:
     - paper: A3 only (default A3)

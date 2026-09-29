@@ -22,20 +22,22 @@ public class OfficeRoomsTests
     /// <summary>Same file as the office smoke (OFFICE_DXF_SHA256 in opening_edit_smoke.py).</summary>
     const string OfficeSha256 = "53a6791c04b7602327ccce28653944ad206a0f3eaa7c1629aa7655b754066f93";
 
-    sealed class Entity
+    internal sealed class Entity
     {
         public string Type = "";
         public string Layer = "";
         public string Text = "";
         public double Height;
+        public double Rotation;
+        public double ScaleY = 1;
         public readonly List<Pt> Points = new List<Pt>();
         public Pt End;
     }
 
-    static readonly string OfficePath = Path.Combine(AppContext.BaseDirectory, "fixtures", "office_2D.dxf");
+    internal static readonly string OfficePath = Path.Combine(AppContext.BaseDirectory, "fixtures", "office_2D.dxf");
 
-    /// <summary>ENTITIES of a DXF: layer, 10/20 points, 11/21 end, text, height.</summary>
-    static List<Entity> Entities(string path)
+    /// <summary>ENTITIES of a DXF: layer, 10/20 points, 11/21 end, text, height, insert rotation and Y scale.</summary>
+    internal static List<Entity> Entities(string path)
     {
         var lines = File.ReadAllLines(path);
         var list = new List<Entity>();
@@ -62,6 +64,8 @@ public class OfficeRoomsTests
                 case "8": current.Layer = value; break;
                 case "1": current.Text = value; break;
                 case "40": current.Height = number; break;
+                case "42": current.ScaleY = number; break;
+                case "50": current.Rotation = number; break;
                 case "10": current.Points.Add(new Pt(number, 0)); break;
                 case "20":
                     if (current.Points.Count > 0)
@@ -76,7 +80,7 @@ public class OfficeRoomsTests
     }
 
     /// <summary>A closed ring without repeated vertices, as the wall path keeps it.</summary>
-    static List<Pt> OpenRing(List<Pt> points)
+    internal static List<Pt> OpenRing(List<Pt> points)
     {
         var ring = new List<Pt>();
         foreach (var p in points)
@@ -87,7 +91,7 @@ public class OfficeRoomsTests
         return ring;
     }
 
-    static bool On(Entity e, string layer) => e.Layer.Equals(layer, StringComparison.OrdinalIgnoreCase);
+    internal static bool On(Entity e, string layer) => e.Layer.Equals(layer, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The text Rhino's DXF import stores for a DXF string: it parses the string
@@ -123,7 +127,7 @@ public class OfficeRoomsTests
     /// order gives the live run's ids. The divider is the space_divider line.
     /// Doors are cut in 3D; the wall rings have no gaps.
     /// </summary>
-    static (RoomDetect.Scene Scene, List<RoomDetect.Label> Labels, List<List<Pt>> Rings) Office()
+    internal static (RoomDetect.Scene Scene, List<RoomDetect.Label> Labels, List<List<Pt>> Rings) Office()
     {
         var entities = Entities(OfficePath);
         var scene = new RoomDetect.Scene();
