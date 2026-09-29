@@ -198,6 +198,26 @@ def test_a_marker_that_never_got_a_mark_goes_red():
     assert failures and "a marker without a mark" in failures[0]
 
 
+def _laid_out():
+    return [{"view": "plan", "page": "Forsk — Plan"}, {"view": "schedules", "page": "Forsk — Schedules"}]
+
+
+def test_every_laid_out_page_is_written():
+    failures = []
+    pdf = {"pages": ["Forsk — Plan", "Forsk — Schedules"], "message": "Wrote 2 page(s) to /tmp/x.pdf."}
+    assert plan_smoke.check_pages_written(_laid_out(), pdf, "sheet", failures) == 2
+    assert failures == []
+
+
+def test_a_page_left_out_of_the_pdf_goes_red():
+    """F5.2 smoke: laid out 2, the schedules preview stayed blank, and export wrote 1."""
+    failures = []
+    message = "Wrote 1 page(s) to /tmp/x.pdf. Blank preview: Forsk — Schedules /tmp/forsk-print-page-2.png."
+    pdf = {"pages": ["Forsk — Plan"], "message": message}
+    assert plan_smoke.check_pages_written(_laid_out(), pdf, "office fit", failures) == 1
+    assert failures == [f"office fit schedules page not in the PDF: {message}"]
+
+
 def test_no_markers_read_says_so():
     sheets, plan_rows, _, page = _schedule_case()
     failures = []

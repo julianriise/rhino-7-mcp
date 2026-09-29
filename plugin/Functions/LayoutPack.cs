@@ -594,10 +594,12 @@ public partial class RhinoMCPFunctions
                 Bitmap bmp = null;
                 try
                 {
+                    var start = Environment.TickCount;
                     bmp = CapturePageAfterWait(page, dotsW, dotsH, out var ink, out var attempt);
                     var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
                     var note = (page.PageName ?? "") + " ink " + ink + " " + size
-                        + " attempt " + attempt.ToString(CultureInfo.InvariantCulture);
+                        + " attempt " + attempt.ToString(CultureInfo.InvariantCulture)
+                        + " ms " + unchecked(Environment.TickCount - start).ToString(CultureInfo.InvariantCulture);
                     if (ink <= 0)
                     {
                         var debug = "/tmp/forsk-print-page-" + pageNumber.ToString(CultureInfo.InvariantCulture) + ".png";

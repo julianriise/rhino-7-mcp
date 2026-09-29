@@ -969,8 +969,9 @@ def main() -> int:
                 failures.append(f"{label} pdf {message}")
             elif f"Symbols {openings}" not in message:
                 failures.append(f"{label} export symbols {message}")
-            if schedules and "Forsk — Schedules" not in (pdf.get("pages") or []):
-                failures.append(f"{label} schedules page not in the PDF: {message}")
+            if not capture_failed:
+                laid_out = pages if schedules else [item for item in pages if item.get("view") == "plan"]
+                plan_smoke.check_pages_written(laid_out, pdf, label, failures)
             return page
 
         openings_now = expected - 1 if baked else 0

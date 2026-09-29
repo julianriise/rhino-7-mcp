@@ -1132,7 +1132,9 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Text style of <paramref name="height"/> with dimension scale 1. With
     /// layout-space scaling off, text on the document's own style takes its
-    /// model dimension scale (x100 in the mm templates), on a page too.
+    /// model dimension scale (x100 in the mm templates), on a page too. The
+    /// style is written only when it differs: every plan text and schedules
+    /// cell asks for it, and a write regenerates every text on the style.
     /// </summary>
     private static DimensionStyle OneToOneTextStyle(RhinoDoc doc, string name, double height)
     {
@@ -1149,6 +1151,8 @@ public partial class RhinoMCPFunctions
             if (index < 0) return null;
             return doc.DimStyles.FindName(name);
         }
+        if (Math.Abs(found.TextHeight - height) < 1e-9 && Math.Abs(found.DimensionScale - 1.0) < 1e-9)
+            return found;
         found.TextHeight = height;
         found.DimensionScaleValue = ScaleValue.OneToOne();
         doc.DimStyles.Modify(found, found.Index, false);

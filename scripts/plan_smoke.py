@@ -897,3 +897,15 @@ def check_leaders(rows, label, failures) -> int:
     if bad:
         failures.append(f"{label} leaders: {'; '.join(bad[:3])}")
     return len(rooms)
+
+
+def check_pages_written(laid_out, pdf, label, failures) -> int:
+    """Laid out equals written: every page the export was given is in the
+    PDF. export_pdf leaves out a page whose preview stayed blank and still
+    says it wrote the rest, so each missing page fails here by its view.
+    Returns the pages written of those laid out."""
+    written = {str(name) for name in pdf.get("pages") or []}
+    missing = [item for item in laid_out if str(item.get("page") or "") not in written]
+    for item in missing:
+        failures.append(f"{label} {item.get('view')} page not in the PDF: {pdf.get('message')}")
+    return len(laid_out) - len(missing)

@@ -834,8 +834,7 @@ def main() -> int:
         print(f"    sheet export {message}")
         if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
             failures.append(f"sheet export {message}")
-        if "Forsk — Schedules" not in (pdf.get("pages") or []):
-            failures.append(f"sheet schedules page not in the PDF: {message}")
+        plan_smoke.check_pages_written(packed.get("pages") or [], pdf, "sheet", failures)
         wall_end = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_end.get("forsk:id") != wall_fid or wall_end.get("forsk:thickness") != wall_thick:
             failures.append("plan symbols changed the wall")
