@@ -206,6 +206,97 @@ public static class Schedules
         return 1;
     }
 
+    /// <summary>Paper cap height of a plan mark: half the room tags' 2.5 mm, so marks do not crowd the plan.</summary>
+    public const double MarkMm = 1.25;
+
+    /// <summary>
+    /// A mark to place on the plan, in drawing mm: the wall centre at the
+    /// opening, unit vectors along the wall and across it toward the mark's
+    /// side (MarkSide), the wall's half thickness, the opening's half width,
+    /// the mark text's half extents, and the paper gap times the scale.
+    /// </summary>
+    public sealed class MarkSpot
+    {
+        public RoomDetect.Pt At;
+        public RoomDetect.Pt Along;
+        public RoomDetect.Pt Out;
+        public double HalfThick;
+        public double HalfWidth;
+        public double Hx;
+        public double Hy;
+        public double Gap;
+    }
+
+    /// <summary>
+    /// Where a mark's centre goes. First choice: at the opening's centre, the
+    /// gap clear of the wall face on its side. If the text would come within
+    /// the gap of a room tag or a mark already placed (in taken), the first
+    /// clear spot of: slid along the wall, staying beside its opening; a step
+    /// further out on its side, slid the same way; then the other face. Tags
+    /// are placed first and keep their place. None clear: the first choice,
+    /// and false.
+    /// </summary>
+    public static bool PlaceMark(MarkSpot spot, IList<RoomDetect.Box> taken, out RoomDetect.Pt centre)
+    {
+        var across = Math.Abs(spot.Out.X) * spot.Hx + Math.Abs(spot.Out.Y) * spot.Hy;
+        var along = Math.Abs(spot.Along.X) * spot.Hx + Math.Abs(spot.Along.Y) * spot.Hy;
+        var slide = 2.0 * along + spot.Gap;
+        var shifts = new List<double> { 0.0 };
+        for (var k = 1; k * slide <= spot.HalfWidth + along + 1e-9; k++)
+        {
+            shifts.Add(k * slide);
+            shifts.Add(-k * slide);
+        }
+        var near = spot.HalfThick + spot.Gap + across;
+        var tries = new List<(int Side, double Reach, double Shift)>();
+        foreach (var step in new[] { 0, 1, 2 })
+            foreach (var shift in shifts)
+                tries.Add((1, near + step * (2.0 * across + spot.Gap), shift));
+        foreach (var shift in shifts)
+            tries.Add((-1, near, shift));
+
+        centre = Spot(spot, tries[0].Side, tries[0].Reach, tries[0].Shift);
+        foreach (var (side, reach, shift) in tries)
+        {
+            var at = Spot(spot, side, reach, shift);
+            if (Clear(at, spot, taken))
+            {
+                centre = at;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static RoomDetect.Pt Spot(MarkSpot spot, int side, double reach, double shift)
+    {
+        return new RoomDetect.Pt(
+            spot.At.X + side * spot.Out.X * reach + spot.Along.X * shift,
+            spot.At.Y + side * spot.Out.Y * reach + spot.Along.Y * shift);
+    }
+
+    static bool Clear(RoomDetect.Pt at, MarkSpot spot, IList<RoomDetect.Box> taken)
+    {
+        if (taken == null) return true;
+        var box = MarkBox(at, spot.Hx, spot.Hy);
+        foreach (var other in taken)
+            if (Overlaps(box, other, spot.Gap)) return false;
+        return true;
+    }
+
+    /// <summary>The box of a mark text centred at at.</summary>
+    public static RoomDetect.Box MarkBox(RoomDetect.Pt at, double hx, double hy)
+    {
+        return new RoomDetect.Box(at.X - hx, at.Y - hy, at.X + hx, at.Y + hy);
+    }
+
+    /// <summary>True when two boxes come closer than clearance.</summary>
+    public static bool Overlaps(RoomDetect.Box a, RoomDetect.Box b, double clearance)
+    {
+        return a.MinX < b.MaxX + clearance && b.MinX < a.MaxX + clearance
+            && a.MinY < b.MaxY + clearance && b.MinY < a.MaxY + clearance;
+    }
+
     static List<int> ReadingOrder(IList<Opening> openings)
     {
         var order = new List<int>();

@@ -111,6 +111,84 @@ public class SchedulesTests
         Assert.Equal(1, Schedules.MarkSide(sliding, -1, between));
     }
 
+    // A door in a wall along x at y = 0, 200 thick, 900 wide, at 1:125: gap
+    // 1 mm on paper is 125, a 1.25 mm mark about 280 x 160 drawing mm.
+    static Schedules.MarkSpot Door() => new Schedules.MarkSpot
+    {
+        At = new RoomDetect.Pt(0, 0),
+        Along = new RoomDetect.Pt(1, 0),
+        Out = new RoomDetect.Pt(0, -1),
+        HalfThick = 100,
+        HalfWidth = 450,
+        Hx = 140,
+        Hy = 80,
+        Gap = 125
+    };
+
+    static bool Touches(RoomDetect.Pt centre, Schedules.MarkSpot spot, RoomDetect.Box tag) =>
+        Schedules.Overlaps(Schedules.MarkBox(centre, spot.Hx, spot.Hy), tag, spot.Gap);
+
+    [Fact]
+    public void MarkIsHalfTheRoomTagHeight()
+    {
+        Assert.Equal(2 * Schedules.MarkMm, OpeningTypes.PlanAnnotationHeight(1), 9);
+    }
+
+    [Fact]
+    public void PlaceMark_NothingNear_SitsOutsideAtTheOpeningCentre()
+    {
+        var spot = Door();
+        Assert.True(Schedules.PlaceMark(spot, new List<RoomDetect.Box>(), out var at));
+        Assert.Equal(0, at.X, 9);
+        Assert.Equal(-(100 + 125 + 80), at.Y, 9);
+    }
+
+    [Fact]
+    public void PlaceMark_ATagInTheWay_SlidesAlongTheWall_ClearOfIt()
+    {
+        // Wet Room's name overflows its room and sits where D08 would go.
+        var spot = Door();
+        var tag = new RoomDetect.Box(-300, -500, 200, -250);
+        Assert.True(Schedules.PlaceMark(spot, new[] { tag }, out var at));
+        Assert.False(Touches(at, spot, tag));
+        Assert.True(at.Y < 0, "still outside");
+        Assert.True(Math.Abs(at.X) <= spot.HalfWidth + spot.Hx, "still beside its opening");
+    }
+
+    [Fact]
+    public void PlaceMark_TagAcrossTheWholeOpening_StepsOut_ThenTheOtherFace()
+    {
+        var spot = Door();
+        var wide = new RoomDetect.Box(-1200, -600, 1200, -200);
+        Assert.True(Schedules.PlaceMark(spot, new[] { wide }, out var at));
+        Assert.False(Touches(at, spot, wide));
+        Assert.True(at.Y < -600, "a step further out on its side");
+
+        var blocked = new[] { new RoomDetect.Box(-1200, -3000, 1200, -200) };
+        Assert.True(Schedules.PlaceMark(spot, blocked, out at));
+        Assert.True(at.Y > 0, "the other face");
+        Assert.False(Touches(at, spot, blocked[0]));
+    }
+
+    [Fact]
+    public void PlaceMark_NoClearSpot_KeepsTheFirstChoice_AndSaysSo()
+    {
+        var spot = Door();
+        var everywhere = new[] { new RoomDetect.Box(-5000, -5000, 5000, 5000) };
+        Assert.False(Schedules.PlaceMark(spot, everywhere, out var at));
+        Assert.Equal(-(100 + 125 + 80), at.Y, 9);
+    }
+
+    [Fact]
+    public void PlaceMark_KeepsClearOfAMarkAlreadyPlaced()
+    {
+        var spot = Door();
+        Assert.True(Schedules.PlaceMark(spot, new List<RoomDetect.Box>(), out var first));
+        var taken = new List<RoomDetect.Box> { Schedules.MarkBox(first, spot.Hx, spot.Hy) };
+        Assert.True(Schedules.PlaceMark(spot, taken, out var second));
+        Assert.False(Touches(second, spot, taken[0]));
+    }
+
     [Fact]
     public void DoorTable_PrintsTheRecord_InMarkOrder()
     {

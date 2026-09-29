@@ -326,6 +326,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["fitted"] = fitPlan || scale != requestedScale;
                 pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH) * 0.9 / scale, 3);
                 pageRecord["opening_marks"] = drawn.Marks;
+                pageRecord["marks_on_tags"] = new JArray(drawn.MarksOnTags ?? new List<string>());
                 pageRecord["room_tags"] = drawn.RoomTags;
                 pageRecord["room_areas_dropped"] = drawn.RoomAreasDropped;
                 pageRecord["rooms_overflow"] = drawn.RoomsOverflow;

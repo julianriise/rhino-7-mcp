@@ -35,8 +35,10 @@ public partial class RhinoMCPFunctions
         public List<string> RoomsUntagged;
         public List<string> RoomsOverflowing;
         public int Skipped;
-        // Openings whose mark (forsk:mark) is printed beside them.
+        // Openings whose mark (forsk:mark) is printed beside them, and those
+        // that found no spot clear of the room tags ("D08 on Wet Room").
         public int Marks;
+        public List<string> MarksOnTags;
         public string Note;
         public string RoomText;
     }
@@ -65,7 +67,12 @@ public partial class RhinoMCPFunctions
         ref int count,
         out PlanStats stats)
     {
-        stats = new PlanStats { RoomsUntagged = new List<string>(), RoomsOverflowing = new List<string>() };
+        stats = new PlanStats
+        {
+            RoomsUntagged = new List<string>(),
+            RoomsOverflowing = new List<string>(),
+            MarksOnTags = new List<string>()
+        };
         if (doc == null || layer == null || scale < 1) return false;
         var pattern = SolidPatternIndex(doc);
         if (pattern < 0) return false;
@@ -104,17 +111,21 @@ public partial class RhinoMCPFunctions
         }
 
         // One read of the rooms for the tags and the marks' sides; the marks
-        // are stamped before the symbols print them.
+        // are stamped before the symbols queue them. Tags go down first, then
+        // each mark takes the first spot clear of them.
         var rooms = PlanRooms(doc);
         ScheduleOpenings(doc, rooms);
+        var pending = new List<PendingMark>();
         added += BakeOpeningSymbols(
-            doc, layer, scale, cutZ, worldToHld, delta, pattern, tol, rooms,
+            doc, layer, scale, cutZ, worldToHld, delta, pattern, tol, rooms, pending,
             ref box, ref index, ref count, ref stats);
         added += BakeRoofOutlines(
             doc, layer, scale, worldToHld, delta, pattern, tol,
             ref box, ref index, ref count, ref stats);
+        var tagBoxes = new List<RoomDetect.Box>();
         added += BakeRoomTags(
-            doc, layer, scale, worldToHld, delta, rooms, ref box, ref index, ref count, ref stats);
+            doc, layer, scale, worldToHld, delta, rooms, tagBoxes, ref box, ref index, ref count, ref stats);
+        added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, ref box, ref index, ref count, ref stats);
 
         foreach (var rect in openings)
             rect?.Dispose();
@@ -136,6 +147,7 @@ public partial class RhinoMCPFunctions
         int pattern,
         double tol,
         List<PlanRoom> rooms,
+        List<PendingMark> pending,
         ref BoundingBox box,
         ref int index,
         ref int count,
@@ -216,13 +228,17 @@ public partial class RhinoMCPFunctions
                 stats.Symbols++;
                 added += baked;
                 var mark = marker.Attributes.GetUserString(Schedules.MarkKey);
-                var side = Schedules.MarkSide(record, frame.YInward, OpeningRooms(rooms, plane, frame.HalfThick));
-                if (!string.IsNullOrEmpty(mark)
-                    && AddMarkText(doc, layer, mark, markerId, plane, side, frame.HalfThick, scale,
-                        worldToHld, delta, ref box, ref index, ref count))
+                if (!string.IsNullOrEmpty(mark))
                 {
-                    stats.Marks++;
-                    added++;
+                    pending.Add(new PendingMark
+                    {
+                        Mark = mark,
+                        MarkerId = markerId,
+                        Plane = plane,
+                        Side = Schedules.MarkSide(record, frame.YInward, OpeningRooms(rooms, plane, frame.HalfThick)),
+                        HalfThick = frame.HalfThick,
+                        HalfWidth = frame.VoidHalf
+                    });
                 }
             }
             else
@@ -231,57 +247,104 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
-    /// <summary>
-    /// The opening's mark beside it on the plan, clear of the wall face by
-    /// 1 mm on paper on the given side, 2.5 mm tall on paper like the tags.
-    /// </summary>
-    private static bool AddMarkText(
-        RhinoDoc doc, Layer layer, string mark, string markerId, Plane plane, int side, double halfThick, int scale,
-        Transform worldToHld, Vector3d delta, ref BoundingBox box, ref int index, ref int count)
+    /// <summary>An opening's mark, queued until the room tags are down.</summary>
+    private sealed class PendingMark
     {
-        var height = OpeningTypes.PlanAnnotationHeight(scale);
-        if (height <= 0) return false;
-        var at = MapPlan(0, 0, plane, worldToHld, delta);
-        var outward = MapPlan(0, side, plane, worldToHld, delta) - at;
-        outward.Z = 0;
-        if (!outward.Unitize()) return false;
-        var textPlane = Plane.WorldXY;
-        textPlane.Origin = at;
-        var entity = PlanAnnotation(doc, mark, textPlane, height);
-        if (entity == null) return false;
-        var id = Guid.Empty;
-        try
+        public string Mark;
+        public string MarkerId;
+        public Plane Plane;
+        public int Side;
+        public double HalfThick;
+        public double HalfWidth;
+    }
+
+    /// <summary>
+    /// The marks beside their openings, Schedules.MarkMm tall on paper, each
+    /// at the first spot Schedules.PlaceMark finds clear of the room tags and
+    /// of the marks placed before it, 1 mm on paper. A mark with no clear
+    /// spot keeps its first choice and is listed in MarksOnTags when it
+    /// touches a tag.
+    /// </summary>
+    private static int BakeMarks(
+        RhinoDoc doc, Layer layer, int scale, Transform worldToHld, Vector3d delta,
+        List<PendingMark> pending, List<RoomDetect.Box> tagBoxes,
+        ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
+    {
+        var height = Schedules.MarkMm * scale;
+        if (height <= 0) return 0;
+        var gap = 1.0 * scale;
+        var taken = new List<RoomDetect.Box>(tagBoxes);
+        var added = 0;
+        foreach (var item in pending)
         {
-            var extent = entity.GetBoundingBox(true);
-            var hx = extent.IsValid ? (extent.Max.X - extent.Min.X) / 2.0 : 0.35 * height * mark.Length;
-            var hy = extent.IsValid ? (extent.Max.Y - extent.Min.Y) / 2.0 : 0.75 * height;
-            var reach = halfThick + scale * 1.0 + Math.Abs(outward.X) * hx + Math.Abs(outward.Y) * hy;
-            entity.Translate(outward * reach);
-            var attr = DrawAttr(layer, FormatStableId("d", index), "opening_mark", null, markerId);
-            attr.SetUserString(Schedules.MarkKey, mark);
-            id = doc.Objects.AddText(entity, attr);
+            var at = MapPlan(0, 0, item.Plane, worldToHld, delta);
+            var along = MapPlan(1, 0, item.Plane, worldToHld, delta) - at;
+            var outward = MapPlan(0, item.Side, item.Plane, worldToHld, delta) - at;
+            along.Z = 0;
+            outward.Z = 0;
+            if (!along.Unitize() || !outward.Unitize()) continue;
+            var textPlane = Plane.WorldXY;
+            textPlane.Origin = at;
+            var entity = PlanAnnotation(doc, item.Mark, textPlane, height);
+            if (entity == null) continue;
+            var id = Guid.Empty;
+            var placed = default(RoomDetect.Box);
+            try
+            {
+                var extent = entity.GetBoundingBox(true);
+                var spot = new Schedules.MarkSpot
+                {
+                    At = new RoomDetect.Pt(at.X, at.Y),
+                    Along = new RoomDetect.Pt(along.X, along.Y),
+                    Out = new RoomDetect.Pt(outward.X, outward.Y),
+                    HalfThick = item.HalfThick,
+                    HalfWidth = item.HalfWidth,
+                    Hx = extent.IsValid ? (extent.Max.X - extent.Min.X) / 2.0 : 0.35 * height * item.Mark.Length,
+                    Hy = extent.IsValid ? (extent.Max.Y - extent.Min.Y) / 2.0 : 0.75 * height,
+                    Gap = gap
+                };
+                Schedules.PlaceMark(spot, taken, out var centre);
+                // The text is centred on its plane origin, which is at.
+                entity.Translate(new Vector3d(centre.X - at.X, centre.Y - at.Y, 0));
+                placed = Schedules.MarkBox(centre, spot.Hx, spot.Hy);
+                var attr = DrawAttr(layer, FormatStableId("d", index), "opening_mark", null, item.MarkerId);
+                attr.SetUserString(Schedules.MarkKey, item.Mark);
+                id = doc.Objects.AddText(entity, attr);
+            }
+            catch (Exception)
+            {
+                id = Guid.Empty;
+            }
+            finally
+            {
+                entity.Dispose();
+            }
+            if (id == Guid.Empty) continue;
+            var written = doc.Objects.FindId(id);
+            if (written?.Geometry is TextEntity stored)
+            {
+                var model = stored.TextHeight * (stored.DimensionScale > 0 ? stored.DimensionScale : 1.0);
+                var paper = OpeningTypes.PaperTextHeight(model, scale, doc.LayoutSpaceAnnotationScalingEnabled);
+                written.Attributes.SetUserString("forsk:paper_height", paper.ToString("0.###", CultureInfo.InvariantCulture));
+                written.CommitChanges();
+                var stamp = stored.GetBoundingBox(true);
+                box.Union(stamp);
+                if (stamp.IsValid)
+                    placed = new RoomDetect.Box(stamp.Min.X, stamp.Min.Y, stamp.Max.X, stamp.Max.Y);
+            }
+            foreach (var tag in tagBoxes)
+            {
+                if (!Schedules.Overlaps(placed, tag, 0)) continue;
+                stats.MarksOnTags.Add(item.Mark);
+                break;
+            }
+            taken.Add(placed);
+            index++;
+            count++;
+            added++;
+            stats.Marks++;
         }
-        catch (Exception)
-        {
-            id = Guid.Empty;
-        }
-        finally
-        {
-            entity.Dispose();
-        }
-        if (id == Guid.Empty) return false;
-        var written = doc.Objects.FindId(id);
-        if (written?.Geometry is TextEntity stored)
-        {
-            var model = stored.TextHeight * (stored.DimensionScale > 0 ? stored.DimensionScale : 1.0);
-            var paper = OpeningTypes.PaperTextHeight(model, scale, doc.LayoutSpaceAnnotationScalingEnabled);
-            written.Attributes.SetUserString("forsk:paper_height", paper.ToString("0.###", CultureInfo.InvariantCulture));
-            written.CommitChanges();
-            box.Union(stored.GetBoundingBox(true));
-        }
-        index++;
-        count++;
-        return true;
+        return added;
     }
 
     private bool TrySymbolFrame(
@@ -604,6 +667,7 @@ public partial class RhinoMCPFunctions
         Transform worldToHld,
         Vector3d delta,
         List<PlanRoom> rooms,
+        List<RoomDetect.Box> tagBoxes,
         ref BoundingBox box,
         ref int index,
         ref int count,
@@ -682,6 +746,14 @@ public partial class RhinoMCPFunctions
             }
             stats.Rooms++;
             added++;
+            foreach (var tagId in new[] { nameId, areaId })
+            {
+                var tagBox = tagId == Guid.Empty
+                    ? BoundingBox.Empty
+                    : doc.Objects.FindId(tagId)?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+                if (tagBox.IsValid)
+                    tagBoxes.Add(new RoomDetect.Box(tagBox.Min.X, tagBox.Min.Y, tagBox.Max.X, tagBox.Max.Y));
+            }
             if (areaId == Guid.Empty)
             {
                 stats.RoomAreasDropped++;
