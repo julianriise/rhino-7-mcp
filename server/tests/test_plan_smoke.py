@@ -160,7 +160,9 @@ def test_schedules_match_the_model(capsys):
     failures = []
     plan_smoke.check_schedules(*_schedule_case(), "sheet", failures)
     assert failures == []
-    assert capsys.readouterr().out == "    sheet schedules doors 2 windows 1 rooms 1 marks 3/3, rooms as tagged\n"
+    assert capsys.readouterr().out == (
+        "    sheet schedules doors 2 windows 1 rooms 1 marks 3/3, rooms as tagged, cells fit, pages 1\n"
+    )
 
 
 @pytest.mark.parametrize("break_it, reason", [
@@ -215,3 +217,49 @@ def test_opening_markers_asks_for_the_hidden_layer():
         return {"objects": [marker, block] if visible else [], "has_more": False}
 
     assert plan_smoke.opening_markers(send) == [marker]
+
+
+def test_a_cell_wider_than_its_column_goes_red():
+    sheets, plan_rows, markers, page = _schedule_case()
+    sheets[0]["schedules"]["cells_over"] = ["Sidehengslet 17.9/18 mm"]
+    failures = []
+    plan_smoke.check_schedules(sheets, plan_rows, markers, page, "sheet", failures)
+    assert failures and "1 cells wider than their column: Sidehengslet" in failures[0]
+
+
+def _office_rooms_case():
+    # Two rooms side by side, wall on x = 5000 between them (200 thick), outer wall on y = 0.
+    rings = [
+        (["Kontor"], [(100, 100), (4900, 100), (4900, 4000), (100, 4000)]),
+        (["Gang"], [(5100, 100), (9900, 100), (9900, 4000), (5100, 4000)]),
+    ]
+    rooms = [{"id": "rd-01", "name": "Kontor", "x": 2500, "y": 2000}, {"id": "rd-02", "name": "Gang", "x": 7500, "y": 2000}]
+    markers = [
+        {"attributes": {"forsk:mark": "D01"}, "bounding_box": [[4900, 1000, 0], [5100, 1900, 2100]]},
+        {"attributes": {"forsk:mark": "V01"}, "bounding_box": [[1800, -100, 900], [3000, 100, 2100]]},
+    ]
+    sheets = [{"schedules": {"lists": {
+        "door": {"rows": [{"id": "D01", "cells": ["D01", "Slagdør", "900 × 2100", "V inn", "Kontor / Gang"]}]},
+        "window": {"rows": [{"id": "V01", "cells": ["V01", "Sidehengslet", "1200 × 1200", "900", "Kontor"]}]},
+    }}}]
+    return sheets, markers, rooms, rings
+
+
+def test_opening_rooms_match_the_plan(capsys):
+    failures = []
+    plan_smoke.check_opening_rooms(*_office_rooms_case(), "office fit", failures)
+    assert failures == []
+    assert capsys.readouterr().out == "    office fit opening rooms 2/2 as the plan\n"
+
+
+@pytest.mark.parametrize("row, cell, reason", [
+    ("window", "–", "V01 '–' expected 'Kontor'"),
+    ("window", "Rom", "V01 'Rom' expected 'Kontor'"),
+    ("door", "Kontor", "D01 'Kontor' expected 'Kontor / Gang'"),
+])
+def test_opening_rooms_placeholder_or_wrong_room_goes_red(row, cell, reason):
+    sheets, markers, rooms, rings = _office_rooms_case()
+    sheets[0]["schedules"]["lists"][row]["rows"][0]["cells"][4] = cell
+    failures = []
+    plan_smoke.check_opening_rooms(sheets, markers, rooms, rings, "office fit", failures)
+    assert failures and reason in failures[0], failures

@@ -824,14 +824,14 @@ def main() -> int:
             failures.append(f"large hatch {row}")
         outside_plan(all_objects(sock), failures)
 
-        pdf = send_command(sock, "export_pdf", {
-            "path": "/tmp/forsk-f5-garage-doors.pdf",
-            "layout": "plan",
-        })
+        # The plan, then the schedules page: page 2 of the same PDF.
+        pdf = send_command(sock, "export_pdf", {"path": "/tmp/forsk-f5-garage-doors.pdf"})
         message = str(pdf.get("message") or "")
         print(f"    sheet export {message}")
         if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
             failures.append(f"sheet export {message}")
+        if "Forsk — Schedules" not in (pdf.get("pages") or []):
+            failures.append(f"sheet schedules page not in the PDF: {message}")
         wall_end = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_end.get("forsk:id") != wall_fid or wall_end.get("forsk:thickness") != wall_thick:
             failures.append("plan symbols changed the wall")

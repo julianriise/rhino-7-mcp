@@ -608,10 +608,63 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
         bad.append(f"room rows {len(rows('room'))} for {tagged} tagged rooms")
     if wrong:
         bad.append("rooms not as tagged: " + "; ".join(wrong[:2]))
+    # The page measured every cell text Rhino laid out against its column.
+    over = [item for sheet in sheets or [] for item in ((sheet or {}).get("schedules") or {}).get("cells_over") or []]
+    if over:
+        bad.append(f"{len(over)} cells wider than their column: {'; '.join(over[:2])}")
     matched = len(set(on_plan) & set(listed))
     print(
         f"    {label} schedules doors {len(door_ids)} windows {len(window_ids)} rooms {len(rows('room'))} "
-        f"marks {matched}/{len(marks)}{'' if wrong else ', rooms as tagged'}"
+        f"marks {matched}/{len(marks)}{'' if wrong else ', rooms as tagged'}{'' if over else ', cells fit'}, "
+        f"pages {len(sheets or [])}"
     )
     if bad:
         failures.append(f"{label} schedules: {'; '.join(bad[:3])}")
+
+
+OPENING_PROBE_MM = 300.0  # ScheduleSheet.OpeningProbeMm, past each wall face
+
+
+def check_opening_rooms(sheets, markers, rooms, rings, label, failures) -> None:
+    """Each door and window row's Rom cell against the plan, not a stand-in:
+    a probe a step past each face of the opening lands in a DXF room ring or
+    outside. For each side in a ring, the cell names a room rooms_detect
+    found in that ring; the cell is "–" only when no side is in one. A
+    divided ring (the corridor) accepts either of its rooms."""
+    lists = schedule_rows(sheets)
+    cells = {
+        row.get("id"): row.get("cells") or []
+        for kind in ("door", "window")
+        for row in lists.get(kind) or []
+    }
+    held = [
+        {room.get("name") for room in rooms if _inside((room["x"], room["y"]), ring, 0.0)}
+        for _texts, ring in rings
+    ]
+    wrong = []
+    for marker in markers:
+        mark = (marker.get("attributes") or {}).get("forsk:mark")
+        box = _box(marker)
+        row = cells.get(mark)
+        if row is None or box is None:
+            wrong.append(f"{mark} has no row")
+            continue
+        cell = row[4] if len(row) > 4 else ""
+        listed = [] if cell in ("", "–") else cell.split(" / ")
+        # The marker box is thin across the wall: probe along its short side.
+        dx, dy = box[2] - box[0], box[3] - box[1]
+        across = (0.0, 1.0) if dx >= dy else (1.0, 0.0)
+        reach = min(dx, dy) / 2.0 + OPENING_PROBE_MM
+        cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+        sides = []
+        for sign in (-1.0, 1.0):
+            probe = (cx + sign * across[0] * reach, cy + sign * across[1] * reach)
+            names = next((held[i] for i, (_t, ring) in enumerate(rings) if _inside(probe, ring, 0.0)), None)
+            if names is not None:
+                sides.append(names)
+        if len(listed) != len(sides) or not all(any(name in names for name in listed) for names in sides):
+            expect = " / ".join("|".join(sorted(n for n in names if n)) for names in sides) or "–"
+            wrong.append(f"{mark} {cell!r} expected {expect!r}")
+    print(f"    {label} opening rooms {len(markers) - len(wrong)}/{len(markers)} as the plan")
+    if wrong:
+        failures.append(f"{label} opening rooms: {'; '.join(wrong[:3])}")

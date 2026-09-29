@@ -947,6 +947,7 @@ def main() -> int:
                 sheets = [item for item in pages if item.get("view") == "schedules"]
                 markers = plan_smoke.opening_markers(lambda cmd, args: send_command(sock, cmd, args))
                 plan_smoke.check_schedules(sheets, rows, markers, page, label, failures)
+                plan_smoke.check_opening_rooms(sheets, markers, found, room_rings, label, failures)
                 export = {"path": pdf_name}
             pdf = send_command(sock, "export_pdf", export)
             print(f"    {pdf.get('message')}")
