@@ -23,6 +23,7 @@
     <Compile Include="..\..\plugin\Functions\Schedules.cs" Link="Schedules.cs" />
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />
+    <Compile Include="..\..\plugin\Functions\PreviewFrame.cs" Link="PreviewFrame.cs" />
   </ItemGroup>
 
   <ItemGroup>

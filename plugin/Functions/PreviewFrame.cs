@@ -1,0 +1,179 @@
+using System;
+using System.Globalization;
+using System.IO;
+using System.Text;
+
+namespace RhinoMCPPlugin.Functions;
+
+/// <summary>
+/// The Mac page preview as bytes. CopyOpaque makes the frame the PDF draws:
+/// a zero-alpha black pixel is an unpainted buffer and turns white, any other
+/// pixel is kept opaque. CountDark samples its ink on a grid. IsBlank is the
+/// retry rule: under InkFloor dark samples, or dark over two fifths of the
+/// grid, is a missed paint, not a sheet. Classify names what a frame was, and
+/// Attempt is one read of a page as a line in /tmp/forsk-print.log. No
+/// System.Drawing and no RhinoCommon, so it tests headless; LayoutPack locks
+/// the bitmaps and hands the buffers in.
+/// </summary>
+public static class PreviewFrame
+{
+    /// <summary>Grid step of the ink count. Step 4 on the 2480-wide sheet hits wall poché a few pixels thick and a long hairline.</summary>
+    public const int InkStep = 4;
+    /// <summary>Fewest dark samples a drawn sheet has. Fewer is a missed paint.</summary>
+    public const int InkFloor = 400;
+    /// <summary>Where a blank frame is saved. The garage smoke copies these into forsk's .smoke-preview/.</summary>
+    public const string DebugPngPrefix = "/tmp/forsk-print-";
+
+    /// <summary>
+    /// What a read gave. None: no bitmap. Empty: mostly unpainted pixels
+    /// (transparent black), no ink. White: opaque paper, no ink. Black: dark
+    /// over two fifths of the grid, the opaque black buffer. Partial: some ink,
+    /// under InkFloor. Ink: a sheet. Every kind but Ink is blank.
+    /// </summary>
+    public enum Kind { None, Empty, White, Black, Partial, Ink }
+
+    public static bool IsUnpainted(int b0, int b1, int b2, int alpha)
+        => alpha < 16 && b0 < 8 && b1 < 8 && b2 < 8;
+
+    public static bool IsDark(int b0, int b1, int b2) => (b0 + b1 + b2) / 3 < 248;
+
+    /// <summary>
+    /// Copy 3 or 4 byte pixels into opaque 4 byte pixels, row by row. Returns
+    /// how many unpainted pixels turned white.
+    /// </summary>
+    public static long CopyOpaque(byte[] src, int srcStride, int bpp, byte[] dst, int dstStride, int width, int height)
+    {
+        long clear = 0;
+        for (int y = 0; y < height; y++)
+        {
+            int srow = y * srcStride;
+            int drow = y * dstStride;
+            for (int x = 0; x < width; x++)
+            {
+                int s = srow + (x * bpp);
+                int d = drow + (x * 4);
+                if (s + 2 >= src.Length || d + 3 >= dst.Length) continue;
+                byte b0 = src[s];
+                byte b1 = src[s + 1];
+                byte b2 = src[s + 2];
+                byte alpha = bpp == 4 && s + 3 < src.Length ? src[s + 3] : (byte)255;
+                if (IsUnpainted(b0, b1, b2, alpha))
+                {
+                    b0 = b1 = b2 = 255;
+                    clear++;
+                }
+                dst[d] = b0;
+                dst[d + 1] = b1;
+                dst[d + 2] = b2;
+                dst[d + 3] = 255;
+            }
+        }
+        return clear;
+    }
+
+    /// <summary>Dark samples on a grid of the given step.</summary>
+    public static int CountDark(byte[] buffer, int stride, int bpp, int width, int height, int step)
+    {
+        int dark = 0;
+        for (int y = 0; y < height; y += step)
+        {
+            int row = y * stride;
+            for (int x = 0; x < width; x += step)
+            {
+                int i = row + (x * bpp);
+                if (i + 2 >= buffer.Length) continue;
+                if (IsDark(buffer[i], buffer[i + 1], buffer[i + 2])) dark++;
+            }
+        }
+        return dark;
+    }
+
+    public static int Samples(int width, int height)
+        => ((width + InkStep - 1) / InkStep) * ((height + InkStep - 1) / InkStep);
+
+    /// <summary>True when the frame is not a sheet, so the page is read again.</summary>
+    public static bool IsBlank(int width, int height, int dark)
+        => Classify(width, height, dark, 0) != Kind.Ink;
+
+    public static Kind Classify(int width, int height, int dark, long clear)
+    {
+        if (width < 2 || height < 2) return Kind.None;
+        if (dark * 5L > Samples(width, height) * 2L) return Kind.Black;
+        if (dark == 0) return clear * 2 > (long)width * height ? Kind.Empty : Kind.White;
+        if (dark < InkFloor) return Kind.Partial;
+        return Kind.Ink;
+    }
+
+    /// <summary>A blank frame's PNG, named by export, page and attempt so no read overwrites another.</summary>
+    public static string DebugPngPath(string pdfPath, int page, int attempt)
+    {
+        var stem = new StringBuilder();
+        foreach (var c in Path.GetFileNameWithoutExtension(pdfPath ?? "") ?? "")
+            stem.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '-');
+        if (stem.Length == 0) stem.Append("pdf");
+        return DebugPngPrefix + stem
+            + "-p" + page.ToString(CultureInfo.InvariantCulture)
+            + "-a" + attempt.ToString(CultureInfo.InvariantCulture) + ".png";
+    }
+
+    /// <summary>
+    /// One read of a page preview. Raw is what GetPreviewImage returned; the
+    /// checked frame is the copy (or raw, when the copy failed). Copy is fast
+    /// (locked buffer), pixel (GetPixel per pixel, for an unexpected format),
+    /// raw (copy failed, raw kept) or none (no frame). Idle is false when an
+    /// idle wait ran into its cap. Png is the saved blank frame, failed:Type,
+    /// or - for a sheet or no frame.
+    /// </summary>
+    public sealed class Attempt
+    {
+        public string Pdf = "";
+        public int Page;
+        public string PageName = "";
+        public int Number;
+        public int Of;
+        public int RawWidth;
+        public int RawHeight;
+        public string Format = "-";
+        public string Copy = "none";
+        public int Width;
+        public int Height;
+        public int Dark;
+        public long Clear;
+        public bool Idle = true;
+        public long PrepMs;
+        public long WakeMs;
+        public long IdleMs;
+        public long PreviewMs;
+        public long CopyMs;
+        public long CheckMs;
+        public string Png = "-";
+
+        public Kind Frame => Classify(Width, Height, Dark, Clear);
+        public bool Blank => IsBlank(Width, Height, Dark);
+
+        public string LogLine()
+        {
+            var inv = CultureInfo.InvariantCulture;
+            var raw = RawWidth > 0 ? RawWidth.ToString(inv) + "x" + RawHeight.ToString(inv) : "null";
+            var name = string.IsNullOrWhiteSpace(PageName) ? "-" : PageName.Trim().Replace(' ', '_');
+            return "capture " + Pdf
+                + " p" + Page.ToString(inv) + " " + name
+                + " a" + Number.ToString(inv) + "/" + Of.ToString(inv)
+                + " frame=" + Frame.ToString().ToLowerInvariant()
+                + " blank=" + (Blank ? "yes" : "no")
+                + " ink=" + Dark.ToString(inv) + "/" + (Width < 2 || Height < 2 ? 0 : Samples(Width, Height)).ToString(inv)
+                + " clear=" + Clear.ToString(inv)
+                + " raw=" + raw
+                + " fmt=" + Format
+                + " copy=" + Copy
+                + " idle=" + (Idle ? "fired" : "cap")
+                + " ms=prep:" + PrepMs.ToString(inv)
+                + ",wake:" + WakeMs.ToString(inv)
+                + ",idle:" + IdleMs.ToString(inv)
+                + ",preview:" + PreviewMs.ToString(inv)
+                + ",copy:" + CopyMs.ToString(inv)
+                + ",check:" + CheckMs.ToString(inv)
+                + " png=" + Png;
+        }
+    }
+}

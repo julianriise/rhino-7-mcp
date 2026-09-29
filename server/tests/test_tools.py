@@ -3729,7 +3729,10 @@ class TestPrintGuards:
         assert "DrawBitmap" in src
         assert "forsk-print.log" in src
         assert "capture failed after activate/Wait" in src
-        assert "forsk-print-page-" in src
+        frame = self._text("plugin", "Functions", "PreviewFrame.cs")
+        assert "PreviewFrame.DebugPngPath" in src
+        assert 'DebugPngPrefix = "/tmp/forsk-print-"' in frame
+        assert "InkFloor = 400" in frame
         assert "MacPreviewAttempts = 2" in src
         symbols = self._text("plugin", "Functions", "PlanSymbols.cs")
         assert "OpenRibbon" in symbols
@@ -3738,7 +3741,8 @@ class TestPrintGuards:
         assert "ClosedBand" in ribbon
         fill = bake[bake.index("private static int BakeSectionFills"):bake.index("private struct GreyscaleDrawing")]
         assert "HatchHasWildArc" not in fill
-        assert "const int dense = 4" in src
+        assert "const int dense = PreviewFrame.InkStep" in src
+        assert "InkStep = 4" in frame
         assert "bmp.Width / 40" not in src
         assert "RhinoApp.Wait()" in src
         assert "RhinoApp.Idle" in src

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
@@ -28,9 +29,10 @@ namespace RhinoMCPPlugin.Functions;
 /// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
 /// wrote a white sheet, so Mac export activates each layout, redraws, waits,
 /// then draws GetPreviewImage into the PDF. A blank frame is a paint race:
-/// that page is activated again, up to five times. Pages that have ink are
-/// still written. Each export appends a line to
-/// /tmp/forsk-print.log. AddPageView width and height are millimetres
+/// that page is activated again, MacPreviewAttempts reads in all. Pages that
+/// have ink are still written. Each export appends a line to
+/// /tmp/forsk-print.log, and one capture line per read (PreviewFrame); a
+/// blank frame is saved as a PNG beside it. AddPageView width and height are millimetres
 /// (A3 landscape 420 x 297). Detail corners and the title block are converted
 /// into the document page units.
 /// </summary>
@@ -583,6 +585,7 @@ public partial class RhinoMCPFunctions
         var blanks = new List<string>();
         var blankLabels = new List<string>();
         var shots = new List<Bitmap>();
+        var reads = new List<PreviewRead>();
         try
         {
             FocusRhino();
@@ -595,18 +598,16 @@ public partial class RhinoMCPFunctions
                 try
                 {
                     var start = Environment.TickCount;
-                    bmp = CapturePageAfterWait(page, dotsW, dotsH, out var ink, out var attempt);
+                    bmp = CapturePageAfterWait(page, pageNumber, full, dotsW, dotsH, reads, out var ink, out var attempt);
                     var size = bmp == null ? "null" : bmp.Width + "x" + bmp.Height;
                     var note = (page.PageName ?? "") + " ink " + ink + " " + size
                         + " attempt " + attempt.ToString(CultureInfo.InvariantCulture)
                         + " ms " + unchecked(Environment.TickCount - start).ToString(CultureInfo.InvariantCulture);
                     if (ink <= 0)
                     {
-                        var debug = "/tmp/forsk-print-page-" + pageNumber.ToString(CultureInfo.InvariantCulture) + ".png";
-                        if (!SaveDebugPng(bmp, debug))
-                            note += " debug save failed " + debug;
-                        else
-                            note += " " + debug;
+                        // The last read's PNG; LogPreviewReads saves it once every page is read.
+                        var debug = reads.Count > 0 ? reads[reads.Count - 1].Log.Png : "-";
+                        note += " " + debug;
                         blanks.Add(debug);
                         var pageName = string.IsNullOrEmpty(page.PageName)
                             ? "page " + pageNumber.ToString(CultureInfo.InvariantCulture)
@@ -676,6 +677,7 @@ public partial class RhinoMCPFunctions
         }
         finally
         {
+            LogPreviewReads(reads);
             foreach (var shot in shots)
             {
                 if (shot != null) shot.Dispose();
@@ -683,20 +685,54 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    // One read of a page preview and, when it was blank, its frame for the debug PNG.
+    private sealed class PreviewRead
+    {
+        public PreviewFrame.Attempt Log;
+        public Bitmap Frame;
+    }
+
+    /// <summary>
+    /// Once every page is read: save each blank frame as a PNG and log every
+    /// read, one line each. Saving waits until here so it cannot change the
+    /// time between reads.
+    /// </summary>
+    private static void LogPreviewReads(List<PreviewRead> reads)
+    {
+        foreach (var read in reads)
+        {
+            if (read.Frame != null)
+            {
+                var error = SaveDebugPng(read.Frame, read.Log.Png);
+                if (error != null)
+                    read.Log.Png = "failed:" + error;
+                read.Frame.Dispose();
+                read.Frame = null;
+            }
+            AppendPrintLog(read.Log.LogLine());
+        }
+    }
+
     /// <summary>
     /// Page active, detail not active, drawing layers only, then paint.
     /// The paper and the detail stay Wireframe. Curves are already black.
     /// </summary>
-    private void PrepareMacPage(RhinoPageView page)
+    private void PrepareMacPage(RhinoPageView page, PreviewFrame.Attempt log)
     {
         if (page == null) return;
+        var clock = Stopwatch.StartNew();
         var doc = page.Document ?? RhinoDoc.ActiveDoc;
         var view = ViewKeyForPage(page);
         if (doc != null && view != SchedulesView && CountPrintDrawings(doc, view) == 0)
             EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
         ApplyPageDrawingDisplay(doc, page);
+        log.PrepMs = clock.ElapsedMilliseconds;
+        clock.Restart();
         WakePagePreview(doc, page);
-        WaitForOneIdle();
+        log.WakeMs = clock.ElapsedMilliseconds;
+        clock.Restart();
+        log.Idle = WaitForOneIdle();
+        log.IdleMs = clock.ElapsedMilliseconds;
     }
 
     /// <summary>
@@ -850,61 +886,95 @@ public partial class RhinoMCPFunctions
         return null;
     }
 
-    private Bitmap CapturePageAfterWait(RhinoPageView page, int dotsW, int dotsH, out int ink, out int attempt)
+    /// <summary>
+    /// Read the page until a frame is a sheet. Every read goes into reads for
+    /// the print log; a blank frame is kept there for its debug PNG. On a
+    /// miss, attempt is the number of reads made and ink is 0.
+    /// </summary>
+    private Bitmap CapturePageAfterWait(
+        RhinoPageView page, int pageNumber, string pdfPath, int dotsW, int dotsH,
+        List<PreviewRead> reads, out int ink, out int attempt)
     {
         var size = new Size(dotsW, dotsH);
-        Bitmap bmp = null;
         ink = 0;
-        attempt = 0;
         for (attempt = 1; attempt <= MacPreviewAttempts; attempt++)
         {
-            if (bmp != null)
+            var log = new PreviewFrame.Attempt
             {
-                bmp.Dispose();
-                bmp = null;
-            }
-            PrepareMacPage(page);
+                Pdf = Path.GetFileName(pdfPath),
+                Page = pageNumber,
+                PageName = ShortPageName(page),
+                Number = attempt,
+                Of = MacPreviewAttempts
+            };
+            PrepareMacPage(page, log);
             if (attempt > 1)
             {
                 // The first frame after the modal can still be unpainted.
                 // Pause, then one more idle, before reading the preview again.
+                var clock = Stopwatch.StartNew();
                 var start = Environment.TickCount;
                 while (unchecked(Environment.TickCount - start) < 150)
                     RhinoApp.Wait();
-                WaitForOneIdle();
+                if (!WaitForOneIdle())
+                    log.Idle = false;
+                log.IdleMs += clock.ElapsedMilliseconds;
             }
-            var raw = page.GetPreviewImage(size, false);
-            bmp = CopyPreview(raw);
-            if (bmp != null && !ReferenceEquals(bmp, raw))
-                raw?.Dispose();
-            else
-                bmp = raw;
-            ink = CountDarkSamples(bmp);
+            var bmp = ReadPreview(page, size, log);
+            var read = new PreviewRead { Log = log };
+            reads.Add(read);
             // A near-uniform frame is a missed paint: all white, or the opaque
             // black buffer. It is not a sheet. Keep looking.
-            if (!IsUniformPreview(bmp, ink))
+            if (!log.Blank)
+            {
+                ink = log.Dark;
                 return bmp;
+            }
+            if (bmp != null)
+            {
+                read.Frame = bmp;
+                log.Png = PreviewFrame.DebugPngPath(pdfPath, pageNumber, attempt);
+            }
         }
-        if (bmp != null && IsUniformPreview(bmp, ink))
+        attempt = MacPreviewAttempts;
+        return null;
+    }
+
+    /// <summary>One GetPreviewImage, copied and counted, each step timed into the log.</summary>
+    private static Bitmap ReadPreview(RhinoPageView page, Size size, PreviewFrame.Attempt log)
+    {
+        var clock = Stopwatch.StartNew();
+        var raw = page.GetPreviewImage(size, false);
+        log.PreviewMs = clock.ElapsedMilliseconds;
+        if (raw != null)
         {
-            bmp.Dispose();
-            bmp = null;
-            ink = 0;
+            log.RawWidth = raw.Width;
+            log.RawHeight = raw.Height;
+            log.Format = raw.PixelFormat.ToString();
         }
+        clock.Restart();
+        var bmp = CopyPreview(raw, out var copy, out var clear);
+        if (bmp != null && !ReferenceEquals(bmp, raw))
+            raw?.Dispose();
+        else
+            bmp = raw;
+        log.CopyMs = clock.ElapsedMilliseconds;
+        log.Copy = copy;
+        log.Clear = clear;
+        clock.Restart();
+        log.Dark = CountDarkSamples(bmp);
+        log.Width = bmp?.Width ?? 0;
+        log.Height = bmp?.Height ?? 0;
+        log.CheckMs = clock.ElapsedMilliseconds;
         return bmp;
     }
 
-    /// <summary>
-    /// True when the preview is empty paper or a black framebuffer.
-    /// A drawn A3 sheet is mostly paper with a few percent of ink.
-    /// </summary>
-    private static bool IsUniformPreview(Bitmap bmp, int dark)
+    private static string ShortPageName(RhinoPageView page)
     {
-        if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return true;
-        int samples = ((bmp.Width + 3) / 4) * ((bmp.Height + 3) / 4);
-        if (samples < 1) return true;
-        if (dark < 400) return true;
-        return dark * 5 > samples * 2;
+        var name = page?.PageName ?? "";
+        return name.StartsWith(LayoutPagePrefix, StringComparison.Ordinal)
+            ? name.Substring(LayoutPagePrefix.Length)
+            : name;
     }
 
     private static void UseModelView(RhinoDoc doc)
@@ -923,7 +993,8 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static void WaitForOneIdle()
+    /// <summary>Pump until Rhino goes idle once, at most 800 ms. False when the cap ran out first.</summary>
+    private static bool WaitForOneIdle()
     {
         var idle = false;
         EventHandler handler = null;
@@ -944,6 +1015,7 @@ public partial class RhinoMCPFunctions
             if (!idle)
                 RhinoApp.Idle -= handler;
         }
+        return idle;
     }
 
     private static void FocusRhino()
@@ -959,27 +1031,31 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static bool SaveDebugPng(Bitmap bmp, string path)
+    /// <summary>Null when saved, else the exception type.</summary>
+    private static string SaveDebugPng(Bitmap bmp, string path)
     {
-        if (bmp == null || string.IsNullOrEmpty(path)) return false;
         try
         {
-            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            return true;
+            bmp.Save(path, ImageFormat.Png);
+            return null;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return false;
+            return ex.GetType().Name;
         }
     }
 
     /// <summary>
     /// Own the preview pixels. A zero-alpha black sample is an unpainted
     /// buffer, not ink; any other sample is kept opaque so the PDF draw
-    /// cannot drop it.
+    /// cannot drop it. Path is fast (locked buffer), pixel (GetPixel, for an
+    /// unexpected format), raw (the copy failed, source returned) or none.
+    /// Clear counts the unpainted pixels that turned white.
     /// </summary>
-    private static Bitmap CopyPreview(Bitmap source)
+    private static Bitmap CopyPreview(Bitmap source, out string path, out long clear)
     {
+        clear = 0;
+        path = source == null ? "none" : "raw";
         if (source == null || source.Width < 2 || source.Height < 2) return source;
         var copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
         BitmapData srcData = null;
@@ -992,7 +1068,13 @@ public partial class RhinoMCPFunctions
             else if (format == PixelFormat.Format32bppArgb
                 || format == PixelFormat.Format32bppRgb
                 || format == PixelFormat.Format32bppPArgb) bpp = 4;
-            if (bpp == 0) return CopyPreviewPixels(source, copy);
+            if (bpp == 0)
+            {
+                var pixels = CopyPreviewPixels(source, copy, out clear);
+                if (!ReferenceEquals(pixels, source))
+                    path = "pixel";
+                return pixels;
+            }
 
             var rect = new Rectangle(0, 0, source.Width, source.Height);
             srcData = source.LockBits(rect, ImageLockMode.ReadOnly, format);
@@ -1007,39 +1089,13 @@ public partial class RhinoMCPFunctions
                 ? srcData.Scan0
                 : IntPtr.Add(srcData.Scan0, srcData.Stride * (height - 1));
             Marshal.Copy(srcOrigin, srcBuf, 0, srcBuf.Length);
-            for (int y = 0; y < height; y++)
-            {
-                int srow = y * srcAbs;
-                int drow = y * dstAbs;
-                for (int x = 0; x < width; x++)
-                {
-                    int s = srow + (x * bpp);
-                    int d = drow + (x * 4);
-                    if (s + 2 >= srcBuf.Length || d + 3 >= dstBuf.Length) continue;
-                    byte b0 = srcBuf[s];
-                    byte b1 = srcBuf[s + 1];
-                    byte b2 = srcBuf[s + 2];
-                    byte alpha = bpp == 4 && s + 3 < srcBuf.Length ? srcBuf[s + 3] : (byte)255;
-                    if (alpha < 16 && b0 < 8 && b1 < 8 && b2 < 8)
-                    {
-                        dstBuf[d] = 255;
-                        dstBuf[d + 1] = 255;
-                        dstBuf[d + 2] = 255;
-                        dstBuf[d + 3] = 255;
-                    }
-                    else
-                    {
-                        dstBuf[d] = b0;
-                        dstBuf[d + 1] = b1;
-                        dstBuf[d + 2] = b2;
-                        dstBuf[d + 3] = 255;
-                    }
-                }
-            }
+            var unpainted = PreviewFrame.CopyOpaque(srcBuf, srcAbs, bpp, dstBuf, dstAbs, width, height);
             var dstOrigin = dstData.Stride >= 0
                 ? dstData.Scan0
                 : IntPtr.Add(dstData.Scan0, dstData.Stride * (height - 1));
             Marshal.Copy(dstBuf, 0, dstOrigin, dstBuf.Length);
+            clear = unpainted;
+            path = "fast";
             return copy;
         }
         catch (Exception)
@@ -1060,8 +1116,9 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static Bitmap CopyPreviewPixels(Bitmap source, Bitmap copy)
+    private static Bitmap CopyPreviewPixels(Bitmap source, Bitmap copy, out long clear)
     {
+        clear = 0;
         try
         {
             for (int y = 0; y < source.Height; y++)
@@ -1071,8 +1128,11 @@ public partial class RhinoMCPFunctions
                     Color color;
                     try { color = source.GetPixel(x, y); }
                     catch (Exception) { color = Color.White; }
-                    if (color.A < 16 && color.R < 8 && color.G < 8 && color.B < 8)
+                    if (PreviewFrame.IsUnpainted(color.R, color.G, color.B, color.A))
+                    {
                         color = Color.White;
+                        clear++;
+                    }
                     else
                         color = Color.FromArgb(255, color.R, color.G, color.B);
                     copy.SetPixel(x, y, color);
@@ -1083,6 +1143,7 @@ public partial class RhinoMCPFunctions
         catch (Exception)
         {
             copy.Dispose();
+            clear = 0;
             return source;
         }
     }
@@ -1090,9 +1151,8 @@ public partial class RhinoMCPFunctions
     private static int CountDarkSamples(Bitmap bmp)
     {
         if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return 0;
-        // Step 4 on the 2480-wide sheet hits wall poché a few pixels thick
-        // and a long hairline. A locked buffer keeps that grid cheap.
-        const int dense = 4;
+        // A locked buffer keeps the ink grid cheap.
+        const int dense = PreviewFrame.InkStep;
         var format = bmp.PixelFormat;
         bool direct = format == PixelFormat.Format32bppArgb
             || format == PixelFormat.Format32bppRgb
@@ -1140,19 +1200,7 @@ public partial class RhinoMCPFunctions
                 ? data.Scan0
                 : IntPtr.Add(data.Scan0, stride * (height - 1));
             Marshal.Copy(origin, buffer, 0, buffer.Length);
-            int dark = 0;
-            for (int y = 0; y < height; y += step)
-            {
-                int row = y * absStride;
-                for (int x = 0; x < width; x += step)
-                {
-                    int i = row + (x * bpp);
-                    if (i + 2 >= buffer.Length) continue;
-                    int sum = buffer[i] + buffer[i + 1] + buffer[i + 2];
-                    if (sum / 3 < 248) dark++;
-                }
-            }
-            return dark;
+            return PreviewFrame.CountDark(buffer, absStride, bpp, width, height, step);
         }
         finally
         {
@@ -1172,7 +1220,7 @@ public partial class RhinoMCPFunctions
                 Color color;
                 try { color = bmp.GetPixel(x, y); }
                 catch (Exception) { return dark; }
-                if ((color.R + color.G + color.B) / 3 < 248) dark++;
+                if (PreviewFrame.IsDark(color.R, color.G, color.B)) dark++;
             }
         }
         return dark;
@@ -2078,12 +2126,14 @@ public partial class RhinoMCPFunctions
         return (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
     }
 
-    private static void LogPenLine(string detail)
+    private static void LogPenLine(string detail) => AppendPrintLog("pen " + detail);
+
+    private static void AppendPrintLog(string text)
     {
         try
         {
             var line = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
-                + " pen " + detail + "\n";
+                + " " + text + "\n";
             File.AppendAllText(PrintLogPath, line);
         }
         catch (Exception)
