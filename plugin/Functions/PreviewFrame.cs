@@ -50,6 +50,20 @@ public static class PreviewFrame
     public static bool ReadAgain(int reads, long elapsedMs)
         => reads < MinReads || elapsedMs < ReadBudgetMs;
 
+    /// <summary>Longest wait for the page to draw on screen after it is selected, in ms.</summary>
+    public const int PaintWaitMs = 2000;
+    /// <summary>Longest a read keeps the model view on screen before it selects the page, in ms.</summary>
+    public const int SettleCapMs = 8000;
+
+    /// <summary>
+    /// How long a read keeps the model view on screen before it selects the
+    /// page, in ms. The first two reads do not wait. Each later read waits
+    /// twice as long, 1 s to SettleCapMs: the old per-pixel copy left the
+    /// model view up for ~15 s, and the office schedules page painted then.
+    /// </summary>
+    public static int SettleMs(int read)
+        => read < 3 ? 0 : Math.Min(SettleCapMs, 1000 << Math.Min(read - 3, 4));
+
     /// <summary>
     /// What a read gave. None: no bitmap. Empty: mostly unpainted pixels
     /// (transparent black), no ink. White: opaque paper, no ink. Viewport:
@@ -245,7 +259,13 @@ public static class PreviewFrame
     /// frame). Idle is false when an
     /// idle wait ran into its cap. Png is the saved blank frame, failed:Type,
     /// or - for a sheet, no frame, or a blank frame between a page's first
-    /// and last (not kept). Of is how many reads the page had.
+    /// and last (not kept). Of is how many reads the page had. Via is how the
+    /// page was reached: model (through the model view) or page (through
+    /// another layout first, for the page that was read last). SettleMs is
+    /// how long the model view was kept up before the page was selected.
+    /// Paint counts the page's own draws from when it was selected to the
+    /// read, ReadPaint its draws during the read, OtherPaint every other
+    /// view's draws in that time.
     /// </summary>
     public sealed class Attempt
     {
@@ -264,9 +284,15 @@ public static class PreviewFrame
         public int Wash;
         public int Band;
         public long Clear;
+        public string Via = "model";
+        public int SettleMs;
+        public int Paint;
+        public int ReadPaint;
+        public int OtherPaint;
         public bool Idle = true;
         public long PrepMs;
         public long WakeMs;
+        public long PaintMs;
         public long IdleMs;
         public long PreviewMs;
         public long CopyMs;
@@ -293,9 +319,14 @@ public static class PreviewFrame
                 + " raw=" + raw
                 + " fmt=" + Format
                 + " copy=" + Copy
+                + " via=" + Via
+                + " settle=" + SettleMs.ToString(inv)
+                + " paint=" + Paint.ToString(inv) + "+" + ReadPaint.ToString(inv)
+                + " other=" + OtherPaint.ToString(inv)
                 + " idle=" + (Idle ? "fired" : "cap")
                 + " ms=prep:" + PrepMs.ToString(inv)
                 + ",wake:" + WakeMs.ToString(inv)
+                + ",paint:" + PaintMs.ToString(inv)
                 + ",idle:" + IdleMs.ToString(inv)
                 + ",preview:" + PreviewMs.ToString(inv)
                 + ",copy:" + CopyMs.ToString(inv)

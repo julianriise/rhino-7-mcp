@@ -146,6 +146,20 @@ public class PreviewFrameTests
         Assert.Equal(kind, PreviewFrame.Classify(2480, 1754, dark, 0, wash));
     }
 
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 0)]
+    [InlineData(3, 1000)]
+    [InlineData(4, 2000)]
+    [InlineData(5, 4000)]
+    [InlineData(6, 8000)]
+    [InlineData(7, 8000)]
+    [InlineData(40, 8000)]
+    public void SettleMs_DoublesFromTheThirdReadToItsCap(int read, int ms)
+    {
+        Assert.Equal(ms, PreviewFrame.SettleMs(read));
+    }
+
     [Fact]
     public void Classify_OpaqueWhitePaper_IsWhiteAndBlank()
     {
@@ -527,14 +541,15 @@ public class PreviewFrameTests
 
         Assert.Equal(
             "capture forsk-f5-garage-doors.pdf p2 Schedules a1/2 frame=empty blank=yes ink=0/272180"
-            + " wash=0 band=0 clear=4349920 raw=2480x1754 fmt=Format32bppPArgb copy=fast idle=cap"
-            + " ms=prep:0,wake:950,idle:812,preview:70123,copy:310,check:25"
+            + " wash=0 band=0 clear=4349920 raw=2480x1754 fmt=Format32bppPArgb copy=fast"
+            + " via=model settle=0 paint=0+0 other=0 idle=cap"
+            + " ms=prep:0,wake:950,paint:0,idle:812,preview:70123,copy:310,check:25"
             + " png=/tmp/forsk-print-forsk-f5-garage-doors-p2-a1.png",
             read.LogLine());
     }
 
     [Fact]
-    public void LogLine_ModelViewFrame_SaysViewportWashAndBand()
+    public void LogLine_ModelViewFrame_SaysViewportWashBandAndHowThePageWasReached()
     {
         var read = new PreviewFrame.Attempt
         {
@@ -552,7 +567,13 @@ public class PreviewFrameTests
             Dark = 171738,
             Wash = 153874,
             Band = 548,
+            Via = "page",
+            SettleMs = 1000,
+            Paint = 1,
+            ReadPaint = 4,
+            OtherPaint = 2,
             WakeMs = 1230,
+            PaintMs = 40,
             IdleMs = 160,
             PreviewMs = 190,
             CopyMs = 211,
@@ -562,8 +583,9 @@ public class PreviewFrameTests
 
         Assert.Equal(
             "capture forsk-f5-garage-cap3.pdf p1 Plan a3/4 frame=viewport blank=yes ink=171738/272180"
-            + " wash=153874 band=548 clear=0 raw=2480x1754 fmt=Undefined copy=fast idle=fired"
-            + " ms=prep:0,wake:1230,idle:160,preview:190,copy:211,check:25"
+            + " wash=153874 band=548 clear=0 raw=2480x1754 fmt=Undefined copy=fast"
+            + " via=page settle=1000 paint=1+4 other=2 idle=fired"
+            + " ms=prep:0,wake:1230,paint:40,idle:160,preview:190,copy:211,check:25"
             + " png=/tmp/forsk-print-forsk-f5-garage-cap3-p1-a3.png",
             read.LogLine());
     }
@@ -574,8 +596,9 @@ public class PreviewFrameTests
         var read = new PreviewFrame.Attempt { Pdf = "a.pdf", Page = 1, PageName = "Plan", Number = 2, Of = 2 };
 
         Assert.Equal(
-            "capture a.pdf p1 Plan a2/2 frame=none blank=yes ink=0/0 wash=0 band=0 clear=0 raw=null fmt=- copy=none idle=fired"
-            + " ms=prep:0,wake:0,idle:0,preview:0,copy:0,check:0 png=-",
+            "capture a.pdf p1 Plan a2/2 frame=none blank=yes ink=0/0 wash=0 band=0 clear=0 raw=null fmt=- copy=none"
+            + " via=model settle=0 paint=0+0 other=0 idle=fired"
+            + " ms=prep:0,wake:0,paint:0,idle:0,preview:0,copy:0,check:0 png=-",
             read.LogLine());
     }
 }

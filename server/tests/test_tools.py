@@ -3737,6 +3737,15 @@ class TestPrintGuards:
         assert "ReadBudgetMs = 20000" in frame
         assert "MinReads = 2" in frame
         assert "PreviewFrame.ReadAgain" in src
+        # A blank frame is named for what it holds, and a re-read does not repeat the wake that gave it.
+        assert "Viewport" in frame[frame.index("public enum Kind"):frame.index("public static bool IsUnpainted")]
+        assert "PaintWaitMs = 2000" in frame
+        assert "SettleCapMs = 8000" in frame
+        wake = src[src.index("private static void WakePagePreview"):src.index("private static RhinoPageView OtherPage")]
+        assert wake.index("doc.Views.ActiveView = other") < wake.index("doc.Views.ActiveView = model")
+        assert wake.index("doc.Views.ActiveView = model") < wake.index("watch.Start()")
+        assert wake.index("watch.Start()") < wake.index("doc.Views.ActiveView = page")
+        assert "DisplayPipeline.PostDrawObjects" in src
         copy = src[src.index("private static Bitmap CopyPreview"):src.index("private static int CountDarkSamples")]
         assert "Graphics.FromImage" in copy
         assert "GetPixel" not in copy

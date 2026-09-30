@@ -9,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -713,8 +714,10 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Page active, detail not active, drawing layers only, then paint.
     /// The paper and the detail stay Wireframe. Curves are already black.
+    /// The page that was read last is reached through another layout, and
+    /// the read waits for the page to draw on screen.
     /// </summary>
-    private void PrepareMacPage(RhinoPageView page, PreviewFrame.Attempt log)
+    private void PrepareMacPage(RhinoPageView page, PreviewFrame.Attempt log, PaintWatch watch)
     {
         if (page == null) return;
         var clock = Stopwatch.StartNew();
@@ -723,24 +726,53 @@ public partial class RhinoMCPFunctions
         if (doc != null && view != SchedulesView && CountPrintDrawings(doc, view) == 0)
             EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
         ApplyPageDrawingDisplay(doc, page);
+        var other = page.MainViewport.Id == _lastPreviewPage ? OtherPage(doc, page) : null;
+        log.Via = other == null ? "model" : "page";
+        log.SettleMs = PreviewFrame.SettleMs(log.Number);
         log.PrepMs = clock.ElapsedMilliseconds;
         clock.Restart();
-        WakePagePreview(doc, page);
+        WakePagePreview(doc, page, other, log.SettleMs, watch);
         log.WakeMs = clock.ElapsedMilliseconds;
+        clock.Restart();
+        var start = Environment.TickCount;
+        while (watch.Page < 1 && unchecked(Environment.TickCount - start) < PreviewFrame.PaintWaitMs)
+            RhinoApp.Wait();
+        log.PaintMs = clock.ElapsedMilliseconds;
         clock.Restart();
         log.Idle = WaitForOneIdle();
         log.IdleMs = clock.ElapsedMilliseconds;
     }
+
+    // The page the last preview read was of, by its paper viewport.
+    private static Guid _lastPreviewPage;
 
     /// <summary>
     /// The Mac page preview is painted once. A later read of a page that is
     /// already active returns an empty buffer (white JPEG, transparent black
     /// pixels). Step through a model view and dirty the detail mode so the
     /// page paints again. The camera stays put.
+    ///
+    /// That step leaves the model view's picture on screen, and a read that
+    /// comes before the page has taken its place is that picture with the
+    /// page's tiles on it (PreviewFrame, Viewport). Selecting the page that
+    /// was read last gave it on every read (garage cap3, all 23 reads of a
+    /// blank page), and a page reached from another layout painted (cap2).
+    /// So that page goes through other, another layout, first. The model
+    /// view stays in between: its grey is what makes a missed read blank
+    /// and not a wrong sheet. Settle keeps it up before the page is selected.
     /// </summary>
-    private static void WakePagePreview(RhinoDoc doc, RhinoPageView page)
+    private static void WakePagePreview(
+        RhinoDoc doc, RhinoPageView page, RhinoPageView other, int settleMs, PaintWatch watch)
     {
         if (page == null) return;
+        if (doc != null && other != null)
+        {
+            doc.Views.ActiveView = other;
+            other.SetPageAsActive();
+            other.Redraw();
+            RhinoApp.Wait();
+            WaitForOneIdle();
+        }
         if (doc != null)
         {
             RhinoView model = null;
@@ -766,6 +798,9 @@ public partial class RhinoMCPFunctions
                 doc.Views.ActiveView = model;
                 model.Redraw();
                 RhinoApp.Wait();
+                var start = Environment.TickCount;
+                while (unchecked(Environment.TickCount - start) < settleMs)
+                    RhinoApp.Wait();
             }
         }
 
@@ -785,6 +820,7 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        watch.Start();
         if (doc != null)
             doc.Views.ActiveView = page;
         page.SetPageAsActive();
@@ -792,6 +828,83 @@ public partial class RhinoMCPFunctions
         if (doc != null)
             doc.Views.Redraw();
         RhinoApp.Wait();
+    }
+
+    /// <summary>Another layout of the document, or null when the page is the only one.</summary>
+    private static RhinoPageView OtherPage(RhinoDoc doc, RhinoPageView page)
+    {
+        if (doc == null || page == null) return null;
+        RhinoPageView[] all;
+        try { all = doc.Views.GetPageViews(); }
+        catch (Exception) { return null; }
+        if (all == null) return null;
+        foreach (var other in all)
+        {
+            if (other != null && other.MainViewport.Id != page.MainViewport.Id)
+                return other;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Counts what the display pipeline draws from Start until it is
+    /// disposed: Page is the page's own paper viewport, Other every view
+    /// that is not the page or one of its details. The read waits for Page:
+    /// a page that has not drawn since it was selected is taken as not on
+    /// screen yet. Not proven live; the capture line's paint= is the check.
+    /// </summary>
+    private sealed class PaintWatch : IDisposable
+    {
+        private readonly Guid _paper;
+        private readonly HashSet<Guid> _details = new HashSet<Guid>();
+        private int _page;
+        private int _other;
+        private bool _started;
+
+        public PaintWatch(RhinoPageView page)
+        {
+            _paper = page.MainViewport.Id;
+            var details = page.GetDetailViews();
+            if (details == null) return;
+            foreach (var detail in details)
+            {
+                if (detail?.Viewport != null)
+                    _details.Add(detail.Viewport.Id);
+            }
+        }
+
+        public int Page => Volatile.Read(ref _page);
+        public int Other => Volatile.Read(ref _other);
+
+        public void Start()
+        {
+            if (_started) return;
+            _started = true;
+            DisplayPipeline.PostDrawObjects += OnDraw;
+        }
+
+        private void OnDraw(object sender, DrawEventArgs e)
+        {
+            try
+            {
+                var viewport = e?.Viewport;
+                if (viewport == null) return;
+                var id = viewport.Id;
+                if (id == _paper)
+                    Interlocked.Increment(ref _page);
+                else if (!_details.Contains(id))
+                    Interlocked.Increment(ref _other);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_started)
+                DisplayPipeline.PostDrawObjects -= OnDraw;
+        }
     }
 
     /// <summary>
@@ -887,7 +1000,10 @@ public partial class RhinoMCPFunctions
     /// Read the page until a frame is a sheet or PreviewFrame.ReadAgain says
     /// its time is up. Every read goes into reads for the print log; the
     /// first and the latest blank frame are kept there for their debug PNGs.
-    /// Attempt is the number of reads made; on a miss ink is 0.
+    /// Attempt is the number of reads made; on a miss ink is 0. A second
+    /// read is of the page read last, so it goes through another layout, and
+    /// from the third the model view is kept up longer each time
+    /// (PreviewFrame.SettleMs). The capture line says which read painted.
     /// </summary>
     private Bitmap CapturePageAfterWait(
         RhinoPageView page, int pageNumber, string pdfPath, int dotsW, int dotsH,
@@ -911,24 +1027,29 @@ public partial class RhinoMCPFunctions
                 PageName = ShortPageName(page),
                 Number = attempt
             };
-            PrepareMacPage(page, log);
-            if (attempt > 1)
+            Bitmap bmp;
+            using (var watch = new PaintWatch(page))
             {
-                // The first frame after the modal can still be unpainted.
-                // Pause, then one more idle, before reading the preview again.
-                var clock = Stopwatch.StartNew();
-                var start = Environment.TickCount;
-                while (unchecked(Environment.TickCount - start) < 150)
-                    RhinoApp.Wait();
-                if (!WaitForOneIdle())
-                    log.Idle = false;
-                log.IdleMs += clock.ElapsedMilliseconds;
+                PrepareMacPage(page, log, watch);
+                if (attempt > 1)
+                {
+                    // The first frame after the modal can still be unpainted.
+                    // Pause, then one more idle, before reading the preview again.
+                    var clock = Stopwatch.StartNew();
+                    var start = Environment.TickCount;
+                    while (unchecked(Environment.TickCount - start) < 150)
+                        RhinoApp.Wait();
+                    if (!WaitForOneIdle())
+                        log.Idle = false;
+                    log.IdleMs += clock.ElapsedMilliseconds;
+                }
+                bmp = ReadPreview(page, size, log, watch);
             }
-            var bmp = ReadPreview(page, size, log);
             var read = new PreviewRead { Log = log };
             reads.Add(read);
-            // A near-uniform frame is a missed paint: all white, or the opaque
-            // black buffer. It is not a sheet. Keep looking.
+            // A near-uniform frame is a missed paint: all white, the model
+            // view's picture, or the opaque black buffer. It is not a sheet.
+            // Keep looking.
             if (!log.Blank)
             {
                 ink = log.Dark;
@@ -961,11 +1082,15 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>One GetPreviewImage, copied and counted, each step timed into the log.</summary>
-    private static Bitmap ReadPreview(RhinoPageView page, Size size, PreviewFrame.Attempt log)
+    private static Bitmap ReadPreview(RhinoPageView page, Size size, PreviewFrame.Attempt log, PaintWatch watch)
     {
         var clock = Stopwatch.StartNew();
+        log.Paint = watch.Page;
         var raw = page.GetPreviewImage(size, false);
         log.PreviewMs = clock.ElapsedMilliseconds;
+        log.ReadPaint = watch.Page - log.Paint;
+        log.OtherPaint = watch.Other;
+        _lastPreviewPage = page.MainViewport.Id;
         if (raw != null)
         {
             log.RawWidth = raw.Width;
