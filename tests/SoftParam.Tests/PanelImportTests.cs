@@ -1,3 +1,4 @@
+using System.Linq;
 using RhinoMCPPlugin.Forsk;
 using Xunit;
 
@@ -6,7 +7,9 @@ namespace SoftParam.Tests;
 /// <summary>
 /// F7: the panel classifies plan import and set scale from chat, and the
 /// Import chip offers Import plan in a document with no plan, then Set scale
-/// on the imported plan until two points have set it.
+/// on the imported plan until two points have set it. F2.6: a DXF asked
+/// for in chat routes to dxf_import, with a file picker when no path is given
+/// and the tool's whole receipt.
 /// </summary>
 public class PanelImportTests
 {
@@ -30,11 +33,65 @@ public class PanelImportTests
     [InlineData("run daylight", ForskIntent.Daylight)]
     [InlineData("generate the 3D model", ForskIntent.Build)]
     [InlineData("move the window 200 along the wall", ForskIntent.Edit)]
-    [InlineData("import the dxf", ForskIntent.General)]
+    [InlineData("why did my dxf labels come in wrong", ForskIntent.General)]
     [InlineData("hello", ForskIntent.General)]
     public void OtherTurns_KeepTheirIntent(string text, ForskIntent expected)
     {
         Assert.Equal(expected, ForskIntentRouter.Classify(text, ""));
+    }
+
+    [Theory]
+    [InlineData("import plan.dxf")]
+    [InlineData("import a DXF")]
+    [InlineData("import the dxf")]
+    [InlineData("Import /Users/jr/plans/office_2D.dxf")]
+    [InlineData("open the DXF of the plan")]
+    [InlineData("importer dxf-filen")]
+    public void DxfWords_RouteToDxfImport(string text)
+    {
+        // "import plan.dxf" names a plan too; the DXF wins over the plan image import.
+        Assert.Equal(ForskIntent.Dxf, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal("dxf_import", ForskDxf.Tool);
+        Assert.Contains("Call " + ForskDxf.Tool, ForskDxf.Bias);
+        Assert.Contains("no path", ForskDxf.Bias);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("plan.dxf")]
+    [InlineData("/no/such/folder/plan.dxf")]
+    public void Dxf_NoPathToOpenAsItStands_TheUserPicksTheFile(string path)
+    {
+        Assert.True(ForskDxf.NeedsPick(path));
+    }
+
+    [Fact]
+    public void Dxf_AnAbsolutePathToAFileThatIsThere_IsImportedAsGiven()
+    {
+        Assert.False(ForskDxf.NeedsPick(OfficeRoomsTests.OfficePath));
+    }
+
+    [Fact]
+    public void Dxf_Receipt_IsTheToolsWholeMessage_WithSuspectLabelsAndUnits()
+    {
+        // What dxf_import answers, MCP client or panel.
+        const string guess = "Units not stated ($INSUNITS missing): guessed m from its size, 12 across, scale ×1000. Check a known length.";
+        const string message = "Imported plan.dxf: 40 objects. Texts 15/16 read from the DXF, 0 rewritten, 1 left as Rhino made them. "
+            + guess + " Labels suspect 1 (B00F8ttekott): a DXF escape lost, and no DXF text matched to restore it.";
+        var unmatched = new[] { "label 'B00F8ttekott' at 2000,3000, no DXF text on its layer" };
+        var warnings = new[] { guess, "2 objects were not scaled to size." };
+
+        Assert.Equal("Import DXF · ok · Imported plan.dxf: 40 objects.", ForskDxf.Line(true, message));
+        var note = ForskDxf.Note(message, unmatched, warnings).Split('\n');
+        // The rest of the message, word for word, then what needs a look. The
+        // guess is in the message already, so it is not a row again.
+        Assert.Equal(message.Substring("Imported plan.dxf: 40 objects. ".Length), note[0]);
+        Assert.Equal(new[] { "· " + unmatched[0], "· 2 objects were not scaled to size." }, note.Skip(1).ToArray());
+
+        Assert.Equal("Import DXF · error · Import DXF cancelled.", ForskDxf.Line(false, "Import DXF cancelled."));
+        Assert.Equal("Import DXF · ok · Imported a.dxf: 1 object.", ForskDxf.Line(true, "Imported a.dxf: 1 object."));
+        Assert.Equal("", ForskDxf.Note("Imported a.dxf: 1 object.", new string[0], new string[0]));
     }
 
     static ChipRow Underlay(string status) => new ChipRow { ImportKind = "underlay", ScaleStatus = status, Layer = "X-PLAN" };

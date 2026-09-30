@@ -411,13 +411,12 @@ namespace RhinoMCPPlugin.Forsk
                         ["head"] = Num("Top Z. Default 2100.")
                     },
                     "layer"),
-                Fn("dxf_import",
-                    "Import a DXF plan with its text intact: Rhino's import, then every TEXT and MTEXT rewritten from the DXF file, matched by layer and position. Rhino's own Import turns B\\U+00F8ttekott into B00F8ttekott. Reports texts matched, rewritten, and unmatched.",
+                Fn(ForskDxf.Tool,
+                    "Import a DXF plan with its text intact and at true size: Rhino's import, then every TEXT and MTEXT rewritten from the DXF file, matched by layer and position, and the plan scaled to mm from the DXF's units ($INSUNITS). Rhino's own Import turns B\\U+00F8ttekott into B00F8ttekott. Reports texts matched, rewritten, and unmatched, the units read and the scale applied, and warns when the units were a guess.",
                     new JObject
                     {
-                        ["path"] = Str("Absolute path of the .dxf file.")
-                    },
-                    "path"),
+                        ["path"] = Str("Absolute path of the .dxf file. Omit it and the user picks the file.")
+                    }),
                 Fn(ForskPlanImport.ImportTool,
                     "Import a floor plan image with its detection (a forsk.plan_import.v0 JSON): the image as a locked, faded underlay on X-PLAN, the detected walls, doors, windows and rooms as 2D review geometry on wall, door, window, A-ROOM and label. Nothing is 3D until the user generates. Reports counts, how the scale stands, and what needs review.",
                     new JObject
@@ -607,7 +606,7 @@ Nothing is selected. Click the object in Rhino, then say it again. Or name it an
 
 Plan to 3D order is floor_from_layer, walls_from_layer, roof_flat_from_walls, openings_from_layer door, openings_from_layer window, rooms_from_layer. Skip rooms when there are no room curves.
 
-Import a DXF with dxf_import and its absolute .dxf path, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room.
+Import a DXF with dxf_import, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room, and it reads the DXF's units, so the plan lands at true size in mm. Pass the absolute .dxf path the user gave. With none, call it with no path and the user picks the file.
 
 Import a floor plan image with plan_import: the image path and its forsk.plan_import.v0 detection. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
 
@@ -731,6 +730,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "No rooms: offer rooms_detect, which finds them from the walls. "
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
             }
+            if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)
             {
                 return "Turn bias: Import. plan_import brings in the plan image and its detection; plan_scale sets the scale. "
@@ -990,7 +990,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     var name = fn?["name"]?.ToString() ?? "";
                     var args = ParseArgs(fn?["arguments"]?.ToString());
                     var envelope = CallOnUi(name, args);
-                    show("receipt", ForskTools.Receipt(string.IsNullOrEmpty(name) ? "tool" : name, envelope));
+                    if (name == ForskDxf.Tool)
+                    {
+                        // The tool's whole receipt, as MCP clients get it.
+                        show("receipt", ForskPlanImport.DxfLine(envelope));
+                        show("assistant", ForskPlanImport.DxfNote(envelope));
+                    }
+                    else
+                        show("receipt", ForskTools.Receipt(string.IsNullOrEmpty(name) ? "tool" : name, envelope));
                     history.Add(new JObject
                     {
                         ["role"] = "tool",
@@ -1041,6 +1048,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print) return "Print";
             if (intent == ForskIntent.Build) return "Build";
             if (intent == ForskIntent.Daylight) return "Daylight";
+            if (intent == ForskIntent.Dxf) return "Import DXF";
             if (intent == ForskIntent.Import) return "Import";
             return "General";
         }
@@ -1056,6 +1064,15 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 ForskPrint.SettleAfterDialog();
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
+            }
+            // No DXF path to open as it stands: the user picks the file.
+            if (name == ForskDxf.Tool && ForskDxf.NeedsPick(args?["path"]?.ToString()))
+            {
+                var path = ForskPlanImport.PickDxfFromBackground();
+                if (string.IsNullOrEmpty(path))
+                    return ForskTools.Fail("Import DXF cancelled.");
+                ForskPrint.SettleAfterDialog();
+                callArgs = new JObject { ["path"] = path };
             }
             // No points given: the user picks them in the viewport and types the length.
             if (name == ForskPlanImport.ScaleTool && ForskPlanImport.NeedsPick(args))

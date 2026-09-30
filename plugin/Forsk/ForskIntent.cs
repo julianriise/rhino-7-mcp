@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace RhinoMCPPlugin.Forsk
@@ -11,12 +12,13 @@ namespace RhinoMCPPlugin.Forsk
         Sheets,
         Print,
         Daylight,
+        Dxf,
         Import,
         General
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is print, daylight, sheets, import, edit, build.
+    /// One-turn tool bias from the message. Order is print, daylight, sheets, DXF, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -27,6 +29,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
             if (IsSheets(t)) return ForskIntent.Sheets;
+            if (IsDxf(t)) return ForskIntent.Dxf;
             if (IsImport(t)) return ForskIntent.Import;
             if (IsEdit(t)) return ForskIntent.Edit;
             if (IsBuild(t)) return ForskIntent.Build;
@@ -82,6 +85,14 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
             if (IsDimensions(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
+        }
+
+        /// <summary>A DXF asked for: import plan.dxf, import a DXF. It comes before the plan image import, which "plan" would match.</summary>
+        static bool IsDxf(string t)
+        {
+            if (!HasWord(t, "dxf")) return false;
+            return HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere")
+                || HasWord(t, "open") || HasWord(t, "åpne") || t.Contains("bring in");
         }
 
         /// <summary>A plan image brought in as an underlay with its detection, and the plan's scale from two points.</summary>
@@ -176,6 +187,62 @@ namespace RhinoMCPPlugin.Forsk
                 i = end;
             }
             return false;
+        }
+    }
+
+    /// <summary>
+    /// dxf_import from the panel's chat ("import plan.dxf", "import a DXF"):
+    /// the handler MCP clients call. With no path it can open as it stands the
+    /// user picks the file, and the receipt is the tool's whole message.
+    /// </summary>
+    public static class ForskDxf
+    {
+        public const string Tool = "dxf_import";
+
+        public const string Bias = "Turn bias: Import DXF. Call dxf_import. Pass path only when the user gave an absolute .dxf path; "
+            + "with no path the user picks the file. "
+            + "The panel prints the receipt: objects, texts, units and scale, suspect labels. "
+            + "Reply with one line, and pass on a units guess or a suspect label. "
+            + "Do not generate 3D here. The user asks for that.";
+
+        /// <summary>No path the import can open as it stands (none, a bare file name, a file that is not there): the user picks the file.</summary>
+        public static bool NeedsPick(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return true;
+            path = path.Trim();
+            return !Path.IsPathRooted(path) || !File.Exists(path);
+        }
+
+        /// <summary>A tool message's first sentence (the counts), and the rest of it.</summary>
+        public static string Split(string message, out string rest)
+        {
+            message = message ?? "";
+            var stop = message.IndexOf(". ", StringComparison.Ordinal);
+            rest = stop < 0 ? "" : message.Substring(stop + 2);
+            return stop < 0 ? message : message.Substring(0, stop + 1);
+        }
+
+        /// <summary>The receipt row: Import DXF · ok · Imported plan.dxf: 283 objects.</summary>
+        public static string Line(bool ok, string message)
+        {
+            if (!ok) return "Import DXF · error · " + (string.IsNullOrEmpty(message) ? "failed" : message);
+            return "Import DXF · ok · " + Split(message, out _);
+        }
+
+        /// <summary>
+        /// Under the receipt: the rest of the tool's message (texts, units and
+        /// scale, suspect labels), then each text left as Rhino made it and
+        /// each warning the message does not already carry, one row each.
+        /// </summary>
+        public static string Note(string message, IEnumerable<string> unmatched, IEnumerable<string> warnings)
+        {
+            Split(message, out var rest);
+            var note = new StringBuilder(rest);
+            foreach (var row in unmatched ?? new string[0])
+                note.Append("\n· ").Append(row);
+            foreach (var row in warnings ?? new string[0])
+                if (!rest.Contains(row)) note.Append("\n· ").Append(row);
+            return note.ToString().Trim();
         }
     }
 

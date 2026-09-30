@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Eto.Forms;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -15,6 +16,8 @@ namespace RhinoMCPPlugin.Forsk
     /// scale runs the ForskSetScale command: two picked points and the real
     /// length between them, prefilled with what the plan measures now. The
     /// geometry and the clean-up live in the plan_import and plan_scale handlers.
+    /// A DXF asked for in chat with no path is picked here, and its receipt
+    /// shown whole (ForskDxf).
     /// </summary>
     public static class ForskPlanImport
     {
@@ -95,10 +98,45 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The tool message's first sentence (the counts), and the rest of it.</summary>
         static string Split(JObject envelope, out string rest)
         {
-            var message = envelope["result"]?["message"]?.ToString() ?? "";
-            var stop = message.IndexOf(". ", StringComparison.Ordinal);
-            rest = stop < 0 ? "" : message.Substring(stop + 2);
-            return stop < 0 ? message : message.Substring(0, stop + 1);
+            return ForskDxf.Split(envelope["result"]?["message"]?.ToString(), out rest);
+        }
+
+        /// <summary>The DXF to import, asked for from a background thread. Null when the dialog is cancelled.</summary>
+        public static string PickDxfFromBackground()
+        {
+            string path = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try
+                    {
+                        var dialog = new Eto.Forms.OpenFileDialog { Title = "Import DXF" };
+                        dialog.Filters.Add(new FileFilter("DXF", ".dxf"));
+                        if (dialog.ShowDialog(RhinoEtoApp.MainWindow) == DialogResult.Ok) path = dialog.FileName;
+                    }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            return path;
+        }
+
+        /// <summary>Chat receipt for dxf_import: Import DXF · ok · Imported plan.dxf: 283 objects.</summary>
+        public static string DxfLine(JObject envelope)
+        {
+            var ok = Ok(envelope);
+            return ForskTools.Clip(ForskDxf.Line(ok, (ok ? envelope["result"]?["message"] : envelope?["message"])?.ToString()));
+        }
+
+        /// <summary>Under it: texts, units and scale, suspect labels, then what needs a look.</summary>
+        public static string DxfNote(JObject envelope)
+        {
+            if (!Ok(envelope)) return "";
+            var result = envelope["result"];
+            return ForskDxf.Note(result?["message"]?.ToString(),
+                (result?["unmatched"] as JArray)?.Select(row => row.ToString()),
+                (result?["warnings"] as JArray)?.Select(row => row.ToString()));
         }
 
         /// <summary>Chip receipt: Set scale · ok · Scale set: 4000 mm between the two points ...</summary>
