@@ -20,6 +20,21 @@ public static class RoomDetect
     public const double MaxEndMm = 600.0;
     /// <summary>A divider may stop this short of a wall face and still split the room.</summary>
     public const double ReachMm = 300.0;
+    /// <summary>A lone outline filling more of its bounding box than this is a block, not a ring of walls.</summary>
+    public const double BlockFill = 0.45;
+
+    /// <summary>
+    /// A closed outline that fills most of its bounding box: a wall run
+    /// standing free, or a room or roof outline drawn on the wall layer.
+    /// </summary>
+    public static bool IsBlock(double area, double box) => box > 0 && area / box > BlockFill;
+
+    /// <summary>
+    /// A block that is slender all along is a wall run, never a room: twice
+    /// its area over the length of its edge is how wide it is across, and a
+    /// wall is no wider than MaxEndMm. The bake keeps it as a wall.
+    /// </summary>
+    public static bool IsWallRun(double area, double edge) => edge > 0 && 2.0 * area / edge <= MaxEndMm;
 
     public readonly struct Pt
     {

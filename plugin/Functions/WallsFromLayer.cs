@@ -11,7 +11,9 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Extrude closed wall-layer curves to solids. Nested room outlines become
-/// wall bands (outer minus inner). No roof/ceiling. Source DXF is never modified.
+/// wall bands (outer minus inner). A slender outline standing free, in a room
+/// or outside, is a wall run of its own. No roof/ceiling. Source DXF is never
+/// modified.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -226,25 +228,33 @@ public partial class RhinoMCPFunctions
             return result;
         }
 
+        // Wall, the space inside it, wall again: an outline standing free in a
+        // room is a wall run of its own, not a hole in that room.
+        var space = new bool[n];
         for (var i = 0; i < n; i++)
         {
+            // At most n steps up: two copies of one outline hold each other.
+            var parent = parentOf[i];
+            for (var step = 0; parent >= 0 && step < n; step++, parent = parentOf[parent]) space[i] = !space[i];
+        }
+
+        for (var i = 0; i < n; i++)
+        {
+            if (space[i]) continue;
             if (children[i].Count == 0)
             {
-                if (parentOf[i] < 0)
-                {
-                    var brep = ExtrudeClosedCurve(closed[i], height, tol);
-                    if (brep == null)
-                        warnings.Add("Extrude failed for a disjoint closed curve.");
-                    else if (LooksLikeRoofOrRoomFill(brep, height))
-                        warnings.Add("Skipped a disjoint capped room outline (would become a roof/ceiling).");
-                    else
-                        result.Add(new WallBake
-                        {
-                            Breps = new List<Brep> { brep },
-                            Outer = closed[i],
-                            Holes = new List<Curve>()
-                        });
-                }
+                var brep = ExtrudeClosedCurve(closed[i], height, tol);
+                if (brep == null)
+                    warnings.Add("Extrude failed for a disjoint closed curve.");
+                else if (LooksLikeRoofOrRoomFill(brep, height))
+                    warnings.Add("Skipped a disjoint capped room outline (would become a roof/ceiling).");
+                else
+                    result.Add(new WallBake
+                    {
+                        Breps = new List<Brep> { brep },
+                        Outer = closed[i],
+                        Holes = new List<Curve>()
+                    });
                 continue;
             }
 
@@ -431,16 +441,24 @@ public partial class RhinoMCPFunctions
         return kept.Count > 0 ? kept : new List<Brep>();
     }
 
+    /// <summary>
+    /// A solid that fills most of its bounding box is a room or roof outline
+    /// drawn on the wall layer, not a wall. A slender one is a wall run
+    /// standing free: it stays a wall, never a room.
+    /// </summary>
     private static bool LooksLikeRoofOrRoomFill(Brep brep, double height)
     {
         if (brep == null || !brep.IsValid) return false;
         var bbox = brep.GetBoundingBox(true);
         if (!bbox.IsValid) return false;
         var xy = (bbox.Max.X - bbox.Min.X) * (bbox.Max.Y - bbox.Min.Y);
-        if (xy <= 0) return false;
         var vmp = VolumeMassProperties.Compute(brep);
         if (vmp == null) return false;
-        var footprint = Math.Abs(vmp.Volume) / Math.Max(Math.Abs(height), 1e-6);
-        return footprint / xy > 0.45;
+        var tall = Math.Max(Math.Abs(height), 1e-6);
+        var footprint = Math.Abs(vmp.Volume) / tall;
+        if (!RoomDetect.IsBlock(footprint, xy)) return false;
+        // The sides' area over the height is the length of the outline's edge.
+        var amp = AreaMassProperties.Compute(brep);
+        return amp == null || !RoomDetect.IsWallRun(footprint, (amp.Area - 2.0 * footprint) / tall);
     }
 }

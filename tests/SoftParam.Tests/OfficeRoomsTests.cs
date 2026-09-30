@@ -200,6 +200,24 @@ public class OfficeRoomsTests
         Assert.Equal(OfficeSha256, Convert.ToHexString(hash).ToLowerInvariant());
     }
 
+    /// <summary>
+    /// walls_from_layer keeps a slender lone outline as a wall, and reads an
+    /// outline inside a room face as a wall run standing in that room. The
+    /// office has neither: every ring but the outer face is a room face
+    /// directly inside it, so its bake is the one wall band it always was.
+    /// </summary>
+    [Fact]
+    public void Office_HasNoWallRunStandingFree()
+    {
+        var rings = Office().Rings;
+        var outer = rings.OrderByDescending(r => Math.Abs(RoomDetect.Area(r))).First();
+        foreach (var ring in rings.Where(r => r != outer))
+        {
+            Assert.True(RoomDetect.Contains(outer, ring[0]));
+            Assert.DoesNotContain(rings, other => other != outer && other != ring && RoomDetect.Contains(other, ring[0]));
+        }
+    }
+
     [Fact]
     public void Office_SixteenRegions_EachNamedByTheLabelInsideIt()
     {

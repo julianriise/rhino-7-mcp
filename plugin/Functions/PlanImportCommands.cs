@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
@@ -12,7 +13,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Plan import (F7) in the document. plan_import places the plan image as a
-/// locked, faded underlay on X-PLAN, kept off Print, and draws the cleaned
+/// locked, faded underlay on X-PLAN, shown in every view's display mode and
+/// kept off Print, and draws the cleaned
 /// detection on the 2D layers the bake reads: a closed rectangle per wall on
 /// wall, opening footprints on door and window, room outlines on A-ROOM and
 /// their names on label. Nothing is 3D until the user bakes. plan_scale sets
@@ -27,7 +29,6 @@ public partial class RhinoMCPFunctions
     private const string ImportScaleKey = "forsk:import_scale";
     private const string ImportScaleStatusKey = "forsk:import_scale_status";
     private const string ImportRatioKey = "forsk:import_ratio";
-    private const string ImportThicknessKey = "forsk:import_thickness";
     private const string ImportDetectedKey = "forsk:import_detected";
     private const string ImportReviewKey = "forsk:import_review";
 
@@ -90,6 +91,10 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException("Rhino could not place the plan image " + Path.GetFileName(imagePath) + ".");
         FadeUnderlay(doc, picture, warnings);
         var underlayAttr = picture.Attributes.Duplicate();
+        // A picture draws its image in a rendered mode only: without this the Top view, in wireframe, shows nothing of it.
+        var display = DisplayModeDescription.GetDisplayMode(DisplayModeDescription.RenderedId);
+        if (display != null) underlayAttr.SetDisplayModeOverride(display);
+        else warnings.Add("The plan image shows in rendered views only: the Rendered display mode was not found.");
         underlayAttr.Name = "plan-underlay";
         underlayAttr.LayerIndex = underlayLayer.Index;
         underlayAttr.SetUserString(ImportKey, "plan");
@@ -118,7 +123,6 @@ public partial class RhinoMCPFunctions
             var name = "import-wall-" + (i + 1).ToString("D2", CultureInfo.InvariantCulture);
             wallNames.Add(name);
             var attr = ImportAttributes(wallLayer, name, "wall");
-            attr.SetUserString(ImportThicknessKey, FormatMm(wall.Thickness));
             attr.SetUserString(ImportDetectedKey, wall.Detected.ToString("R", CultureInfo.InvariantCulture));
             if (!string.IsNullOrEmpty(wall.Class)) attr.SetUserString("forsk:import_class", wall.Class);
             if (doc.Objects.AddCurve(RoomOutline(PlanImport.Ring(wall), 0), attr) != Guid.Empty) objects++;
@@ -149,14 +153,15 @@ public partial class RhinoMCPFunctions
             var attr = ImportAttributes(roomLayer, name, "room");
             if (room.Outside) attr.SetUserString(ImportReviewKey, "the walls do not close around it");
             if (doc.Objects.AddCurve(RoomOutline(room.Ring, 0), attr) != Guid.Empty) objects++;
-            if (room.Label == null) continue;
+            // A room the detection could not name gets the name rooms_detect would give it, as a text to edit.
+            var label = room.Label ?? RoomDetect.DefaultRoomName;
             var at = Plane.WorldXY;
             at.Origin = new Point3d(room.At.X, room.At.Y, 0);
-            using (var text = PlanAnnotation(doc, room.Label, at, PlanLabelHeight))
+            using (var text = PlanAnnotation(doc, label, at, PlanLabelHeight))
             {
                 if (text == null)
                 {
-                    warnings.Add("Label " + room.Label + " was not drawn.");
+                    warnings.Add("Label " + label + " was not drawn.");
                     continue;
                 }
                 if (doc.Objects.AddText(text, ImportAttributes(labelLayer, name + "-label", "label")) != Guid.Empty) objects++;
@@ -172,6 +177,7 @@ public partial class RhinoMCPFunctions
             ["squared"] = cleaned.Snapped,
             ["diagonal"] = cleaned.Diagonal,
             ["joined"] = cleaned.Joined,
+            ["gaps_closed"] = cleaned.Closed,
             ["extended"] = cleaned.Extended,
             ["doors"] = cleaned.Doors,
             ["windows"] = cleaned.Windows,
@@ -179,6 +185,7 @@ public partial class RhinoMCPFunctions
             ["uncut"] = cleaned.Uncut,
             ["outlines"] = cleaned.Outlines,
             ["free_walls"] = cleaned.Blocks,
+            ["blocks_skipped"] = cleaned.Skipped,
             ["rooms"] = cleaned.Rooms.Count,
             ["unlabelled"] = cleaned.Unlabelled,
             ["outside"] = cleaned.Outside,
@@ -195,6 +202,7 @@ public partial class RhinoMCPFunctions
                 ["id"] = underlayId.ToString(),
                 ["layer"] = underlayLayer.Name,
                 ["image"] = Path.GetFileName(imagePath),
+                ["display"] = display?.EnglishName,
                 ["width_mm"] = Math.Round(size.WidthMm, 1),
                 ["height_mm"] = Math.Round(size.HeightMm, 1)
             },
@@ -404,24 +412,20 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// A wall rectangle as the import left it: its centreline scales and its
     /// thickness is rounded again from the detected value. False for a wall
-    /// the user has reshaped; that one scales as drawn.
+    /// the user has reshaped; that one scales as drawn. The wall carries its
+    /// detected thickness only. A rounded-thickness stamp was kept beside it
+    /// once and did not follow the rectangle, so a wall scaled away and back
+    /// came home 5 mm off.
     /// </summary>
     private static bool TryRescaleImportedWall(RhinoDoc doc, RhinoObject obj, PlanImport.Scale now, double factor)
     {
         if (!(obj.Geometry is Curve curve) || !curve.TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count != 5)
             return false;
-        var invariant = CultureInfo.InvariantCulture;
-        if (!double.TryParse(obj.Attributes.GetUserString(ImportDetectedKey), NumberStyles.Float, invariant, out var detected)) return false;
-        if (!double.TryParse(obj.Attributes.GetUserString(ImportThicknessKey), NumberStyles.Float, invariant, out var stamped)) return false;
+        if (!double.TryParse(obj.Attributes.GetUserString(ImportDetectedKey), NumberStyles.Float, CultureInfo.InvariantCulture, out var detected)) return false;
         var ring = new List<RoomDetect.Pt>(4);
         for (var i = 0; i < 4; i++) ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
-        var scaled = PlanImport.RescaleWall(now, factor, ring, detected, stamped, 10.0, out var thickness);
-        if (double.IsNaN(thickness)) return false;
-        if (!doc.Objects.Replace(obj.Id, RoomOutline(scaled, polyline[0].Z))) return false;
-        var attr = obj.Attributes.Duplicate();
-        attr.SetUserString(ImportThicknessKey, FormatMm(thickness));
-        doc.Objects.ModifyAttributes(obj.Id, attr, true);
-        return true;
+        var scaled = PlanImport.RescaleWall(now, factor, ring, detected, 10.0, out var thickness);
+        return !double.IsNaN(thickness) && doc.Objects.Replace(obj.Id, RoomOutline(scaled, polyline[0].Z));
     }
 
     private static bool TryPlanPoint(JToken token, out RoomDetect.Pt point)

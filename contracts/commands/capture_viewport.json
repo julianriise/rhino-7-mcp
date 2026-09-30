@@ -52,6 +52,13 @@
       "minItems": 4,
       "maxItems": 4,
       "description": "[minX, minY, maxX, maxY] in model units. Zoom the target viewport to this box, then capture at the viewport's own aspect with the long side max(width, height), so the box is never cropped. Overrides zoom_to_fit."
+    },
+    "hide_layers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Layer names (case-insensitive) turned off for this picture only, and on again after it. A layer that is not there, or already off, is left alone."
     }
   },
   "additionalProperties": false

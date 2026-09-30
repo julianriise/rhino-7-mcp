@@ -38,6 +38,10 @@
       "type": "boolean",
       "description": "Whether axes were shown"
     },
+    "hidden_layers": {
+      "type": "integer",
+      "description": "Layers hide_layers turned off for this picture"
+    },
     "object_count": {
       "type": "integer",
       "description": "Number of objects in the document"

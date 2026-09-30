@@ -33,7 +33,12 @@ public static class PlanImport
         public double MaxBridge = 3000.0;
         /// <summary>An opening snaps to a wall when its centre is within this of the wall's face.</summary>
         public double OpeningReach = 150.0;
-        /// <summary>A wall end this close to another wall runs to that wall's far face.</summary>
+        /// <summary>
+        /// A wall end this close to another wall runs to that wall's far face.
+        /// An end further off, up to the thicker of the two walls, is a gap
+        /// in the detection (no doorway is narrower than its wall is thick):
+        /// it is closed the same way and reported.
+        /// </summary>
         public double JoinReach = 100.0;
         /// <summary>Shorter walls are dropped.</summary>
         public double MinLength = 100.0;
@@ -48,14 +53,16 @@ public static class PlanImport
         public Pt A;
         public Pt B;
         public double Thickness;
-        /// <summary>Thickness as detected, before rounding. The scale step rounds from this.</summary>
+        /// <summary>Thickness as detected, before rounding. The scale step rounds from this and nothing else.</summary>
         public double Detected;
         public string Class;
         public int Pieces = 1;
         public bool Snapped;
         public bool Diagonal;
-        /// <summary>Stands free of the other walls as a lone block: the bake skips it.</summary>
+        /// <summary>Stands free of the other walls. A run bakes as a wall on its own.</summary>
         public bool Free;
+        /// <summary>Free, and wider across than a wall: the bake reads that block as a room outline and skips it.</summary>
+        public bool Skipped;
         public double Length => Dist(A, B);
     }
 
@@ -112,21 +119,25 @@ public static class PlanImport
         public int Diagonal;
         /// <summary>Wall ends run to the wall they stop at.</summary>
         public int Joined;
+        /// <summary>Gaps closed: joins across more than JoinReach, each with its line in Review.</summary>
+        public int Closed;
         /// <summary>Wall ends run through an opening that sat past them.</summary>
         public int Extended;
         public int Doors;
         public int Windows;
         /// <summary>Openings that found no wall.</summary>
         public int Loose;
-        /// <summary>Openings the bake will not cut: the loose ones, and those on a wall standing free.</summary>
+        /// <summary>Openings the bake will not cut: the loose ones, and those on a block the bake skips.</summary>
         public int Uncut;
         public int Unlabelled;
         /// <summary>Rooms the walls do not close around.</summary>
         public int Outside;
         /// <summary>Separate wall outlines once touching rectangles are read together: what the bake extrudes.</summary>
         public int Outlines;
-        /// <summary>Outlines the bake will skip: a lone block reads as a room outline there.</summary>
+        /// <summary>Outlines standing free of the rest as a lone block: a wall run, or a block the bake skips.</summary>
         public int Blocks;
+        /// <summary>Of those, blocks wider than a wall: the bake reads each as a room outline and skips it.</summary>
+        public int Skipped;
         /// <summary>What was left out, each with its reason.</summary>
         public List<string> Dropped = new List<string>();
         /// <summary>What the user should look at, one line each.</summary>
@@ -259,6 +270,10 @@ public static class PlanImport
         DropContained(walls, null, result);
         Host(walls, plan.Openings, s, result);
         Join(walls, s, result);
+        var extended = result.Extended;
+        Settle(walls, plan.Openings, s, result);
+        // A wall run on through an opening has a new end to join.
+        if (result.Extended > extended) Join(walls, s, result);
         DropContained(walls, result.Openings, result);
 
         foreach (var wall in walls)
@@ -414,7 +429,7 @@ public static class PlanImport
     /// Each opening goes to the nearest wall it lies in. One that starts where
     /// a wall stops takes that wall with it: the wall is run through the
     /// opening, as the bake needs a wall to cut. One with no wall in reach
-    /// stays where it was detected and is reported.
+    /// waits for Settle. result.Openings keeps the file's order.
     /// </summary>
     static void Host(List<Wall> walls, List<Opening> detected, Settings s, Result result)
     {
@@ -423,82 +438,103 @@ public static class PlanImport
             var kind = opening.Kind == "window" ? "window" : "door";
             if (kind == "window") result.Windows++;
             else result.Doors++;
-
-            var best = -1;
-            var bestOff = double.MaxValue;
-            var bestInside = false;
-            double bestLo = 0, bestHi = 0;
-            for (var i = 0; i < walls.Count; i++)
-            {
-                if (!TryProject(opening, walls[i], s, out var lo, out var hi, out var off)) continue;
-                var length = walls[i].Length;
-                var inside = lo >= -1.0 && hi <= length + 1.0;
-                var past = !inside
-                    && ((lo >= -1.0 && lo <= length + s.MergeGap) || (hi <= length + 1.0 && hi >= -s.MergeGap));
-                if (!inside && !past) continue;
-                if (best >= 0 && bestInside && !inside) continue;
-                if (best >= 0 && bestInside == inside && off >= bestOff) continue;
-                best = i;
-                bestOff = off;
-                bestInside = inside;
-                bestLo = lo;
-                bestHi = hi;
-            }
-
-            var middle = Mid(opening.A, opening.B);
-            var name = kind + " at " + At(middle);
-            if (best < 0)
-            {
-                var nearest = Nearest(walls, middle);
-                var note = nearest < 0 ? "no wall to sit in" : "no wall in reach, nearest face " + Mm(nearest) + " mm away";
-                result.Openings.Add(new Opening
-                {
-                    Kind = kind,
-                    A = opening.A,
-                    B = opening.B,
-                    Width = opening.Width,
-                    Depth = s.LooseDepth,
-                    Note = note
-                });
-                result.Loose++;
-                result.Review.Add(name + ": " + note + ". Left where it was detected; it will not cut until a wall is drawn under it.");
-                continue;
-            }
-
-            var wall = walls[best];
-            var u = Unit(wall.A, wall.B);
-            var a = Along(wall.A, u, bestLo);
-            var b = Along(wall.A, u, bestHi);
-            var wallLength = wall.Length;
-            if (bestLo < -1.0)
-            {
-                wall.A = a;
-                result.Extended++;
-            }
-            if (bestHi > wallLength + 1.0)
-            {
-                wall.B = b;
-                result.Extended++;
-            }
-
-            var placed = new Opening
+            result.Openings.Add(Place(walls, opening, kind, s, result) ?? new Opening
             {
                 Kind = kind,
-                A = a,
-                B = b,
+                A = opening.A,
+                B = opening.B,
                 Width = opening.Width,
-                Depth = wall.Thickness + 2.0 * s.Proud,
-                Host = best
-            };
-            if (wall.Diagonal)
-                placed.Note = "on a diagonal wall: the bake cuts along X or Y only, so it will not cut square to this wall";
-            else if (placed.Width <= placed.Depth)
-                placed.Note = "narrower than its wall is thick: check its width after the bake";
-            else if (opening.Kind != "window" && opening.Kind != "door")
-                placed.Note = "a passage with no door drawn: imported as a door";
-            if (placed.Note != null) result.Review.Add(name + ": " + placed.Note + ".");
-            result.Openings.Add(placed);
+                Depth = s.LooseDepth
+            });
         }
+    }
+
+    /// <summary>
+    /// An opening that found no wall is tried again now that the other
+    /// openings and the joins have moved the wall ends, so the order of the
+    /// file does not decide which openings find a wall. One still with no
+    /// wall stays where it was detected and is reported.
+    /// </summary>
+    static void Settle(List<Wall> walls, List<Opening> detected, Settings s, Result result)
+    {
+        for (var i = 0; i < result.Openings.Count; i++)
+        {
+            var loose = result.Openings[i];
+            if (loose.Host >= 0) continue;
+            var placed = Place(walls, detected[i], loose.Kind, s, result);
+            if (placed != null)
+            {
+                result.Openings[i] = placed;
+                continue;
+            }
+            var middle = Mid(loose.A, loose.B);
+            var nearest = Nearest(walls, middle);
+            loose.Note = nearest < 0 ? "no wall to sit in" : "no wall in reach, nearest face " + Mm(nearest) + " mm away";
+            result.Loose++;
+            result.Review.Add(loose.Kind + " at " + At(middle) + ": " + loose.Note
+                + ". Left where it was detected; it will not cut until a wall is drawn under it.");
+        }
+    }
+
+    /// <summary>The opening on its wall, the wall run through it where it sat past the end. Null with no wall in reach.</summary>
+    static Opening Place(List<Wall> walls, Opening opening, string kind, Settings s, Result result)
+    {
+        var best = -1;
+        var bestOff = double.MaxValue;
+        var bestInside = false;
+        double bestLo = 0, bestHi = 0;
+        for (var i = 0; i < walls.Count; i++)
+        {
+            if (!TryProject(opening, walls[i], s, out var lo, out var hi, out var off)) continue;
+            var length = walls[i].Length;
+            var inside = lo >= -1.0 && hi <= length + 1.0;
+            var past = !inside
+                && ((lo >= -1.0 && lo <= length + s.MergeGap) || (hi <= length + 1.0 && hi >= -s.MergeGap));
+            if (!inside && !past) continue;
+            if (best >= 0 && bestInside && !inside) continue;
+            if (best >= 0 && bestInside == inside && off >= bestOff) continue;
+            best = i;
+            bestOff = off;
+            bestInside = inside;
+            bestLo = lo;
+            bestHi = hi;
+        }
+
+        if (best < 0) return null;
+
+        var wall = walls[best];
+        var u = Unit(wall.A, wall.B);
+        var a = Along(wall.A, u, bestLo);
+        var b = Along(wall.A, u, bestHi);
+        var wallLength = wall.Length;
+        if (bestLo < -1.0)
+        {
+            wall.A = a;
+            result.Extended++;
+        }
+        if (bestHi > wallLength + 1.0)
+        {
+            wall.B = b;
+            result.Extended++;
+        }
+
+        var placed = new Opening
+        {
+            Kind = kind,
+            A = a,
+            B = b,
+            Width = opening.Width,
+            Depth = wall.Thickness + 2.0 * s.Proud,
+            Host = best
+        };
+        if (wall.Diagonal)
+            placed.Note = "on a diagonal wall: the bake cuts along X or Y only, so it will not cut square to this wall";
+        else if (placed.Width <= placed.Depth)
+            placed.Note = "narrower than its wall is thick: check its width after the bake";
+        else if (opening.Kind != "window" && opening.Kind != "door")
+            placed.Note = "a passage with no door drawn: imported as a door";
+        if (placed.Note != null) result.Review.Add(kind + " at " + At(Mid(opening.A, opening.B)) + ": " + placed.Note + ".");
+        return placed;
     }
 
     /// <summary>Distance from p to the nearest wall face, 0 inside a wall, -1 with no walls.</summary>
@@ -516,12 +552,15 @@ public static class PlanImport
     /// <summary>
     /// A wall end within reach of another wall runs to that wall's far face,
     /// so a corner is a full corner and the outline closes. A collinear
-    /// neighbour a small gap away is met. Every move is measured on the walls
-    /// as detected, then applied, so the order of the walls does not matter.
+    /// neighbour a small gap away is met. An end that stood more than
+    /// JoinReach short closed a gap in the detection: counted, with its line
+    /// in Review. Every move is measured on the walls as detected, then
+    /// applied, so the order of the walls does not matter.
     /// </summary>
     static void Join(List<Wall> walls, Settings s, Result result)
     {
         var moves = new List<KeyValuePair<int, double>>();
+        var closed = new List<Pt>();
         for (var i = 0; i < walls.Count; i++)
         {
             for (var end = 0; end < 2; end++)
@@ -530,13 +569,21 @@ public static class PlanImport
                 var at = end == 0 ? wall.A : wall.B;
                 var outward = end == 0 ? Unit(wall.B, wall.A) : Unit(wall.A, wall.B);
                 var best = double.NaN;
+                var stoodShort = 0.0;
                 for (var j = 0; j < walls.Count; j++)
                 {
-                    if (i == j || !TryReach(wall, at, outward, walls[j], s, out var move)) continue;
-                    if (double.IsNaN(best) || Math.Abs(move) < Math.Abs(best)) best = move;
+                    if (i == j || !TryReach(wall, at, outward, walls[j], s, out var move, out var gap)) continue;
+                    if (!double.IsNaN(best) && Math.Abs(move) >= Math.Abs(best)) continue;
+                    best = move;
+                    stoodShort = gap;
                 }
                 if (double.IsNaN(best) || Math.Abs(best) < 0.5 || wall.Length + best < s.MinLength) continue;
                 moves.Add(new KeyValuePair<int, double>(2 * i + end, best));
+                // Two ends facing each other in one line close one gap between them: reported once.
+                if (stoodShort <= s.JoinReach || closed.Exists(c => Dist(c, at) <= stoodShort + 1.0)) continue;
+                closed.Add(at);
+                result.Review.Add("Closed a " + Mm(stoodShort) + " mm gap at " + At(at)
+                    + ": the wall end was run to the wall it stopped short of. Check that nothing opens there.");
             }
         }
         foreach (var move in moves)
@@ -545,13 +592,19 @@ public static class PlanImport
             if (move.Key % 2 == 0) wall.A = Along(wall.A, Unit(wall.B, wall.A), move.Value);
             else wall.B = Along(wall.B, Unit(wall.A, wall.B), move.Value);
         }
-        result.Joined = moves.Count;
+        result.Joined += moves.Count;
+        result.Closed += closed.Count;
     }
 
-    /// <summary>How far the end at 'at' moves along 'outward' to meet 'other'. Negative trims an overshoot.</summary>
-    static bool TryReach(Wall wall, Pt at, Pt outward, Wall other, Settings s, out double move)
+    /// <summary>
+    /// How far the end at 'at' moves along 'outward' to meet 'other', and the
+    /// gap it stood short by (0 when it had reached). Negative trims an
+    /// overshoot. The reach is the thicker of the two walls, JoinReach at least.
+    /// </summary>
+    static bool TryReach(Wall wall, Pt at, Pt outward, Wall other, Settings s, out double move, out double gap)
     {
-        move = 0;
+        move = gap = 0;
+        var reach = Math.Max(s.JoinReach, Math.Max(wall.Thickness, other.Thickness));
         var u = Unit(other.A, other.B);
         var n = Normal(u);
         var rate = Dot(outward, n);
@@ -563,11 +616,12 @@ public static class PlanImport
             var l2 = (-other.Thickness / 2.0 - off) / rate;
             var near = Math.Min(l1, l2);
             var far = Math.Max(l1, l2);
-            if (near > s.JoinReach || far < -s.JoinReach) return false;
+            if (near > reach || far < -s.JoinReach) return false;
             var along = Dot(Sub(Along(at, outward, (near + far) / 2.0), other.A), u);
             var slack = wall.Thickness / 2.0 + s.JoinReach;
             if (along < -slack || along > other.Length + slack) return false;
             move = far;
+            gap = Math.Max(0, near);
             return true;
         }
 
@@ -575,9 +629,10 @@ public static class PlanImport
         if (Math.Abs(off) >= (wall.Thickness + other.Thickness) / 2.0) return false;
         var a = Dot(Sub(other.A, at), outward);
         var b = Dot(Sub(other.B, at), outward);
-        var gap = Math.Min(a, b);
-        if (gap <= 0 || gap > s.JoinReach) return false;
-        move = gap + s.Proud;
+        var apart = Math.Min(a, b);
+        if (apart <= 0 || apart > reach) return false;
+        move = apart + s.Proud;
+        gap = apart;
         return true;
     }
 
@@ -626,10 +681,11 @@ public static class PlanImport
     }
 
     /// <summary>
-    /// The bake reads walls that touch as one outline, and takes a closed
-    /// outline that fills most of its bounding box for a room outline, not a
-    /// wall: it skips it. A wall or straight run standing free of the rest is
-    /// such a block, so it is reported here before the bake drops it.
+    /// The bake reads walls that touch as one outline. An outline standing
+    /// free of the rest that fills most of its bounding box is a lone block.
+    /// A slender one is a wall run: the bake keeps it as a wall on its own.
+    /// One wider than a wall reads as a room outline there and is skipped.
+    /// Either way it is reported here first.
     /// </summary>
     static void Outlines(List<List<Pt>> loops, Result result)
     {
@@ -638,20 +694,39 @@ public static class PlanImport
             var area = RoomDetect.Area(outer);
             if (area <= 0) continue;
             result.Outlines++;
+            var edge = Length(outer);
             foreach (var hole in loops)
-                if (RoomDetect.Area(hole) < 0 && RoomDetect.Contains(outer, hole[0])) area += RoomDetect.Area(hole);
+            {
+                if (RoomDetect.Area(hole) >= 0 || !RoomDetect.Contains(outer, hole[0])) continue;
+                area += RoomDetect.Area(hole);
+                edge += Length(hole);
+            }
             var box = (outer.Max(p => p.X) - outer.Min(p => p.X)) * (outer.Max(p => p.Y) - outer.Min(p => p.Y));
-            if (box <= 0 || area / box <= BlockFill) continue;
+            if (!RoomDetect.IsBlock(area, box)) continue;
             result.Blocks++;
+            var run = RoomDetect.IsWallRun(area, edge);
+            if (!run) result.Skipped++;
             foreach (var wall in result.Walls)
-                if (RoomDetect.Contains(outer, Mid(wall.A, wall.B))) wall.Free = true;
+            {
+                if (!RoomDetect.Contains(outer, Mid(wall.A, wall.B))) continue;
+                wall.Free = true;
+                wall.Skipped = !run;
+            }
             var at = RoomDetect.TryInside(new List<List<Pt>> { outer }, out var inside) ? inside : outer[0];
-            result.Review.Add("wall at " + At(at) + " stands free of the other walls: the bake reads a lone block as a room outline and skips it. Run it into a wall, or delete it.");
+            result.Review.Add("wall at " + At(at) + " stands free of the other walls: "
+                + (run
+                    ? "it bakes as a wall on its own."
+                    : "a block this wide reads as a room outline at the bake and is skipped.")
+                + " Run it into a wall, or delete it.");
         }
     }
 
-    /// <summary>The bake's own limit (LooksLikeRoofOrRoomFill): footprint over bounding box.</summary>
-    const double BlockFill = 0.45;
+    static double Length(List<Pt> ring)
+    {
+        var length = 0.0;
+        for (var i = 0; i < ring.Count; i++) length += Dist(ring[i], ring[(i + 1) % ring.Count]);
+        return length;
+    }
 
     static void Rooms(Plan plan, List<List<Pt>> loops, Result result)
     {
@@ -686,9 +761,9 @@ public static class PlanImport
                 result.Uncut++;
                 continue;
             }
-            if (!result.Walls[opening.Host].Free) continue;
+            if (!result.Walls[opening.Host].Skipped) continue;
             result.Uncut++;
-            var note = "its wall stands free and the bake skips that wall, so this will not cut";
+            var note = "its wall is in a block the bake skips, so this will not cut";
             result.Review.Add(opening.Kind + " at " + At(Mid(opening.A, opening.B)) + ": " + note + ".");
             if (opening.Note == null) opening.Note = note;
         }
@@ -697,7 +772,7 @@ public static class PlanImport
         {
             var at = rooms.Where(r => r.Label == null).Select(r => At(r.At));
             result.Review.Add(Count(result.Unlabelled, "room") + " without a label (" + string.Join("; ", at)
-                + "): each reads " + RoomDetect.DefaultRoomName + " until a text on the label layer names it.");
+                + "): each is labelled " + RoomDetect.DefaultRoomName + ". Edit that text on the label layer to name it.");
         }
         if (result.Outside > 0)
         {
@@ -730,6 +805,7 @@ public static class PlanImport
         if (result.Unlabelled > 0) review.Add(Count(result.Unlabelled, "room") + " without a label");
         if (result.Outside > 0) review.Add("walls open around " + Count(result.Outside, "room"));
         if (result.Blocks > 0) review.Add(Count(result.Blocks, "wall") + " standing free");
+        if (result.Closed > 0) review.Add(Count(result.Closed, "wall gap") + " closed");
         if (result.Dropped.Count > 0) review.Add(result.Dropped.Count + " dropped");
         return text + (review.Count > 0 ? " Review: " + string.Join(", ", review) + "." : " Nothing to review.");
     }
@@ -800,21 +876,25 @@ public static class PlanImport
 
     /// <summary>
     /// A wall rectangle at the new scale. One still as the import made it
-    /// (four corners, square, its stamped thickness) keeps a round thickness:
-    /// its centreline scales and the thickness is rounded again from the
-    /// detected value, so a repeat does not drift. One the user has reshaped
-    /// scales as drawn. thickness is what to stamp, or NaN to leave the stamp.
+    /// (four corners, square, as thick as its detected thickness rounds to at
+    /// the scale the plan has now) keeps a round thickness: its centreline
+    /// scales and the thickness is rounded again from the detected value, so
+    /// scaling away and back does not drift. The detected thickness and the
+    /// plan's scale are all it reads: there is no second stamp to go stale.
+    /// One the user has reshaped scales as drawn. thickness is the wall's new
+    /// thickness, or NaN for a wall that scaled as drawn.
     /// </summary>
     public static List<Pt> RescaleWall(
-        Scale now, double factor, IList<Pt> ring, double detected, double stamped, double round, out double thickness)
+        Scale now, double factor, IList<Pt> ring, double detected, double round, out double thickness)
     {
         thickness = double.NaN;
-        if (ring.Count == 4 && detected > 0 && stamped > 0)
+        if (ring.Count == 4 && detected > 0)
         {
+            var drawn = RoundTo(detected * now.Factor, round);
             var side = Dist(ring[1], ring[2]);
             var square = Math.Abs(Dot(Sub(ring[1], ring[0]), Sub(ring[2], ring[1])))
                 <= 1e-3 * Math.Max(1.0, Dist(ring[0], ring[1]) * side);
-            if (square && Math.Abs(side - stamped) <= 1.0 && Math.Abs(Dist(ring[3], ring[0]) - stamped) <= 1.0
+            if (square && Math.Abs(side - drawn) <= 1.0 && Math.Abs(Dist(ring[3], ring[0]) - drawn) <= 1.0
                 && Dist(ring[0], ring[1]) > 1e-6)
             {
                 thickness = RoundTo(detected * factor, round);

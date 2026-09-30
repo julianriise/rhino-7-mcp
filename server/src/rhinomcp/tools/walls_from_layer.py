@@ -20,8 +20,10 @@ def walls_from_layer(
 
     Uses the curves as drawn (double-line / room outlines). Does not
     centerline-offset. Nested closed curves become wall bands (outer minus
-    inner). Disjoint closed curves extrude as-is. Source curves stay on
-    their original layer. Does not create a roof, ceiling, or floor slab;
+    inner). A closed curve standing free, in a room or outside, is a wall
+    of its own when it is slender (no wider across than 600 mm): a wall run
+    is never read as a room. A free block wider than that is a room outline
+    and is skipped. Source curves stay on their original layer. Does not create a roof, ceiling, or floor slab;
     rooms stay open at the top. Roof/ceiling/slab/floor layers are ignored.
     Layer X-EXIST returns count 0: existing underlay is not a bake source.
 

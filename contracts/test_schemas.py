@@ -676,13 +676,14 @@ def test_responses():
 
     print("  plan_import_result:")
     if not validate("responses/plan_import_result.json", {
-        "walls": 30, "walls_detected": 41, "merged": 11, "squared": 0, "diagonal": 0, "joined": 40, "extended": 5,
-        "doors": 7, "windows": 12, "loose": 1, "uncut": 1, "outlines": 5, "free_walls": 3,
+        "walls": 30, "walls_detected": 41, "merged": 11, "squared": 0, "diagonal": 0, "joined": 43, "gaps_closed": 3,
+        "extended": 5, "doors": 7, "windows": 12, "loose": 0, "uncut": 0, "outlines": 2, "free_walls": 1,
+        "blocks_skipped": 0,
         "rooms": 11, "unlabelled": 3, "outside": 8,
-        "dropped": [], "review": ["window at 18.2, -16.4 m: no wall in reach, nearest face 212 mm away."],
+        "dropped": [], "review": ["Closed a 250 mm gap at 5.0, 3.6 m: the wall end was run to the wall it stopped short of. Check that nothing opens there."],
         "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
         "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan.png",
-                     "width_mm": 42011.6, "height_mm": 29705.4},
+                     "display": "Rendered", "width_mm": 42011.6, "height_mm": 29705.4},
         "objects": 72, "replaced": 0, "warnings": [],
         "message": "Imported 30 walls (41 detected, 11 merged), 7 doors, 12 windows, 11 rooms.",
     }):

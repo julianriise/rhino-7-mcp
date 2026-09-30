@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -46,6 +47,7 @@ public partial class RhinoMCPFunctions
         bool showCplaneAxes = parameters["show_cplane_axes"]?.ToObject<bool>() ?? false;
         bool zoomToFit = parameters["zoom_to_fit"]?.ToObject<bool>() ?? false;
         var zoomBox = parameters["zoom_bbox"] as JArray;
+        var hideLayers = parameters["hide_layers"] as JArray;
 
         // Ensure minimum dimensions
         width = Math.Max(width, 100);
@@ -77,8 +79,21 @@ public partial class RhinoMCPFunctions
             : null;
         string savedTargetName = !targetIsActive ? targetView.ActiveViewport.Name : null;
 
+        // hide_layers: off for this picture only. The finally below turns them on again.
+        var hidden = new List<int>();
+
         try
         {
+            foreach (var name in hideLayers ?? new JArray())
+            {
+                var layer = FindLayerCaseInsensitive(doc, name.ToString());
+                if (layer == null || !layer.IsVisible) continue;
+                layer.IsVisible = false;
+                doc.Layers.Modify(layer, layer.Index, true);
+                hidden.Add(layer.Index);
+            }
+            if (hidden.Count > 0) doc.Views.Redraw();
+
             // Store viewport name
             string viewportName = targetView.ActiveViewport.Name ?? viewportTarget;
 
@@ -137,11 +152,18 @@ public partial class RhinoMCPFunctions
                 ["show_grid"] = showGrid,
                 ["show_axes"] = showAxes,
                 ["show_cplane_axes"] = showCplaneAxes,
+                ["hidden_layers"] = hidden.Count,
                 ["object_count"] = doc.Objects.Count
             };
         }
         finally
         {
+            foreach (var index in hidden)
+            {
+                var layer = doc.Layers[index];
+                layer.IsVisible = true;
+                doc.Layers.Modify(layer, index, true);
+            }
             // Restore any viewport we may have changed (projection and name) so the
             // capture leaves no visible side effect on the user's views.
             if (savedActiveState != null)

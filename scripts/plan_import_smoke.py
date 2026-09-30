@@ -8,12 +8,16 @@ One detection per run, into a blank millimetre document:
 
 Import and check the counts and the receipt. Set the scale from a known
 dimension: the sheet is A3 at 1:100, so the page image's two top corners are
-42 000 mm apart. Repeat the step, scale away and back, and check nothing
-drifted. Capture the plan with the underlay. Bake with the panel's own
-sequence, run rooms_detect, capture again. The bake is checked against what
-the import said it would do (outlines, free walls, uncut openings).
+42 000 mm apart. Repeat the step, scale away and back, and check no corner of
+any wall drifted. Capture the plan with the underlay. Bake with the panel's
+own sequence, run rooms_detect, capture again. The bake is checked against
+what the import's receipt said it would do (outlines, blocks the bake skips,
+uncut openings), never against numbers written here.
 
-Prints at most nine lines: a PASS or FAIL line, then one line per step.
+Prints at most nine lines: a PASS or FAIL line, then one line per step. The
+last four say what the pictures should show: the underlay's display mode, one
+floor, wall and roof per outline, every imported room still a room with a
+label, and the plan image drawn in both views.
 The plan is a client drawing: it is read from forsk-private and never copied
 into a repo. The plan file and captures go to /tmp.
 
@@ -25,9 +29,11 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import socket
 import sys
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server" / "src"))
@@ -44,17 +50,24 @@ TECTLY_FRAME = dict(crop_size=(1423, 1684), crop_offset=(694, 327), page_size=(3
 # A3 is 420 mm wide: 42 000 mm on the plan at 1:100.
 PAGE_WIDTH_MM = 42000.0
 
-# The same numbers the headless plan1 tests pin (PlanImportTests).
+# What the clean-up makes of each detection: the same numbers the headless
+# plan1 tests pin (PlanImportTests). What the bake should then do is read from
+# the import's receipt, not written here.
 EXPECT = {
     "tectly": dict(
-        walls_detected=41, walls=30, doors=7, windows=12, loose=1, uncut=4, rooms=11,
-        unlabelled=3, outlines=5, free_walls=3, diagonal=0, status="unconfirmed"),
+        walls_detected=41, walls=30, doors=7, windows=12, loose=0, uncut=0, rooms=11,
+        unlabelled=3, outlines=2, free_walls=1, blocks_skipped=0, gaps_closed=3, diagonal=0,
+        status="unconfirmed"),
     "pdfvector": dict(
         walls_detected=54, walls=47, doors=12, windows=10, loose=0, uncut=0, rooms=12,
-        unlabelled=0, outside=0, outlines=1, free_walls=0, diagonal=4, status="detected"),
+        unlabelled=0, outside=0, outlines=1, free_walls=0, blocks_skipped=0, gaps_closed=0, diagonal=4,
+        status="detected"),
 }
 CAPTURE_MARGIN_MM = 1500.0
+# get_objects gives corners to 0.01 mm: any drift it can show is a failure.
 DRIFT_MM = 0.001
+# The slabs are wireframe in the Top view, and the isocurves across them read as walls.
+SLAB_LAYERS = ["A-FLOR", "A-ROOF"]
 
 
 class SmokeError(RuntimeError):
@@ -141,7 +154,19 @@ def convert_tectly(plan1: Path, out: Path, failures: list) -> str:
     )
 
 
-def capture(sock: socket.socket, png: str, bbox: list[float]) -> None:
+def wall_rings(sock: socket.socket) -> dict[str, list]:
+    """The four corners of every imported wall rectangle, by object id."""
+    ids = {row.get("id") for row in by_kind(layer_objects(sock, "wall"), "wall")}
+    rows = send_command(sock, "get_objects", {
+        "layer_filter": "wall", "limit": 200, "include_geometry": True, "include_hidden": True,
+    }).get("objects") or []
+    return {
+        row.get("id"): [(float(p[0]), float(p[1])) for p in ((row.get("geometry") or {}).get("points") or [])[:4]]
+        for row in rows if row.get("id") in ids
+    }
+
+
+def capture(sock: socket.socket, bbox: list[float], hide: list[str]) -> bytes:
     shot = send_command(sock, "capture_viewport", {
         "viewport": "top",
         "width": 1000,
@@ -152,8 +177,38 @@ def capture(sock: socket.socket, png: str, bbox: list[float]) -> None:
         ],
         "show_grid": False,
         "show_axes": False,
+        "hide_layers": hide,
     })
-    Path(png).write_bytes(base64.b64decode(shot.get("image_data") or ""))
+    return base64.b64decode(shot.get("image_data") or "")
+
+
+def png_rows(data: bytes) -> list[bytes]:
+    """The rows of a PNG as stored (each still filtered): enough to tell two pictures of one view apart."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SmokeError("the capture is not a PNG")
+    at, packed, width, height, per_pixel = 8, bytearray(), 0, 0, 0
+    while at + 8 <= len(data):
+        length = int.from_bytes(data[at:at + 4], "big")
+        kind, body = data[at + 4:at + 8], data[at + 8:at + 8 + length]
+        if kind == b"IHDR":
+            width, height = int.from_bytes(body[0:4], "big"), int.from_bytes(body[4:8], "big")
+            per_pixel = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(body[9], 0) * body[8] // 8
+        elif kind == b"IDAT":
+            packed += body
+        at += 12 + length
+    raw = zlib.decompress(bytes(packed))
+    stride = width * per_pixel + 1
+    if not width or not per_pixel or len(raw) != stride * height:
+        raise SmokeError("the capture PNG is not one this smoke reads")
+    return [raw[y * stride:(y + 1) * stride] for y in range(height)]
+
+
+def underlay_rows(shown: bytes, hidden: bytes) -> tuple[int, int]:
+    """Rows of the view that change when X-PLAN goes off, and the rows there are. 0: the plan image is not drawn."""
+    a, b = png_rows(shown), png_rows(hidden)
+    if len(a) != len(b):
+        raise SmokeError(f"two captures of one view differ in size: {len(a)} and {len(b)} rows")
+    return sum(1 for mine, other in zip(a, b) if mine != other), len(a)
 
 
 def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: list) -> None:
@@ -184,9 +239,9 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     lines.append(
         f"import walls {imported.get('walls')}/{imported.get('walls_detected')} doors {imported.get('doors')} "
         f"windows {imported.get('windows')} loose {imported.get('loose')} uncut {imported.get('uncut')} "
-        f"rooms {imported.get('rooms')} unlabelled {imported.get('unlabelled')} outside {imported.get('outside')} "
-        f"outlines {imported.get('outlines')} free {imported.get('free_walls')} diagonal {imported.get('diagonal')} "
-        f"review {len(review)}"
+        f"rooms {imported.get('rooms')} unlabelled {imported.get('unlabelled')} walls open around {imported.get('outside')} "
+        f"outlines {imported.get('outlines')} free {imported.get('free_walls')} gaps closed {imported.get('gaps_closed')} "
+        f"diagonal {imported.get('diagonal')} review {len(review)}"
     )
     message = str(imported.get("message") or "")
     lines.append("receipt " + clip(message))
@@ -202,12 +257,14 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     pictures = by_kind(layer_objects(sock, "X-PLAN"), "underlay")
     chip = send_command(sock, "panel_daylight", {"action": "state", "text": "set the scale of the plan"})
     lines.append(
-        f"underlay X-PLAN locked {layer.get('locked')} objects {len(pictures)} "
-        f"{width:.0f} x {float(underlay.get('height_mm') or 0):.0f} mm, chip {chip.get('import_label')} "
-        f"visible {chip.get('import_visible')}, intent {chip.get('intent')}"
+        f"underlay shown in {underlay.get('display')} whatever the view's mode, X-PLAN locked {layer.get('locked')} "
+        f"objects {len(pictures)} {width:.0f} x {float(underlay.get('height_mm') or 0):.0f} mm, "
+        f"chip {chip.get('import_label')} visible {chip.get('import_visible')}, intent {chip.get('intent')}"
     )
     if layer.get("locked") is not True or len(pictures) != 1 or abs(width - 42011.6) > 1.0:
         failures.append(f"underlay locked {layer.get('locked')} objects {len(pictures)} width {width:.1f}")
+    if not underlay.get("display"):
+        failures.append("underlay has no display mode of its own: a wireframe view shows nothing of it")
     if chip.get("import_label") != "Set scale" or chip.get("import_visible") is not True or chip.get("intent") != "import":
         failures.append(f"chip {chip.get('import_label')} visible {chip.get('import_visible')} intent {chip.get('intent')}")
 
@@ -215,23 +272,28 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     ends = {"p1": [0, 0], "p2": [width, 0], "frame": "source"}
     measured = send_command(sock, "plan_scale", ends)
     first = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
-    walls = by_kind(layer_objects(sock, "wall"), "wall")
-    wall_id = walls[0].get("id") if walls else None
-    before = bbox_of(sock, wall_id) if wall_id else []
+    # Every corner of every wall, before and after: one wall is not the plan.
+    before = wall_rings(sock)
     repeat = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
     away = send_command(sock, "plan_scale", {**ends, "length_mm": 2 * PAGE_WIDTH_MM})
     back = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
-    after = bbox_of(sock, wall_id) if wall_id else []
-    drift = max((abs(a - b) for a, b in zip(before, after)), default=-1.0)
+    after = wall_rings(sock)
+    moved = [
+        max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+        for key, ring in before.items() for a, b in zip(ring, after.get(key) or [])
+    ]
+    whole = len(before) == imported.get("walls") and all(len(ring) == 4 and len(after.get(key) or []) == 4 for key, ring in before.items())
+    drift = max(moved) if whole and moved else -1.0
     pictures = by_kind(layer_objects(sock, "X-PLAN"), "underlay")
     page = bbox_of(sock, pictures[0].get("id")) if pictures else [0, 0, 0, 0]
-    thick = [float((w.get("attributes") or {}).get("forsk:import_thickness") or 0) for w in walls]
+    # The rectangle as drawn is the thickness: across is its second side.
+    thick = [math.dist(ring[1], ring[2]) for ring in after.values() if len(ring) == 4]
     chip = send_command(sock, "panel_daylight", {"action": "state"})
     lines.append(
         f"scale {float(measured.get('measured_mm') or 0):.1f} -> {PAGE_WIDTH_MM:.0f} mm x{float(first.get('relative') or 0):.6f} "
         f"moved {first.get('scaled')} rounded {first.get('walls_rounded')}, repeat x{float(repeat.get('relative') or 0):.9f}, "
-        f"x2 and back drift {drift:.4f} mm, page {page[2] - page[0]:.2f} mm wide, status {back.get('status')}, "
-        f"chip visible {chip.get('import_visible')}"
+        f"x2 and back {len(before)} walls drift {drift:.2f} mm at most, page {page[2] - page[0]:.2f} mm wide, "
+        f"status {back.get('status')}, chip visible {chip.get('import_visible')}"
     )
     if abs(float(measured.get("measured_mm") or 0) - width) > 0.1 or measured.get("scaled") != 0:
         failures.append(f"scale measure {measured.get('measured_mm')} scaled {measured.get('scaled')}")
@@ -246,8 +308,11 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
         failures.append(f"scale x2 {away.get('relative')} back {back.get('relative')}")
     if drift < 0 or drift > DRIFT_MM or abs(page[2] - page[0] - PAGE_WIDTH_MM) > 0.01 or abs(page[0]) > 0.01 or abs(page[3]) > 0.01:
         failures.append(f"scale drift {drift} page {page}")
-    if any(t <= 0 or abs(t - round(t / 10) * 10) > 1e-6 for t in thick) or len(thick) != imported.get("walls"):
-        failures.append("wall thickness is not on 10 mm after the scale")
+    if away.get("walls_rounded") != imported.get("walls") or back.get("walls_rounded") != imported.get("walls"):
+        failures.append(f"scale x2 rounded {away.get('walls_rounded')} walls, back {back.get('walls_rounded')}, of {imported.get('walls')}")
+    # Corners come to 0.01 mm, so a side is good to 0.03.
+    if any(t <= 0 or abs(t - round(t / 10) * 10) > 0.03 for t in thick) or len(thick) != imported.get("walls"):
+        failures.append("a wall is not a round 10 mm thick after the scale")
     if back.get("status") != "user" or chip.get("import_visible") is not False:
         failures.append(f"scale status {back.get('status')} chip visible {chip.get('import_visible')}")
 
@@ -257,8 +322,9 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     xs = [p[0] * factor for wall in data["walls"] for p in (wall["start"], wall["end"])]
     ys = [p[1] * factor for wall in data["walls"] for p in (wall["start"], wall["end"])]
     zoom = [min(xs), min(ys), max(xs), max(ys)]
-    review_png = f"/tmp/forsk-smoke-import-{source}-1000.png"
-    capture(sock, review_png, zoom)
+    review_shot = capture(sock, zoom, [])
+    Path(f"/tmp/forsk-smoke-import-{source}-1000.png").write_bytes(review_shot)
+    review_rows = underlay_rows(review_shot, capture(sock, zoom, ["X-PLAN"]))
 
     # 5. Bake, the panel's sequence. Checked against what the import said the bake would do.
     floor = send_command(sock, "floor_from_layer", {"layer": "wall", "thickness": 400})
@@ -270,36 +336,62 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     cut = int(doors.get("cut_count") or 0) + int(windows.get("cut_count") or 0)
     failed = int(doors.get("failed_count") or 0) + int(windows.get("failed_count") or 0)
     openings = int(imported.get("doors") or 0) + int(imported.get("windows") or 0)
+    # The receipt said what the bake would make: a floor, a roof and a wall
+    # solid per outline (a wall run standing free is one), less the blocks too
+    # wide to be a wall, and every opening cut but the uncut ones.
     outlines = int(imported.get("outlines") or 0)
-    free = int(imported.get("free_walls") or 0)
+    skipped = int(imported.get("blocks_skipped") or 0)
     uncut = int(imported.get("uncut") or 0)
     lines.append(
-        f"bake floor {floor.get('count')} walls {baked.get('count')} roof {roof.get('count')} "
+        f"bake floor {floor.get('count')} walls {baked.get('count')} roof {roof.get('count')} for {outlines} "
+        f"outline{'' if outlines == 1 else 's'} ({imported.get('gaps_closed')} gaps closed, {imported.get('free_walls')} standing free), "
         f"doors {doors.get('cut_count')}/{imported.get('doors')} windows {windows.get('cut_count')}/{imported.get('windows')} "
-        f"failed {failed} room markers {markers.get('count')}"
+        f"failed {failed}, room markers {markers.get('count')}"
     )
-    if floor.get("count") != outlines or baked.get("count") != outlines - free:
+    if floor.get("count") != outlines or roof.get("count") != outlines or baked.get("count") != outlines - skipped:
         failures.append(
-            f"bake floor {floor.get('count')} expected {outlines}, walls {baked.get('count')} expected {outlines - free}")
+            f"bake floor {floor.get('count')} roof {roof.get('count')} expected {outlines}, "
+            f"walls {baked.get('count')} expected {outlines - skipped}")
     if cut != openings - uncut or failed != uncut:
         failures.append(f"bake cut {cut} expected {openings - uncut}, failed {failed} expected {uncut}")
     if markers.get("count") != imported.get("rooms"):
         failures.append(f"bake room markers {markers.get('count')} expected {imported.get('rooms')}")
 
     # 6. Rooms: the imported outlines win, detection fills the rest. The scale is refused once 3D exists.
+    # Every imported room is still a room, walls closed round it or not, and
+    # has a label. kept counts the regions the walls close that an imported
+    # outline already stands for: detection found them and added nothing.
     rooms = send_command(sock, "rooms_detect", {})
     refused = send_raw(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
+    had = int(imported.get("rooms") or 0)
+    survive = int(rooms.get("count") or 0) - int(rooms.get("detected") or 0)
+    labels = len(by_kind(layer_objects(sock, "label"), "label"))
     lines.append(
-        f"rooms {rooms.get('count')} detected {rooms.get('detected')} kept {rooms.get('kept')} "
-        f"open {len(rooms.get('open') or [])}, scale after bake {refused.get('status')}: "
-        + clip(rooms.get("message"), 90)
+        f"rooms {survive} of {had} imported are rooms after the bake, {labels} labelled "
+        f"({imported.get('unlabelled')} as Rom), walls close round {rooms.get('kept')}, "
+        f"{rooms.get('detected')} detected on top, open {len(rooms.get('open') or [])}, "
+        f"scale after bake {refused.get('status')}: " + clip(rooms.get("message"), 40)
     )
-    if int(rooms.get("count") or 0) < int(imported.get("rooms") or 0):
-        failures.append(f"rooms {rooms.get('count')} expected at least {imported.get('rooms')}")
+    if survive != had:
+        failures.append(f"rooms {survive} of {had} imported rooms survive the bake")
+    if labels != had:
+        failures.append(f"rooms {labels} labels for {had} rooms")
+    # A room the walls stay open around is named in the receipt's review, so the user knows which to close.
+    if int(imported.get("outside") or 0) > 0 and not any("The walls do not close around" in row for row in review):
+        failures.append(f"rooms the walls are open around {imported.get('outside')} and the review does not name them")
     if refused.get("status") != "error" or "clear_generated" not in str(refused.get("message")):
         failures.append("plan_scale ran on a generated model")
 
-    capture(sock, f"/tmp/forsk-smoke-import-{source}-baked-1000.png", zoom)
+    # 7. The baked view, slabs off. In both views the plan image is drawn: turn X-PLAN off and rows change.
+    baked_shot = capture(sock, zoom, SLAB_LAYERS)
+    Path(f"/tmp/forsk-smoke-import-{source}-baked-1000.png").write_bytes(baked_shot)
+    baked_rows = underlay_rows(baked_shot, capture(sock, zoom, SLAB_LAYERS + ["X-PLAN"]))
+    lines.append(
+        f"views plan image drawn: {review_rows[0]} of {review_rows[1]} rows change with X-PLAN off before the bake, "
+        f"{baked_rows[0]} of {baked_rows[1]} after; baked view has the slabs off, so no isocurve reads as a wall"
+    )
+    if review_rows[0] == 0 or baked_rows[0] == 0:
+        failures.append(f"the plan image is not drawn: rows changed {review_rows[0]} before the bake, {baked_rows[0]} after")
 
 
 def main() -> int:
@@ -316,7 +408,7 @@ def main() -> int:
             run(source, plan1, sock, failures, lines)
         finally:
             sock.close()
-    except (SmokeError, OSError, KeyError, ValueError) as exc:
+    except (SmokeError, OSError, KeyError, ValueError, zlib.error) as exc:
         failures.append(clip(exc, 200))
     print(f"import {source}: " + ("PASS" if not failures else "FAIL " + "; ".join(failures)))
     for line in lines:
