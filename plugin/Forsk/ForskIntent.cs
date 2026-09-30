@@ -18,7 +18,7 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is PDF import, print, daylight, sheets, DXF, import, edit, build.
+    /// One-turn tool bias from the message. Order is PDF or image import, print, daylight, sheets, DXF, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -26,7 +26,7 @@ namespace RhinoMCPPlugin.Forsk
         public static ForskIntent Classify(string text, string target)
         {
             var t = Normalize(text);
-            if (IsPlanPdf(t)) return ForskIntent.Import;
+            if (IsPlanFile(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
             if (IsSheets(t)) return ForskIntent.Sheets;
@@ -60,10 +60,15 @@ namespace RhinoMCPPlugin.Forsk
             return sb.ToString().Trim();
         }
 
-        /// <summary>A PDF brought in: import plan.pdf. It comes before print, which "pdf" would match.</summary>
-        static bool IsPlanPdf(string t)
+        /// <summary>
+        /// A PDF, scan or image brought in: import plan.pdf, import scan.jpg. It
+        /// comes before print, which "pdf" would match, and sheets, which
+        /// "tegning" would.
+        /// </summary>
+        static bool IsPlanFile(string t)
         {
-            if (!HasWord(t, "pdf")) return false;
+            if (!HasWord(t, "pdf") && !HasWord(t, "png") && !HasWord(t, "jpg") && !HasWord(t, "jpeg") && !HasWord(t, "scan"))
+                return false;
             return HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere") || t.Contains("bring in");
         }
 
@@ -250,6 +255,52 @@ namespace RhinoMCPPlugin.Forsk
                 note.Append("\n· ").Append(row);
             foreach (var row in warnings ?? new string[0])
                 if (!rest.Contains(row)) note.Append("\n· ").Append(row);
+            return note.ToString().Trim();
+        }
+    }
+
+    /// <summary>
+    /// The Import plan chip's file and receipt (F7). A PDF is plan_import's
+    /// pdf_path, a PNG or JPEG its image_path for the raster source, and a DXF
+    /// goes to dxf_import. The receipt row is the message's first sentence:
+    /// the counts, or on an error the reason. The rest goes under it, the
+    /// scale, the licence or the next step, then what needs review.
+    /// </summary>
+    public static class ForskPlanFile
+    {
+        public static readonly string[] Extensions = { ".pdf", ".png", ".jpg", ".jpeg", ".dxf" };
+        const int ReviewRows = 6;
+
+        /// <summary>The argument a picked file goes in: pdf_path, image_path, or dxf for dxf_import. Null for a file the chip does not take.</summary>
+        public static string Argument(string path)
+        {
+            switch (Path.GetExtension(path ?? "").ToLowerInvariant())
+            {
+                case ".pdf": return "pdf_path";
+                case ".png":
+                case ".jpg":
+                case ".jpeg": return "image_path";
+                case ".dxf": return "dxf";
+                default: return null;
+            }
+        }
+
+        /// <summary>The receipt row: Import plan · ok · Imported 30 walls, 7 doors, 12 windows, 11 rooms.</summary>
+        public static string Line(bool ok, string message)
+        {
+            return "Import plan · " + (ok ? "ok" : "error") + " · " + ForskDxf.Split(string.IsNullOrEmpty(message) ? "failed" : message, out _);
+        }
+
+        /// <summary>Under the receipt: the rest of the message, then what needs review, one row each.</summary>
+        public static string Note(bool ok, string message, IEnumerable<string> review)
+        {
+            ForskDxf.Split(message, out var rest);
+            var note = new StringBuilder(rest);
+            var rows = ok && review != null ? new List<string>(review) : new List<string>();
+            for (var i = 0; i < rows.Count && i < ReviewRows; i++)
+                note.Append("\n· ").Append(rows[i]);
+            if (rows.Count > ReviewRows)
+                note.Append("\n· and ").Append(rows.Count - ReviewRows).Append(" more");
             return note.ToString().Trim();
         }
     }

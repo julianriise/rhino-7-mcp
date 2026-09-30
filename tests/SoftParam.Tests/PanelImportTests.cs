@@ -26,6 +26,10 @@ public class PanelImportTests
     [InlineData("Import /Users/jr/plans/plan1.pdf")]
     [InlineData("importer pdf-en")]
     [InlineData("bring in the PDF plan")]
+    [InlineData("import scan.jpg")]
+    [InlineData("Import /Users/jr/Downloads/IMG_1234.jpeg")]
+    [InlineData("importer tegning.png")]
+    [InlineData("bring in the scan")]
     public void ImportWords_ClassifyAsImport(string text)
     {
         Assert.Equal(ForskIntent.Import, ForskIntentRouter.Classify(text, ""));
@@ -97,6 +101,47 @@ public class PanelImportTests
         Assert.Equal("Import DXF · error · Import DXF cancelled.", ForskDxf.Line(false, "Import DXF cancelled."));
         Assert.Equal("Import DXF · ok · Imported a.dxf: 1 object.", ForskDxf.Line(true, "Imported a.dxf: 1 object."));
         Assert.Equal("", ForskDxf.Note("Imported a.dxf: 1 object.", new string[0], new string[0]));
+    }
+
+    [Theory]
+    [InlineData("/tmp/plan1.pdf", "pdf_path")]
+    [InlineData("/tmp/Plan1.PDF", "pdf_path")]
+    [InlineData("/tmp/scan.png", "image_path")]
+    [InlineData("/tmp/scan.jpg", "image_path")]
+    [InlineData("/tmp/photo.JPEG", "image_path")]
+    [InlineData("/tmp/office_2D.dxf", "dxf")]
+    [InlineData("/tmp/plan.json", null)]
+    public void ImportPlanChip_TakesAPdfAnImageOrADxf(string file, string argument)
+    {
+        // A PDF is plan_import's pdf_path, an image its image_path for the raster source, a DXF goes to dxf_import.
+        Assert.Equal(argument, ForskPlanFile.Argument(file));
+        Assert.Equal(argument != null, ForskPlanFile.Extensions.Contains(System.IO.Path.GetExtension(file).ToLowerInvariant()));
+    }
+
+    [Fact]
+    public void ImportPlanReceipt_OnAnError_PutsTheReasonOnTheRowAndTheNextStepUnderIt()
+    {
+        const string weights = "plan.png: the raster source has no model weights. Nothing was imported. "
+            + "Fetch them once with: uv run --frozen --project \"/Users/jr/Documents/hobby/forsk/tools/cubicasa\" cubicasa-plan --fetch-weights, then import again.";
+        Assert.Equal("Import plan · error · plan.png: the raster source has no model weights.", ForskPlanFile.Line(false, weights));
+        Assert.Equal("Nothing was imported. Fetch them once with: uv run --frozen --project \"/Users/jr/Documents/hobby/forsk/tools/cubicasa\" "
+            + "cubicasa-plan --fetch-weights, then import again.", ForskPlanFile.Note(false, weights, null));
+        Assert.Equal("Import plan · error · Import plan cancelled.", ForskPlanFile.Line(false, "Import plan cancelled."));
+        Assert.Equal("", ForskPlanFile.Note(false, "Import plan cancelled.", null));
+    }
+
+    [Fact]
+    public void ImportPlanReceipt_CarriesTheScaleTheLicenceAndTheReviewRows()
+    {
+        const string message = "Imported 4 walls, 1 door, 1 window, 1 room. Wall cleanup: 4 wall pieces merged into 1 outline, 0 gaps closed, 0 overlaps left. "
+            + "Scale not detected (assumed 1:100): set it with two points and a known length. Nothing to review. "
+            + "Plan read by the CubiCasa5k model, licensed CC BY-NC 4.0 — non-commercial use only.";
+        Assert.Equal("Import plan · ok · Imported 4 walls, 1 door, 1 window, 1 room.", ForskPlanFile.Line(true, message));
+        var review = Enumerable.Range(1, 8).Select(i => "row " + i).ToArray();
+        var note = ForskPlanFile.Note(true, message, review).Split('\n');
+        Assert.Equal(message.Substring("Imported 4 walls, 1 door, 1 window, 1 room. ".Length), note[0]);
+        Assert.Contains("licensed CC BY-NC 4.0 — non-commercial use only.", note[0]);
+        Assert.Equal(new[] { "· row 1", "· row 2", "· row 3", "· row 4", "· row 5", "· row 6", "· and 2 more" }, note.Skip(1).ToArray());
     }
 
     static ChipRow Underlay(string status) => new ChipRow { ImportKind = "underlay", ScaleStatus = status, Layer = "X-PLAN" };

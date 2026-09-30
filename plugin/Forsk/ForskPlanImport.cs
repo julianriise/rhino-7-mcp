@@ -12,21 +12,20 @@ using RhinoMCPPlugin.Functions;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// Plan import from the panel, chip and chat. Import plan asks for a vector
-    /// PDF (and its page, when it has more than one), or for the plan image
-    /// and its detection (forsk.plan_import.v0), and runs plan_import. Set
-    /// scale runs the ForskSetScale command: two picked points and the real
-    /// length between them, prefilled with what the plan measures now. The
-    /// geometry and the clean-up live in the plan_import and plan_scale handlers.
-    /// A DXF asked for in chat with no path is picked here, and its receipt
-    /// shown whole (ForskDxf).
+    /// Plan import from the panel, chip and chat. Import plan asks for a PDF
+    /// (and its page, when it has more than one), a scanned or photographed
+    /// plan (PNG or JPEG, read by the raster source), or a DXF (dxf_import),
+    /// and runs the import. Set scale runs the ForskSetScale command: two
+    /// picked points and the real length between them, prefilled with what the
+    /// plan measures now. The geometry and the clean-up live in the plan_import
+    /// and plan_scale handlers. A DXF asked for in chat with no path is picked
+    /// here, and its receipt shown whole (ForskDxf).
     /// </summary>
     public static class ForskPlanImport
     {
         public const string ImportTool = "plan_import";
         public const string ScaleTool = "plan_scale";
         public const string ScaleCommand = "ForskSetScale";
-        const int ReviewRows = 6;
 
         static JObject _lastScale;
 
@@ -39,28 +38,36 @@ namespace RhinoMCPPlugin.Forsk
                 line = ScaleLine(PickScaleFromBackground());
                 return;
             }
+            if (source?["dxf"] != null)
+            {
+                var dxf = ForskTools.CommandOnUi(ForskDxf.Tool, new JObject { ["path"] = source["dxf"] });
+                line = DxfLine(dxf);
+                note = DxfNote(dxf);
+                return;
+            }
             var envelope = ForskTools.CommandOnUi(ImportTool, source);
             line = ImportLine(envelope);
             note = ReviewNote(envelope);
         }
 
         /// <summary>
-        /// What to import, as plan_import's arguments: a vector PDF and its
-        /// page (asked for when it has more than one), or a plan image and its
-        /// detection beside it. UI thread. Null when a dialog is cancelled.
+        /// What to import: plan_import's arguments for a PDF and its page
+        /// (asked for when it has more than one) or an image, or the DXF as dxf.
+        /// UI thread. Null when a dialog is cancelled.
         /// </summary>
         public static JObject PickSource()
         {
             var parent = RhinoEtoApp.MainWindow;
-            var first = new Eto.Forms.OpenFileDialog { Title = "Import plan: a vector PDF, or the plan image" };
-            first.Filters.Add(new FileFilter("Plan PDF or image", ".pdf", ".png", ".jpg", ".jpeg"));
+            var first = new Eto.Forms.OpenFileDialog { Title = "Import plan: a PDF, a scan or photo of the plan, or a DXF" };
+            first.Filters.Add(new FileFilter("Plan PDF, image or DXF", ForskPlanFile.Extensions));
             if (first.ShowDialog(parent) != DialogResult.Ok) return null;
-            if (IsPdf(first.FileName))
+            var argument = ForskPlanFile.Argument(first.FileName);
+            if (argument == "pdf_path")
             {
                 var page = AskPage(first.FileName);
                 return page == null ? null : new JObject { ["pdf_path"] = first.FileName, ["page"] = page.Value };
             }
-            return PickDetection(first.FileName, out var plan) ? new JObject { ["image_path"] = first.FileName, ["plan_path"] = plan } : null;
+            return argument == null ? null : new JObject { [argument] = first.FileName };
         }
 
         /// <summary>PickSource from a background thread.</summary>
@@ -92,15 +99,11 @@ namespace RhinoMCPPlugin.Forsk
             return items.IndexOf(chosen) + 1;
         }
 
-        public static bool IsPdf(string path)
-        {
-            return !string.IsNullOrEmpty(path) && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-        }
-
         /// <summary>
         /// plan_import from chat with nothing it can open as it stands: the user
         /// picks. A PDF with no page and more than one is asked for its page.
-        /// Null when nothing needs asking.
+        /// An image alone goes to the raster source; a plan file named with it
+        /// has to be there too. Null when nothing needs asking.
         /// </summary>
         public static JObject NeedsSource(JObject args)
         {
@@ -109,7 +112,7 @@ namespace RhinoMCPPlugin.Forsk
                 return args["page"] == null ? new JObject { ["pdf_path"] = pdf, ["ask_page"] = true } : null;
             var image = args?["image_path"]?.ToString();
             var plan = args?["plan_path"]?.ToString();
-            if (!ForskDxf.NeedsPick(image) && !ForskDxf.NeedsPick(plan)) return null;
+            if (!ForskDxf.NeedsPick(image) && (string.IsNullOrWhiteSpace(plan) || !ForskDxf.NeedsPick(plan))) return null;
             return new JObject();
         }
 
@@ -142,52 +145,24 @@ namespace RhinoMCPPlugin.Forsk
             return answer;
         }
 
-        /// <summary>The detection beside a plan image. UI thread. False when the dialog is cancelled.</summary>
-        static bool PickDetection(string image, out string plan)
-        {
-            plan = null;
-            var planDialog = new Eto.Forms.OpenFileDialog { Title = "Import plan: its detection (forsk.plan_import.v0 JSON)" };
-            planDialog.Filters.Add(new FileFilter("Plan detection", ".json"));
-            try
-            {
-                var folder = Path.GetDirectoryName(image);
-                if (!string.IsNullOrEmpty(folder)) planDialog.Directory = new Uri(folder);
-            }
-            catch (Exception)
-            {
-                // The dialog opens where the system last left it.
-            }
-            if (planDialog.ShowDialog(RhinoEtoApp.MainWindow) != DialogResult.Ok) return false;
-            plan = planDialog.FileName;
-            return true;
-        }
-
-        /// <summary>Chip receipt: Import plan · ok · Imported 30 walls, 7 doors, 12 windows, 11 rooms.</summary>
+        /// <summary>Chip receipt: Import plan · ok · Imported 30 walls, 7 doors, 12 windows, 11 rooms. On an error, the reason.</summary>
         public static string ImportLine(JObject envelope)
         {
-            if (!Ok(envelope))
-                return "Import plan · error · " + ForskTools.Clip(envelope?["message"]?.ToString() ?? "failed");
-            return "Import plan · ok · " + ForskTools.Clip(Split(envelope, out _));
+            return ForskTools.Clip(ForskPlanFile.Line(Ok(envelope), Message(envelope)));
         }
 
-        /// <summary>Under the receipt: how the scale stands, then what needs review, one row each.</summary>
+        /// <summary>Under the receipt: how the scale stands and the model's licence, then what needs review. On an error, the next step.</summary>
         public static string ReviewNote(JObject envelope)
         {
-            if (!Ok(envelope)) return "";
-            Split(envelope, out var rest);
-            var review = envelope["result"]?["review"] as JArray;
-            if (review == null) return rest;
-            for (var i = 0; i < review.Count && i < ReviewRows; i++)
-                rest += "\n· " + review[i];
-            if (review.Count > ReviewRows)
-                rest += "\n· and " + (review.Count - ReviewRows) + " more";
-            return rest.Trim();
+            var ok = Ok(envelope);
+            var review = (ok ? envelope["result"]?["review"] as JArray : null)?.Select(row => row.ToString());
+            return ForskPlanFile.Note(ok, Message(envelope), review);
         }
 
-        /// <summary>The tool message's first sentence (the counts), and the rest of it.</summary>
-        static string Split(JObject envelope, out string rest)
+        /// <summary>The tool's message: the receipt, or why it failed.</summary>
+        static string Message(JObject envelope)
         {
-            return ForskDxf.Split(envelope["result"]?["message"]?.ToString(), out rest);
+            return (Ok(envelope) ? envelope["result"]?["message"] : envelope?["message"])?.ToString();
         }
 
         /// <summary>The DXF to import, asked for from a background thread. Null when the dialog is cancelled.</summary>
