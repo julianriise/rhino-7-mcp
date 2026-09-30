@@ -645,6 +645,18 @@ public class PlanImportTests
     }
 
     [Fact]
+    public void Union_RectangleInsideAWall_ChangesNothing()
+    {
+        var walls = new List<List<Pt>>
+        {
+            Rect(0, 0, 4200, 200), Rect(0, 4000, 4200, 4200), Rect(0, 0, 200, 4200), Rect(4000, 0, 4200, 4200)
+        };
+        var inside = new List<List<Pt>>(walls) { Rect(1000, 50, 2000, 150) };
+        Assert.Equal(new[] { -14.44, 17.64 }, Areas(RoomDetect.Union(walls, 1.0)));
+        Assert.Equal(new[] { -14.44, 17.64 }, Areas(RoomDetect.Union(inside, 1.0)));
+    }
+
+    [Fact]
     public void Union_DiagonalAcrossACorner_ClosesATriangle()
     {
         // A bay: two walls at a right angle and a diagonal drawn across them.

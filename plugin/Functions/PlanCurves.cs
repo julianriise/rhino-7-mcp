@@ -55,11 +55,15 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException($"Layer '{layerName}' not found.");
 
         var rawCurves = new List<Curve>();
+        var imported = false;
         foreach (var obj in doc.Objects)
         {
             if (!ObjectOnLayer(doc, obj, sourceLayer) || IsRoomMarker(obj)) continue;
             if (obj.Geometry is Curve curve)
+            {
                 rawCurves.Add(curve.DuplicateCurve());
+                if (!string.IsNullOrEmpty(obj.Attributes.GetUserString(ImportKey))) imported = true;
+            }
         }
 
         var warnings = new JArray();
@@ -114,7 +118,7 @@ public partial class RhinoMCPFunctions
 
         // Room outlines may share an edge and stay separate rooms; wall outlines that touch are one wall plan.
         if (wallOutlines)
-            profiles.Closed = MergeTouchingOutlines(profiles.Closed, tol);
+            profiles.Closed = MergeTouchingOutlines(profiles.Closed, tol, imported);
         return profiles;
     }
 
@@ -126,8 +130,11 @@ public partial class RhinoMCPFunctions
     /// with the floor and roof under the whole footprint. A plan drawn as
     /// nested outlines (the outer wall face and the room faces inside it), or
     /// with any outline that is not a polyline, is left exactly as drawn.
+    /// A layer that holds an imported plan is a rectangle per wall by
+    /// construction: there an outline inside another is a wall drawn inside a
+    /// wall, which the union absorbs, not a room face.
     /// </summary>
-    private static List<Curve> MergeTouchingOutlines(List<Curve> closed, double tol)
+    private static List<Curve> MergeTouchingOutlines(List<Curve> closed, double tol, bool imported)
     {
         if (closed.Count < 2) return closed;
         var rings = new List<List<RoomDetect.Pt>>();
@@ -144,7 +151,7 @@ public partial class RhinoMCPFunctions
         }
 
         var containTol = Math.Max(tol, 1.0);
-        for (var i = 0; i < closed.Count; i++)
+        for (var i = 0; i < closed.Count && !imported; i++)
         {
             for (var j = 0; j < closed.Count; j++)
             {
