@@ -7,6 +7,12 @@ One detection per run, into a blank millimetre document:
              (tools/pdf_vector) on page 1 and imports what it wrote. The
              receipt names the scale it read; the doors take the swing the
              sheet draws.
+  raster     plan1_200.png alone: plan_import runs the raster source
+             (tools/cubicasa, the CubiCasa5k model) on the page image. Its
+             counts are the model's and are not pinned; the receipt must say
+             the scale is assumed 1:100 and carry the model's CC BY-NC 4.0
+             licence line, and the page must land at 1:100. With no model
+             weights fetched it prints SKIP and exits 0.
 
 Import and check the counts and the receipt: the walls come in merged, one
 closed outline per connected run with its holes, none overlapping another,
@@ -26,7 +32,7 @@ The plan is a client drawing: it is read from forsk-private and never copied
 into a repo. The plan file and captures go to /tmp.
 
 Usage:
-  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py pdfvector|pdf PLAN1_DIR
+  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py pdfvector|pdf|raster PLAN1_DIR
 """
 
 from __future__ import annotations
@@ -61,7 +67,13 @@ EXPECT = {
         walls_detected=54, walls=46, doors=12, windows=10, loose=0, uncut=0, rooms=12,
         unlabelled=0, outside=0, outlines=1, outline_holes=12, wall_pieces=53, overlaps=0, free_walls=0,
         blocks_skipped=0, gaps_closed=1, diagonal=4, status="detected"),
+    # The model's reading of the page image: its counts are its own. The merge
+    # leaves no overlap whatever it read, and an image's scale is only assumed.
+    "raster": dict(overlaps=0, status="unconfirmed"),
 }
+# The raster source's receipt: the assumed scale, and the model's licence.
+RASTER_SCALE = "Scale not detected (assumed 1:100): set it with two points and a known length."
+RASTER_LICENCE = "Plan read by the CubiCasa5k model, licensed CC BY-NC 4.0 — non-commercial use only."
 # Doors whose swing the extractor read off plan1 (PlanPdfTests).
 PDF_SWINGS = 11
 CAPTURE_MARGIN_MM = 1500.0
@@ -72,6 +84,10 @@ SLAB_LAYERS = ["A-FLOR", "A-ROOF"]
 
 
 class SmokeError(RuntimeError):
+    pass
+
+
+class SmokeSkip(RuntimeError):
     pass
 
 
@@ -214,13 +230,27 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     if int(summary.get("object_count") or 0) > 40:
         raise SmokeError("document is not blank")
 
-    # 1. Import: counts and receipt. The PDF run hands plan_import the PDF alone.
+    # 1. Import: counts and receipt. The PDF run hands plan_import the PDF alone, the raster run the image alone.
     if source == "pdf":
         imported = send_command(sock, "plan_import", {"pdf_path": str(plan1 / "plan1.pdf"), "page": 1})
         pdf = imported.get("pdf") or {}
         plan = Path(str(pdf.get("plan_path") or ""))
         if pdf.get("file") != "plan1.pdf" or pdf.get("page") != 1 or not plan.is_file():
             failures.append(f"pdf {pdf}")
+    elif source == "raster":
+        answer = send_raw(sock, "plan_import", {"image_path": str(image)})
+        if answer.get("status") == "error":
+            if "has no model weights" in str(answer.get("message")):
+                raise SmokeSkip(clip(answer.get("message"), 200))
+            raise SmokeError(f"plan_import: {answer.get('message')}")
+        imported = answer.get("result") or {}
+        raster = imported.get("raster") or {}
+        plan = Path(str(raster.get("plan_path") or ""))
+        if raster.get("file") != "plan1_200.png" or raster.get("model") != "cubicasa5k" or "non-commercial" not in str(
+                raster.get("licence")) or not plan.is_file():
+            failures.append(f"raster {raster}")
+        if not imported.get("walls"):
+            failures.append("raster read no walls")
     else:
         imported = send_command(sock, "plan_import", {"image_path": str(image), "plan_path": str(plan)})
     scale = imported.get("scale") or {}
@@ -247,11 +277,15 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
             f"wall layer holds {len(drawn)} objects, {outers} outlines and {holes} holes, for "
             f"{imported.get('outlines')} outlines and {imported.get('outline_holes')} holes")
     message = str(imported.get("message") or "")
-    lines.append("receipt " + clip(message))
+    # The raster receipt's head is the model's counts, printed above: show its scale and licence instead.
+    lines.append("receipt " + clip(RASTER_SCALE + " " + RASTER_LICENCE if source == "raster" and RASTER_SCALE in message
+                                   and message.endswith(RASTER_LICENCE) else message))
     if "Scale" not in message or ("Review:" not in message and "Nothing to review" not in message):
         failures.append("receipt has no scale or review part")
     if expect["status"] == "detected" and "Scale 1:100 read from the plan and applied: confirm it, or override it, with Set scale" not in message:
         failures.append("receipt does not name the scale it read and Set scale")
+    if source == "raster" and (RASTER_SCALE not in message or not message.endswith(RASTER_LICENCE)):
+        failures.append("receipt does not say the scale is assumed and the model's licence")
     for row in imported.get("warnings") or []:
         failures.append(f"import warning {row}")
 
@@ -401,7 +435,7 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
 
 def main() -> int:
     if len(sys.argv) != 3 or sys.argv[1] not in EXPECT:
-        print("usage: plan_import_smoke.py pdfvector|pdf PLAN1_DIR", file=sys.stderr)
+        print("usage: plan_import_smoke.py pdfvector|pdf|raster PLAN1_DIR", file=sys.stderr)
         return 1
     source, plan1 = sys.argv[1], Path(sys.argv[2])
     failures: list = []
@@ -413,6 +447,9 @@ def main() -> int:
             run(source, plan1, sock, failures, lines)
         finally:
             sock.close()
+    except SmokeSkip as skip:
+        print(f"import {source}: SKIP {skip}")
+        return 0
     except (SmokeError, OSError, KeyError, ValueError, zlib.error) as exc:
         failures.append(clip(exc, 200))
     print(f"import {source}: " + ("PASS" if not failures else "FAIL " + "; ".join(failures)))
