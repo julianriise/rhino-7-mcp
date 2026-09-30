@@ -19,9 +19,18 @@
       "items": { "type": "string" },
       "description": "Texts left as Rhino made them: no DXF entity on their layer within 1 mm, or two equally near"
     },
+    "labels_suspect": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Unmatched texts that look like a mangled \\U+ escape (B00F8ttekott): reported, not guessed at"
+    },
+    "units": { "type": "string", "enum": ["mm", "cm", "m", "in", "ft"], "description": "The units the DXF is drawn in" },
+    "insunits": { "type": ["integer", "null"], "description": "$INSUNITS as the file has it, null when it is missing" },
+    "scale": { "type": "number", "description": "Millimetres per drawing unit: the scale into the mm model" },
+    "units_guessed": { "type": "boolean", "description": "$INSUNITS was missing, 0 or not a plan unit; the units are read from the drawing's size (under 500 across is m, else mm) and a warning says so" },
     "warnings": { "type": "array", "items": { "type": "string" } },
-    "message": { "type": "string", "description": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten." }
+    "message": { "type": "string", "description": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten. Units mm ($INSUNITS 4), scale ×1." }
   },
-  "required": ["success", "objects", "texts", "matched", "rewritten", "unmatched", "message"],
+  "required": ["success", "objects", "texts", "matched", "rewritten", "unmatched", "units", "insunits", "scale", "units_guessed", "message"],
   "additionalProperties": false
 }

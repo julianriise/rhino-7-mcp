@@ -17,10 +17,18 @@ def dxf_import(ctx: Context, path: str = "") -> Dict[str, Any]:
     from the DXF file and rewrites the imported texts, matched by layer and
     position. Room names from rooms_detect then read the right text.
 
+    It also lands the plan at true size in the mm model. The DXF's units are
+    read from $INSUNITS (inches, feet, mm, cm or m). When that is missing or 0
+    they are guessed from the drawing's size (under 500 across is metres, else
+    mm) and a warning says so. Rhino's import takes the units from its own
+    AutoCAD import setting instead; what it scaled by is measured and set right.
+
     path must be an absolute path to a .dxf file.
 
     Returns:
-    Dictionary with objects, texts, matched, rewritten, unmatched, warnings, and message.
+    Dictionary with objects, texts, matched, rewritten, unmatched,
+    labels_suspect, units, insunits, scale (mm per drawing unit),
+    units_guessed, warnings, and message.
     """
     try:
         if not isinstance(path, str) or not path.strip():

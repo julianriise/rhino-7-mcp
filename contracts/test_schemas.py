@@ -721,8 +721,18 @@ def test_responses():
     print("  dxf_import_result:")
     if not validate("responses/dxf_import_result.json", {
         "success": True, "objects": 283, "texts": 16, "matched": 16,
-        "rewritten": ["B00F8ttekott -> Bøttekott"], "unmatched": [], "warnings": [],
-        "message": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten.",
+        "rewritten": ["B00F8ttekott -> Bøttekott"], "unmatched": [], "labels_suspect": [], "warnings": [],
+        "units": "mm", "insunits": 4, "scale": 1.0, "units_guessed": False,
+        "message": "Imported office_2D.dxf: 283 objects. Texts 16/16 read from the DXF, 1 rewritten. Units mm ($INSUNITS 4), scale ×1.",
+    }):
+        all_passed = False
+    guessed = "Units not stated ($INSUNITS missing): guessed m from its size, 12 across, scale ×1000. Check a known length."
+    if not validate("responses/dxf_import_result.json", {
+        "success": True, "objects": 40, "texts": 1, "matched": 0,
+        "rewritten": [], "unmatched": ["label 'B00F8ttekott' at 2000,3000, no DXF text on its layer"],
+        "labels_suspect": ["B00F8ttekott"], "warnings": [guessed],
+        "units": "m", "insunits": None, "scale": 1000.0, "units_guessed": True,
+        "message": "Imported plan.dxf: 40 objects. Texts 0/1 read from the DXF, 0 rewritten, 1 left as Rhino made them. " + guessed,
     }):
         all_passed = False
     if not validate("responses/rooms_detect_result.json", {

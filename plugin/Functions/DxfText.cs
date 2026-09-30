@@ -257,7 +257,7 @@ public static class DxfText
             && int.TryParse(s.Substring(start, length), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
     }
 
-    static double Number(string value) =>
+    internal static double Number(string value) =>
         double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var n) ? n : 0;
 
     /// <summary>ANSI_1252 → 1252. No or an unknown header value: 1252, the DXF default.</summary>
@@ -267,7 +267,7 @@ public static class DxfText
         return digits.Success ? int.Parse(digits.Value, CultureInfo.InvariantCulture) : 1252;
     }
 
-    static string HeaderValue(List<KeyValuePair<string, string>> pairs, string name)
+    internal static string HeaderValue(List<KeyValuePair<string, string>> pairs, string name)
     {
         for (var i = 0; i + 1 < pairs.Count; i++)
         {
@@ -278,7 +278,7 @@ public static class DxfText
     }
 
     /// <summary>Group code / value pairs. Codes are trimmed; values keep their spaces, not the line end.</summary>
-    static List<KeyValuePair<string, string>> Pairs(string text)
+    internal static List<KeyValuePair<string, string>> Pairs(string text)
     {
         var lines = text.Split('\n');
         var pairs = new List<KeyValuePair<string, string>>(lines.Length / 2);
