@@ -582,8 +582,8 @@ public static class PlanImport
     }
 
     /// <summary>
-    /// A wall wholly inside another is dropped: the bake reads a closed curve
-    /// inside another as a hole in it.
+    /// A wall wholly inside another adds nothing to the plan and would only
+    /// be in the way when the user edits it: dropped, with the reason.
     /// </summary>
     static void DropContained(List<Wall> walls, List<Opening> openings, Result result)
     {
