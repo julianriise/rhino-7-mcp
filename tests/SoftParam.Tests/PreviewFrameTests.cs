@@ -61,8 +61,89 @@ public class PreviewFrameTests
     {
         var copy = new byte[W * 4 * H];
         var clear = PreviewFrame.CopyOpaque(frame.Pixels, frame.Stride, copy, W * 4, W, H);
-        var dark = PreviewFrame.CountDark(copy, W * 4, 4, W, H, PreviewFrame.InkStep);
-        return new PreviewFrame.Attempt { Width = W, Height = H, Dark = dark, Clear = clear };
+        var ink = PreviewFrame.Measure(copy, W * 4, 4, W, H, PreviewFrame.InkStep);
+        return new PreviewFrame.Attempt
+        {
+            Width = W, Height = H, Dark = ink.Dark, Wash = ink.Wash, Band = ink.Band, Clear = clear
+        };
+    }
+
+    // The frame the garage cap3 saved, to scale: 2 x 2 tiles, and in each the
+    // top 62 of 100 rows hold the model view (its background after the copy's
+    // colour match, a wall across it) with the page below, white with ink.
+    static Frame ModelViewOnTiles(byte background)
+    {
+        var frame = Fill(255, 255, 255, 255);
+        for (int y = 0; y < H; y++)
+        {
+            int row = y % (H / 2);
+            for (int x = 0; x < W; x++)
+            {
+                if (row < 62)
+                    Set(frame.Pixels, frame.Stride, x, y, background, background, background, 255);
+                if (row >= 32 && row < 36 || row >= 80 && row < 84 && x % 8 == 0)
+                    Set(frame.Pixels, frame.Stride, x, y, 0, 0, 0, 255);
+            }
+        }
+        return frame;
+    }
+
+    [Fact]
+    public void Classify_ModelViewPictureOnTheTiles_IsViewportNotBlackNotEmpty()
+    {
+        var read = Read(ModelViewOnTiles(235));
+
+        Assert.Equal(PreviewFrame.Kind.Viewport, read.Frame);
+        Assert.True(read.Blank);
+        // Opaque: nothing of it is the unpainted buffer.
+        Assert.Equal(0, read.Clear);
+        // Rows 0..60 of the grid are the first tile's model view.
+        Assert.Equal(64, read.Band);
+        // Per tile: 16 grid rows of model view, one of them the wall, and half a row of page ink.
+        Assert.Equal(2 * (1600 + 50), read.Dark);
+        Assert.Equal(2 * 1500, read.Wash);
+    }
+
+    [Fact]
+    public void Classify_TheSameTilesInBlack_IsBlack()
+    {
+        var read = Read(ModelViewOnTiles(0));
+
+        Assert.Equal(PreviewFrame.Kind.Black, read.Frame);
+        Assert.True(read.Blank);
+        Assert.Equal(0, read.Wash);
+        Assert.Equal(64, read.Band);
+    }
+
+    [Fact]
+    public void Measure_SheetWithItsInkBelowTheMargin_HasNoBandAndNoWash()
+    {
+        var frame = Fill(255, 255, 255, 255);
+        for (int y = 100; y < 116; y++)
+        {
+            for (int x = 0; x < W; x++)
+                Set(frame.Pixels, frame.Stride, x, y, 0, 0, 0, 255);
+        }
+        var read = Read(frame);
+
+        Assert.Equal(PreviewFrame.Kind.Ink, read.Frame);
+        Assert.Equal(PreviewFrame.InkFloor, read.Dark);
+        Assert.Equal(0, read.Wash);
+        Assert.Equal(0, read.Band);
+    }
+
+    [Theory]
+    // The saved cap3 frames, 2480 x 1754: 171738 dark, 153874 of them the
+    // model view's grey, the first tile's 547 rows on the grid.
+    [InlineData(171738, 153874, PreviewFrame.Kind.Viewport)]
+    // The same dark count with no grey in it is the black buffer.
+    [InlineData(171738, 0, PreviewFrame.Kind.Black)]
+    [InlineData(272180, 0, PreviewFrame.Kind.Black)]
+    // A sheet keeps its name whatever grey its hatches have.
+    [InlineData(12674, 9000, PreviewFrame.Kind.Ink)]
+    public void Classify_TellsTheModelViewFromTheBlackBuffer(int dark, int wash, PreviewFrame.Kind kind)
+    {
+        Assert.Equal(kind, PreviewFrame.Classify(2480, 1754, dark, 0, wash));
     }
 
     [Fact]
@@ -264,7 +345,7 @@ public class PreviewFrameTests
                 return Native(0, 0, 0, 255);
             case "grey band":
             {
-                // cap3: a light grey copy of the plan over part of the sheet.
+                // cap3: the model view's light grey picture over part of the sheet.
                 var rgba = Native(255, 255, 255, 255);
                 Draw(rgba, H, 40);
                 for (int y = 0; y < H * 3 / 5; y++)
@@ -318,7 +399,7 @@ public class PreviewFrameTests
     [Theory]
     [InlineData("sheet", PreviewFrame.Kind.Ink)]
     [InlineData("black", PreviewFrame.Kind.Black)]
-    [InlineData("grey band", PreviewFrame.Kind.Black)]
+    [InlineData("grey band", PreviewFrame.Kind.Viewport)]
     [InlineData("partly painted", PreviewFrame.Kind.Partial)]
     [InlineData("empty", PreviewFrame.Kind.Empty)]
     [InlineData("random", PreviewFrame.Kind.Black)]
@@ -331,10 +412,12 @@ public class PreviewFrameTests
 
         Assert.Equal(pixel, fast);
         Assert.Equal(pixelClear, fastClear);
-        int pixelInk = PreviewFrame.CountDark(pixel, W * 4, 4, W, H, PreviewFrame.InkStep);
-        int fastInk = PreviewFrame.CountDark(fast, W * 4, 4, W, H, PreviewFrame.InkStep);
-        Assert.Equal(pixelInk, fastInk);
-        Assert.Equal(kind, PreviewFrame.Classify(W, H, fastInk, fastClear));
+        var pixelInk = PreviewFrame.Measure(pixel, W * 4, 4, W, H, PreviewFrame.InkStep);
+        var fastInk = PreviewFrame.Measure(fast, W * 4, 4, W, H, PreviewFrame.InkStep);
+        Assert.Equal(pixelInk.Dark, fastInk.Dark);
+        Assert.Equal(pixelInk.Wash, fastInk.Wash);
+        Assert.Equal(pixelInk.Band, fastInk.Band);
+        Assert.Equal(kind, PreviewFrame.Classify(W, H, fastInk.Dark, fastClear, fastInk.Wash));
     }
 
     [Fact]
@@ -377,10 +460,15 @@ public class PreviewFrameTests
     [InlineData(2054, false)]
     [InlineData(108872, false)]
     [InlineData(108873, true)]
+    // The garage cap3 frame, and the office schedules read of 09-29 21:52.
+    [InlineData(171738, true)]
+    [InlineData(174976, true)]
     public void IsBlank_KeepsTheInkFloorAndTheBlackRule(int dark, bool blank)
     {
         Assert.Equal(blank, PreviewFrame.IsBlank(2480, 1754, dark));
-        Assert.Equal(blank, PreviewFrame.Classify(2480, 1754, dark, 0) != PreviewFrame.Kind.Ink);
+        Assert.Equal(blank, PreviewFrame.Classify(2480, 1754, dark, 0, 0) != PreviewFrame.Kind.Ink);
+        // Wash only names a blank frame. It never makes a sheet blank or a blank frame a sheet.
+        Assert.Equal(blank, PreviewFrame.Classify(2480, 1754, dark, 0, dark) != PreviewFrame.Kind.Ink);
     }
 
     [Theory]
@@ -439,9 +527,44 @@ public class PreviewFrameTests
 
         Assert.Equal(
             "capture forsk-f5-garage-doors.pdf p2 Schedules a1/2 frame=empty blank=yes ink=0/272180"
-            + " clear=4349920 raw=2480x1754 fmt=Format32bppPArgb copy=fast idle=cap"
+            + " wash=0 band=0 clear=4349920 raw=2480x1754 fmt=Format32bppPArgb copy=fast idle=cap"
             + " ms=prep:0,wake:950,idle:812,preview:70123,copy:310,check:25"
             + " png=/tmp/forsk-print-forsk-f5-garage-doors-p2-a1.png",
+            read.LogLine());
+    }
+
+    [Fact]
+    public void LogLine_ModelViewFrame_SaysViewportWashAndBand()
+    {
+        var read = new PreviewFrame.Attempt
+        {
+            Pdf = "forsk-f5-garage-cap3.pdf",
+            Page = 1,
+            PageName = "Plan",
+            Number = 3,
+            Of = 4,
+            RawWidth = 2480,
+            RawHeight = 1754,
+            Format = "Undefined",
+            Copy = "fast",
+            Width = 2480,
+            Height = 1754,
+            Dark = 171738,
+            Wash = 153874,
+            Band = 548,
+            WakeMs = 1230,
+            IdleMs = 160,
+            PreviewMs = 190,
+            CopyMs = 211,
+            CheckMs = 25,
+            Png = "/tmp/forsk-print-forsk-f5-garage-cap3-p1-a3.png"
+        };
+
+        Assert.Equal(
+            "capture forsk-f5-garage-cap3.pdf p1 Plan a3/4 frame=viewport blank=yes ink=171738/272180"
+            + " wash=153874 band=548 clear=0 raw=2480x1754 fmt=Undefined copy=fast idle=fired"
+            + " ms=prep:0,wake:1230,idle:160,preview:190,copy:211,check:25"
+            + " png=/tmp/forsk-print-forsk-f5-garage-cap3-p1-a3.png",
             read.LogLine());
     }
 
@@ -451,7 +574,7 @@ public class PreviewFrameTests
         var read = new PreviewFrame.Attempt { Pdf = "a.pdf", Page = 1, PageName = "Plan", Number = 2, Of = 2 };
 
         Assert.Equal(
-            "capture a.pdf p1 Plan a2/2 frame=none blank=yes ink=0/0 clear=0 raw=null fmt=- copy=none idle=fired"
+            "capture a.pdf p1 Plan a2/2 frame=none blank=yes ink=0/0 wash=0 band=0 clear=0 raw=null fmt=- copy=none idle=fired"
             + " ms=prep:0,wake:0,idle:0,preview:0,copy:0,check:0 png=-",
             read.LogLine());
     }

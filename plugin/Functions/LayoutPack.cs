@@ -982,7 +982,7 @@ public partial class RhinoMCPFunctions
         log.Copy = copy;
         log.Clear = clear;
         clock.Restart();
-        log.Dark = CountDarkSamples(bmp);
+        log.Dark = CountDarkSamples(bmp, out log.Wash, out log.Band);
         log.Width = bmp?.Width ?? 0;
         log.Height = bmp?.Height ?? 0;
         log.CheckMs = clock.ElapsedMilliseconds;
@@ -1168,8 +1168,11 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static int CountDarkSamples(Bitmap bmp)
+    /// <summary>Dark samples, and the wash and band of a frame that locks. A raw frame (the copy failed) gives dark only.</summary>
+    private static int CountDarkSamples(Bitmap bmp, out int wash, out int band)
     {
+        wash = 0;
+        band = 0;
         if (bmp == null || bmp.Width < 2 || bmp.Height < 2) return 0;
         // A locked buffer keeps the ink grid cheap.
         const int dense = PreviewFrame.InkStep;
@@ -1182,8 +1185,12 @@ public partial class RhinoMCPFunctions
         {
             try
             {
-                int locked = CountDarkLocked(bmp, dense);
-                if (locked >= 0) return locked;
+                int bpp = format == PixelFormat.Format24bppRgb ? 3 : 4;
+                var buffer = LockedBytes(bmp, format, out var stride);
+                var ink = PreviewFrame.Measure(buffer, stride, bpp, bmp.Width, bmp.Height, dense);
+                wash = ink.Wash;
+                band = ink.Band;
+                return ink.Dark;
             }
             catch (Exception)
             {
@@ -1191,23 +1198,6 @@ public partial class RhinoMCPFunctions
         }
         int step = direct ? dense : Math.Max(8, bmp.Width / 80);
         return CountDarkPixels(bmp, step);
-    }
-
-    private static int CountDarkLocked(Bitmap bmp, int step)
-    {
-        int bpp;
-        var format = bmp.PixelFormat;
-        if (format == PixelFormat.Format24bppRgb)
-            bpp = 3;
-        else if (format == PixelFormat.Format32bppArgb
-            || format == PixelFormat.Format32bppRgb
-            || format == PixelFormat.Format32bppPArgb)
-            bpp = 4;
-        else
-            return -1;
-
-        var buffer = LockedBytes(bmp, format, out var stride);
-        return PreviewFrame.CountDark(buffer, stride, bpp, bmp.Width, bmp.Height, step);
     }
 
     private static int CountDarkPixels(Bitmap bmp, int step)

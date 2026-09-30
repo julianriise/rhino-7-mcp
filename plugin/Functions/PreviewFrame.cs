@@ -10,12 +10,23 @@ namespace RhinoMCPPlugin.Functions;
 /// The Mac page preview as bytes. CopyOpaque makes the frame the PDF draws:
 /// a zero-alpha black pixel is an unpainted buffer and turns white, any other
 /// pixel is kept opaque. WriteColours puts each colour through SetPixel once,
-/// as the old per-pixel copy did. CountDark samples its ink on a grid. IsBlank is the
+/// as the old per-pixel copy did. Measure samples its ink on a grid. IsBlank is the
 /// retry rule: under InkFloor dark samples, or dark over two fifths of the
 /// grid, is a missed paint, not a sheet. Classify names what a frame was, and
 /// Attempt is one read of a page as a line in /tmp/forsk-print.log. No
 /// System.Drawing and no RhinoCommon, so it tests headless; LayoutPack locks
 /// the bitmaps and hands the buffers in.
+///
+/// The frame long logged as black is not black and not transparent. The
+/// saved cap3 frames (2480 x 1754, clear 0, dark 171738/272180) hold 153874
+/// samples of one light grey, 235: the model viewport's background, 230,
+/// after the copy's colour match. The preview is rendered as 2 x 2 tiles of
+/// 1252 x 889 that overlap by 12, and in each tile the top 547 rows are the
+/// model view's picture (the garage walls at that view's zoom) with the page
+/// drawn below it, 547 rows down. So the page's tiles landed on the picture
+/// of the model view, the view the wake had just put on screen. The first
+/// and the last of 23 reads are the same file. Wash and band measure that,
+/// and Classify names it Viewport.
 /// </summary>
 public static class PreviewFrame
 {
@@ -41,16 +52,22 @@ public static class PreviewFrame
 
     /// <summary>
     /// What a read gave. None: no bitmap. Empty: mostly unpainted pixels
-    /// (transparent black), no ink. White: opaque paper, no ink. Black: dark
-    /// over two fifths of the grid, the opaque black buffer. Partial: some ink,
-    /// under InkFloor. Ink: a sheet. Every kind but Ink is blank.
+    /// (transparent black), no ink. White: opaque paper, no ink. Viewport:
+    /// dark over two fifths of the grid and most of it wash, the model
+    /// view's picture with its light grey background. Black: dark over two
+    /// fifths and not wash, the opaque black buffer. Partial: some ink, under
+    /// InkFloor. Ink: a sheet. Every kind but Ink is blank.
     /// </summary>
-    public enum Kind { None, Empty, White, Black, Partial, Ink }
+    public enum Kind { None, Empty, White, Viewport, Black, Partial, Ink }
 
     public static bool IsUnpainted(int b0, int b1, int b2, int alpha)
         => alpha < 16 && b0 < 8 && b1 < 8 && b2 < 8;
 
     public static bool IsDark(int b0, int b1, int b2) => (b0 + b1 + b2) / 3 < 248;
+
+    /// <summary>Dark but light: a viewport background (230, or 235 after the colour match), never ink.</summary>
+    public static bool IsWash(int b0, int b1, int b2)
+        => IsDark(b0, b1, b2) && b0 >= 200 && b1 >= 200 && b2 >= 200;
 
     /// <summary>
     /// Colour times alpha, rounded as the Mac System.Drawing rounds it. It
@@ -150,34 +167,60 @@ public static class PreviewFrame
 
     static int Rgb(byte[] frame, int i) => frame[i] | (frame[i + 1] << 8) | (frame[i + 2] << 16);
 
-    /// <summary>Dark samples on a grid of the given step.</summary>
-    public static int CountDark(byte[] buffer, int stride, int bpp, int width, int height, int step)
+    /// <summary>
+    /// A frame on the ink grid. Dark: dark samples. Wash: the dark samples
+    /// that are light grey. Band: pixel rows from the top that are dark nine
+    /// tenths across, 0 on a sheet and 548 where the first tile holds the
+    /// model view's picture.
+    /// </summary>
+    public struct Ink
     {
-        int dark = 0;
+        public int Dark;
+        public int Wash;
+        public int Band;
+    }
+
+    /// <summary>The frame's ink on a grid of the given step.</summary>
+    public static Ink Measure(byte[] buffer, int stride, int bpp, int width, int height, int step)
+    {
+        var ink = new Ink();
+        bool top = true;
         for (int y = 0; y < height; y += step)
         {
             int row = y * stride;
+            int across = 0;
+            int dark = 0;
             for (int x = 0; x < width; x += step)
             {
                 int i = row + (x * bpp);
                 if (i + 2 >= buffer.Length) continue;
-                if (IsDark(buffer[i], buffer[i + 1], buffer[i + 2])) dark++;
+                across++;
+                if (!IsDark(buffer[i], buffer[i + 1], buffer[i + 2])) continue;
+                dark++;
+                if (IsWash(buffer[i], buffer[i + 1], buffer[i + 2])) ink.Wash++;
             }
+            ink.Dark += dark;
+            top = top && across > 0 && dark * 10 >= across * 9;
+            if (top) ink.Band = Math.Min(height, y + step);
         }
-        return dark;
+        return ink;
     }
+
+    /// <summary>Dark samples on a grid of the given step.</summary>
+    public static int CountDark(byte[] buffer, int stride, int bpp, int width, int height, int step)
+        => Measure(buffer, stride, bpp, width, height, step).Dark;
 
     public static int Samples(int width, int height)
         => ((width + InkStep - 1) / InkStep) * ((height + InkStep - 1) / InkStep);
 
     /// <summary>True when the frame is not a sheet, so the page is read again.</summary>
     public static bool IsBlank(int width, int height, int dark)
-        => Classify(width, height, dark, 0) != Kind.Ink;
+        => Classify(width, height, dark, 0, 0) != Kind.Ink;
 
-    public static Kind Classify(int width, int height, int dark, long clear)
+    public static Kind Classify(int width, int height, int dark, long clear, int wash)
     {
         if (width < 2 || height < 2) return Kind.None;
-        if (dark * 5L > Samples(width, height) * 2L) return Kind.Black;
+        if (dark * 5L > Samples(width, height) * 2L) return wash * 2L > dark ? Kind.Viewport : Kind.Black;
         if (dark == 0) return clear * 2 > (long)width * height ? Kind.Empty : Kind.White;
         if (dark < InkFloor) return Kind.Partial;
         return Kind.Ink;
@@ -218,6 +261,8 @@ public static class PreviewFrame
         public int Width;
         public int Height;
         public int Dark;
+        public int Wash;
+        public int Band;
         public long Clear;
         public bool Idle = true;
         public long PrepMs;
@@ -228,7 +273,7 @@ public static class PreviewFrame
         public long CheckMs;
         public string Png = "-";
 
-        public Kind Frame => Classify(Width, Height, Dark, Clear);
+        public Kind Frame => Classify(Width, Height, Dark, Clear, Wash);
         public bool Blank => IsBlank(Width, Height, Dark);
 
         public string LogLine()
@@ -242,6 +287,8 @@ public static class PreviewFrame
                 + " frame=" + Frame.ToString().ToLowerInvariant()
                 + " blank=" + (Blank ? "yes" : "no")
                 + " ink=" + Dark.ToString(inv) + "/" + (Width < 2 || Height < 2 ? 0 : Samples(Width, Height)).ToString(inv)
+                + " wash=" + Wash.ToString(inv)
+                + " band=" + Band.ToString(inv)
                 + " clear=" + Clear.ToString(inv)
                 + " raw=" + raw
                 + " fmt=" + Format
