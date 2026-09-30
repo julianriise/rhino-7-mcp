@@ -193,10 +193,27 @@ class TestPlanTools:
         from rhinomcp.tools.plan_import import plan_import
 
         assert plan_import(ctx=None, image_path="plan.png", plan_path="/tmp/plan.json") == {
-            "success": False, "message": "plan_import needs an absolute image_path."}
+            "success": False, "message": "plan_import needs an absolute image_path, or a pdf_path."}
         assert plan_import(ctx=None, image_path="/tmp/plan.png") == {
-            "success": False, "message": "plan_import needs an absolute plan_path."}
+            "success": False, "message": "plan_import needs an absolute plan_path, or a pdf_path."}
+        assert plan_import(ctx=None, pdf_path="plan1.pdf") == {
+            "success": False, "message": "plan_import needs an absolute pdf_path."}
+        assert plan_import(ctx=None, pdf_path="/tmp/plan1.pdf", image_path="/tmp/plan.png")["message"] == (
+            "plan_import takes pdf_path, or image_path with plan_path, not both.")
+        assert plan_import(ctx=None, pdf_path="/tmp/plan1.pdf", page=0)["message"] == "plan_import page is 1-based."
         mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.plan_import.get_rhino_connection")
+    def test_plan_import_passes_a_pdf_and_its_page_on(self, mock_get_conn):
+        from rhinomcp.tools.plan_import import plan_import
+
+        conn = MagicMock()
+        conn.send_command.return_value = {"walls": 46, "pdf": {"file": "plan1.pdf", "page": 1}}
+        mock_get_conn.return_value = conn
+        plan_import(ctx=None, pdf_path="/tmp/plan1.pdf")
+        conn.send_command.assert_called_once_with("plan_import", {"pdf_path": "/tmp/plan1.pdf"})
+        plan_import(ctx=None, pdf_path=" /tmp/plan1.pdf ", page=2, replace=True)
+        assert conn.send_command.call_args[0][1] == {"pdf_path": "/tmp/plan1.pdf", "page": 2, "replace": True}
 
     @patch("rhinomcp.tools.plan_scale.get_rhino_connection")
     def test_plan_scale_measures_without_a_length_and_sets_with_one(self, mock_get_conn):

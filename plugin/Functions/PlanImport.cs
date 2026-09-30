@@ -94,6 +94,13 @@ public static class PlanImport
         public int Host = -1;
         /// <summary>Why this opening needs a look, or null.</summary>
         public string Note;
+        /// <summary>A door the file draws swinging: its hinge, and the leaf's tip when open. Detected only.</summary>
+        public bool Swings;
+        public Pt Hinge;
+        public Pt Open;
+        /// <summary>Once hosted: unit vectors from the opening's middle toward its hinge end along the wall, and toward the face its leaf opens past. Zero when the file draws no swing.</summary>
+        public Pt HingeDir;
+        public Pt OpensDir;
     }
 
     public sealed class Room
@@ -119,6 +126,8 @@ public static class PlanImport
         public string ScaleRatio;
         /// <summary>Width on the plan of the image the detection was made from, top-left at (0, 0). 0 when the file does not say.</summary>
         public double ImageWidthMm;
+        /// <summary>The source's word on why it found nothing, such as a PDF page that is a raster scan. Null when it says nothing.</summary>
+        public string Diagnostic;
     }
 
     public sealed class Result
@@ -187,7 +196,8 @@ public static class PlanImport
             Vendor = root["source"]?["vendor"]?.ToString(),
             ScaleStatus = root["scale"]?["status"]?.ToString(),
             ScaleRatio = root["scale"]?["ratio"]?.ToString(),
-            ImageWidthMm = root["image"]?["width_mm"]?.ToObject<double?>() ?? 0
+            ImageWidthMm = root["image"]?["width_mm"]?.ToObject<double?>() ?? 0,
+            Diagnostic = root["source"]?["diagnostic"]?.Type == JTokenType.String ? root["source"]["diagnostic"].ToString() : null
         };
 
         var index = 0;
@@ -215,13 +225,21 @@ public static class PlanImport
                 && !(TryPt(token["hinge"], flip, out a) && TryPt(token["closed"], flip, out b)))
                 throw new FormatException("Opening " + index + " has neither a and b nor hinge and closed.");
             var width = token["opening_width"]?.ToObject<double?>() ?? token["width"]?.ToObject<double?>() ?? Dist(a, b);
-            plan.Openings.Add(new Opening
+            var opening = new Opening
             {
                 Kind = (token["kind"]?.ToString() ?? "").ToLowerInvariant(),
                 A = a,
                 B = b,
                 Width = width > 0 ? width : Dist(a, b)
-            });
+            };
+            // A swing drawn: the leaf from its hinge, closed in the wall and open into a room.
+            if (TryPt(token["hinge"], flip, out var hinge) && TryPt(token["open"], flip, out var open))
+            {
+                opening.Swings = true;
+                opening.Hinge = hinge;
+                opening.Open = open;
+            }
+            plan.Openings.Add(opening);
         }
 
         index = 0;
@@ -629,6 +647,7 @@ public static class PlanImport
             Depth = wall.Thickness + 2.0 * s.Proud,
             Host = best
         };
+        if (kind == "door" && opening.Swings) Swing(placed, opening, u);
         if (wall.Diagonal)
             placed.Note = "on a diagonal wall: the bake cuts along X or Y only, so it will not cut square to this wall";
         else if (placed.Width <= placed.Depth)
@@ -637,6 +656,22 @@ public static class PlanImport
             placed.Note = "a passage with no door drawn: imported as a door";
         if (placed.Note != null) result.Review.Add(kind + " at " + At(Mid(opening.A, opening.B)) + ": " + placed.Note + ".");
         return placed;
+    }
+
+    /// <summary>
+    /// The swing the file drew, on the wall the door sits in: the hinge end
+    /// along the wall, and the face the leaf opens past. A leaf drawn along
+    /// the wall says nothing about the face, and the door keeps no swing.
+    /// </summary>
+    static void Swing(Opening placed, Opening detected, Pt u)
+    {
+        var n = Normal(u);
+        var across = Dot(Sub(detected.Open, detected.Hinge), n);
+        if (Math.Abs(across) < 1.0) return;
+        var along = Dot(Sub(detected.Hinge, Mid(detected.A, detected.B)), u);
+        placed.HingeDir = along >= 0 ? u : new Pt(-u.X, -u.Y);
+        placed.OpensDir = across > 0 ? n : new Pt(-n.X, -n.Y);
+        placed.Swings = true;
     }
 
     /// <summary>Distance from p to the nearest wall face, 0 inside a wall, -1 with no walls.</summary>
@@ -920,8 +955,133 @@ public static class PlanImport
         var at = string.IsNullOrEmpty(ratio) ? "" : " " + ratio;
         if (status == "user") return "Scale set from two points and a known length.";
         if (status == "detected")
-            return "Scale" + at + " read from the plan, not confirmed: check it with two points and a known length.";
+            return "Scale" + at + " read from the plan and applied: confirm it, or override it, with Set scale (two points and a known length).";
         return "Scale not detected" + (at.Length > 0 ? " (assumed" + at + ")" : "") + ": set it with two points and a known length.";
+    }
+
+    /// <summary>
+    /// Why a detection with no walls imports nothing, and what to do next,
+    /// when the source said why (a PDF page that is a scan, or has no filled
+    /// walls). Null when there is something to import.
+    /// </summary>
+    public static string Refusal(Plan plan, string source)
+    {
+        if (plan.Walls.Count > 0 || string.IsNullOrWhiteSpace(plan.Diagnostic)) return null;
+        return source + ": " + plan.Diagnostic + ". Nothing was imported. "
+            + "The PDF has no vector walls to read, so it needs a detection made from its image: "
+            + "send the page image to Tectly, convert the answer with plan_from_tectly, "
+            + "then run plan_import with that image and the plan file it wrote.";
+    }
+
+    /// <summary>
+    /// The detection's walls and openings in its own mm, as a
+    /// forsk.plan_import.v0 file, kept on the underlay so plan_scale can clean
+    /// the walls again at the scale the user sets.
+    /// </summary>
+    public static string SourceJson(Plan plan)
+    {
+        var walls = new JArray();
+        foreach (var w in plan.Walls)
+        {
+            var wall = new JObject { ["start"] = XY(w.A), ["end"] = XY(w.B), ["thickness"] = w.Thickness };
+            if (w.Class != null) wall["class"] = w.Class;
+            walls.Add(wall);
+        }
+        var openings = new JArray();
+        foreach (var o in plan.Openings)
+            openings.Add(new JObject { ["kind"] = o.Kind, ["a"] = XY(o.A), ["b"] = XY(o.B), ["width"] = o.Width });
+        return new JObject
+        {
+            ["schema"] = Schema,
+            ["units"] = "mm",
+            ["y_axis"] = "up",
+            ["walls"] = walls,
+            ["openings"] = openings
+        }.ToString(Newtonsoft.Json.Formatting.None);
+    }
+
+    static JArray XY(Pt p) => new JArray(p.X, p.Y);
+
+    /// <summary>One loop drawn on the wall layer: an outline (kind wall) or a hole in one (wall-hole).</summary>
+    public sealed class WallLoop
+    {
+        public string Name;
+        public string Kind;
+        public List<Pt> Ring;
+        /// <summary>Detected pieces merged into the outline; 0 on a hole.</summary>
+        public int Pieces;
+    }
+
+    /// <summary>The wall layer as the import draws it: import-wall-01, then its holes import-wall-01-hole-01 and on.</summary>
+    public static List<WallLoop> WallLoops(Result result)
+    {
+        var loops = new List<WallLoop>();
+        for (var i = 0; i < result.Networks.Count; i++)
+        {
+            var outline = result.Networks[i];
+            var name = WallName(i);
+            loops.Add(new WallLoop { Name = name, Kind = "wall", Ring = outline.Outer, Pieces = outline.Pieces });
+            for (var h = 0; h < outline.Holes.Count; h++)
+                loops.Add(new WallLoop
+                {
+                    Name = name + "-hole-" + (h + 1).ToString("D2", CultureInfo.InvariantCulture),
+                    Kind = "wall-hole",
+                    Ring = outline.Holes[h]
+                });
+        }
+        return loops;
+    }
+
+    public static string WallName(int network) => "import-wall-" + (network + 1).ToString("D2", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The wall layer holds exactly these loops, each as drawn within tol:
+    /// nobody has moved, added or removed an imported wall loop since.
+    /// </summary>
+    public static bool SameLoops(List<WallLoop> expected, IDictionary<string, List<Pt>> drawn, double tol)
+    {
+        if (drawn.Count != expected.Count) return false;
+        foreach (var loop in expected)
+        {
+            if (!drawn.TryGetValue(loop.Name, out var ring) || ring.Count != loop.Ring.Count) return false;
+            for (var i = 0; i < ring.Count; i++)
+                if (Math.Abs(ring[i].X - loop.Ring[i].X) > tol || Math.Abs(ring[i].Y - loop.Ring[i].Y) > tol) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The detection as it lies at a scale: every point from the plan's
+    /// top-left corner times factor, thickness and width too. Clean on this
+    /// rounds and joins at the true size the user set.
+    /// </summary>
+    public static Plan Scaled(Plan plan, double factor, Pt origin)
+    {
+        Pt At(Pt p) => new Pt(origin.X + p.X * factor, origin.Y + p.Y * factor);
+        var scaled = new Plan
+        {
+            Vendor = plan.Vendor,
+            ScaleStatus = plan.ScaleStatus,
+            ScaleRatio = plan.ScaleRatio,
+            ImageWidthMm = plan.ImageWidthMm * factor,
+            Diagnostic = plan.Diagnostic
+        };
+        foreach (var w in plan.Walls)
+            scaled.Walls.Add(new Wall { A = At(w.A), B = At(w.B), Thickness = w.Thickness * factor, Class = w.Class });
+        foreach (var o in plan.Openings)
+            scaled.Openings.Add(new Opening
+            {
+                Kind = o.Kind,
+                A = At(o.A),
+                B = At(o.B),
+                Width = o.Width * factor,
+                Swings = o.Swings,
+                Hinge = At(o.Hinge),
+                Open = At(o.Open)
+            });
+        foreach (var r in plan.Rooms)
+            scaled.Rooms.Add(new Room { Label = r.Label, Ring = r.Ring?.Select(At).ToList() });
+        return scaled;
     }
 
     /// <summary>The wall's footprint, counterclockwise: along the right face from A, back along the left.</summary>

@@ -222,6 +222,7 @@ public partial class RhinoMCPFunctions
                         if (markerId != Guid.Empty)
                         {
                             markerIds.Add(markerId.ToString());
+                            StampImportedSwing(doc, markerId, foot, hostId, tol);
                             Brep hostBrep = null;
                             WallSolid hostSolid = null;
                             for (var w = 0; w < walls.Count; w++)
@@ -400,6 +401,37 @@ public partial class RhinoMCPFunctions
             : "door";
         StampOpeningStyle(attr, OpeningTypes.DefaultRecord(kindTag));
         return doc.Objects.AddBrep(markerBrep, attr);
+    }
+
+    /// <summary>
+    /// A door footprint the plan import drew with its swing: the marker gets
+    /// the hand and swing that draw that swing again, read against the host
+    /// wall's face at the opening, as the plan symbol and the schedule read it.
+    /// </summary>
+    private void StampImportedSwing(RhinoDoc doc, Guid markerId, OpeningFootprint foot, Guid hostId, double tol)
+    {
+        if (!Guid.TryParse(foot.SourceId, out var sourceId)) return;
+        var source = doc.Objects.FindId(sourceId);
+        if (source == null
+            || !TryDirection(source.Attributes.GetUserString(ImportHingeKey), out var hingeX, out var hingeY)
+            || !TryDirection(source.Attributes.GetUserString(ImportOpensKey), out var opensX, out var opensY))
+            return;
+        var marker = doc.Objects.FindId(markerId);
+        var host = doc.Objects.FindId(hostId);
+        if (marker == null || host == null) return;
+        var at = marker.Geometry.GetBoundingBox(true).Center;
+        at.Z = 0;
+        var segs = SegmentsFromPath(host.Attributes.GetUserString("forsk:path"), tol);
+        if (!TryOffsetOnSegments(segs, at, out var segment, out _, out _) || segment == null) return;
+        OpeningTypes.HandSwingFrom(hingeX, hingeY, opensX, opensY, segment.Inward.X, segment.Inward.Y, out var hand, out var swing);
+        var kind = marker.Attributes.GetUserString("forsk:opening_kind");
+        if (!OpeningTypes.TryRead(kind, marker.Attributes.GetUserString(OpeningTypes.TypeKey), hand, swing, null, out var record, out _)
+            || !record.Def.HasHand || !record.Def.HasSwing)
+            return;
+        StampOpeningStyle(marker.Attributes, record);
+        // What the plan's swing read as, kept apart from the type a later edit changes.
+        marker.Attributes.SetUserString("forsk:import_swing", hand + "/" + swing);
+        marker.CommitChanges();
     }
 
     private static double LongerXySide(BoundingBox bbox)

@@ -18,10 +18,12 @@ def plan_scale(
     Set an imported plan's scale from two points and the real length between them.
 
     The underlay and everything on the plan layers (wall, door, window, A-ROOM,
-    label) scale together about the plan's top-left corner. Wall outlines
-    scale as drawn: their thickness is not rounded again, so repeating the
-    step does not drift. Refused once the 3D model is generated:
-    clear_generated first.
+    label) scale together about the plan's top-left corner. The imported wall
+    outlines are cleaned again from the detection at the new scale, so their
+    thickness is rounded to 10 mm there; the same scale always gives the same
+    walls, so repeating the step or scaling away and back does not drift. Wall
+    outlines edited since the import scale as drawn. Refused once the 3D
+    model is generated: clear_generated first.
 
     Parameters:
     - p1, p2: [x, y] in mm, on two ends of a length the user knows
@@ -34,7 +36,7 @@ def plan_scale(
     Returns:
     Dictionary with measured_mm, factor (scale from the detection's own mm),
     status, scaled, and message; with a length also length_mm,
-    previous_factor, and relative.
+    previous_factor, relative, and walls_recleaned.
     """
     try:
         if p1 is None or p2 is None or len(p1) < 2 or len(p2) < 2:

@@ -376,6 +376,21 @@ public static class OpeningTypes
         return (outward ? -1 : 1) * inward;
     }
 
+    /// <summary>
+    /// A drawn swing as the hand and swing that draw it again: the hinge end
+    /// (a direction along the wall) and the face the leaf opens past (a
+    /// direction across it), read against the wall's Inward. HandSign puts
+    /// an L hinge toward Inward × Z; SwingSign puts an in leaf toward Inward.
+    /// </summary>
+    public static void HandSwingFrom(
+        double hingeX, double hingeY, double opensX, double opensY, double inwardX, double inwardY,
+        out string hand, out string swing)
+    {
+        // Inward × Z, the side HandSign calls left.
+        hand = hingeX * inwardY - hingeY * inwardX >= 0 ? "L" : "R";
+        swing = opensX * inwardX + opensY * inwardY >= 0 ? "in" : "out";
+    }
+
     /// <summary>Sliding track sits on the face opposite Inward.</summary>
     public static int TrackSign(int yInward)
     {

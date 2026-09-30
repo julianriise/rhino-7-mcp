@@ -4,14 +4,18 @@
 One detection per run, into a blank millimetre document:
   tectly     raw Tectly JSON -> forsk.plan_import.v0 (checked against the
              reference conversion within 10 mm), then imported
-  pdfvector  the vector-PDF extractor's plan file, imported as it is
+  pdfvector  the reference vector-PDF plan file (PyMuPDF), imported as it is
+  pdf        plan1.pdf itself: plan_import runs forsk's extractor
+             (tools/pdf_vector) on page 1 and imports what it wrote. The
+             receipt names the scale it read; the doors take the swing the
+             sheet draws.
 
 Import and check the counts and the receipt: the walls come in merged, one
 closed outline per connected run with its holes, none overlapping another,
 and the wall layer holds exactly those loops. Set the scale from a known
 dimension: the sheet is A3 at 1:100, so the page image's two top corners are
-42 000 mm apart. Repeat the step, scale away and back, and check no corner of
-any wall outline drifted. Capture the plan with the underlay. Bake with the panel's
+42 000 mm apart. The walls are cleaned again at each new scale. Repeat the
+step, scale away and back, and check no corner of any wall outline drifted. Capture the plan with the underlay. Bake with the panel's
 own sequence, run rooms_detect, capture again. The bake is checked against
 what the import's receipt said it would do (outlines, blocks the bake skips,
 uncut openings), never against numbers written here.
@@ -24,7 +28,7 @@ The plan is a client drawing: it is read from forsk-private and never copied
 into a repo. The plan file and captures go to /tmp.
 
 Usage:
-  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py tectly|pdfvector PLAN1_DIR
+  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py tectly|pdfvector|pdf PLAN1_DIR
 """
 
 from __future__ import annotations
@@ -63,7 +67,15 @@ EXPECT = {
         walls_detected=54, walls=47, doors=12, windows=10, loose=0, uncut=0, rooms=12,
         unlabelled=0, outside=0, outlines=1, outline_holes=12, wall_pieces=54, overlaps=0, free_walls=0,
         blocks_skipped=0, gaps_closed=0, diagonal=4, status="detected"),
+    # The same page through this port of the extractor: one wall dropped inside
+    # a thicker one and one 346 mm gap closed, both in review (PlanPdfTests).
+    "pdf": dict(
+        walls_detected=54, walls=46, doors=12, windows=10, loose=0, uncut=0, rooms=12,
+        unlabelled=0, outside=0, outlines=1, outline_holes=12, wall_pieces=53, overlaps=0, free_walls=0,
+        blocks_skipped=0, gaps_closed=1, diagonal=4, status="detected"),
 }
+# Doors whose swing the extractor read off plan1 (PlanPdfTests).
+PDF_SWINGS = 11
 CAPTURE_MARGIN_MM = 1500.0
 # get_objects gives corners to 0.01 mm: any drift it can show is a failure.
 DRIFT_MM = 0.001
@@ -167,6 +179,16 @@ def wall_loops(sock: socket.socket) -> dict[str, list]:
     }
 
 
+def door_swings(sock: socket.socket) -> dict[str, int]:
+    """Baked doors that took the plan's swing, by the hand/swing they took."""
+    counts: dict[str, int] = {}
+    for row in layer_objects(sock, "A-OPEN"):
+        taken = (row.get("attributes") or {}).get("forsk:import_swing")
+        if taken:
+            counts[taken] = counts.get(taken, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def capture(sock: socket.socket, bbox: list[float], hide: list[str]) -> bytes:
     shot = send_command(sock, "capture_viewport", {
         "viewport": "top",
@@ -218,7 +240,7 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     if source == "tectly":
         plan = Path("/tmp/forsk-smoke-import-tectly.json")
         lines.append(convert_tectly(plan1, plan, failures))
-    else:
+    elif source == "pdfvector":
         plan = plan1 / "plan1_pdfvector.json"
 
     summary = send_command(sock, "get_document_summary", {})
@@ -228,8 +250,15 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     if int(summary.get("object_count") or 0) > 40:
         raise SmokeError("document is not blank")
 
-    # 1. Import: counts and receipt.
-    imported = send_command(sock, "plan_import", {"image_path": str(image), "plan_path": str(plan)})
+    # 1. Import: counts and receipt. The PDF run hands plan_import the PDF alone.
+    if source == "pdf":
+        imported = send_command(sock, "plan_import", {"pdf_path": str(plan1 / "plan1.pdf"), "page": 1})
+        pdf = imported.get("pdf") or {}
+        plan = Path(str(pdf.get("plan_path") or ""))
+        if pdf.get("file") != "plan1.pdf" or pdf.get("page") != 1 or not plan.is_file():
+            failures.append(f"pdf {pdf}")
+    else:
+        imported = send_command(sock, "plan_import", {"image_path": str(image), "plan_path": str(plan)})
     scale = imported.get("scale") or {}
     got = {key: imported.get(key) for key in expect if key != "status"}
     got["status"] = scale.get("status")
@@ -257,6 +286,8 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     lines.append("receipt " + clip(message))
     if "Scale" not in message or ("Review:" not in message and "Nothing to review" not in message):
         failures.append("receipt has no scale or review part")
+    if expect["status"] == "detected" and "Scale 1:100 read from the plan and applied: confirm it, or override it, with Set scale" not in message:
+        failures.append("receipt does not name the scale it read and Set scale")
     for row in imported.get("warnings") or []:
         failures.append(f"import warning {row}")
 
@@ -301,9 +332,12 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     lines.append(
         f"scale {float(measured.get('measured_mm') or 0):.1f} -> {PAGE_WIDTH_MM:.0f} mm x{float(first.get('relative') or 0):.6f} "
         f"moved {first.get('scaled')}, repeat x{float(repeat.get('relative') or 0):.9f}, "
-        f"x2 and back {len(before)} wall loops drift {drift:.2f} mm at most, page {page[2] - page[0]:.2f} mm wide, "
+        f"x2 and back {len(before)} wall loops drift {drift:.2f} mm at most, walls cleaned again "
+        f"{[step.get('walls_recleaned') for step in (first, repeat, away, back)]}, page {page[2] - page[0]:.2f} mm wide, "
         f"status {back.get('status')}, chip visible {chip.get('import_visible')}"
     )
+    if [step.get("walls_recleaned") for step in (first, repeat, away, back)] != [True, False, True, True]:
+        failures.append("scale did not clean the walls again at each new scale")
     if abs(float(measured.get("measured_mm") or 0) - width) > 0.1 or measured.get("scaled") != 0:
         failures.append(f"scale measure {measured.get('measured_mm')} scaled {measured.get('scaled')}")
     if abs(float(first.get("relative") or 0) - PAGE_WIDTH_MM / width) > 1e-9:
@@ -337,6 +371,7 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     windows = send_command(sock, "openings_from_layer", {"layer": "window"})
     markers = send_command(sock, "rooms_from_layer", {})
     cut = int(doors.get("cut_count") or 0) + int(windows.get("cut_count") or 0)
+    swings = door_swings(sock)
     failed = int(doors.get("failed_count") or 0) + int(windows.get("failed_count") or 0)
     openings = int(imported.get("doors") or 0) + int(imported.get("windows") or 0)
     # The receipt said what the bake would make: a floor, a roof and a wall
@@ -349,8 +384,11 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
         f"bake floor {floor.get('count')} walls {baked.get('count')} roof {roof.get('count')} for {outlines} "
         f"outline{'' if outlines == 1 else 's'} ({imported.get('gaps_closed')} gaps closed, {imported.get('free_walls')} standing free), "
         f"doors {doors.get('cut_count')}/{imported.get('doors')} windows {windows.get('cut_count')}/{imported.get('windows')} "
-        f"failed {failed}, room markers {markers.get('count')}"
+        f"failed {failed}, room markers {markers.get('count')}, door swings from the plan {swings}"
     )
+    carried = sum(swings.values())
+    if source == "pdf" and carried != PDF_SWINGS:
+        failures.append(f"bake {carried} door swings carried, expected {PDF_SWINGS}")
     if floor.get("count") != outlines or roof.get("count") != outlines or baked.get("count") != outlines - skipped:
         failures.append(
             f"bake floor {floor.get('count')} roof {roof.get('count')} expected {outlines}, "
@@ -399,7 +437,7 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
 
 def main() -> int:
     if len(sys.argv) != 3 or sys.argv[1] not in EXPECT:
-        print("usage: plan_import_smoke.py tectly|pdfvector PLAN1_DIR", file=sys.stderr)
+        print("usage: plan_import_smoke.py tectly|pdfvector|pdf PLAN1_DIR", file=sys.stderr)
         return 1
     source, plan1 = sys.argv[1], Path(sys.argv[2])
     failures: list = []

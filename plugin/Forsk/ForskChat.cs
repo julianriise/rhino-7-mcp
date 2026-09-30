@@ -418,17 +418,18 @@ namespace RhinoMCPPlugin.Forsk
                         ["path"] = Str("Absolute path of the .dxf file. Omit it and the user picks the file.")
                     }),
                 Fn(ForskPlanImport.ImportTool,
-                    "Import a floor plan image with its detection (a forsk.plan_import.v0 JSON): the image as a locked, faded underlay on X-PLAN, the detected walls, doors, windows and rooms as 2D review geometry on wall, door, window, A-ROOM and label. Nothing is 3D until the user generates. Reports counts, how the scale stands, and what needs review.",
+                    "Import a floor plan: a vector PDF (its walls, doors, windows, rooms and scale read off the page), or a plan image with its detection (a forsk.plan_import.v0 JSON). The page or image as a locked, faded underlay on X-PLAN, the walls, doors, windows and rooms as 2D review geometry on wall, door, window, A-ROOM and label. Nothing is 3D until the user generates. Reports counts, how the scale stands, and what needs review. Omit every path and the user picks the file.",
                     new JObject
                     {
+                        ["pdf_path"] = Str("Absolute path of a vector PDF plan. Instead of image_path and plan_path."),
+                        ["page"] = Num("The PDF's page, 1-based. Omit it and the user picks when there are several."),
                         ["image_path"] = Str("Absolute path of the plan image."),
                         ["plan_path"] = Str("Absolute path of the forsk.plan_import.v0 JSON."),
                         ["scale_hint"] = Str("The drawing's scale when the user states it, such as 1:100. It sizes the image; two points still set the scale."),
                         ["image_dpi"] = Num("Image resolution when the file does not carry it."),
                         ["image_width_mm"] = Num("Width of the image on the plan in mm, when known."),
                         ["replace"] = Bool("Swap an earlier import. Default false.")
-                    },
-                    "image_path", "plan_path"),
+                    }),
                 Fn(ForskPlanImport.ScaleTool,
                     "Set the imported plan's scale from two points and the real length between them. The underlay and the plan geometry move together. With no points the user picks them in the viewport and types the length. With points and no length it only measures.",
                     new JObject
@@ -608,7 +609,7 @@ Plan to 3D order is floor_from_layer, walls_from_layer, roof_flat_from_walls, op
 
 Import a DXF with dxf_import, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room, and it reads the DXF's units, so the plan lands at true size in mm. Pass the absolute .dxf path the user gave. With none, call it with no path and the user picks the file.
 
-Import a floor plan image with plan_import: the image path and its forsk.plan_import.v0 detection. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
+Import a floor plan with plan_import: a vector PDF as pdf_path (page when the user names one), or the image path and its forsk.plan_import.v0 detection. With no path the user picks the file. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
 
 Defaults: walls 3000, floor thickness 400, roof 200, doors sill 0 head 2100 width 900, windows sill 900 head 2100 width 1200. Pass stated heights as tool params. If the user states none, use the defaults and say so once.
 
@@ -733,7 +734,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)
             {
-                return "Turn bias: Import. plan_import brings in the plan image and its detection; plan_scale sets the scale. "
+                return "Turn bias: Import. plan_import brings in a vector PDF (pdf_path), or the plan image and its detection; with no path the user picks. plan_scale sets the scale. "
                     + "Reply with the counts, how the scale stands, and what needs review, from the tool message. "
                     + "Set scale with no points given is plan_scale with no arguments: the user picks two points and types the length. "
                     + "Do not generate 3D here. The user reviews and traces missing walls on the wall layer first, then asks to generate.";
@@ -996,6 +997,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                         show("receipt", ForskPlanImport.DxfLine(envelope));
                         show("assistant", ForskPlanImport.DxfNote(envelope));
                     }
+                    else if (name == ForskPlanImport.ImportTool)
+                    {
+                        // The chip's receipt: counts, then how the scale stands and what needs review.
+                        show("receipt", ForskPlanImport.ImportLine(envelope));
+                        show("assistant", ForskPlanImport.ReviewNote(envelope));
+                    }
                     else
                         show("receipt", ForskTools.Receipt(string.IsNullOrEmpty(name) ? "tool" : name, envelope));
                     history.Add(new JObject
@@ -1073,6 +1080,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     return ForskTools.Fail("Import DXF cancelled.");
                 ForskPrint.SettleAfterDialog();
                 callArgs = new JObject { ["path"] = path };
+            }
+            // No plan to open as it stands: the user picks a PDF or an image and its detection. A PDF of several pages asks which.
+            if (name == ForskPlanImport.ImportTool && ForskPlanImport.NeedsSource(args) != null)
+            {
+                callArgs = ForskPlanImport.SourceFromBackground(args);
+                if (callArgs == null)
+                    return ForskTools.Fail("Import plan cancelled.");
+                ForskPrint.SettleAfterDialog();
             }
             // No points given: the user picks them in the viewport and types the length.
             if (name == ForskPlanImport.ScaleTool && ForskPlanImport.NeedsPick(args))

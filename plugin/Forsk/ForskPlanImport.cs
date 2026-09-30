@@ -7,12 +7,14 @@ using Rhino;
 using Rhino.Input;
 using Rhino.Input.Custom;
 using Rhino.UI;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// Plan import from the panel, chip and chat. Import plan asks for the plan
-    /// image and its detection (forsk.plan_import.v0) and runs plan_import. Set
+    /// Plan import from the panel, chip and chat. Import plan asks for a vector
+    /// PDF (and its page, when it has more than one), or for the plan image
+    /// and its detection (forsk.plan_import.v0), and runs plan_import. Set
     /// scale runs the ForskSetScale command: two picked points and the real
     /// length between them, prefilled with what the plan measures now. The
     /// geometry and the clean-up live in the plan_import and plan_scale handlers.
@@ -28,8 +30,8 @@ namespace RhinoMCPPlugin.Forsk
 
         static JObject _lastScale;
 
-        /// <summary>The Import chip's click, off the UI thread. line is the receipt row, note what needs review.</summary>
-        public static void Chip(ImportAction action, string image, string plan, out string line, out string note)
+        /// <summary>The Import chip's click, off the UI thread. source is what PickSource chose. line is the receipt row, note what needs review.</summary>
+        public static void Chip(ImportAction action, JObject source, out string line, out string note)
         {
             note = "";
             if (action == ImportAction.SetScale)
@@ -37,38 +39,125 @@ namespace RhinoMCPPlugin.Forsk
                 line = ScaleLine(PickScaleFromBackground());
                 return;
             }
-            var envelope = ForskTools.CommandOnUi(ImportTool, new JObject
-            {
-                ["image_path"] = image,
-                ["plan_path"] = plan
-            });
+            var envelope = ForskTools.CommandOnUi(ImportTool, source);
             line = ImportLine(envelope);
             note = ReviewNote(envelope);
         }
 
-        /// <summary>The plan image, then its detection beside it. UI thread. False when either dialog is cancelled.</summary>
-        public static bool PickFiles(out string image, out string plan)
+        /// <summary>
+        /// What to import, as plan_import's arguments: a vector PDF and its
+        /// page (asked for when it has more than one), or a plan image and its
+        /// detection beside it. UI thread. Null when a dialog is cancelled.
+        /// </summary>
+        public static JObject PickSource()
         {
-            image = null;
-            plan = null;
             var parent = RhinoEtoApp.MainWindow;
-            var imageDialog = new Eto.Forms.OpenFileDialog { Title = "Import plan: the plan image" };
-            imageDialog.Filters.Add(new FileFilter("Plan image", ".png", ".jpg", ".jpeg"));
-            if (imageDialog.ShowDialog(parent) != DialogResult.Ok) return false;
+            var first = new Eto.Forms.OpenFileDialog { Title = "Import plan: a vector PDF, or the plan image" };
+            first.Filters.Add(new FileFilter("Plan PDF or image", ".pdf", ".png", ".jpg", ".jpeg"));
+            if (first.ShowDialog(parent) != DialogResult.Ok) return null;
+            if (IsPdf(first.FileName))
+            {
+                var page = AskPage(first.FileName);
+                return page == null ? null : new JObject { ["pdf_path"] = first.FileName, ["page"] = page.Value };
+            }
+            return PickDetection(first.FileName, out var plan) ? new JObject { ["image_path"] = first.FileName, ["plan_path"] = plan } : null;
+        }
 
+        /// <summary>PickSource from a background thread.</summary>
+        public static JObject PickSourceFromBackground()
+        {
+            return OnUi(PickSource);
+        }
+
+        /// <summary>
+        /// The page to import: 1 for a one-page PDF, else the user's choice. UI
+        /// thread. Null when cancelled. A PDF the extractor cannot count goes on
+        /// as page 1, and plan_import reports what went wrong with it.
+        /// </summary>
+        public static int? AskPage(string pdf)
+        {
+            int pages;
+            try
+            {
+                pages = PlanPdf.Pages(pdf);
+            }
+            catch (Exception)
+            {
+                return 1;
+            }
+            if (pages <= 1) return 1;
+            var items = Enumerable.Range(1, pages).Select(n => "Page " + n).ToList();
+            var chosen = Rhino.UI.Dialogs.ShowListBox("Import plan", Path.GetFileName(pdf) + " has " + pages + " pages. Which is the plan?", items) as string;
+            if (chosen == null) return null;
+            return items.IndexOf(chosen) + 1;
+        }
+
+        public static bool IsPdf(string path)
+        {
+            return !string.IsNullOrEmpty(path) && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// plan_import from chat with nothing it can open as it stands: the user
+        /// picks. A PDF with no page and more than one is asked for its page.
+        /// Null when nothing needs asking.
+        /// </summary>
+        public static JObject NeedsSource(JObject args)
+        {
+            var pdf = args?["pdf_path"]?.ToString();
+            if (!ForskDxf.NeedsPick(pdf))
+                return args["page"] == null ? new JObject { ["pdf_path"] = pdf, ["ask_page"] = true } : null;
+            var image = args?["image_path"]?.ToString();
+            var plan = args?["plan_path"]?.ToString();
+            if (!ForskDxf.NeedsPick(image) && !ForskDxf.NeedsPick(plan)) return null;
+            return new JObject();
+        }
+
+        /// <summary>The plan_import arguments chat should run with, asking the user what it lacks. Background thread. Null when cancelled.</summary>
+        public static JObject SourceFromBackground(JObject args)
+        {
+            var need = NeedsSource(args);
+            if (need == null) return args;
+            if (need["ask_page"] == null) return PickSourceFromBackground();
+            var pdf = need["pdf_path"].ToString();
+            var page = OnUi(() => AskPage(pdf) is int n ? new JObject { ["page"] = n } : null);
+            if (page == null) return null;
+            var run = (JObject)args.DeepClone();
+            run["page"] = page["page"];
+            return run;
+        }
+
+        static JObject OnUi(Func<JObject> ask)
+        {
+            JObject answer = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try { answer = ask(); }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            return answer;
+        }
+
+        /// <summary>The detection beside a plan image. UI thread. False when the dialog is cancelled.</summary>
+        static bool PickDetection(string image, out string plan)
+        {
+            plan = null;
             var planDialog = new Eto.Forms.OpenFileDialog { Title = "Import plan: its detection (forsk.plan_import.v0 JSON)" };
             planDialog.Filters.Add(new FileFilter("Plan detection", ".json"));
             try
             {
-                var folder = Path.GetDirectoryName(imageDialog.FileName);
+                var folder = Path.GetDirectoryName(image);
                 if (!string.IsNullOrEmpty(folder)) planDialog.Directory = new Uri(folder);
             }
             catch (Exception)
             {
                 // The dialog opens where the system last left it.
             }
-            if (planDialog.ShowDialog(parent) != DialogResult.Ok) return false;
-            image = imageDialog.FileName;
+            if (planDialog.ShowDialog(RhinoEtoApp.MainWindow) != DialogResult.Ok) return false;
             plan = planDialog.FileName;
             return true;
         }

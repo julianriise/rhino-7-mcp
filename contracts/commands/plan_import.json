@@ -2,9 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "plan_import.json",
   "title": "PlanImport Command",
-  "description": "Plan import (F7): a plan image as a locked, faded underlay on X-PLAN (top-left at 0,0, off Print) and its detection (forsk.plan_import.v0: mm, y up) as 2D review geometry on the layers the bake reads: a closed outline per connected run of walls on wall (the holes it closes are loops of their own, tagged wall-hole), opening footprints on door and window, room outlines on A-ROOM, room names on label. One undo step. Clean-up: walls within 3 degrees of an axis are squared (diagonals stay), thickness rounded to 10 mm, collinear pieces merged (through an opening too), each opening snapped to its nearest wall, wall ends run into the walls they stop at, and the wall rectangles merged into outlines so none overlaps another. The image is sized by image_width_mm, else the width the plan file states (image.width_mm), else its pixels at image_dpi (or the PNG's own dpi) times the scale (scale_hint, or the plan file's ratio). Refused in a document that is not in millimetres, and in one that already has an import unless replace is true.",
+  "description": "Plan import (F7): a vector PDF (pdf_path: forsk's extractor, tools/pdf_vector, reads the page's walls, doors, windows, rooms and scale, and renders the page in the same frame), or a plan image with its detection. The page or image goes in as a locked, faded underlay on X-PLAN (top-left at 0,0, off Print) and the detection (forsk.plan_import.v0: mm, y up) as 2D review geometry on the layers the bake reads: a closed outline per connected run of walls on wall (the holes it closes are loops of their own, tagged wall-hole), opening footprints on door and window, room outlines on A-ROOM, room names on label. One undo step. Clean-up: walls within 3 degrees of an axis are squared (diagonals stay), thickness rounded to 10 mm, collinear pieces merged (through an opening too), each opening snapped to its nearest wall, wall ends run into the walls they stop at, and the wall rectangles merged into outlines so none overlaps another. A door's drawn swing goes onto its footprint for the bake. The image is sized by image_width_mm, else the width the plan file states (image.width_mm), else its pixels at image_dpi (or the PNG's own dpi) times the scale (scale_hint, or the plan file's ratio). A detection with no walls whose source says why (a scanned PDF page) is refused with that reason and the Tectly route. Refused in a document that is not in millimetres, and in one that already has an import unless replace is true.",
   "type": "object",
   "properties": {
+    "pdf_path": { "type": "string", "minLength": 1, "description": "Absolute path of a vector PDF plan, in place of image_path and plan_path." },
+    "page": { "type": "integer", "minimum": 1, "description": "The PDF's page, 1-based. Needed when the PDF has more than one." },
     "image_path": { "type": "string", "minLength": 1, "description": "Absolute path of the plan image (PNG or JPEG)." },
     "plan_path": { "type": "string", "minLength": 1, "description": "Absolute path of the forsk.plan_import.v0 JSON." },
     "scale_hint": { "type": "string", "pattern": "^\\s*[0-9.]+:[0-9.]+\\s*$", "description": "The drawing's scale, such as 1:100. Sizes the image and is named in the receipt. It does not rescale the detection: plan_scale does." },
@@ -12,6 +14,9 @@
     "image_width_mm": { "type": "number", "exclusiveMinimum": 0 },
     "replace": { "type": "boolean", "default": false, "description": "Delete the objects of an earlier import first." }
   },
-  "required": ["image_path", "plan_path"],
+  "oneOf": [
+    { "required": ["pdf_path"], "not": { "anyOf": [{ "required": ["image_path"] }, { "required": ["plan_path"] }] } },
+    { "required": ["image_path", "plan_path"], "not": { "anyOf": [{ "required": ["pdf_path"] }, { "required": ["page"] }] } }
+  ],
   "additionalProperties": false
 }

@@ -418,10 +418,9 @@ namespace RhinoMCPPlugin.Forsk
             if (_busy || !_chipState.ShowImport) return;
             var action = _chipState.Import;
             var label = _chipState.ImportLabel;
-            string image = null;
-            string plan = null;
+            JObject source = null;
             // The file dialogs run here, on the UI thread, before the panel goes busy.
-            if (action == ImportAction.ImportPlan && !ForskPlanImport.PickFiles(out image, out plan)) return;
+            if (action == ImportAction.ImportPlan && (source = ForskPlanImport.PickSource()) == null) return;
             _busy = true;
             _composer.Send.EnabledClick = false;
             _chip.EnabledClick = false;
@@ -433,7 +432,7 @@ namespace RhinoMCPPlugin.Forsk
                 string note;
                 try
                 {
-                    ForskPlanImport.Chip(action, image, plan, out line, out note);
+                    ForskPlanImport.Chip(action, source, out line, out note);
                 }
                 catch (Exception e)
                 {

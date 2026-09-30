@@ -292,6 +292,8 @@ def test_new_commands():
         ("commands/rooms_detect.json", {}),
         ("commands/dxf_import.json", {"path": "/tmp/office_2D.dxf"}),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json"}),
+        ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf"}),
+        ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "page": 2, "replace": True}),
         ("commands/plan_import.json", {
             "image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json",
             "scale_hint": "1:100", "image_dpi": 200, "image_width_mm": 42012, "replace": True,
@@ -696,6 +698,17 @@ def test_responses():
         "message": "Imported 0 walls, 0 doors, 0 windows, 0 rooms.",
     }):
         all_passed = False
+    if not validate("responses/plan_import_result.json", {
+        "walls": 46, "walls_detected": 54, "doors": 12, "windows": 10, "loose": 0, "rooms": 12, "unlabelled": 0,
+        "dropped": ["wall at 15.8, -22.7 m: inside a thicker wall"], "review": [],
+        "scale": {"status": "detected", "ratio": "1:100", "factor": 1.0},
+        "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan1-p1.png",
+                     "width_mm": 42011.6, "height_mm": 29705.3},
+        "pdf": {"file": "plan1.pdf", "page": 1, "plan_path": "/tmp/forsk-pdf-import/plan1-p1.json",
+                "image_path": "/tmp/forsk-pdf-import/plan1-p1.png"},
+        "message": "Imported 46 walls (54 detected, 7 merged, 1 dropped), 12 doors, 10 windows, 12 rooms.",
+    }):
+        all_passed = False
     if not validate("responses/plan_scale_result.json", {
         "measured_mm": 3900.0, "factor": 1.0, "status": "detected", "scaled": 0,
         "message": "The two points are 3900 mm apart at the scale the plan has now.",
@@ -703,8 +716,8 @@ def test_responses():
         all_passed = False
     if not validate("responses/plan_scale_result.json", {
         "measured_mm": 3900.0, "length_mm": 4000, "factor": 1.0256410256410255, "previous_factor": 1.0,
-        "relative": 1.0256410256410255, "status": "user", "scaled": 73,
-        "message": "Scale set: 4000 mm between the two points (was 3900 mm, x1.0256).",
+        "relative": 1.0256410256410255, "status": "user", "scaled": 73, "walls_recleaned": True,
+        "message": "Scale set: 4000 mm between the two points (was 3900 mm, x1.0256). Walls cleaned again at this scale: thickness rounded to 10 mm.",
     }):
         all_passed = False
     if not validate("responses/rooms_detect_result.json", {
@@ -944,6 +957,10 @@ def test_invalid_examples():
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png"}, "plan_import needs a plan_path"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "scale_hint": "100"}, "plan_import scale_hint is a ratio"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "tectly_key": "x"}, "plan_import unknown field"),
+        ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "image_path": "/tmp/plan.png"}, "plan_import a PDF or an image, not both"),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "page": 1}, "plan_import page is a PDF's"),
+        ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "page": 0}, "plan_import page is 1-based"),
+        ("commands/plan_import.json", {}, "plan_import needs a source"),
         ("commands/plan_scale.json", {"p1": [0, 0]}, "plan_scale needs two points"),
         ("commands/plan_scale.json", {"p1": [0, 0], "p2": [1000, 0], "length_mm": 0}, "plan_scale length above 0"),
         ("commands/plan_scale.json", {"p1": [0, 0], "p2": [1000, 0], "frame": "page"}, "plan_scale unknown frame"),

@@ -34,6 +34,11 @@ public partial class RhinoMCPFunctions
     /// <summary>forsk:import_kind of a hole in a wall outline: the bake reads it with the outline around it, never as a wall.</summary>
     private const string ImportWallHoleKind = "wall-hole";
     private const string ImportReviewKey = "forsk:import_review";
+    /// <summary>On the underlay: the detection's walls and openings in its own mm, which plan_scale cleans again at the scale set.</summary>
+    private const string ImportSourceKey = "forsk:import_source";
+    /// <summary>On a door footprint: "x,y" toward its hinge end along the wall, and toward the face its leaf opens past.</summary>
+    private const string ImportHingeKey = "forsk:import_hinge_dir";
+    private const string ImportOpensKey = "forsk:import_opens_dir";
 
     /// <summary>The image lies just under the plan curves, so they draw on top of it.</summary>
     private const double PlanUnderlayZ = -1.0;
@@ -46,18 +51,55 @@ public partial class RhinoMCPFunctions
     [McpCommand("plan_import")]
     public JObject ImportPlan(JObject parameters)
     {
-        var imagePath = parameters["image_path"]?.ToString();
-        var planPath = parameters["plan_path"]?.ToString();
-        if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
-            throw new ArgumentException("image_path must be an existing image file.");
-        if (string.IsNullOrWhiteSpace(planPath) || !File.Exists(planPath))
-            throw new ArgumentException("plan_path must be an existing forsk.plan_import.v0 file.");
-
         var doc = RhinoDoc.ActiveDoc;
         if (doc.ModelUnitSystem != UnitSystem.Millimeters)
             throw new InvalidOperationException("Document units must be millimetres. Switch the .3dm to millimetres.");
 
+        var imagePath = parameters["image_path"]?.ToString();
+        var planPath = parameters["plan_path"]?.ToString();
+        var pdfPath = parameters["pdf_path"]?.ToString();
+        JObject pdf = null;
+        string source;
+        if (!string.IsNullOrWhiteSpace(pdfPath))
+        {
+            // A vector PDF: forsk's extractor writes the plan file and the page image, then the import goes on as for any source.
+            if (!string.IsNullOrWhiteSpace(imagePath) || !string.IsNullOrWhiteSpace(planPath))
+                throw new ArgumentException("Pass pdf_path, or image_path with plan_path, not both.");
+            if (!File.Exists(pdfPath))
+                throw new ArgumentException("pdf_path must be an existing PDF.");
+            var page = parameters["page"]?.ToObject<int?>();
+            if (page == null)
+            {
+                var pages = PlanPdf.Pages(pdfPath);
+                if (pages > 1)
+                    throw new ArgumentException(Path.GetFileName(pdfPath) + " has " + pages + " pages. Pass page, 1 to " + pages + ".");
+                page = 1;
+            }
+            var extracted = PlanPdf.Extract(pdfPath, page.Value, PlanPdf.WorkDir());
+            imagePath = extracted.ImagePath;
+            planPath = extracted.PlanPath;
+            source = Path.GetFileName(pdfPath) + " page " + page.Value.ToString(CultureInfo.InvariantCulture);
+            pdf = new JObject
+            {
+                ["file"] = Path.GetFileName(pdfPath),
+                ["page"] = page.Value,
+                ["plan_path"] = planPath,
+                ["image_path"] = imagePath
+            };
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                throw new ArgumentException("image_path must be an existing image file.");
+            if (string.IsNullOrWhiteSpace(planPath) || !File.Exists(planPath))
+                throw new ArgumentException("plan_path must be an existing forsk.plan_import.v0 file.");
+            source = Path.GetFileName(planPath);
+        }
+
         var plan = PlanImport.Parse(File.ReadAllText(planPath));
+        // A scan, or a page with no filled walls: say why and what to do, and place nothing.
+        var refusal = PlanImport.Refusal(plan, source);
+        if (refusal != null) throw new InvalidOperationException(refusal);
         var hint = parameters["scale_hint"]?.ToString();
         if (!string.IsNullOrWhiteSpace(hint) && !PlanImport.TryRatio(hint, out _))
             throw new ArgumentException("scale_hint must read like 1:100.");
@@ -106,7 +148,9 @@ public partial class RhinoMCPFunctions
         underlayAttr.SetUserString(ImportScaleStatusKey, status);
         if (!string.IsNullOrWhiteSpace(ratio)) underlayAttr.SetUserString(ImportRatioKey, ratio);
         underlayAttr.SetUserString("forsk:import_plan", Path.GetFileName(planPath));
+        if (pdf != null) underlayAttr.SetUserString("forsk:import_pdf", source);
         if (!string.IsNullOrWhiteSpace(plan.Vendor)) underlayAttr.SetUserString("forsk:import_vendor", plan.Vendor);
+        underlayAttr.SetUserString(ImportSourceKey, PlanImport.SourceJson(plan));
         doc.Objects.ModifyAttributes(underlayId, underlayAttr, true);
         KeepLayerOffPrint(doc, underlayLayer);
         underlayLayer.IsLocked = true;
@@ -118,22 +162,7 @@ public partial class RhinoMCPFunctions
         var roomLayer = EnsureLayer(doc, ResolveRoomSourceLayer(doc, "A-ROOM")?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
         var labelLayer = EnsureLayer(doc, RoomLabelLayerName, Color.FromArgb(90, 90, 90));
 
-        var objects = 1;
-        var wallNames = new List<string>();
-        for (var i = 0; i < cleaned.Networks.Count; i++)
-        {
-            var outline = cleaned.Networks[i];
-            var name = "import-wall-" + (i + 1).ToString("D2", CultureInfo.InvariantCulture);
-            wallNames.Add(name);
-            var attr = ImportAttributes(wallLayer, name, "wall");
-            attr.SetUserString("forsk:import_pieces", outline.Pieces.ToString(CultureInfo.InvariantCulture));
-            if (doc.Objects.AddCurve(RoomOutline(outline.Outer, 0), attr) != Guid.Empty) objects++;
-            for (var h = 0; h < outline.Holes.Count; h++)
-            {
-                var hole = ImportAttributes(wallLayer, name + "-hole-" + (h + 1).ToString("D2", CultureInfo.InvariantCulture), ImportWallHoleKind);
-                if (doc.Objects.AddCurve(RoomOutline(outline.Holes[h], 0), hole) != Guid.Empty) objects++;
-            }
-        }
+        var objects = 1 + DrawWallLoops(doc, wallLayer, PlanImport.WallLoops(cleaned));
 
         int doors = 0, windows = 0;
         foreach (var opening in cleaned.Openings)
@@ -143,8 +172,14 @@ public partial class RhinoMCPFunctions
             var attr = ImportAttributes(window ? windowLayer : doorLayer, name, opening.Kind);
             attr.SetUserString("forsk:import_width", FormatMm(opening.Width));
             if (opening.Host >= 0 && cleaned.Walls[opening.Host].Network >= 0)
-                attr.SetUserString("forsk:import_host", wallNames[cleaned.Walls[opening.Host].Network]);
+                attr.SetUserString("forsk:import_host", PlanImport.WallName(cleaned.Walls[opening.Host].Network));
             if (opening.Note != null) attr.SetUserString(ImportReviewKey, opening.Note);
+            // The swing the plan drew, as directions: the bake reads them into the door's hand and swing.
+            if (opening.Swings)
+            {
+                attr.SetUserString(ImportHingeKey, Direction(opening.HingeDir));
+                attr.SetUserString(ImportOpensKey, Direction(opening.OpensDir));
+            }
             if (opening.Host < 0)
             {
                 // No wall under it: red, so it is seen before the bake skips it.
@@ -177,7 +212,7 @@ public partial class RhinoMCPFunctions
         }
 
         doc.Views.Redraw();
-        return new JObject
+        var result = new JObject
         {
             ["walls"] = cleaned.Walls.Count,
             ["walls_detected"] = cleaned.Detected,
@@ -222,6 +257,36 @@ public partial class RhinoMCPFunctions
             ["warnings"] = warnings,
             ["message"] = PlanImport.Message(cleaned, PlanImport.ScaleLine(status, ratio))
         };
+        if (pdf != null) result["pdf"] = pdf;
+        return result;
+    }
+
+    /// <summary>The loops on the wall layer, named and tagged as the import draws them. Returns how many were added.</summary>
+    private static int DrawWallLoops(RhinoDoc doc, Layer wallLayer, List<PlanImport.WallLoop> loops)
+    {
+        var added = 0;
+        foreach (var loop in loops)
+        {
+            var attr = ImportAttributes(wallLayer, loop.Name, loop.Kind);
+            if (loop.Kind == "wall") attr.SetUserString("forsk:import_pieces", loop.Pieces.ToString(CultureInfo.InvariantCulture));
+            if (doc.Objects.AddCurve(RoomOutline(loop.Ring, 0), attr) != Guid.Empty) added++;
+        }
+        return added;
+    }
+
+    private static string Direction(RoomDetect.Pt u)
+    {
+        return u.X.ToString("R", CultureInfo.InvariantCulture) + "," + u.Y.ToString("R", CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryDirection(string text, out double x, out double y)
+    {
+        x = y = 0;
+        var parts = (text ?? "").Split(',');
+        return parts.Length == 2
+            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)
+            && x * x + y * y > 0.25;
     }
 
     private sealed class PlanImage
@@ -358,18 +423,36 @@ public partial class RhinoMCPFunctions
             if (layer != null) layers.Add(layer);
         }
         var targets = new List<RhinoObject>();
+        var wallLoops = new List<RhinoObject>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj.Id == underlay.Id) continue;
             var imported = !string.IsNullOrEmpty(obj.Attributes.GetUserString(ImportKey));
+            var kind = obj.Attributes.GetUserString(ImportKindKey);
+            if (imported && (kind == "wall" || kind == ImportWallHoleKind)) wallLoops.Add(obj);
             // What the user has drawn on the plan layers since goes with the plan.
             if (imported || layers.Exists(layer => ObjectOnLayer(doc, obj, layer))) targets.Add(obj);
         }
 
-        // A wall outline scales as drawn, like the rest: nothing is rounded again, so nothing can drift.
+        // The imported walls are cleaned again at the new scale, so their
+        // thickness is rounded to 10 mm at the size the user set. The same
+        // scale always gives the same walls, so scaling away and back leaves
+        // every wall where it was. Only while the wall layer holds the loops
+        // the import drew: an edited wall is the user's, and scales as drawn.
+        string asDrawn = null;
+        var recleaned = Math.Abs(relative - 1.0) > 1e-12 ? RecleanedWalls(underlay, now, factor, wallLoops, out asDrawn) : null;
+        if (recleaned != null) targets.RemoveAll(obj => wallLoops.Contains(obj));
+
         var scaled = 0;
         foreach (var obj in targets)
             if (doc.Objects.Transform(obj, xform, true) != Guid.Empty) scaled++;
+        if (recleaned != null)
+        {
+            var wallLayer = doc.Layers[wallLoops[0].Attributes.LayerIndex];
+            foreach (var obj in wallLoops)
+                doc.Objects.Delete(obj, true, true);
+            scaled += DrawWallLoops(doc, wallLayer, recleaned);
+        }
 
         // The underlay sits on a locked layer: unlocked for the move, locked again after.
         var underlayLayer = doc.Layers[underlay.Attributes.LayerIndex];
@@ -395,6 +478,9 @@ public partial class RhinoMCPFunctions
 
         doc.Views.Redraw();
         var times = relative.ToString("0.####", CultureInfo.InvariantCulture);
+        var walls = recleaned != null ? " Walls cleaned again at this scale: thickness rounded to 10 mm."
+            : asDrawn != null ? " " + asDrawn + ", so they scaled as drawn: thickness not rounded again."
+            : "";
         return new JObject
         {
             ["measured_mm"] = Math.Round(measured, 1),
@@ -404,12 +490,48 @@ public partial class RhinoMCPFunctions
             ["relative"] = relative,
             ["status"] = "user",
             ["scaled"] = scaled + 1,
+            ["walls_recleaned"] = recleaned != null,
             ["message"] = Math.Abs(relative - 1.0) < 1e-9
                 ? "Scale confirmed: the two points are " + FormatMm(Math.Round(length.Value)) + " mm apart. Nothing moved."
                 : "Scale set: " + FormatMm(Math.Round(length.Value)) + " mm between the two points (was "
                     + FormatMm(Math.Round(measured)) + " mm, x" + times + "). The underlay and "
-                    + scaled + " plan object" + (scaled == 1 ? "" : "s") + " moved together about the plan's top-left corner."
+                    + scaled + " plan object" + (scaled == 1 ? "" : "s") + " moved together about the plan's top-left corner." + walls
         };
+    }
+
+    /// <summary>
+    /// The imported wall loops cleaned again from the detection at factor,
+    /// when the wall layer still holds exactly what the import's clean-up
+    /// makes at the scale the plan has now. Null otherwise, and asDrawn
+    /// says why when there are imported walls to say it about.
+    /// </summary>
+    private static List<PlanImport.WallLoop> RecleanedWalls(
+        RhinoObject underlay, PlanImport.Scale now, double factor, List<RhinoObject> wallLoops, out string asDrawn)
+    {
+        asDrawn = null;
+        if (wallLoops.Count == 0) return null;
+        var json = underlay.Attributes.GetUserString(ImportSourceKey);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            asDrawn = "This import keeps no detection to clean the walls again from";
+            return null;
+        }
+        asDrawn = "The wall outlines were edited since the import";
+        var drawn = new Dictionary<string, List<RoomDetect.Pt>>();
+        foreach (var obj in wallLoops)
+        {
+            if (!(obj.Geometry is Curve curve) || !curve.TryGetPolyline(out var polyline) || polyline.Count < 4) return null;
+            var ring = new List<RoomDetect.Pt>();
+            for (var i = 0; i < polyline.Count - 1; i++) ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
+            var name = obj.Attributes.Name ?? "";
+            if (drawn.ContainsKey(name)) return null;
+            drawn[name] = ring;
+        }
+        var source = PlanImport.Parse(json);
+        var expected = PlanImport.WallLoops(PlanImport.Clean(PlanImport.Scaled(source, now.Factor, now.Origin)));
+        if (!PlanImport.SameLoops(expected, drawn, 0.01)) return null;
+        asDrawn = null;
+        return PlanImport.WallLoops(PlanImport.Clean(PlanImport.Scaled(source, factor, now.Origin)));
     }
 
     private static bool TryPlanPoint(JToken token, out RoomDetect.Pt point)

@@ -12,13 +12,24 @@ def plan_import(
     ctx: Context,
     image_path: str = "",
     plan_path: str = "",
+    pdf_path: str = "",
+    page: Optional[int] = None,
     scale_hint: Optional[str] = None,
     image_dpi: Optional[float] = None,
     image_width_mm: Optional[float] = None,
     replace: bool = False,
 ) -> Dict[str, Any]:
     """
-    Import a floor plan image with a detection of it, in one undoable step.
+    Import a floor plan in one undoable step: a vector PDF, or a plan image
+    with a detection of it.
+
+    A vector PDF (pdf_path, with page when it has several) is read by forsk's
+    extractor (tools/pdf_vector, run with uv): its walls, doors, windows, rooms
+    and the scale printed on the sheet, and the page rendered in the same
+    frame. The detected scale is applied; the receipt names it, and the user
+    confirms or overrides it with plan_scale. A page with no vector walls (a
+    scan) imports nothing and says so, with the next step: a Tectly detection
+    of the page image through plan_from_tectly.
 
     The image goes in as a locked, faded underlay on X-PLAN, its top-left at
     (0, 0), shown in every view's display mode and kept off Print. The
@@ -41,6 +52,9 @@ def plan_import(
     A wider gap stays open. What it could not place is reported, not hidden.
 
     Parameters:
+    - pdf_path: absolute path of a vector PDF plan, in place of image_path
+      and plan_path
+    - page: the PDF's page, 1-based; needed when it has more than one
     - image_path: absolute path of the plan image (PNG or JPEG)
     - plan_path: absolute path of the forsk.plan_import.v0 JSON
     - scale_hint: the drawing's scale when known, such as "1:100". It sizes the
@@ -60,14 +74,26 @@ def plan_import(
     of the rest), blocks_skipped (of those, the ones too wide to be a wall,
     which the bake skips), rooms, unlabelled, outside (rooms the walls do not
     close around), dropped, review (one line per thing to look at), scale
-    (status, ratio, factor), underlay, and message.
+    (status, ratio, factor), underlay, pdf (with a PDF: the page read and
+    the plan file and page image written for it), and message.
     Always pass on the scale status and the review lines.
     """
     try:
-        for label, path in (("image_path", image_path), ("plan_path", plan_path)):
-            if not isinstance(path, str) or not path.strip() or not os.path.isabs(path.strip()):
-                return {"success": False, "message": f"plan_import needs an absolute {label}."}
-        params: Dict[str, Any] = {"image_path": image_path.strip(), "plan_path": plan_path.strip()}
+        if pdf_path and pdf_path.strip():
+            if (image_path and image_path.strip()) or (plan_path and plan_path.strip()):
+                return {"success": False, "message": "plan_import takes pdf_path, or image_path with plan_path, not both."}
+            if not os.path.isabs(pdf_path.strip()):
+                return {"success": False, "message": "plan_import needs an absolute pdf_path."}
+            params: Dict[str, Any] = {"pdf_path": pdf_path.strip()}
+            if page is not None:
+                if page < 1:
+                    return {"success": False, "message": "plan_import page is 1-based."}
+                params["page"] = page
+        else:
+            for label, path in (("image_path", image_path), ("plan_path", plan_path)):
+                if not isinstance(path, str) or not path.strip() or not os.path.isabs(path.strip()):
+                    return {"success": False, "message": f"plan_import needs an absolute {label}, or a pdf_path."}
+            params = {"image_path": image_path.strip(), "plan_path": plan_path.strip()}
         if scale_hint:
             params["scale_hint"] = scale_hint
         if image_dpi:

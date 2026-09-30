@@ -51,6 +51,18 @@
       "required": ["id", "layer", "image", "width_mm", "height_mm"],
       "additionalProperties": false
     },
+    "pdf": {
+      "type": "object",
+      "description": "With a PDF source: the page read, and the plan file and page image the extractor wrote for it",
+      "properties": {
+        "file": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "plan_path": { "type": "string" },
+        "image_path": { "type": "string" }
+      },
+      "required": ["file", "page", "plan_path", "image_path"],
+      "additionalProperties": false
+    },
     "objects": { "type": "integer", "description": "Objects added, the underlay included" },
     "replaced": { "type": "integer", "description": "Objects of an earlier import deleted first" },
     "warnings": { "type": "array", "items": { "type": "string" } },

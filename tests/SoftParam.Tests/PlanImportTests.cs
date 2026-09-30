@@ -522,8 +522,8 @@ public class PlanImportTests
         Assert.Contains("1 room without a label (3.7, -2.0 m)", Assert.Single(result.Review));
         Assert.Equal(
             "Imported 5 walls, 1 door, 1 window, 2 rooms. Wall cleanup: 5 wall pieces merged into 1 outline, "
-            + "0 gaps closed, 0 overlaps left. Scale 1:50 read from the plan, not confirmed: "
-            + "check it with two points and a known length. Review: 1 room without a label.",
+            + "0 gaps closed, 0 overlaps left. Scale 1:50 read from the plan and applied: "
+            + "confirm it, or override it, with Set scale (two points and a known length). Review: 1 room without a label.",
             PlanImport.Message(result, PlanImport.ScaleLine("detected", "1:50")));
     }
 
@@ -574,7 +574,7 @@ public class PlanImportTests
 
     [Theory]
     [InlineData("user", "1:100", "Scale set from two points and a known length.")]
-    [InlineData("detected", "1:100", "Scale 1:100 read from the plan, not confirmed: check it with two points and a known length.")]
+    [InlineData("detected", "1:100", "Scale 1:100 read from the plan and applied: confirm it, or override it, with Set scale (two points and a known length).")]
     [InlineData("user_supplied", "1:100", "Scale not detected (assumed 1:100): set it with two points and a known length.")]
     [InlineData(null, null, "Scale not detected: set it with two points and a known length.")]
     public void ScaleLine_SaysHowTheScaleStands(string status, string ratio, string line)
@@ -791,6 +791,137 @@ public class PlanImportTests
         Assert.DoesNotContain(result.Walls, w => w.Skipped);
         Assert.Contains("wall at 8.0, 1.5 m stands free of the other walls: it bakes as a wall on its own", Assert.Single(result.Review));
         Assert.Contains("1 wall standing free", PlanImport.Message(result, ""));
+    }
+
+    static PlanImport.Plan Room200() => PlanOf(
+        W(0, 0, 5000, 0), W(5000, 0, 5000, -4000), W(0, -4000, 5000, -4000), W(0, 0, 0, -4000));
+
+    [Fact]
+    public void Rescale_CleansTheWallsAgain_SoThicknessIsRoundedAtTheScaleSet()
+    {
+        // 200 mm walls at x1.037: scaled as drawn they are 207.4 mm thick, cleaned again 210.
+        var origin = new Pt(0, 0);
+        var at = PlanImport.Clean(PlanImport.Scaled(Room200(), 1.037, origin));
+        Assert.All(at.Walls, w => Assert.Equal(210.0, w.Thickness));
+        var outline = Assert.Single(at.Networks);
+        var hole = Assert.Single(outline.Holes);
+        // The outline's two faces are the rounded thickness apart.
+        Assert.Equal(210.0, hole.Min(p => p.X) - outline.Outer.Min(p => p.X), 6);
+        Assert.Equal(210.0, outline.Outer.Max(p => p.Y) - hole.Max(p => p.Y), 6);
+        Assert.All(PlanImport.Clean(PlanImport.Scaled(Room200(), 2.074, origin)).Walls, w => Assert.Equal(410.0, w.Thickness));
+    }
+
+    [Fact]
+    public void Rescale_AwayAndBack_LeavesEveryWallLoopWhereItWas()
+    {
+        var origin = new Pt(120.0, -35.0);
+        var source = PlanImport.Parse(PlanImport.SourceJson(Room200()));
+        List<PlanImport.WallLoop> At(double factor) => PlanImport.WallLoops(PlanImport.Clean(PlanImport.Scaled(source, factor, origin)));
+        var first = At(0.999724);
+        At(1.999448);
+        var back = At(0.999724);
+        Assert.Equal(new[] { "import-wall-01", "import-wall-01-hole-01" }, first.Select(l => l.Name));
+        Assert.True(PlanImport.SameLoops(first, back.ToDictionary(l => l.Name, l => l.Ring), 0.0));
+        // The source kept on the underlay cleans to what the import drew from the file.
+        Assert.True(PlanImport.SameLoops(PlanImport.WallLoops(PlanImport.Clean(Room200())),
+            PlanImport.WallLoops(PlanImport.Clean(PlanImport.Scaled(source, 1.0, new Pt(0, 0)))).ToDictionary(l => l.Name, l => l.Ring), 0.0));
+    }
+
+    [Fact]
+    public void Rescale_AnEditedWallLoop_IsNotTheImports()
+    {
+        var loops = PlanImport.WallLoops(PlanImport.Clean(Room200()));
+        var drawn = loops.ToDictionary(l => l.Name, l => new List<Pt>(l.Ring));
+        Assert.True(PlanImport.SameLoops(loops, drawn, 0.01));
+        // A face moved 5 mm: the user's wall now, and it scales as drawn.
+        var ring = drawn["import-wall-01"];
+        ring[0] = new Pt(ring[0].X - 5.0, ring[0].Y);
+        Assert.False(PlanImport.SameLoops(loops, drawn, 0.01));
+        drawn = loops.ToDictionary(l => l.Name, l => l.Ring);
+        drawn.Remove("import-wall-01-hole-01");
+        Assert.False(PlanImport.SameLoops(loops, drawn, 0.01));
+    }
+
+    static PlanImport.Opening DoorIn(string door)
+    {
+        var plan = PlanImport.Parse(@"{ ""schema"": ""forsk.plan_import.v0"",
+            ""walls"": [ { ""start"": [0, 0], ""end"": [6000, 0], ""thickness"": 200 } ],
+            ""openings"": [ " + door + @" ] }");
+        return Assert.Single(PlanImport.Clean(plan).Openings);
+    }
+
+    [Fact]
+    public void DoorSwing_TheFileDraws_IsCarriedOntoTheHostedDoor()
+    {
+        // Hinge at 2000, closed at 2900 in the wall, the leaf open toward +y.
+        var door = DoorIn(@"{ ""kind"": ""door"", ""hinge"": [2000, 0], ""closed"": [2900, 0], ""open"": [2000, 900] }");
+        Assert.True(door.Swings);
+        Assert.Equal(-1.0, door.HingeDir.X, 9);
+        Assert.Equal(0.0, door.HingeDir.Y, 9);
+        Assert.Equal(1.0, door.OpensDir.Y, 9);
+
+        var mirrored = DoorIn(@"{ ""kind"": ""door"", ""hinge"": [2900, 0], ""closed"": [2000, 0], ""open"": [2900, -900] }");
+        Assert.Equal(1.0, mirrored.HingeDir.X, 9);
+        Assert.Equal(-1.0, mirrored.OpensDir.Y, 9);
+    }
+
+    [Theory]
+    [InlineData(@"{ ""kind"": ""door"", ""hinge"": [2000, 0], ""closed"": [2900, 0] }")]
+    [InlineData(@"{ ""kind"": ""door"", ""hinge"": [2000, 0], ""closed"": [2900, 0], ""open"": [1100, 0] }")]
+    [InlineData(@"{ ""kind"": ""window"", ""a"": [2000, 0], ""b"": [2900, 0] }")]
+    public void NoSwingDrawn_NoSwingCarried(string opening)
+    {
+        Assert.False(DoorIn(opening).Swings);
+    }
+
+    [Theory]
+    [InlineData(0, 1, -1, 0, 0, 1, "R", "in")]
+    [InlineData(0, -1, -1, 0, 0, 1, "L", "out")]
+    [InlineData(1, 0, 0, 1, -1, 0, "R", "out")]
+    [InlineData(-1, 0, 0, 1, 1, 0, "L", "out")]
+    public void DoorSwing_ReadsAsHandAndSwing_AgainstTheWallsInward(
+        double ix, double iy, double hx, double hy, double ox, double oy, string hand, string swing)
+    {
+        OpeningTypes.HandSwingFrom(hx, hy, ox, oy, ix, iy, out var gotHand, out var gotSwing);
+        Assert.Equal(hand, gotHand);
+        Assert.Equal(swing, gotSwing);
+    }
+
+    /// <summary>
+    /// The plan symbol draws the hinge at HandSign × the frame's X and the leaf
+    /// at SwingSign × its Y, with xLeft and yInward from the wall's Inward.
+    /// For every wall direction, face and frame orientation, the hand and
+    /// swing read from a drawn swing draw that same swing again.
+    /// </summary>
+    [Fact]
+    public void DoorSwing_HandAndSwing_DrawTheSwingAgain_InEveryFrame()
+    {
+        var signs = new[] { 1.0, -1.0 };
+        foreach (var (ux, uy) in new[] { (1.0, 0.0), (0.0, 1.0) })
+        foreach (var inwardSign in signs)
+        foreach (var hingeSign in signs)
+        foreach (var opensSign in signs)
+        foreach (var xSign in signs)
+        foreach (var ySign in signs)
+        {
+            double nx = -uy, ny = ux;
+            double ix = nx * inwardSign, iy = ny * inwardSign;
+            double hx = ux * hingeSign, hy = uy * hingeSign;
+            double ox = nx * opensSign, oy = ny * opensSign;
+            OpeningTypes.HandSwingFrom(hx, hy, ox, oy, ix, iy, out var hand, out var swing);
+            Assert.True(OpeningTypes.TryRead("door", null, hand, swing, null, out var record, out _));
+
+            // The frame as OpeningFacing makes it: X along the wall, Y across, either way round.
+            double px = ux * xSign, py = uy * xSign, qx = nx * ySign, qy = ny * ySign;
+            var xLeft = px * iy + py * -ix >= 0 ? 1 : -1;
+            var yInward = qx * ix + qy * iy >= 0 ? 1 : -1;
+            var hingeAt = OpeningTypes.HandSign(record, xLeft);
+            var leafAt = OpeningTypes.SwingSign(record, yInward);
+            Assert.Equal(hx, hingeAt * px, 9);
+            Assert.Equal(hy, hingeAt * py, 9);
+            Assert.Equal(ox, leafAt * qx, 9);
+            Assert.Equal(oy, leafAt * qy, 9);
+        }
     }
 
     /// <summary>

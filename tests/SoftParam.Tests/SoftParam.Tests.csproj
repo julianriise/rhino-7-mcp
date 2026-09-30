@@ -28,6 +28,7 @@
     <Compile Include="..\..\plugin\Functions\DxfUnits.cs" Link="DxfUnits.cs" />
     <Compile Include="..\..\plugin\Functions\PreviewFrame.cs" Link="PreviewFrame.cs" />
     <Compile Include="..\..\plugin\Functions\PlanImport.cs" Link="PlanImport.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanPdf.cs" Link="PlanPdf.cs" />
   </ItemGroup>
 
   <ItemGroup>

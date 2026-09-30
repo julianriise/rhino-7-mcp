@@ -22,6 +22,10 @@ public class PanelImportTests
     [InlineData("scale the plan")]
     [InlineData("importer plantegningen")]
     [InlineData("sett målestokk")]
+    [InlineData("import plan.pdf")]
+    [InlineData("Import /Users/jr/plans/plan1.pdf")]
+    [InlineData("importer pdf-en")]
+    [InlineData("bring in the PDF plan")]
     public void ImportWords_ClassifyAsImport(string text)
     {
         Assert.Equal(ForskIntent.Import, ForskIntentRouter.Classify(text, ""));
@@ -29,6 +33,7 @@ public class PanelImportTests
 
     [Theory]
     [InlineData("print pdf at the plan scale", ForskIntent.Print)]
+    [InlineData("make a pdf of the plan", ForskIntent.Print)]
     [InlineData("make sheets", ForskIntent.Sheets)]
     [InlineData("run daylight", ForskIntent.Daylight)]
     [InlineData("generate the 3D model", ForskIntent.Build)]

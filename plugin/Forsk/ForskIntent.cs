@@ -18,7 +18,7 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is print, daylight, sheets, DXF, import, edit, build.
+    /// One-turn tool bias from the message. Order is PDF import, print, daylight, sheets, DXF, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -26,6 +26,7 @@ namespace RhinoMCPPlugin.Forsk
         public static ForskIntent Classify(string text, string target)
         {
             var t = Normalize(text);
+            if (IsPlanPdf(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
             if (IsSheets(t)) return ForskIntent.Sheets;
@@ -57,6 +58,13 @@ namespace RhinoMCPPlugin.Forsk
                 }
             }
             return sb.ToString().Trim();
+        }
+
+        /// <summary>A PDF brought in: import plan.pdf. It comes before print, which "pdf" would match.</summary>
+        static bool IsPlanPdf(string t)
+        {
+            if (!HasWord(t, "pdf")) return false;
+            return HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere") || t.Contains("bring in");
         }
 
         static bool IsPrint(string t)
