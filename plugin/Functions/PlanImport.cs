@@ -120,6 +120,8 @@ public static class PlanImport
         public List<Opening> Openings = new List<Opening>();
         public List<Room> Rooms = new List<Room>();
         public string Vendor;
+        /// <summary>The licence the source states for its plan, such as the CubiCasa5k model's CC BY-NC 4.0. Null when it states none.</summary>
+        public string Licence;
         /// <summary>detected, or anything else for a scale nobody measured.</summary>
         public string ScaleStatus;
         /// <summary>1:100, or null.</summary>
@@ -191,13 +193,18 @@ public static class PlanImport
             throw new FormatException("plan_import units must be mm, not " + units + ".");
         var flip = string.Equals(root["y_axis"]?.ToString(), "down", StringComparison.OrdinalIgnoreCase) ? -1.0 : 1.0;
 
+        // Who made the plan and under what licence: in source (pdf-vector), or
+        // as source and licence at the top level or in metadata (cubicasa-plan).
+        var source = root["source"] as JObject;
+        var meta = root["metadata"] as JObject;
         var plan = new Plan
         {
-            Vendor = root["source"]?["vendor"]?.ToString(),
+            Vendor = Text(source?["vendor"]) ?? Text(root["source"]) ?? Text(meta?["source"]) ?? Text(meta?["vendor"]),
+            Licence = Text(source?["licence"]) ?? Text(root["licence"]) ?? Text(meta?["licence"]),
             ScaleStatus = root["scale"]?["status"]?.ToString(),
             ScaleRatio = root["scale"]?["ratio"]?.ToString(),
             ImageWidthMm = root["image"]?["width_mm"]?.ToObject<double?>() ?? 0,
-            Diagnostic = root["source"]?["diagnostic"]?.Type == JTokenType.String ? root["source"]["diagnostic"].ToString() : null
+            Diagnostic = Text(source?["diagnostic"])
         };
 
         var index = 0;
@@ -256,6 +263,12 @@ public static class PlanImport
             plan.Rooms.Add(new Room { Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(), Ring = ring });
         }
         return plan;
+    }
+
+    /// <summary>A JSON string's text, trimmed. Null for anything else, or a blank string.</summary>
+    static string Text(JToken token)
+    {
+        return token?.Type == JTokenType.String && !string.IsNullOrWhiteSpace(token.ToString()) ? token.ToString().Trim() : null;
     }
 
     static bool TryPt(JToken token, double flip, out Pt p)

@@ -20,20 +20,27 @@ def plan_import(
     replace: bool = False,
 ) -> Dict[str, Any]:
     """
-    Import a floor plan in one undoable step: a vector PDF, or a plan image
-    with a detection of it.
+    Import a floor plan in one undoable step: a vector PDF, a scanned or
+    photographed plan, or a plan image with a detection of it.
 
     A vector PDF (pdf_path, with page when it has several) is read by forsk's
     extractor (tools/pdf_vector, run with uv): its walls, doors, windows, rooms
     and the scale printed on the sheet, and the page rendered in the same
     frame. The detected scale is applied; the receipt names it, and the user
-    confirms or overrides it with plan_scale. A page with no vector walls (a
-    scan) imports nothing and says so.
+    confirms or overrides it with plan_scale.
+
+    A PNG or JPEG alone (image_path with no plan_path), or a PDF page with no
+    vector walls (a scan), goes to the raster source: the CubiCasa5k model
+    (tools/cubicasa, run with uv). Its licence is CC BY-NC 4.0, non-commercial
+    use only, and the receipt says so. An image has no known scale: the plan
+    comes at 1:100 at the image's dpi, marked assumed, and the user sets the
+    scale with plan_scale. When the model finds no plan, or its weights are
+    not fetched yet, nothing is imported and the message gives the next step.
 
     The image goes in as a locked, faded underlay on X-PLAN, its top-left at
     (0, 0), shown in every view's display mode and kept off Print. The
-    detection (a forsk.plan_import.v0 JSON: mm, y up; from a vector-PDF
-    extractor or any other source) goes on top as 2D review
+    detection (a forsk.plan_import.v0 JSON: mm, y up; from the vector-PDF
+    extractor, the raster source, or any other source) goes on top as 2D review
     geometry on the layers the bake reads: a closed outline per connected run
     of walls on wall (the walls merged, so none overlaps another; the holes an
     outline closes are loops of their own), opening footprints on door and
@@ -54,8 +61,10 @@ def plan_import(
     - pdf_path: absolute path of a vector PDF plan, in place of image_path
       and plan_path
     - page: the PDF's page, 1-based; needed when it has more than one
-    - image_path: absolute path of the plan image (PNG or JPEG)
-    - plan_path: absolute path of the forsk.plan_import.v0 JSON
+    - image_path: absolute path of the plan image (PNG or JPEG); alone, the
+      raster source reads it
+    - plan_path: absolute path of the image's forsk.plan_import.v0 JSON, when
+      it was detected elsewhere
     - scale_hint: the drawing's scale when known, such as "1:100". It sizes the
       image and is named in the receipt; the user still sets the scale with
       plan_scale
@@ -73,14 +82,16 @@ def plan_import(
     of the rest), blocks_skipped (of those, the ones too wide to be a wall,
     which the bake skips), rooms, unlabelled, outside (rooms the walls do not
     close around), dropped, review (one line per thing to look at), scale
-    (status, ratio, factor), underlay, pdf (with a PDF: the page read and
-    the plan file and page image written for it), and message.
-    Always pass on the scale status and the review lines.
+    (status, ratio, factor), underlay, pdf (with a vector PDF: the page read
+    and the plan file and page image written for it), raster (with the raster
+    source: what it read, the files it wrote, the model and its licence, and
+    scan, why a PDF page went to it), and message.
+    Always pass on the scale status, the review lines and the licence.
     """
     try:
         if pdf_path and pdf_path.strip():
             if (image_path and image_path.strip()) or (plan_path and plan_path.strip()):
-                return {"success": False, "message": "plan_import takes pdf_path, or image_path with plan_path, not both."}
+                return {"success": False, "message": "plan_import takes pdf_path or image_path, not both."}
             if not os.path.isabs(pdf_path.strip()):
                 return {"success": False, "message": "plan_import needs an absolute pdf_path."}
             params: Dict[str, Any] = {"pdf_path": pdf_path.strip()}
@@ -89,10 +100,13 @@ def plan_import(
                     return {"success": False, "message": "plan_import page is 1-based."}
                 params["page"] = page
         else:
-            for label, path in (("image_path", image_path), ("plan_path", plan_path)):
-                if not isinstance(path, str) or not path.strip() or not os.path.isabs(path.strip()):
-                    return {"success": False, "message": f"plan_import needs an absolute {label}, or a pdf_path."}
-            params = {"image_path": image_path.strip(), "plan_path": plan_path.strip()}
+            if not isinstance(image_path, str) or not image_path.strip() or not os.path.isabs(image_path.strip()):
+                return {"success": False, "message": "plan_import needs an absolute image_path, or a pdf_path."}
+            params = {"image_path": image_path.strip()}
+            if plan_path and plan_path.strip():
+                if not os.path.isabs(plan_path.strip()):
+                    return {"success": False, "message": "plan_import needs an absolute plan_path."}
+                params["plan_path"] = plan_path.strip()
         if scale_hint:
             params["scale_hint"] = scale_hint
         if image_dpi:

@@ -29,6 +29,9 @@
     <Compile Include="..\..\plugin\Functions\PreviewFrame.cs" Link="PreviewFrame.cs" />
     <Compile Include="..\..\plugin\Functions\PlanImport.cs" Link="PlanImport.cs" />
     <Compile Include="..\..\plugin\Functions\PlanPdf.cs" Link="PlanPdf.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanRaster.cs" Link="PlanRaster.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanSource.cs" Link="PlanSource.cs" />
+    <Compile Include="..\..\plugin\Functions\ForskUv.cs" Link="ForskUv.cs" />
   </ItemGroup>
 
   <ItemGroup>

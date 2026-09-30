@@ -55,59 +55,16 @@ public partial class RhinoMCPFunctions
         if (doc.ModelUnitSystem != UnitSystem.Millimeters)
             throw new InvalidOperationException("Document units must be millimetres. Switch the .3dm to millimetres.");
 
-        var imagePath = parameters["image_path"]?.ToString();
-        var planPath = parameters["plan_path"]?.ToString();
-        var pdfPath = parameters["pdf_path"]?.ToString();
-        JObject pdf = null;
-        string source;
-        if (!string.IsNullOrWhiteSpace(pdfPath))
-        {
-            // A vector PDF: forsk's extractor writes the plan file and the page image, then the import goes on as for any source.
-            if (!string.IsNullOrWhiteSpace(imagePath) || !string.IsNullOrWhiteSpace(planPath))
-                throw new ArgumentException("Pass pdf_path, or image_path with plan_path, not both.");
-            if (!File.Exists(pdfPath))
-                throw new ArgumentException("pdf_path must be an existing PDF.");
-            var page = parameters["page"]?.ToObject<int?>();
-            if (page == null)
-            {
-                var pages = PlanPdf.Pages(pdfPath);
-                if (pages > 1)
-                    throw new ArgumentException(Path.GetFileName(pdfPath) + " has " + pages + " pages. Pass page, 1 to " + pages + ".");
-                page = 1;
-            }
-            var extracted = PlanPdf.Extract(pdfPath, page.Value, PlanPdf.WorkDir());
-            imagePath = extracted.ImagePath;
-            planPath = extracted.PlanPath;
-            source = Path.GetFileName(pdfPath) + " page " + page.Value.ToString(CultureInfo.InvariantCulture);
-            pdf = new JObject
-            {
-                ["file"] = Path.GetFileName(pdfPath),
-                ["page"] = page.Value,
-                ["plan_path"] = planPath,
-                ["image_path"] = imagePath
-            };
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
-                throw new ArgumentException("image_path must be an existing image file.");
-            if (string.IsNullOrWhiteSpace(planPath) || !File.Exists(planPath))
-                throw new ArgumentException("plan_path must be an existing forsk.plan_import.v0 file.");
-            source = Path.GetFileName(planPath);
-        }
-
-        var plan = PlanImport.Parse(File.ReadAllText(planPath));
-        // A scan, or a page with no filled walls: say why and what to do, and place nothing.
-        var refusal = PlanImport.Refusal(plan, source);
-        if (refusal != null) throw new InvalidOperationException(refusal);
         var hint = parameters["scale_hint"]?.ToString();
         if (!string.IsNullOrWhiteSpace(hint) && !PlanImport.TryRatio(hint, out _))
             throw new ArgumentException("scale_hint must read like 1:100.");
-        var detected = string.Equals(plan.ScaleStatus, "detected", StringComparison.OrdinalIgnoreCase);
-        var ratio = detected && !string.IsNullOrWhiteSpace(plan.ScaleRatio) ? plan.ScaleRatio
-            : !string.IsNullOrWhiteSpace(hint) ? hint.Trim()
-            : plan.ScaleRatio;
-        var status = detected ? "detected" : "unconfirmed";
+        // The plan file and image from the source: a vector PDF, a scan or photo through the raster source, or both given.
+        // What cannot be imported is refused here, with its reason and next step, before anything is placed.
+        var resolved = PlanSource.Resolve(parameters, PlanSource.WorkDir());
+        var plan = resolved.Plan;
+        var imagePath = resolved.ImagePath;
+        var planPath = resolved.PlanPath;
+        var status = PlanSource.Scale(plan, hint, out var ratio);
 
         var size = PlanImageSize(imagePath, parameters, plan.ImageWidthMm, ratio);
 
@@ -148,8 +105,11 @@ public partial class RhinoMCPFunctions
         underlayAttr.SetUserString(ImportScaleStatusKey, status);
         if (!string.IsNullOrWhiteSpace(ratio)) underlayAttr.SetUserString(ImportRatioKey, ratio);
         underlayAttr.SetUserString("forsk:import_plan", Path.GetFileName(planPath));
-        if (pdf != null) underlayAttr.SetUserString("forsk:import_pdf", source);
+        if (resolved.Pdf != null) underlayAttr.SetUserString("forsk:import_pdf", resolved.Label);
+        if (resolved.Raster != null) underlayAttr.SetUserString("forsk:import_raster", resolved.Label);
         if (!string.IsNullOrWhiteSpace(plan.Vendor)) underlayAttr.SetUserString("forsk:import_vendor", plan.Vendor);
+        // The licence of the model that read the plan stays with it in the .3dm.
+        if (resolved.Licence != null) underlayAttr.SetUserString("forsk:import_licence", resolved.Licence);
         underlayAttr.SetUserString(ImportSourceKey, PlanImport.SourceJson(plan));
         doc.Objects.ModifyAttributes(underlayId, underlayAttr, true);
         KeepLayerOffPrint(doc, underlayLayer);
@@ -255,9 +215,10 @@ public partial class RhinoMCPFunctions
             ["objects"] = objects,
             ["replaced"] = earlier.Count,
             ["warnings"] = warnings,
-            ["message"] = PlanImport.Message(cleaned, PlanImport.ScaleLine(status, ratio))
+            ["message"] = PlanSource.Receipt(resolved, cleaned, status, ratio)
         };
-        if (pdf != null) result["pdf"] = pdf;
+        if (resolved.Pdf != null) result["pdf"] = resolved.Pdf;
+        if (resolved.Raster != null) result["raster"] = resolved.Raster;
         return result;
     }
 

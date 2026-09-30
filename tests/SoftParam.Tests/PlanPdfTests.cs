@@ -29,12 +29,12 @@ public class PlanPdfTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
-    static bool CanExtract => PlanPdf.ExtractorDir() != null && PlanPdf.Uv() != null;
+    internal static bool CanExtract => PlanPdf.ExtractorDir() != null && ForskUv.Uv() != null;
 
     string Temp(string name) => Path.Combine(_dir, name);
 
     /// <summary>A one-page PDF of the content stream, Helvetica as F1, and the image XObject when given.</summary>
-    static byte[] Pdf(string stream, byte[] image = null, double width = Width, double height = Height)
+    internal static byte[] Pdf(string stream, byte[] image = null, double width = Width, double height = Height)
     {
         var resources = image == null
             ? "/Font << /F1 4 0 R >>"

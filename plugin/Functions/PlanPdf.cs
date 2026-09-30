@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Threading.Tasks;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -10,9 +8,7 @@ namespace RhinoMCPPlugin.Functions;
 /// A vector PDF as a plan_import source (F7.7). Forsk's extractor
 /// (tools/pdf_vector in the forsk checkout: pdfplumber and pypdfium2, MIT and
 /// Apache) reads one page into forsk.plan_import.v0 and renders that page in
-/// the same frame. It runs in a child process with uv from its own lock, so
-/// there is one copy of it, nothing of it in the plugin, and nothing added to
-/// the server's environment. No RhinoCommon, so it tests headless.
+/// the same frame. It runs with uv (ForskUv). No RhinoCommon, so it tests headless.
 /// </summary>
 public static class PlanPdf
 {
@@ -28,39 +24,7 @@ public static class PlanPdf
     }
 
     /// <summary>tools/pdf_vector: FORSK_HOME, else the forsk checkout beside rhino-7-mcp.</summary>
-    public static string ExtractorDir()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var root in new[] { Environment.GetEnvironmentVariable("FORSK_HOME"), Path.Combine(home, "Documents", "hobby", "forsk") })
-        {
-            if (string.IsNullOrWhiteSpace(root)) continue;
-            var dir = Path.Combine(root, "tools", "pdf_vector");
-            if (File.Exists(Path.Combine(dir, "pyproject.toml"))) return dir;
-        }
-        return null;
-    }
-
-    /// <summary>uv: UV when set, else PATH, else where its installers put it. Rhino's PATH has no Homebrew.</summary>
-    public static string Uv()
-    {
-        var set = Environment.GetEnvironmentVariable("UV");
-        if (!string.IsNullOrWhiteSpace(set) && File.Exists(set)) return set;
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
-        foreach (var dir in dirs)
-        {
-            if (string.IsNullOrWhiteSpace(dir)) continue;
-            var path = Path.Combine(dir, "uv");
-            if (File.Exists(path)) return path;
-        }
-        foreach (var path in new[]
-        {
-            "/opt/homebrew/bin/uv", "/usr/local/bin/uv",
-            Path.Combine(home, ".local", "bin", "uv"), Path.Combine(home, ".cargo", "bin", "uv")
-        })
-            if (File.Exists(path)) return path;
-        return null;
-    }
+    public static string ExtractorDir() => ForskUv.ToolDir("pdf_vector");
 
     /// <summary>Pages in the PDF.</summary>
     public static int Pages(string pdf)
@@ -94,17 +58,11 @@ public static class PlanPdf
         foreach (var old in new[] { extracted.PlanPath, extracted.ImagePath })
             if (File.Exists(old)) File.Delete(old);
         Run(pdf, "--page " + page.ToString(CultureInfo.InvariantCulture)
-            + " --out " + Quote(extracted.PlanPath) + " --png " + Quote(extracted.ImagePath)
+            + " --out " + ForskUv.Quote(extracted.PlanPath) + " --png " + ForskUv.Quote(extracted.ImagePath)
             + " --dpi " + Dpi.ToString(CultureInfo.InvariantCulture));
         if (!File.Exists(extracted.PlanPath) || !File.Exists(extracted.ImagePath))
             throw new InvalidOperationException("The PDF extractor wrote no plan for page " + page + " of " + Path.GetFileName(pdf) + ".");
         return extracted;
-    }
-
-    /// <summary>Where a PDF's plan file and page image go: they stay beside each other, and the image is embedded in the .3dm.</summary>
-    public static string WorkDir()
-    {
-        return Path.Combine(Path.GetTempPath(), "forsk-pdf-import");
     }
 
     /// <summary>pdf-vector on the PDF with args; its stdout. Its last stderr line on failure.</summary>
@@ -116,45 +74,14 @@ public static class PlanPdf
         if (dir == null)
             throw new InvalidOperationException(
                 "Importing a PDF needs the forsk checkout's tools/pdf_vector. Set FORSK_HOME to the forsk checkout.");
-        var uv = Uv();
+        var uv = ForskUv.Uv();
         if (uv == null)
             throw new InvalidOperationException(
                 "Importing a PDF needs uv (docs.astral.sh/uv) to run tools/pdf_vector. Install uv, or set UV to its path.");
 
-        var start = new ProcessStartInfo(uv, "run --frozen --quiet --project " + Quote(dir) + " pdf-vector " + Quote(pdf) + " " + args)
-        {
-            WorkingDirectory = dir,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        using (var process = Process.Start(start))
-        {
-            if (process == null) throw new InvalidOperationException("Could not start the PDF extractor.");
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(TimeoutMs))
-            {
-                try { process.Kill(); } catch { /* already gone */ }
-                throw new TimeoutException("The PDF extractor took over " + TimeoutMs / 1000 + " s.");
-            }
-            Task.WaitAll(stdout, stderr);
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException("The PDF extractor failed: " + LastLine(stderr.Result));
-            return stdout.Result;
-        }
-    }
-
-    static string Quote(string path)
-    {
-        return "\"" + path.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
-    }
-
-    static string LastLine(string text)
-    {
-        var lines = (text ?? "").Trim().Split('\n');
-        var last = lines[lines.Length - 1].Trim();
-        return last.Length == 0 ? "no output" : last;
+        var ran = ForskUv.Run(uv, ForskUv.RunArgs(dir, "pdf-vector") + " " + ForskUv.Quote(pdf) + " " + args, dir, "The PDF extractor", TimeoutMs);
+        if (ran.Code != 0)
+            throw new InvalidOperationException("The PDF extractor failed: " + ForskUv.LastLine(ran.Stderr));
+        return ran.Stdout;
     }
 }

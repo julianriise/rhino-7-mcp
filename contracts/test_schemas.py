@@ -292,6 +292,7 @@ def test_new_commands():
         ("commands/rooms_detect.json", {}),
         ("commands/dxf_import.json", {"path": "/tmp/office_2D.dxf"}),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json"}),
+        ("commands/plan_import.json", {"image_path": "/tmp/scan.jpg"}),
         ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf"}),
         ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "page": 2, "replace": True}),
         ("commands/plan_import.json", {
@@ -704,11 +705,39 @@ def test_responses():
         "scale": {"status": "detected", "ratio": "1:100", "factor": 1.0},
         "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan1-p1.png",
                      "width_mm": 42011.6, "height_mm": 29705.3},
-        "pdf": {"file": "plan1.pdf", "page": 1, "plan_path": "/tmp/forsk-pdf-import/plan1-p1.json",
-                "image_path": "/tmp/forsk-pdf-import/plan1-p1.png"},
+        "pdf": {"file": "plan1.pdf", "page": 1, "plan_path": "/tmp/forsk-plan-import/plan1-p1.json",
+                "image_path": "/tmp/forsk-plan-import/plan1-p1.png"},
         "message": "Imported 46 walls (54 detected, 7 merged, 1 dropped), 12 doors, 10 windows, 12 rooms.",
     }):
         all_passed = False
+    if not validate("responses/plan_import_result.json", {
+        "walls": 4, "walls_detected": 4, "doors": 1, "windows": 1, "loose": 0, "rooms": 1, "unlabelled": 0,
+        "dropped": [], "review": [], "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
+        "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "scan-p1-raster.png",
+                     "width_mm": 21000.0, "height_mm": 29700.0},
+        "raster": {"file": "scan.pdf", "page": 1, "scan": "no vector walls found; page looks like a raster scan",
+                   "model": "cubicasa5k", "licence": "CC BY-NC 4.0 — non-commercial use only",
+                   "plan_path": "/tmp/forsk-plan-import/scan-p1-raster.json",
+                   "image_path": "/tmp/forsk-plan-import/scan-p1-raster.png"},
+        "message": "Imported 4 walls, 1 door, 1 window, 1 room.",
+    }):
+        all_passed = False
+    # The raster source's plan always states its model's licence.
+    plan_import_validator = Draft202012Validator(load_schema_with_refs("responses/plan_import_result.json"))
+    unlicensed = {
+        "walls": 4, "walls_detected": 4, "doors": 1, "windows": 1, "loose": 0, "rooms": 1, "unlabelled": 0,
+        "dropped": [], "review": [], "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
+        "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan-raster.png",
+                     "width_mm": 1.0, "height_mm": 1.0},
+        "raster": {"file": "plan.png", "model": "cubicasa5k",
+                   "plan_path": "/tmp/plan-raster.json", "image_path": "/tmp/plan-raster.png"},
+        "message": "Imported 4 walls, 1 door, 1 window, 1 room.",
+    }
+    if not list(plan_import_validator.iter_errors(unlicensed)):
+        print("  FAIL: plan_import_result accepted a raster plan with no licence")
+        all_passed = False
+    else:
+        print("  plan_import_result rejects a raster plan with no licence")
     if not validate("responses/plan_scale_result.json", {
         "measured_mm": 3900.0, "factor": 1.0, "status": "detected", "scaled": 0,
         "message": "The two points are 3900 mm apart at the scale the plan has now.",
@@ -954,7 +983,8 @@ def test_invalid_examples():
         ("commands/rooms_detect.json", {"layer": "A-ROOM"}, "rooms_detect takes no parameters"),
         ("commands/dxf_import.json", {}, "dxf_import needs a path"),
         ("commands/dxf_import.json", {"path": "/tmp/a.dxf", "units": "mm"}, "dxf_import unknown field"),
-        ("commands/plan_import.json", {"image_path": "/tmp/plan.png"}, "plan_import needs a plan_path"),
+        ("commands/plan_import.json", {"plan_path": "/tmp/plan.json"}, "plan_import plan_path needs its image"),
+        ("commands/plan_import.json", {"image_path": "/tmp/scan.pdf", "page": 1}, "plan_import page is a pdf_path's"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "scale_hint": "100"}, "plan_import scale_hint is a ratio"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "api_key": "x"}, "plan_import unknown field"),
         ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "image_path": "/tmp/plan.png"}, "plan_import a PDF or an image, not both"),

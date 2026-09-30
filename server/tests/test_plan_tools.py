@@ -33,14 +33,27 @@ class TestPlanTools:
 
         assert plan_import(ctx=None, image_path="plan.png", plan_path="/tmp/plan.json") == {
             "success": False, "message": "plan_import needs an absolute image_path, or a pdf_path."}
-        assert plan_import(ctx=None, image_path="/tmp/plan.png") == {
-            "success": False, "message": "plan_import needs an absolute plan_path, or a pdf_path."}
+        assert plan_import(ctx=None, image_path="/tmp/plan.png", plan_path="plan.json") == {
+            "success": False, "message": "plan_import needs an absolute plan_path."}
+        assert plan_import(ctx=None, plan_path="/tmp/plan.json") == {
+            "success": False, "message": "plan_import needs an absolute image_path, or a pdf_path."}
         assert plan_import(ctx=None, pdf_path="plan1.pdf") == {
             "success": False, "message": "plan_import needs an absolute pdf_path."}
         assert plan_import(ctx=None, pdf_path="/tmp/plan1.pdf", image_path="/tmp/plan.png")["message"] == (
-            "plan_import takes pdf_path, or image_path with plan_path, not both.")
+            "plan_import takes pdf_path or image_path, not both.")
         assert plan_import(ctx=None, pdf_path="/tmp/plan1.pdf", page=0)["message"] == "plan_import page is 1-based."
         mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.plan_import.get_rhino_connection")
+    def test_plan_import_passes_an_image_alone_on_for_the_raster_source(self, mock_get_conn):
+        from rhinomcp.tools.plan_import import plan_import
+
+        conn = MagicMock()
+        conn.send_command.return_value = {"walls": 4, "raster": {"file": "scan.jpg", "model": "cubicasa5k"}}
+        mock_get_conn.return_value = conn
+        result = plan_import(ctx=None, image_path=" /tmp/scan.jpg ", plan_path=" ")
+        conn.send_command.assert_called_once_with("plan_import", {"image_path": "/tmp/scan.jpg"})
+        assert result["raster"]["model"] == "cubicasa5k"
 
     @patch("rhinomcp.tools.plan_import.get_rhino_connection")
     def test_plan_import_passes_a_pdf_and_its_page_on(self, mock_get_conn):

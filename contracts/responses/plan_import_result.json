@@ -53,7 +53,7 @@
     },
     "pdf": {
       "type": "object",
-      "description": "With a PDF source: the page read, and the plan file and page image the extractor wrote for it",
+      "description": "With a vector PDF source: the page read, and the plan file and page image the extractor wrote for it",
       "properties": {
         "file": { "type": "string" },
         "page": { "type": "integer", "minimum": 1 },
@@ -61,6 +61,21 @@
         "image_path": { "type": "string" }
       },
       "required": ["file", "page", "plan_path", "image_path"],
+      "additionalProperties": false
+    },
+    "raster": {
+      "type": "object",
+      "description": "With the raster source (a PNG or JPEG alone, or a PDF page with no vector walls): what it read, the plan file and raster it wrote, the model and its licence",
+      "properties": {
+        "file": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1, "description": "The PDF's page, when a PDF page went to the raster source" },
+        "scan": { "type": "string", "description": "Why the PDF page went to the raster source: the extractor's diagnostic, such as no vector walls found; page looks like a raster scan" },
+        "model": { "type": "string", "description": "cubicasa5k" },
+        "licence": { "type": "string", "description": "CC BY-NC 4.0 — non-commercial use only. The message says it too." },
+        "plan_path": { "type": "string" },
+        "image_path": { "type": "string" }
+      },
+      "required": ["file", "model", "licence", "plan_path", "image_path"],
       "additionalProperties": false
     },
     "objects": { "type": "integer", "description": "Objects added, the underlay included" },
