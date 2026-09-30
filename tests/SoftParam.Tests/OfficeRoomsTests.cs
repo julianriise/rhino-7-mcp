@@ -164,7 +164,7 @@ public class OfficeRoomsTests
         var (scene, _, _) = Office();
         foreach (var room in RoomDetect.Detect(scene).Rooms)
         {
-            Assert.True(RoomDetect.TryInside(new List<List<Pt>> { room.Ring }, out var at));
+            var at = room.Inside;
             var clear = Clearance(at.X, at.Y, room.Ring);
             var hall = RoomDetect.Contains(room.Ring, new Pt(7618.35, 17752.5));
             Assert.True(clear >= (hall ? 1500 : 500), $"tag at {at.X:0},{at.Y:0} is {clear:0} mm from the room edge");
@@ -254,27 +254,82 @@ public class OfficeRoomsTests
         }, names.ToArray());
     }
 
-    [Fact]
-    public void Office_PlanTags_ShowWhatRoomsDetectFound()
+    /// <summary>
+    /// rooms_detect as the handler runs it: a marker per outline (detected
+    /// rings, then the ones drawn by hand), each with its record, and the tag
+    /// the plan reads back from the marker's stamps with no labels in reach.
+    /// </summary>
+    internal static List<(RoomDetect.Tag Reported, string Name, Pt At, string Untagged)> ReportedAndTagged(
+        RoomDetect.Scene scene, List<RoomDetect.Label> labels)
     {
-        // rooms_detect names each room once and stamps the name on its marker.
-        var (scene, labels, _) = Office();
         var found = RoomDetect.Detect(scene);
-        var detected = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToList();
+        var ids = RoomDetect.Match(found.Rooms, new List<KeyValuePair<string, List<Pt>>>(), "rd-");
+        var names = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToArray();
+        var rows = new List<(RoomDetect.Tag, string, Pt, string)>();
+        var outlines = found.Rooms.Select(room => room.Ring).Concat(scene.Keep).ToList();
+        for (var i = 0; i < outlines.Count; i++)
+        {
+            var outline = outlines[i];
+            var tag = RoomDetect.Report(outline, "room-" + (i + 1).ToString("00"), Math.Abs(RoomDetect.Area(outline)),
+                found.Rooms, ids, names, labels);
+            Assert.NotNull(tag);
+            Assert.True(RoomDetect.TryTag(tag.Name, RoomDetect.StampAt(outline, tag.At), tag.Area,
+                new List<RoomDetect.Label>(), outline, out var name, out var at, out var untagged));
+            rows.Add((tag, name, at, untagged));
+        }
+        return rows;
+    }
 
-        // The plan tag reads the marker: that stamp, the net area, the outline.
-        // All 16 are tagged with rooms_detect's name, the two corridor halves
-        // along the space divider included; no wall is probed at print.
-        var tags = found.Rooms.Select((room, i) =>
-            RoomDetect.TagName(detected[i], room.Area, labels, room.Ring, out var untagged)
-            + (untagged == null ? "" : " untagged: " + untagged)).ToList();
-        Assert.Equal(16, tags.Count);
-        Assert.Equal(detected, tags);
+    [Fact]
+    public void Office_PlanTags_ShowWhatRoomsDetectReported()
+    {
+        // All 16 rooms are tagged with the name and at the point rooms_detect
+        // reported, the two corridor halves along the space divider included.
+        // Labels read at print do not rename a room; no wall is probed.
+        var (scene, labels, _) = Office();
+        var rows = ReportedAndTagged(scene, labels);
+        Assert.Equal(16, rows.Count);
+        foreach (var row in rows)
+        {
+            Assert.True(row.Reported.Detected);
+            Assert.Equal(row.Reported.Name, row.Name);
+            Assert.Equal(row.Reported.At.X, row.At.X, 6);
+            Assert.Equal(row.Reported.At.Y, row.At.Y, 6);
+            Assert.Null(row.Untagged);
+        }
+        Assert.Equal(new[] { "Fax/kopi/printer", "Rom" }, rows
+            .Where(row => row.Reported.Id == "rd-08" || row.Reported.Id == "rd-09")
+            .Select(row => row.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
 
-        // The stamp is the name: labels read at print do not rename a detected room.
-        var noLabels = new List<RoomDetect.Label>();
-        Assert.Equal(detected, found.Rooms.Select((room, i) =>
-            RoomDetect.TagName(detected[i], room.Area, noLabels, room.Ring, out _)).ToList());
+        // No office room has a wall standing in it, so each reported point is
+        // the one print worked out from the outline alone before F2.6, to a
+        // thousandth of a millimetre.
+        foreach (var room in RoomDetect.Detect(scene).Rooms)
+        {
+            Assert.Equal(0, room.Holes);
+            Assert.True(RoomDetect.TryInside(new List<List<Pt>> { room.Ring }, out var before));
+            Assert.Equal(before.X, room.Inside.X, 3);
+            Assert.Equal(before.Y, room.Inside.Y, 3);
+        }
+    }
+
+    [Fact]
+    public void Office_AnOutlineDrawnByHand_IsReportedAndTaggedAsDrawn()
+    {
+        // The Hall drawn by hand on A-ROOM: detection leaves that region to it.
+        var (scene, labels, _) = Office();
+        var hall = RoomDetect.Detect(scene).Rooms.Single(room => RoomDetect.Name(labels, room.Ring) == "Hall");
+        scene.Keep.Add(hall.Ring);
+
+        var rows = ReportedAndTagged(scene, labels);
+        Assert.Equal(16, rows.Count);
+        var drawn = Assert.Single(rows, row => !row.Reported.Detected);
+        Assert.Equal("room-16", drawn.Reported.Id);
+        Assert.Equal("Hall", drawn.Name);
+        Assert.Equal(drawn.Reported.At.X, drawn.At.X, 6);
+        Assert.Equal(drawn.Reported.At.Y, drawn.At.Y, 6);
+        Assert.True(RoomDetect.Contains(hall.Ring, drawn.At));
+        Assert.DoesNotContain(rows, row => row.Reported.Detected && row.Name == "Hall");
     }
 
     /// <summary>The DXF's door rectangles and window inserts, as the bake makes openings of them.</summary>
@@ -331,7 +386,7 @@ public class OfficeRoomsTests
         var rooms = found.Rooms.Select((room, i) => new Schedules.Room
         {
             Id = ids[i],
-            Name = RoomDetect.TagName(RoomDetect.Name(labels, room.Ring), room.Area, labels, room.Ring, out _),
+            Name = RoomDetect.Name(labels, room.Ring),
             AreaMm2 = room.Area
         }).ToList();
         var table = Schedules.RoomTable(rooms);
@@ -342,7 +397,7 @@ public class OfficeRoomsTests
             Assert.Equal(room.Name, row[0]);
             Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "ca. " + row[1]);
         }
-        Assert.Equal(OpeningTypes.AreaText(RoomDetect.TotalArea(found.Rooms, new double[0])), table.Total[1]);
+        Assert.Equal(OpeningTypes.AreaText(found.Rooms.Sum(room => room.Area)), table.Total[1]);
     }
 
     /// <summary>
@@ -359,7 +414,7 @@ public class OfficeRoomsTests
     {
         var (scene, labels, _) = Office();
         var wet = RoomDetect.Detect(scene).Rooms.Single(room => RoomDetect.Name(labels, room.Ring) == "Wet Room");
-        Assert.True(RoomDetect.TryInside(new List<List<Pt>> { wet.Ring }, out var tagAt));
+        var tagAt = wet.Inside;
         var cap = 2.5 * scale;
         var name = new RoomDetect.Box(tagAt.X - nameWidth / 2, tagAt.Y - 0.625 * cap, tagAt.X + nameWidth / 2, tagAt.Y + 0.625 * cap);
 

@@ -276,8 +276,8 @@ public static class RoomDetect
     /// <summary>
     /// The one place a room gets its name: the labels inside its ring, picked
     /// by <see cref="PickLabel"/> with the ring's area and inside point. The
-    /// name depends on the ring alone. rooms_detect names each detected room
-    /// here once and stamps it on the marker; the plan tag shows that stamp.
+    /// name depends on the ring alone. rooms_detect names each room here once
+    /// and stamps it on the marker; the plan tag shows that stamp.
     /// </summary>
     public static string Name(IList<Label> labels, List<Pt> ring)
     {
@@ -289,20 +289,98 @@ public static class RoomDetect
     }
 
     /// <summary>
-    /// What the plan tag shows for one room marker, from rooms_detect's result.
-    /// A detected room is bounded by construction (detection only closes a
-    /// region that walls, doors or a space divider bound) and shows the name
-    /// rooms_detect stamped on it. An outline drawn by hand is the user's word,
-    /// named by <see cref="Name"/>. Under <see cref="MinAreaMm2"/> neither is
-    /// tagged: <paramref name="untagged"/> says why, else it is null.
+    /// One room as rooms_detect reports it: the row in its result, the stamps
+    /// on the room's marker, and what the plan tag shows. One record, so the
+    /// three cannot disagree.
     /// </summary>
-    public static string TagName(string detectedName, double areaMm2, IList<Label> labels, List<Pt> ring, out string untagged)
+    public sealed class Tag
     {
-        var name = string.IsNullOrEmpty(detectedName) ? Name(labels, ring) : detectedName;
-        untagged = areaMm2 < MinAreaMm2
-            ? (areaMm2 / 1000000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m² under 1 m²"
-            : null;
-        return name;
+        /// <summary>rd-NN for a detected room, the marker's own name for an outline drawn by hand.</summary>
+        public string Id;
+        public string Name;
+        public double Area;
+        /// <summary>Where the tag goes.</summary>
+        public Pt At;
+        public bool Detected;
+    }
+
+    /// <summary>
+    /// The record for one marker outline. Inside a detected room it is that
+    /// room: its id, name, net area and inside point, which keeps clear of the
+    /// walls standing in the room. Else the outline was drawn by hand and is
+    /// the user's word: named by <see cref="Name"/>, tagged at its own inside
+    /// point. Null when the outline has no inside.
+    /// </summary>
+    public static Tag Report(List<Pt> outline, string drawnId, double drawnAreaMm2,
+        IList<Room> rooms, string[] ids, string[] names, IList<Label> labels)
+    {
+        if (!TryInside(new List<List<Pt>> { outline }, out var at)) return null;
+        for (var i = 0; i < rooms.Count; i++)
+        {
+            if (!Contains(rooms[i].Ring, at)) continue;
+            return new Tag { Id = ids[i], Name = names[i], Area = rooms[i].Area, At = rooms[i].Inside, Detected = true };
+        }
+        return new Tag { Id = drawnId, Name = Name(labels, outline), Area = drawnAreaMm2, At = at };
+    }
+
+    /// <summary>
+    /// A tag point as the marker carries it: its place in the outline's
+    /// bounding box, 0..1 each way, so it stays right when the model is moved
+    /// or scaled.
+    /// </summary>
+    public static string StampAt(IList<Pt> outline, Pt at)
+    {
+        Bounds(outline, out var minX, out var minY, out var maxX, out var maxY);
+        if (maxX <= minX || maxY <= minY) return "";
+        return ((at.X - minX) / (maxX - minX)).ToString("R", CultureInfo.InvariantCulture) + ","
+            + ((at.Y - minY) / (maxY - minY)).ToString("R", CultureInfo.InvariantCulture);
+    }
+
+    static bool TryStampedAt(IList<Pt> outline, string stamp, out Pt at)
+    {
+        at = default;
+        var parts = (stamp ?? "").Split(',');
+        if (parts.Length != 2
+            || !double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var u)
+            || !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+            return false;
+        Bounds(outline, out var minX, out var minY, out var maxX, out var maxY);
+        at = new Pt(minX + u * (maxX - minX), minY + v * (maxY - minY));
+        // An outline turned since it was stamped no longer holds the point.
+        return Contains(outline, at);
+    }
+
+    static void Bounds(IList<Pt> ring, out double minX, out double minY, out double maxX, out double maxY)
+    {
+        minX = minY = double.MaxValue;
+        maxX = maxY = double.MinValue;
+        foreach (var p in ring)
+        {
+            minX = Math.Min(minX, p.X);
+            minY = Math.Min(minY, p.Y);
+            maxX = Math.Max(maxX, p.X);
+            maxY = Math.Max(maxY, p.Y);
+        }
+    }
+
+    /// <summary>
+    /// What the plan tag shows for one room marker: the name and the point
+    /// rooms_detect stamped on it, not worked out again at print. A marker it
+    /// has not stamped (rooms_from_layer alone) is an outline drawn by hand,
+    /// named by <see cref="Name"/> at its own inside point. Under
+    /// <see cref="MinAreaMm2"/> no room is tagged: <paramref name="untagged"/>
+    /// says why, else it is null. False when there is no point to tag at.
+    /// </summary>
+    public static bool TryTag(string stampedName, string stampedAt, double areaMm2, IList<Label> labels, List<Pt> ring,
+        out string name, out Pt at, out string untagged)
+    {
+        name = null;
+        untagged = null;
+        if (!TryStampedAt(ring, stampedAt, out at) && !TryInside(new List<List<Pt>> { ring }, out at)) return false;
+        name = string.IsNullOrEmpty(stampedName) ? Name(labels, ring) : stampedName;
+        if (areaMm2 < MinAreaMm2)
+            untagged = (areaMm2 / 1000000.0).ToString("0.00", CultureInfo.InvariantCulture) + " m² under 1 m²";
+        return true;
     }
 
     /// <summary>
@@ -329,18 +407,6 @@ public static class RoomDetect
             bestDist = dist;
         }
         return best ?? DefaultRoomName;
-    }
-
-    /// <summary>
-    /// Total area of the rooms in mm², holes subtracted as each room's own area
-    /// is, plus the outlines drawn by hand.
-    /// </summary>
-    public static double TotalArea(IList<Room> rooms, IEnumerable<double> drawnMm2)
-    {
-        var total = 0.0;
-        foreach (var room in rooms) total += room.Area;
-        foreach (var area in drawnMm2) total += area;
-        return total;
     }
 
     public static double Area(IList<Pt> ring)

@@ -15,16 +15,17 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "forsk:room_id (rd-01, …)" },
-          "name": { "type": "string", "description": "RoomDetect.Name: the label inside the room, else Rom. Its plan tag shows the same name." },
+          "id": { "type": "string", "description": "forsk:room_id (rd-01, …) for a detected room, the marker's name (room-01, …) for an outline drawn by hand" },
+          "name": { "type": "string", "description": "RoomDetect.Name: the label inside the room, else Rom. Stamped on the marker as forsk:room_name; the plan tag shows it." },
           "area_m2": { "type": "number" },
-          "x": { "type": "number" },
-          "y": { "type": "number" }
+          "x": { "type": "number", "description": "The tag point, clear of walls standing in the room. Stamped on the marker as forsk:room_at; the plan tag sits there." },
+          "y": { "type": "number" },
+          "source": { "type": "string", "enum": ["detected", "drawn"], "description": "detected from the walls, or an outline drawn by hand on A-ROOM" }
         },
-        "required": ["id", "name", "area_m2", "x", "y"],
+        "required": ["id", "name", "area_m2", "x", "y", "source"],
         "additionalProperties": false
       },
-      "description": "Detected outlines: stable id, name, area, and a point well inside"
+      "description": "Every room with a marker, detected first then drawn by hand: id, name, area, and the tag point. The plan tags show these records."
     },
     "count": { "type": "integer", "description": "Room markers" },
     "detected": { "type": "integer", "description": "Regions detected from the walls" },

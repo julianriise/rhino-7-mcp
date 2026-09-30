@@ -71,15 +71,16 @@ public partial class RhinoMCPFunctions
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
             if (!area.HasValue || area.Value <= 0 || !TryRoomPolygon(obj, out var ring)) continue;
             var outline = PlanPoints(ring);
-            if (!RoomDetect.TryInside(new List<List<RoomDetect.Pt>> { outline }, out var inside)) continue;
+            // rooms_detect decided which regions are rooms, named them and
+            // placed their tags; the marker's stamps say so and the tag shows that.
+            if (!RoomDetect.TryTag(obj.Attributes.GetUserString(RoomNameKey), obj.Attributes.GetUserString(RoomAtKey),
+                    area.Value, labels, outline, out var name, out var inside, out var untagged))
+                continue;
             room.Ring = ring;
             room.Outline = outline;
             room.Inside = inside;
             room.Area = area.Value;
-            // rooms_detect decided which regions are rooms and named them; the
-            // tag shows that. An outline drawn by hand is a room as drawn.
-            room.Name = RoomDetect.TagName(obj.Attributes.GetUserString(RoomNameKey), area.Value,
-                labels, outline, out var untagged);
+            room.Name = name;
             room.Untagged = untagged;
         }
         return rooms;

@@ -156,18 +156,115 @@ public class RoomDetectTests
         Assert.Equal(1, found.Slivers);
     }
 
-    [Fact]
-    public void TotalArea_SubtractsHoles_AsEachRoomDoes()
+    static readonly RoomDetect.Label[] NoLabels = new RoomDetect.Label[0];
+
+    /// <summary>What the plan tag shows for a marker carrying this record's stamps, with no labels in reach.</summary>
+    static (string Name, Pt At) Tagged(RoomDetect.Tag tag, List<Pt> outline)
     {
-        // A 3800 x 3800 room with a free-standing 400 x 400 column in it.
+        Assert.True(RoomDetect.TryTag(tag.Name, RoomDetect.StampAt(outline, tag.At), tag.Area, NoLabels, outline,
+            out var name, out var at, out _));
+        return (name, at);
+    }
+
+    [Fact]
+    public void ColumnAtTheRoomsCentre_TheTagIsWhereRoomsDetectPutIt_NotOnTheColumn()
+    {
+        // A 3800 x 3800 room with a free-standing 400 x 400 column at its centre.
         var scene = OneRoom();
-        scene.Walls.Add(Wall(Rect(1900, 1900, 2300, 2300)));
-        var room = Assert.Single(RoomDetect.Detect(scene).Rooms);
+        var column = Rect(1900, 1900, 2300, 2300);
+        scene.Walls.Add(Wall(column));
+        var found = RoomDetect.Detect(scene);
+        var room = Assert.Single(found.Rooms);
         Assert.Equal(1, room.Holes);
         Assert.Equal(14.28 * M2, room.Area, 3);
-        // rooms_detect's total is the same net area, plus any outline drawn by hand.
-        Assert.Equal(14.28 * M2, RoomDetect.TotalArea(new[] { room }, new double[0]), 3);
-        Assert.Equal(19.28 * M2, RoomDetect.TotalArea(new[] { room }, new[] { 5 * M2 }), 3);
+
+        // The marker is the outer outline alone. Its record is the room's: net
+        // area, and the inside point that keeps clear of the column.
+        var tag = RoomDetect.Report(room.Ring, "room-01", 14.44 * M2, found.Rooms, new[] { "rd-01" }, new[] { "Stue" }, NoLabels);
+        Assert.True(tag.Detected);
+        Assert.Equal("rd-01", tag.Id);
+        Assert.Equal(14.28 * M2, tag.Area, 3);
+        Assert.False(RoomDetect.Contains(column, tag.At));
+        var (name, at) = Tagged(tag, room.Ring);
+        Assert.Equal("Stue", name);
+        Assert.Equal(tag.At.X, at.X, 6);
+        Assert.Equal(tag.At.Y, at.Y, 6);
+
+        // Worked out again from the outline, as print did, the tag lands on the column.
+        Assert.True(RoomDetect.TryTag(null, null, tag.Area, NoLabels, room.Ring, out _, out var again, out _));
+        Assert.True(RoomDetect.Contains(column, again));
+    }
+
+    [Fact]
+    public void OutlineDrawnByHand_IsReportedWithItsLabelAndPoint_AndTaggedTheSame()
+    {
+        var scene = TwoRoomsWithGap();
+        scene.Doors.Add(new RoomDetect.Box(4000, 1500, 4200, 2400));
+        var drawn = Rect(300, 300, 3900, 3900);
+        scene.Keep.Add(drawn);
+        var labels = new[] { Label("Bad", 250, 1000, 1000), Label("Stue", 250, 6000, 2000) };
+        var found = RoomDetect.Detect(scene);
+        var right = Assert.Single(found.Rooms);
+        var ids = new[] { "rd-01" };
+        var names = new[] { RoomDetect.Name(labels, right.Ring) };
+
+        var detected = RoomDetect.Report(right.Ring, "room-01", 0, found.Rooms, ids, names, labels);
+        var byHand = RoomDetect.Report(drawn, "room-02", 12.96 * M2, found.Rooms, ids, names, labels);
+        Assert.Equal(("rd-01", "Stue", true), (detected.Id, detected.Name, detected.Detected));
+        Assert.Equal(("room-02", "Bad", false), (byHand.Id, byHand.Name, byHand.Detected));
+        Assert.Equal(12.96 * M2, byHand.Area, 3);
+        Assert.Equal(2100, byHand.At.X, 3);
+        Assert.Equal(2100, byHand.At.Y, 3);
+
+        // The plan reads both back from the stamps; a label moved since does not rename them.
+        var (name, at) = Tagged(detected, right.Ring);
+        Assert.Equal("Stue", name);
+        Assert.Equal(detected.At.X, at.X, 6);
+        Assert.Equal(detected.At.Y, at.Y, 6);
+        (name, at) = Tagged(byHand, drawn);
+        Assert.Equal("Bad", name);
+        Assert.Equal(2100, at.X, 6);
+        Assert.Equal(2100, at.Y, 6);
+    }
+
+    [Fact]
+    public void DividerSplit_EachHalfIsReportedAndTaggedOnItsOwn()
+    {
+        var scene = new RoomDetect.Scene();
+        scene.Walls.Add(Wall(Rect(0, 0, 8200, 4200), Rect(200, 200, 8000, 4000)));
+        scene.Dividers.Add(new List<Pt> { new Pt(4100, 250), new Pt(4100, 3950) });
+        var labels = new[] { Label("Kjøkken", 250, 1000, 1000), Label("Stue", 250, 7000, 3000) };
+        var found = RoomDetect.Detect(scene);
+        var ids = RoomDetect.Match(found.Rooms, new List<KeyValuePair<string, List<Pt>>>(), "rd-");
+        var names = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToArray();
+
+        var tags = found.Rooms.Select(room => RoomDetect.Report(room.Ring, "", 0, found.Rooms, ids, names, labels)).ToList();
+        Assert.Equal(new[] { "Kjøkken", "Stue" }, tags.Select(t => t.Name).OrderBy(n => n).ToArray());
+        Assert.Equal(new[] { "rd-01", "rd-02" }, tags.Select(t => t.Id).OrderBy(id => id).ToArray());
+        for (var i = 0; i < tags.Count; i++)
+        {
+            var (name, at) = Tagged(tags[i], found.Rooms[i].Ring);
+            Assert.Equal(tags[i].Name, name);
+            Assert.Equal(found.Rooms[i].Inside.X, at.X, 6);
+            Assert.Equal(found.Rooms[i].Inside.Y, at.Y, 6);
+            Assert.True(name == "Kjøkken" ? at.X < 4100 : at.X > 4100);
+        }
+    }
+
+    [Fact]
+    public void StampedTagPoint_FollowsTheOutlineMovedOrScaled_AndGivesWayWhenItFallsOutside()
+    {
+        var ring = Rect(0, 0, 4000, 2000);
+        var stamp = RoomDetect.StampAt(ring, new Pt(1000, 1500));
+        var moved = ring.Select(p => new Pt(p.X * 2 + 5000, p.Y * 2 - 3000)).ToList();
+        Assert.True(RoomDetect.TryTag("Stue", stamp, 32 * M2, NoLabels, moved, out _, out var at, out _));
+        Assert.Equal(7000, at.X, 6);
+        Assert.Equal(0, at.Y, 6);
+
+        // An L: the stamp points at the corner it leaves open, so the point is found again.
+        var ell = new List<Pt> { new Pt(0, 0), new Pt(4000, 0), new Pt(4000, 1000), new Pt(1000, 1000), new Pt(1000, 4000), new Pt(0, 4000) };
+        Assert.True(RoomDetect.TryTag("Gang", "0.9,0.9", 7 * M2, NoLabels, ell, out _, out at, out _));
+        Assert.True(RoomDetect.Contains(ell, at));
     }
 
     static RoomDetect.Label Label(string text, double height, double x, double y) =>
@@ -202,14 +299,17 @@ public class RoomDetectTests
     }
 
     [Fact]
-    public void TagName_DrawnOutline_IsNamedByItsLabel_TooSmallIsUntagged()
+    public void Tag_MarkerWithNoStamps_IsNamedByItsLabelAtItsOwnPoint_TooSmallIsUntagged()
     {
-        // A hand-drawn outline has no rooms_detect stamp: its label names it.
+        // A marker rooms_from_layer made alone has no rooms_detect stamps.
         var ring = new List<Pt> { new Pt(0, 0), new Pt(3000, 0), new Pt(3000, 2000), new Pt(0, 2000) };
         var labels = new[] { new RoomDetect.Label("Bad", 250, new Pt(1500, 1000)) };
-        Assert.Equal("Bad", RoomDetect.TagName(null, 6 * M2, labels, ring, out var untagged));
+        Assert.True(RoomDetect.TryTag(null, null, 6 * M2, labels, ring, out var name, out var at, out var untagged));
+        Assert.Equal("Bad", name);
+        Assert.Equal((1500.0, 1000.0), (at.X, at.Y));
         Assert.Null(untagged);
-        Assert.Equal("Bad", RoomDetect.TagName("", 0.5 * M2, labels, ring, out untagged));
+        Assert.True(RoomDetect.TryTag("", "", 0.5 * M2, labels, ring, out name, out _, out untagged));
+        Assert.Equal("Bad", name);
         Assert.Equal("0.50 m² under 1 m²", untagged);
     }
 

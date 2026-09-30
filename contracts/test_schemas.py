@@ -708,7 +708,10 @@ def test_responses():
     }):
         all_passed = False
     if not validate("responses/rooms_detect_result.json", {
-        "ids": ["12345678-1234-1234-1234-123456789012"], "rooms": [{"id": "rd-01", "name": "Garasje", "area_m2": 27.36, "x": 4000.0, "y": 2000.0}],
+        "ids": ["12345678-1234-1234-1234-123456789012"], "rooms": [
+            {"id": "rd-01", "name": "Garasje", "area_m2": 27.36, "x": 4000.0, "y": 2000.0, "source": "detected"},
+            {"id": "room-02", "name": "Bod", "area_m2": 6.0, "x": 9000.0, "y": 1500.0, "source": "drawn"},
+        ],
         "count": 1, "detected": 1, "kept": 0, "removed": 0, "slivers": 1, "area_m2": 27.4,
         "open": [{"reason": "gap 0.9 m without a door", "x": 1950.0, "y": 2100.0}],
         "layer": "A-ROOM", "warnings": [], "message": "1 room, 27.4 m². 1 open: gap 0.9 m without a door.",

@@ -814,7 +814,7 @@ public partial class RhinoMCPFunctions
     private static Dictionary<string, string> RoomStamps(string roomId)
     {
         var stamps = new Dictionary<string, string>();
-        if (!string.IsNullOrEmpty(roomId)) stamps["forsk:room_id"] = roomId;
+        if (!string.IsNullOrEmpty(roomId)) stamps[RoomIdKey] = roomId;
         return stamps;
     }
 

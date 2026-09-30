@@ -41,7 +41,7 @@ public partial class RhinoMCPFunctions
     private const double PlanLabelHeight = 200.0;
 
     /// <summary>The 2D layers a plan is reviewed on. The scale step moves what is on them.</summary>
-    private static readonly string[] PlanReviewLayers = { "wall", "door", "window", "A-ROOM", "room", "label", "space_divider" };
+    private static readonly string[] PlanReviewLayers = { "wall", "door", "window", "A-ROOM", "room", RoomLabelLayerName, DividerLayerName };
 
     [McpCommand("plan_import")]
     public JObject ImportPlan(JObject parameters)

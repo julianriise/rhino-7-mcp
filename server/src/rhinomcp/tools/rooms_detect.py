@@ -17,11 +17,14 @@ def rooms_detect(ctx: Context) -> Dict[str, Any]:
     survives re-runs. Closed curves already drawn on A-ROOM win; detection only
     fills what they leave. Regions under 1 m² are skipped. A gap with no door
     leaves its region open, reported with the reason. Room markers are then
-    rebuilt from every closed A-ROOM curve, as rooms_from_layer does.
+    rebuilt from every closed A-ROOM curve, as rooms_from_layer does, and each
+    is stamped with its room's name and tag point. The plan tags show those
+    stamps, so a sheet's tags are the rooms listed here, drawn ones included.
 
     Returns:
-    Dictionary with ids (markers), rooms (id, name, area_m2, x, y), count,
-    detected, area_m2, open (reason, x, y), warnings, and message.
+    Dictionary with ids (markers), rooms (id, name, area_m2, x, y, source:
+    detected or drawn), count, detected, area_m2, open (reason, x, y),
+    warnings, and message.
     """
     try:
         result = get_rhino_connection().send_command("rooms_detect", {})
