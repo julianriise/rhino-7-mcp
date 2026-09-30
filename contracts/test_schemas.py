@@ -956,7 +956,7 @@ def test_invalid_examples():
         ("commands/dxf_import.json", {"path": "/tmp/a.dxf", "units": "mm"}, "dxf_import unknown field"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png"}, "plan_import needs a plan_path"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "scale_hint": "100"}, "plan_import scale_hint is a ratio"),
-        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "tectly_key": "x"}, "plan_import unknown field"),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "api_key": "x"}, "plan_import unknown field"),
         ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "image_path": "/tmp/plan.png"}, "plan_import a PDF or an image, not both"),
         ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "page": 1}, "plan_import page is a PDF's"),
         ("commands/plan_import.json", {"pdf_path": "/tmp/plan1.pdf", "page": 0}, "plan_import page is 1-based"),

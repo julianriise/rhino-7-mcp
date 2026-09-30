@@ -960,17 +960,13 @@ public static class PlanImport
     }
 
     /// <summary>
-    /// Why a detection with no walls imports nothing, and what to do next,
-    /// when the source said why (a PDF page that is a scan, or has no filled
-    /// walls). Null when there is something to import.
+    /// Why a detection with no walls imports nothing, when the source said why
+    /// (a PDF page with no filled walls). Null when there is something to import.
     /// </summary>
     public static string Refusal(Plan plan, string source)
     {
         if (plan.Walls.Count > 0 || string.IsNullOrWhiteSpace(plan.Diagnostic)) return null;
-        return source + ": " + plan.Diagnostic + ". Nothing was imported. "
-            + "The PDF has no vector walls to read, so it needs a detection made from its image: "
-            + "send the page image to Tectly, convert the answer with plan_from_tectly, "
-            + "then run plan_import with that image and the plan file it wrote.";
+        return source + ": " + plan.Diagnostic + ". Nothing was imported.";
     }
 
     /// <summary>

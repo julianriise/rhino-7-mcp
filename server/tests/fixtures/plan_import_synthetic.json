@@ -4,14 +4,13 @@
  "y_axis": "up",
  "origin": "page top-left at (0, 0); the user places and scales it in Rhino",
  "source": {
-  "vendor": "tectly",
-  "file": "tectly_synthetic.json",
-  "wall_tracing": "Rectangles"
+  "vendor": "synthetic",
+  "file": "plan_import_synthetic.json"
  },
  "scale": {
   "status": "assumed",
   "ratio": "1:100",
-  "note": "mm here assume 1:100 at 254 dpi. Tectly found no scale on this plan. In Forsk the scale comes from the two-point step."
+  "note": "mm here assume 1:100 at 254 dpi. No scale was found on this plan. In Forsk the scale comes from the two-point step."
  },
  "image": {
   "width_mm": 12000.0,

@@ -528,15 +528,15 @@ public class PlanImportTests
     }
 
     /// <summary>
-    /// The file the server's Tectly adapter writes from its synthetic fixture
-    /// (server/tests/fixtures): the same bytes on both sides of the schema.
+    /// The synthetic plan file (server/tests/fixtures): a source's
+    /// forsk.plan_import.v0 as the plugin reads and cleans it.
     /// </summary>
     [Fact]
-    public void AdapterOutput_ReadsAndCleansOnThePluginSide()
+    public void SyntheticPlanFile_ReadsAndCleansOnThePluginSide()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "fixtures", "plan_import_synthetic.json");
         var plan = PlanImport.Parse(File.ReadAllText(path));
-        Assert.Equal("tectly", plan.Vendor);
+        Assert.Equal("synthetic", plan.Vendor);
         Assert.Equal("assumed", plan.ScaleStatus);
         Assert.Equal("1:100", plan.ScaleRatio);
         Assert.Equal(12000.0, plan.ImageWidthMm);
@@ -555,7 +555,7 @@ public class PlanImportTests
     }
 
     [Theory]
-    [InlineData(@"{ ""schema"": ""tectly.v1"", ""walls"": [] }", "Not a forsk.plan_import.v0 file (schema tectly.v1).")]
+    [InlineData(@"{ ""schema"": ""floorplan.v1"", ""walls"": [] }", "Not a forsk.plan_import.v0 file (schema floorplan.v1).")]
     [InlineData(@"{ ""walls"": [] }", "Not a forsk.plan_import.v0 file.")]
     [InlineData(@"{ ""schema"": ""forsk.plan_import.v0"", ""units"": ""m"" }", "plan_import units must be mm, not m.")]
     [InlineData(@"{ ""schema"": ""forsk.plan_import.v0"", ""walls"": [ { ""start"": [0, 0] } ] }", "Wall 1 has no start and end.")]
@@ -925,45 +925,14 @@ public class PlanImportTests
     }
 
     /// <summary>
-    /// The real plan both detections were made from. A client drawing, so it
-    /// is not in git: this runs only where forsk-private is checked out.
+    /// The real plan the detection was made from. A client drawing, so it is
+    /// not in git: this runs only where forsk-private is checked out.
     /// </summary>
     static string Plan1(string file)
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var path = Path.Combine(home, "Documents", "hobby", "forsk-private", "import", "plan1", file);
         return File.Exists(path) ? File.ReadAllText(path) : null;
-    }
-
-    [Fact]
-    public void Plan1_Tectly_KeepsEveryOpeningAndReportsTheOpenWalls()
-    {
-        var json = Plan1("plan1_forsk.json");
-        if (json == null) return;
-        var result = PlanImport.Clean(PlanImport.Parse(json));
-        Assert.Equal(41, result.Detected);
-        Assert.Equal(30, result.Walls.Count);
-        Assert.Equal(7, result.Doors);
-        Assert.Equal(12, result.Windows);
-        // One of Tectly's two false windows sits past a wall end that a door has first to run the wall to: hosted on the second try.
-        Assert.Equal(0, result.Loose);
-        Assert.Equal(11, result.Rooms.Count);
-        Assert.Equal(3, result.Unlabelled);
-        Assert.Equal(0, result.Diagonal);
-        // Tectly missed the diagonal bay walls: the outline is open and says so.
-        Assert.True(result.Outside > 0);
-        Assert.Empty(result.Dropped);
-        // Three wall ends stood 130 to 430 mm short of a wall, each less than that wall is thick: closed.
-        Assert.Equal(3, result.Closed);
-        // What is left apart is one bay's front run: its diagonals are missing, and no wall end points across the step.
-        Assert.Equal(2, result.Outlines);
-        Assert.Equal(1, result.Blocks);
-        Assert.DoesNotContain(result.Walls, w => w.Skipped);
-        // The run bakes as a wall, so every opening cuts.
-        Assert.Equal(0, result.Uncut);
-        Assert.Equal(3, result.Networks.Sum(n => n.Holes.Count));
-        Assert.Equal(41, result.Networks.Sum(n => n.Pieces));
-        WallCleanupTests.AssertSound(result, 5.0);
     }
 
     [Fact]

@@ -33,7 +33,7 @@
 
   <ItemGroup>
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
-    <!-- What the server's Tectly adapter writes: the plugin reads the same file. -->
+    <!-- A synthetic forsk.plan_import.v0 file: any source's output reads the same way. -->
     <None Include="..\..\server\tests\fixtures\plan_import_synthetic.json" Link="fixtures\plan_import_synthetic.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

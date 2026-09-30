@@ -2,8 +2,6 @@
 """Plan import (F7) smoke on the plan1 pack in forsk-private.
 
 One detection per run, into a blank millimetre document:
-  tectly     raw Tectly JSON -> forsk.plan_import.v0 (checked against the
-             reference conversion within 10 mm), then imported
   pdfvector  the reference vector-PDF plan file (PyMuPDF), imported as it is
   pdf        plan1.pdf itself: plan_import runs forsk's extractor
              (tools/pdf_vector) on page 1 and imports what it wrote. The
@@ -28,7 +26,7 @@ The plan is a client drawing: it is read from forsk-private and never copied
 into a repo. The plan file and captures go to /tmp.
 
 Usage:
-  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py tectly|pdfvector|pdf PLAN1_DIR
+  RHINO_MCP_TIMEOUT=300 python3 scripts/plan_import_smoke.py pdfvector|pdf PLAN1_DIR
 """
 
 from __future__ import annotations
@@ -41,17 +39,11 @@ import sys
 import zlib
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server" / "src"))
-
-import forsk_plan_import  # noqa: E402
-
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "300"))
 
-# plan1's page: 3308 x 2339 px at 200 dpi, 1:100. Tectly got the 1423 x 1684
-# crop whose top-left is at page px (694, 327). See the pack's README.
-TECTLY_FRAME = dict(crop_size=(1423, 1684), crop_offset=(694, 327), page_size=(3308, 2339), dpi=200, scale=100)
+# plan1's page: 3308 x 2339 px at 200 dpi, 1:100.
 # A3 is 420 mm wide: 42 000 mm on the plan at 1:100.
 PAGE_WIDTH_MM = 42000.0
 
@@ -59,10 +51,6 @@ PAGE_WIDTH_MM = 42000.0
 # plan1 tests pin (PlanImportTests). What the bake should then do is read from
 # the import's receipt, not written here.
 EXPECT = {
-    "tectly": dict(
-        walls_detected=41, walls=30, doors=7, windows=12, loose=0, uncut=0, rooms=11,
-        unlabelled=3, outlines=2, outline_holes=3, wall_pieces=41, overlaps=0, free_walls=1, blocks_skipped=0,
-        gaps_closed=3, diagonal=0, status="unconfirmed"),
     "pdfvector": dict(
         walls_detected=54, walls=47, doors=12, windows=10, loose=0, uncut=0, rooms=12,
         unlabelled=0, outside=0, outlines=1, outline_holes=12, wall_pieces=54, overlaps=0, free_walls=0,
@@ -147,26 +135,6 @@ def by_kind(rows: list[dict], kind: str) -> list[dict]:
     return [row for row in rows if (row.get("attributes") or {}).get("forsk:import_kind") == kind]
 
 
-def convert_tectly(plan1: Path, out: Path, failures: list) -> str:
-    raw = json.loads((plan1 / "plan1_tectly_raw.json").read_text(encoding="utf-8"))
-    want = json.loads((plan1 / "plan1_forsk.json").read_text(encoding="utf-8"))
-    got = forsk_plan_import.tectly_to_plan(raw, source_file="plan1_tectly_raw.json", **TECTLY_FRAME)
-    out.write_text(json.dumps(got, indent=1, ensure_ascii=False), encoding="utf-8")
-    worst = 0.0
-    if len(got["walls"]) != len(want["walls"]):
-        failures.append(f"convert walls {len(got['walls'])} reference {len(want['walls'])}")
-    for mine, ref in zip(got["walls"], want["walls"]):
-        for key in ("start", "end"):
-            worst = max(worst, abs(mine[key][0] - ref[key][0]), abs(mine[key][1] - ref[key][1]))
-        worst = max(worst, abs(mine["thickness"] - ref["thickness"]))
-    if worst > 10:
-        failures.append(f"convert {worst:.0f} mm from the reference")
-    return (
-        f"convert {len(got['walls'])} walls {len(got['openings'])} openings {len(got['rooms'])} rooms, "
-        f"{worst:.0f} mm from the reference at most"
-    )
-
-
 def wall_loops(sock: socket.socket) -> dict[str, list]:
     """The corners of every imported wall outline and of every hole in one, by object name."""
     rows = send_command(sock, "get_objects", {
@@ -237,11 +205,7 @@ def underlay_rows(shown: bytes, hidden: bytes) -> tuple[int, int]:
 def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: list) -> None:
     expect = EXPECT[source]
     image = plan1 / "plan1_200.png"
-    if source == "tectly":
-        plan = Path("/tmp/forsk-smoke-import-tectly.json")
-        lines.append(convert_tectly(plan1, plan, failures))
-    elif source == "pdfvector":
-        plan = plan1 / "plan1_pdfvector.json"
+    plan = plan1 / "plan1_pdfvector.json"
 
     summary = send_command(sock, "get_document_summary", {})
     units = str((summary.get("meta_data") or {}).get("units") or "")
@@ -437,7 +401,7 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
 
 def main() -> int:
     if len(sys.argv) != 3 or sys.argv[1] not in EXPECT:
-        print("usage: plan_import_smoke.py tectly|pdfvector|pdf PLAN1_DIR", file=sys.stderr)
+        print("usage: plan_import_smoke.py pdfvector|pdf PLAN1_DIR", file=sys.stderr)
         return 1
     source, plan1 = sys.argv[1], Path(sys.argv[2])
     failures: list = []

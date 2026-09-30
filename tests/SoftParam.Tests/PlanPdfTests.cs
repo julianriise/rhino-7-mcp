@@ -171,7 +171,7 @@ public class PlanPdfTests : IDisposable
     }
 
     [Fact]
-    public void ScannedPdf_SaysWhyNothingImports_AndNamesTheTectlyRoute()
+    public void ScannedPdf_SaysItHasNoVectorWalls()
     {
         if (!CanExtract) return;
         var pdf = Temp("scan.pdf");
@@ -180,10 +180,8 @@ public class PlanPdfTests : IDisposable
         var extracted = PlanPdf.Extract(pdf, 1, Path.GetDirectoryName(pdf));
         var plan = PlanImport.Parse(File.ReadAllText(extracted.PlanPath));
         Assert.Empty(plan.Walls);
-        var refusal = PlanImport.Refusal(plan, "scan.pdf page 1");
-        Assert.StartsWith("scan.pdf page 1: no vector walls found; page looks like a raster scan. Nothing was imported.", refusal);
-        Assert.Contains("Tectly", refusal);
-        Assert.Contains("plan_from_tectly", refusal);
+        Assert.Equal("scan.pdf page 1: no vector walls found; page looks like a raster scan. Nothing was imported.",
+            PlanImport.Refusal(plan, "scan.pdf page 1"));
     }
 
     [Fact]

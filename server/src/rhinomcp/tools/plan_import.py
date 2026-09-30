@@ -28,13 +28,12 @@ def plan_import(
     and the scale printed on the sheet, and the page rendered in the same
     frame. The detected scale is applied; the receipt names it, and the user
     confirms or overrides it with plan_scale. A page with no vector walls (a
-    scan) imports nothing and says so, with the next step: a Tectly detection
-    of the page image through plan_from_tectly.
+    scan) imports nothing and says so.
 
     The image goes in as a locked, faded underlay on X-PLAN, its top-left at
     (0, 0), shown in every view's display mode and kept off Print. The
-    detection (a forsk.plan_import.v0 JSON: mm, y up; from Tectly through
-    plan_from_tectly, or from a vector-PDF extractor) goes on top as 2D review
+    detection (a forsk.plan_import.v0 JSON: mm, y up; from a vector-PDF
+    extractor or any other source) goes on top as 2D review
     geometry on the layers the bake reads: a closed outline per connected run
     of walls on wall (the walls merged, so none overlaps another; the holes an
     outline closes are loops of their own), opening footprints on door and
