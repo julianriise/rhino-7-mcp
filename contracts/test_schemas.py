@@ -677,7 +677,8 @@ def test_responses():
     print("  plan_import_result:")
     if not validate("responses/plan_import_result.json", {
         "walls": 30, "walls_detected": 41, "merged": 11, "squared": 0, "diagonal": 0, "joined": 40, "extended": 5,
-        "doors": 7, "windows": 12, "loose": 1, "rooms": 11, "unlabelled": 3, "outside": 8,
+        "doors": 7, "windows": 12, "loose": 1, "uncut": 1, "outlines": 5, "free_walls": 3,
+        "rooms": 11, "unlabelled": 3, "outside": 8,
         "dropped": [], "review": ["window at 18.2, -16.4 m: no wall in reach, nearest face 212 mm away."],
         "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
         "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan.png",

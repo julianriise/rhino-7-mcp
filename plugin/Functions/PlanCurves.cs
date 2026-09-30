@@ -42,7 +42,8 @@ public partial class RhinoMCPFunctions
     private ClosedPlanCurves CollectClosedPlanCurves(
         RhinoDoc doc,
         string layerName,
-        double joinToleranceParam)
+        double joinToleranceParam,
+        bool wallOutlines = false)
     {
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
         var joinTol = joinToleranceParam > 0
@@ -111,7 +112,60 @@ public partial class RhinoMCPFunctions
             profiles.Closed.Add(flat);
         }
 
+        // Room outlines may share an edge and stay separate rooms; wall outlines that touch are one wall plan.
+        if (wallOutlines)
+            profiles.Closed = MergeTouchingOutlines(profiles.Closed, tol);
         return profiles;
+    }
+
+    /// <summary>
+    /// A plan drawn as one closed rectangle per wall (an imported plan, or
+    /// walls traced by hand) has outlines that overlap or touch and none
+    /// inside another. Those are read as the outline they make together: its
+    /// outer loops and the holes they close, which then bake as a wall band
+    /// with the floor and roof under the whole footprint. A plan drawn as
+    /// nested outlines (the outer wall face and the room faces inside it), or
+    /// with any outline that is not a polyline, is left exactly as drawn.
+    /// </summary>
+    private static List<Curve> MergeTouchingOutlines(List<Curve> closed, double tol)
+    {
+        if (closed.Count < 2) return closed;
+        var rings = new List<List<RoomDetect.Pt>>();
+        var z = 0.0;
+        foreach (var outline in closed)
+        {
+            if (!outline.TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count < 4)
+                return closed;
+            z = polyline[0].Z;
+            var ring = new List<RoomDetect.Pt>(polyline.Count - 1);
+            for (var i = 0; i < polyline.Count - 1; i++)
+                ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
+            rings.Add(ring);
+        }
+
+        var containTol = Math.Max(tol, 1.0);
+        for (var i = 0; i < closed.Count; i++)
+        {
+            for (var j = 0; j < closed.Count; j++)
+            {
+                if (i != j && CurveContainsPointOf(closed[j], closed[i], containTol))
+                    return closed;
+            }
+        }
+
+        var loops = RoomDetect.Union(rings, containTol);
+        // As many outer loops as outlines and no hole: nothing touched.
+        if (loops.Count == 0 || (loops.Count == closed.Count && loops.TrueForAll(loop => RoomDetect.Area(loop) > 0)))
+            return closed;
+        var merged = new List<Curve>(loops.Count);
+        foreach (var loop in loops)
+        {
+            var points = new List<Point3d>(loop.Count + 1);
+            foreach (var p in loop) points.Add(new Point3d(p.X, p.Y, z));
+            points.Add(points[0]);
+            merged.Add(new PolylineCurve(points));
+        }
+        return merged;
     }
 
     private static bool IsRoofOrCeilingLayerName(string name)

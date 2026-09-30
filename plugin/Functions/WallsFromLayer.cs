@@ -49,7 +49,7 @@ public partial class RhinoMCPFunctions
             };
         }
 
-        var profiles = CollectClosedPlanCurves(doc, layerName, joinTolerance);
+        var profiles = CollectClosedPlanCurves(doc, layerName, joinTolerance, true);
         if (profiles.SourceCount == 0)
             return profiles.EmptyResult($"No curves on layer '{profiles.SourceLayer.Name}'.");
         if (profiles.Closed.Count == 0)

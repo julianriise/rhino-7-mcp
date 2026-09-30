@@ -122,20 +122,31 @@ public class PlanImportTests
         Assert.Equal(2, result.Walls.Count);
     }
 
+    /// <summary>Three walls of a 6000 x 4000 room. The tests add the bottom wall along y 0.</summary>
+    static PlanImport.Wall[] ThreeSides() =>
+        new[] { W(6000, 0, 6000, 4000), W(0, 4000, 6000, 4000), W(0, 0, 0, 4000) };
+
     [Fact]
     public void PiecesEitherSideOfAnOpening_BecomeOneWallThatHostsIt()
     {
-        var plan = PlanOf(W(0, 0, 2000, 0), W(3000, 0, 6000, 0));
+        var plan = PlanOf(ThreeSides().Concat(new[] { W(0, 0, 2000, 0), W(3000, 0, 6000, 0) }).ToArray());
         plan.Openings.Add(Opening("window", 2000, 0, 3000, 0));
         var result = PlanImport.Clean(plan);
-        var wall = Assert.Single(result.Walls);
-        Assert.Equal(0.0, wall.A.X, 6);
-        Assert.Equal(6000.0, wall.B.X, 6);
+        Assert.Equal(4, result.Walls.Count);
+        Assert.Equal(1, result.Merged);
         var window = Assert.Single(result.Openings);
-        Assert.Equal(0, window.Host);
+        var host = result.Walls[window.Host];
+        Assert.Equal(2, host.Pieces);
+        // One wall from corner to corner, run to the far face of the wall at each end.
+        Assert.Equal(-100.0, host.A.X, 6);
+        Assert.Equal(6100.0, host.B.X, 6);
+        Assert.Equal(0.0, host.A.Y, 6);
+        Assert.Equal(2000.0, window.A.X, 6);
+        Assert.Equal(3000.0, window.B.X, 6);
         Assert.Null(window.Note);
         Assert.Equal(220.0, window.Depth);
         Assert.Equal(1, result.Windows);
+        Assert.Equal(0, result.Uncut);
         Assert.Empty(result.Review);
     }
 
@@ -170,7 +181,7 @@ public class PlanImportTests
         Assert.Equal(-1, window.Host);
         Assert.Equal(600.0, window.A.Y);
         Assert.Equal(1, result.Loose);
-        var line = Assert.Single(result.Review);
+        var line = Assert.Single(result.Review, row => row.StartsWith("window"));
         Assert.Contains("window at 2.5, 0.6 m", line);
         Assert.Contains("nearest face 500 mm away", line);
     }
@@ -201,7 +212,7 @@ public class PlanImportTests
     [Fact]
     public void PassageWithNoDoor_ComesInAsADoorAndSaysSo()
     {
-        var plan = PlanOf(W(0, 0, 6000, 0));
+        var plan = PlanOf(ThreeSides().Concat(new[] { W(0, 0, 6000, 0) }).ToArray());
         plan.Openings.Add(Opening("opening", 2000, 0, 3300, 0));
         var result = PlanImport.Clean(plan);
         Assert.Equal("door", Assert.Single(result.Openings).Kind);
@@ -215,7 +226,7 @@ public class PlanImportTests
         plan.Openings.Add(Opening("window", 1000, 1000, 2000, 2000));
         var result = PlanImport.Clean(plan);
         Assert.Equal(0, Assert.Single(result.Openings).Host);
-        Assert.Contains("on a diagonal wall", Assert.Single(result.Review));
+        Assert.Contains("on a diagonal wall", Assert.Single(result.Review, row => row.StartsWith("window")));
     }
 
     /// <summary>A 5000 x 4000 room on centrelines, each corner drawn a little short or just touching.</summary>
@@ -233,15 +244,18 @@ public class PlanImportTests
     [Fact]
     public void WallEnds_RunIntoTheWallsTheyStopAt_AndTheOutlineCloses()
     {
-        var before = RoomDetect.Footprints(LooseCorners().Walls.Select(PlanImport.Ring).ToList(), 1.0);
-        Assert.True(Math.Abs(RoomDetect.Area(before[0])) < 5 * M2);
+        // As detected the corners do not meet all round: no loop closes a room.
+        var before = RoomDetect.Union(LooseCorners().Walls.Select(PlanImport.Ring).ToList(), 1.0);
+        Assert.DoesNotContain(before, loop => RoomDetect.Area(loop) < 0);
 
         var result = PlanImport.Clean(LooseCorners());
         Assert.Equal(4, result.Walls.Count);
         Assert.Equal(8, result.Joined);
-        var footprint = Assert.Single(RoomDetect.Footprints(result.Walls.Select(PlanImport.Ring).ToList(), 1.0));
-        Assert.Equal(5.2 * 4.2, RoomDetect.Area(footprint) / M2, 6);
-        Assert.Equal(4, footprint.Count);
+        var loops = RoomDetect.Union(result.Walls.Select(PlanImport.Ring).ToList(), 1.0);
+        Assert.Equal(new[] { -18.24, 21.84 }, Areas(loops));
+        Assert.All(loops, loop => Assert.Equal(4, loop.Count));
+        Assert.Equal(1, result.Outlines);
+        Assert.Equal(0, result.Blocks);
         Assert.False(Assert.Single(result.Rooms).Outside);
         Assert.Empty(result.Review);
     }
@@ -258,6 +272,22 @@ public class PlanImportTests
     }
 
     [Fact]
+    public void OpeningOnAWallStandingFree_IsCountedUncut()
+    {
+        var plan = PlanOf(
+            W(0, 0, 5000, 0), W(5000, 0, 5000, 4000), W(0, 4000, 5000, 4000), W(0, 0, 0, 4000),
+            W(8000, 0, 8000, 3000));
+        plan.Openings.Add(Opening("window", 8000, 1000, 8000, 2000));
+        plan.Openings.Add(Opening("window", 1000, 0, 2000, 0));
+        plan.Openings.Add(Opening("door", 6500, 1000, 6500, 1900));
+        var result = PlanImport.Clean(plan);
+        Assert.Equal(1, result.Loose);
+        Assert.Equal(2, result.Uncut);
+        Assert.Contains(result.Review, row => row.StartsWith("window at 8.0, 1.5 m: its wall stands free"));
+        Assert.Null(result.Openings[1].Note);
+    }
+
+    [Fact]
     public void WallEndFarFromAnyWall_IsLeftAlone()
     {
         var result = PlanImport.Clean(PlanOf(W(0, 0, 5000, 0), W(5000, 400, 5000, 4000)));
@@ -271,7 +301,7 @@ public class PlanImportTests
         var result = PlanImport.Clean(PlanOf(W(0, 0, 5000, 0, 400), W(1000, 50, 2000, 50, 100)));
         Assert.Single(result.Walls);
         Assert.Equal("wall at 1.5, 0.1 m: inside a thicker wall", Assert.Single(result.Dropped));
-        Assert.Contains("Dropped wall at 1.5, 0.1 m", Assert.Single(result.Review));
+        Assert.Contains(result.Review, row => row.StartsWith("Dropped wall at 1.5, 0.1 m"));
     }
 
     [Fact]
@@ -579,36 +609,68 @@ public class PlanImportTests
         Assert.Equal(denominator, read);
     }
 
+    static double[] Areas(List<List<Pt>> loops) =>
+        loops.Select(l => Math.Round(RoomDetect.Area(l) / M2, 6)).OrderBy(a => a).ToArray();
+
     [Fact]
-    public void Footprints_SeparateWallRectangles_GiveTheOutlineTheyClose()
+    public void Union_SeparateWallRectangles_GiveTheOutlineAndTheRoomsTheyClose()
     {
         var rings = new List<List<Pt>>
         {
             Rect(0, 0, 4200, 200), Rect(0, 4000, 4200, 4200), Rect(0, 0, 200, 4200), Rect(4000, 0, 4200, 4200),
-            // A partition that only touches the walls, and a column standing free in the room.
-            Rect(2000, 200, 2100, 4000), Rect(3000, 1000, 3300, 1300)
+            // A partition that only touches the walls it runs between.
+            Rect(2000, 200, 2100, 4000)
         };
-        var footprint = Assert.Single(RoomDetect.Footprints(rings, 1.0));
-        Assert.Equal(4.2 * 4.2, RoomDetect.Area(footprint) / M2, 6);
-        Assert.Equal(4, footprint.Count);
+        var loops = RoomDetect.Union(rings, 1.0);
+        Assert.Equal(new[] { -7.22, -6.84, 17.64 }, Areas(loops));
+        Assert.All(loops, loop => Assert.Equal(4, loop.Count));
     }
 
     [Fact]
-    public void Footprints_OpenRing_FollowsTheWalls()
+    public void Union_OpenRing_IsOneOutlineWithNoHole()
     {
         var rings = new List<List<Pt>> { Rect(0, 0, 4200, 200), Rect(0, 0, 200, 4200), Rect(4000, 0, 4200, 4200) };
-        var footprint = Assert.Single(RoomDetect.Footprints(rings, 1.0));
-        Assert.Equal((4200.0 * 200 + 2 * 4000.0 * 200) / M2, RoomDetect.Area(footprint) / M2, 6);
+        var loop = Assert.Single(RoomDetect.Union(rings, 1.0));
+        Assert.Equal((4200.0 * 200 + 2 * 4000.0 * 200) / M2, RoomDetect.Area(loop) / M2, 6);
+        Assert.Equal(8, loop.Count);
     }
 
     [Fact]
-    public void Footprints_OutlinesApart_StayAsDrawn()
+    public void Union_OutlinesApart_StayAsDrawn()
     {
         var rings = new List<List<Pt>> { Rect(0, 0, 4000, 3000), Rect(6000, 0, 9000, 3000) };
-        var footprints = RoomDetect.Footprints(rings, 1.0);
-        Assert.Equal(2, footprints.Count);
-        Assert.All(footprints, f => Assert.Equal(4, f.Count));
-        Assert.Equal(new[] { 9.0, 12.0 }, footprints.Select(f => Math.Round(RoomDetect.Area(f) / M2, 6)).OrderBy(a => a));
+        var loops = RoomDetect.Union(rings, 1.0);
+        Assert.Equal(new[] { 9.0, 12.0 }, Areas(loops));
+        Assert.All(loops, loop => Assert.Equal(4, loop.Count));
+    }
+
+    [Fact]
+    public void Union_DiagonalAcrossACorner_ClosesATriangle()
+    {
+        // A bay: two walls at a right angle and a diagonal drawn across them.
+        var rings = new List<List<Pt>>
+        {
+            Rect(0, 0, 4000, 200), Rect(0, 0, 200, 4000),
+            PlanImport.Ring(W(3000, 100, 100, 3000))
+        };
+        var loops = RoomDetect.Union(rings, 1.0);
+        Assert.Equal(2, loops.Count);
+        Assert.Single(loops, loop => RoomDetect.Area(loop) < 0);
+    }
+
+    [Fact]
+    public void WallStandingFree_IsReportedBeforeTheBakeSkipsIt()
+    {
+        var plan = PlanOf(
+            W(0, 0, 5000, 0), W(5000, 0, 5000, 4000), W(0, 4000, 5000, 4000), W(0, 0, 0, 4000),
+            W(8000, 0, 8000, 3000));
+        var result = PlanImport.Clean(plan);
+        Assert.Equal(2, result.Outlines);
+        Assert.Equal(1, result.Blocks);
+        Assert.True(result.Walls.Single(w => w.A.X == 8000).Free);
+        Assert.Equal(1, result.Walls.Count(w => w.Free));
+        Assert.Contains("wall at 8.0, 1.5 m stands free of the other walls", Assert.Single(result.Review));
+        Assert.Contains("1 wall standing free", PlanImport.Message(result, ""));
     }
 
     /// <summary>
@@ -640,6 +702,12 @@ public class PlanImportTests
         // Tectly missed the diagonal bay walls: the outline is open and says so.
         Assert.True(result.Outside > 0);
         Assert.Empty(result.Dropped);
+        Assert.Equal(5, result.Outlines);
+        // Three straight runs stand 130 to 390 mm clear of the rest: reported, since the bake skips a lone block.
+        Assert.Equal(3, result.Blocks);
+        // Those runs are the bay's front walls, cut off because its diagonals are missing; their windows go uncut too.
+        Assert.Equal(4, result.Uncut);
+        Assert.Equal(3, RoomDetect.Union(result.Walls.Select(PlanImport.Ring).ToList(), 1.0).Count(l => RoomDetect.Area(l) < 0));
     }
 
     [Fact]
@@ -657,6 +725,11 @@ public class PlanImportTests
         Assert.Equal(12, result.Rooms.Count);
         Assert.Equal(0, result.Unlabelled);
         Assert.Equal(0, result.Outside);
-        Assert.Single(RoomDetect.Footprints(result.Walls.Select(PlanImport.Ring).ToList(), 1.0));
+        // One outline, and the twelve rooms are the twelve holes the walls close.
+        Assert.Equal(1, result.Outlines);
+        Assert.Equal(0, result.Blocks);
+        var loops = RoomDetect.Union(result.Walls.Select(PlanImport.Ring).ToList(), 1.0);
+        Assert.Equal(12, loops.Count(loop => RoomDetect.Area(loop) < 0));
+        Assert.Equal(0, result.Uncut);
     }
 }

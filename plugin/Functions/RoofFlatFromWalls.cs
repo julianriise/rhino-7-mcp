@@ -52,7 +52,7 @@ public partial class RhinoMCPFunctions
         }
 
         var outlineLayer = ResolveWallSourceLayer(walls, layerName);
-        var profiles = CollectClosedPlanCurves(doc, outlineLayer, joinTolerance);
+        var profiles = CollectClosedPlanCurves(doc, outlineLayer, joinTolerance, true);
         if (profiles.SourceCount == 0)
             return EmptyRoofResult(thickness, overhang,
                 $"No curves on layer '{profiles.SourceLayer.Name}'.");

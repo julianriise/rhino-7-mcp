@@ -144,18 +144,24 @@ public static class RoomDetect
     }
 
     /// <summary>
-    /// The outer outline of each group of closed outlines that overlap or
-    /// touch, with what they enclose: separate wall rectangles around a room
-    /// read as the one footprint they close. An outline that touches nothing
-    /// comes back as drawn; one inside another group's footprint is left out.
-    /// Counterclockwise.
+    /// Closed outlines read as one shape: the boundary loops of everything
+    /// any of them covers. Separate wall rectangles that overlap or touch give
+    /// the outline they make together: outer loops counterclockwise (area
+    /// above 0) and the holes they close clockwise (area below 0). An outline
+    /// that touches nothing comes back as drawn.
     /// </summary>
-    public static List<List<Pt>> Footprints(IList<List<Pt>> rings, double tol)
+    public static List<List<Pt>> Union(IList<List<Pt>> rings, double tol)
     {
+        var scene = new Scene { Tol = tol > 0 ? tol : 1.0 };
         var segs = new List<Seg>();
         foreach (var ring in rings)
+        {
+            scene.Walls.Add(new List<List<Pt>> { ring });
             AddPath(segs, ring, true, Kind.Wall, -1, 0);
-        return Plan.Build(segs, tol > 0 ? tol : 1.0).Outlines();
+        }
+        var plan = Plan.Build(segs, scene.Tol);
+        plan.Classify(scene);
+        return plan.Boundary();
     }
 
     /// <summary>
@@ -537,6 +543,9 @@ public static class RoomDetect
         readonly List<bool> _alive = new List<bool>();
         readonly List<Cycle> _cycles = new List<Cycle>();
         public readonly List<Cycle> Faces = new List<Cycle>();
+        List<int>[] _outgoing;
+        int[] _slot;
+        int[] _cycleOf;
 
         Plan(double tol)
         {
@@ -664,7 +673,7 @@ public static class RoomDetect
 
         void Trace()
         {
-            var outgoing = new List<int>[_v.Count];
+            var outgoing = _outgoing = new List<int>[_v.Count];
             for (var i = 0; i < _v.Count; i++) outgoing[i] = new List<int>();
             for (var e = 0; e < _ea.Count; e++)
             {
@@ -672,7 +681,8 @@ public static class RoomDetect
                 outgoing[_ea[e]].Add(2 * e);
                 outgoing[_eb[e]].Add(2 * e + 1);
             }
-            var slot = new int[2 * _ea.Count];
+            var slot = _slot = new int[2 * _ea.Count];
+            _cycleOf = new int[2 * _ea.Count];
             for (var v = 0; v < _v.Count; v++)
             {
                 var from = _v[v];
@@ -694,6 +704,7 @@ public static class RoomDetect
                 while (!visited[h])
                 {
                     visited[h] = true;
+                    _cycleOf[h] = _cycles.Count;
                     cycle.Verts.Add(From(h));
                     cycle.Edges.Add(h >> 1);
                     var at = To(h);
@@ -729,18 +740,54 @@ public static class RoomDetect
             return pts;
         }
 
-        /// <summary>Each component's outer boundary that no other component's face holds, counterclockwise.</summary>
-        public List<List<Pt>> Outlines()
+        /// <summary>
+        /// Boundary loops of the wall region after Classify: the half-edges
+        /// with wall on their left and free space on their right, chained so
+        /// the wall stays on the left. Edges between two wall faces are inside
+        /// the region and are passed over.
+        /// </summary>
+        public List<List<Pt>> Boundary()
         {
-            var outlines = new List<List<Pt>>();
-            foreach (var cycle in _cycles)
+            var loops = new List<List<Pt>>();
+            var visited = new bool[2 * _ea.Count];
+            for (var start = 0; start < visited.Length; start++)
             {
-                if (cycle.Area >= -_tol * _tol || cycle.Owner != null) continue;
-                var pts = Points(cycle);
-                pts.Reverse();
-                outlines.Add(Simplify(pts, _tol));
+                if (visited[start] || !OnBoundary(start)) continue;
+                var pts = new List<Pt>();
+                var h = start;
+                while (!visited[h])
+                {
+                    visited[h] = true;
+                    pts.Add(_v[From(h)]);
+                    var around = _outgoing[To(h)];
+                    // Clockwise from the way back, as a face is traced, to the first edge that is boundary too.
+                    var back = _slot[h ^ 1];
+                    var next = -1;
+                    for (var k = 1; k <= around.Count && next < 0; k++)
+                    {
+                        var candidate = around[((back - k) % around.Count + around.Count) % around.Count];
+                        if (OnBoundary(candidate)) next = candidate;
+                    }
+                    if (next < 0) break;
+                    h = next;
+                }
+                var loop = Simplify(pts, _tol);
+                if (loop.Count >= 3 && Math.Abs(Area(loop)) > _tol * _tol) loops.Add(loop);
             }
-            return outlines;
+            return loops;
+        }
+
+        bool OnBoundary(int h)
+        {
+            return _alive[h >> 1] && IsWall(h) && !IsWall(h ^ 1);
+        }
+
+        /// <summary>The face on the half-edge's left is wall. A sliver too thin to classify counts as wall.</summary>
+        bool IsWall(int h)
+        {
+            var cycle = _cycles[_cycleOf[h]];
+            if (Math.Abs(cycle.Area) <= _tol * _tol) return true;
+            return !cycle.Free;
         }
 
         /// <summary>A face is free (not wall) when a point inside it is outside every wall.</summary>

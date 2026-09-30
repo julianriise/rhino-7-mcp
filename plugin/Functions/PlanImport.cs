@@ -54,6 +54,8 @@ public static class PlanImport
         public int Pieces = 1;
         public bool Snapped;
         public bool Diagonal;
+        /// <summary>Stands free of the other walls as a lone block: the bake skips it.</summary>
+        public bool Free;
         public double Length => Dist(A, B);
     }
 
@@ -116,9 +118,15 @@ public static class PlanImport
         public int Windows;
         /// <summary>Openings that found no wall.</summary>
         public int Loose;
+        /// <summary>Openings the bake will not cut: the loose ones, and those on a wall standing free.</summary>
+        public int Uncut;
         public int Unlabelled;
         /// <summary>Rooms the walls do not close around.</summary>
         public int Outside;
+        /// <summary>Separate wall outlines once touching rectangles are read together: what the bake extrudes.</summary>
+        public int Outlines;
+        /// <summary>Outlines the bake will skip: a lone block reads as a room outline there.</summary>
+        public int Blocks;
         /// <summary>What was left out, each with its reason.</summary>
         public List<string> Dropped = new List<string>();
         /// <summary>What the user should look at, one line each.</summary>
@@ -262,7 +270,9 @@ public static class PlanImport
             if (wall.Diagonal) result.Diagonal++;
         }
 
-        Rooms(plan, result);
+        var loops = RoomDetect.Union(walls.Select(Ring).ToList(), 1.0);
+        Outlines(loops, result);
+        Rooms(plan, loops, result);
         Summarise(result);
         return result;
     }
@@ -615,9 +625,37 @@ public static class PlanImport
         return true;
     }
 
-    static void Rooms(Plan plan, Result result)
+    /// <summary>
+    /// The bake reads walls that touch as one outline, and takes a closed
+    /// outline that fills most of its bounding box for a room outline, not a
+    /// wall: it skips it. A wall or straight run standing free of the rest is
+    /// such a block, so it is reported here before the bake drops it.
+    /// </summary>
+    static void Outlines(List<List<Pt>> loops, Result result)
     {
-        var footprints = RoomDetect.Footprints(result.Walls.Select(Ring).ToList(), 1.0);
+        foreach (var outer in loops)
+        {
+            var area = RoomDetect.Area(outer);
+            if (area <= 0) continue;
+            result.Outlines++;
+            foreach (var hole in loops)
+                if (RoomDetect.Area(hole) < 0 && RoomDetect.Contains(outer, hole[0])) area += RoomDetect.Area(hole);
+            var box = (outer.Max(p => p.X) - outer.Min(p => p.X)) * (outer.Max(p => p.Y) - outer.Min(p => p.Y));
+            if (box <= 0 || area / box <= BlockFill) continue;
+            result.Blocks++;
+            foreach (var wall in result.Walls)
+                if (RoomDetect.Contains(outer, Mid(wall.A, wall.B))) wall.Free = true;
+            var at = RoomDetect.TryInside(new List<List<Pt>> { outer }, out var inside) ? inside : outer[0];
+            result.Review.Add("wall at " + At(at) + " stands free of the other walls: the bake reads a lone block as a room outline and skips it. Run it into a wall, or delete it.");
+        }
+    }
+
+    /// <summary>The bake's own limit (LooksLikeRoofOrRoomFill): footprint over bounding box.</summary>
+    const double BlockFill = 0.45;
+
+    static void Rooms(Plan plan, List<List<Pt>> loops, Result result)
+    {
+        var footprints = loops.Where(loop => RoomDetect.Area(loop) > 0).ToList();
         foreach (var room in plan.Rooms)
         {
             var ring = new List<Pt>();
@@ -641,6 +679,19 @@ public static class PlanImport
 
     static void Summarise(Result result)
     {
+        foreach (var opening in result.Openings)
+        {
+            if (opening.Host < 0)
+            {
+                result.Uncut++;
+                continue;
+            }
+            if (!result.Walls[opening.Host].Free) continue;
+            result.Uncut++;
+            var note = "its wall stands free and the bake skips that wall, so this will not cut";
+            result.Review.Add(opening.Kind + " at " + At(Mid(opening.A, opening.B)) + ": " + note + ".");
+            if (opening.Note == null) opening.Note = note;
+        }
         var rooms = result.Rooms;
         if (result.Unlabelled > 0)
         {
@@ -678,6 +729,7 @@ public static class PlanImport
         if (noted > 0) review.Add(Count(noted, "opening") + " to check");
         if (result.Unlabelled > 0) review.Add(Count(result.Unlabelled, "room") + " without a label");
         if (result.Outside > 0) review.Add("walls open around " + Count(result.Outside, "room"));
+        if (result.Blocks > 0) review.Add(Count(result.Blocks, "wall") + " standing free");
         if (result.Dropped.Count > 0) review.Add(result.Dropped.Count + " dropped");
         return text + (review.Count > 0 ? " Review: " + string.Join(", ", review) + "." : " Nothing to review.");
     }
