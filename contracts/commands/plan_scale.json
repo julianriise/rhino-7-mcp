@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan_scale.json",
+  "title": "PlanScale Command",
+  "description": "Set an imported plan's scale from two points and the real length between them. The underlay and everything on the plan layers (wall, door, window, A-ROOM, label, space_divider), imported or drawn since, scale together about the plan's top-left corner. An imported wall rectangle still as the import left it keeps a thickness rounded to 10 mm, rounded again from its detected value. The scale is kept on the underlay as a factor from the detection's own mm, and points given in the model are read back through it, so the same two plan features give the same factor on every run. Without length_mm it only measures. Refused with no imported plan, and once Forsk-generated objects exist.",
+  "type": "object",
+  "properties": {
+    "p1": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "[x, y] in mm." },
+    "p2": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "[x, y] in mm." },
+    "length_mm": { "type": "number", "exclusiveMinimum": 0, "description": "Real length between p1 and p2. Omit to measure only." },
+    "frame": { "type": "string", "enum": ["model", "source"], "default": "model", "description": "model: points as the plan lies in the document now. source: points in the detection file's own mm." }
+  },
+  "required": ["p1", "p2"],
+  "additionalProperties": false
+}

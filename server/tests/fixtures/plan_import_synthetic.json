@@ -1,0 +1,150 @@
+{
+ "schema": "forsk.plan_import.v0",
+ "units": "mm",
+ "y_axis": "up",
+ "origin": "page top-left at (0, 0); the user places and scales it in Rhino",
+ "source": {
+  "vendor": "tectly",
+  "file": "tectly_synthetic.json",
+  "wall_tracing": "Rectangles"
+ },
+ "scale": {
+  "status": "assumed",
+  "ratio": "1:100",
+  "note": "mm here assume 1:100 at 254 dpi. Tectly found no scale on this plan. In Forsk the scale comes from the two-point step."
+ },
+ "image": {
+  "width_mm": 12000.0,
+  "height_mm": 9000.0
+ },
+ "walls": [
+  {
+   "start": [
+    2000,
+    -990
+   ],
+   "end": [
+    6000,
+    -990
+   ],
+   "thickness": 180.0
+  },
+  {
+   "start": [
+    6125,
+    -900
+   ],
+   "end": [
+    6125,
+    -4500
+   ],
+   "thickness": 250.0
+  }
+ ],
+ "openings": [
+  {
+   "kind": "window",
+   "a": [
+    3000,
+    -990
+   ],
+   "b": [
+    4000,
+    -990
+   ]
+  },
+  {
+   "kind": "door",
+   "hinge": [
+    6125,
+    -1800
+   ],
+   "closed": [
+    6125,
+    -2700
+   ],
+   "width": 900,
+   "open": [
+    5200,
+    -1800
+   ]
+  }
+ ],
+ "rooms": [
+  {
+   "label": "Stue",
+   "source_type": "LivingRoom",
+   "ocr_text": "Stue",
+   "area_m2": 13.7,
+   "tag": "ca. 13,7 m²",
+   "boundary": [
+    [
+     2000,
+     -1080
+    ],
+    [
+     6000,
+     -1080
+    ],
+    [
+     6000,
+     -4500
+    ],
+    [
+     2000,
+     -4500
+    ]
+   ]
+  },
+  {
+   "label": "Bad",
+   "source_type": "Bathroom",
+   "ocr_text": null,
+   "area_m2": 2.3,
+   "tag": "ca. 2,3 m²",
+   "boundary": [
+    [
+     6800,
+     -1620
+    ],
+    [
+     8400,
+     -1620
+    ],
+    [
+     8400,
+     -3060
+    ],
+    [
+     6800,
+     -3060
+    ]
+   ]
+  },
+  {
+   "label": "Rom",
+   "source_type": "Other",
+   "ocr_text": null,
+   "area_m2": 1.2,
+   "tag": "ca. 1,2 m²",
+   "boundary": [
+    [
+     6800,
+     -3780
+    ],
+    [
+     8400,
+     -3780
+    ],
+    [
+     8400,
+     -4500
+    ],
+    [
+     6800,
+     -4500
+    ]
+   ]
+  }
+ ]
+}

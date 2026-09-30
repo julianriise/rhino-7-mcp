@@ -15,6 +15,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         ForskHeader _header;
         ForskButton _chip;
+        ForskButton _import;
         ForskButton _daylight;
         ForskComposer _composer;
         Scrollable _scroll;
@@ -61,6 +62,7 @@ namespace RhinoMCPPlugin.Forsk
 
             _header = new ForskHeader();
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
+            _import = new ForskButton { Text = "Import plan", Visible = false, Secondary = true };
             _daylight = new ForskButton { Text = "Daylight", Visible = false, Secondary = true };
             _composer = new ForskComposer();
 
@@ -69,6 +71,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (_chipState.ShowPrint) PrintPdf();
                 else Bake();
             };
+            _import.Click += (s, e) => ImportPlan();
             _daylight.Click += (s, e) => Daylight();
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
@@ -97,7 +100,7 @@ namespace RhinoMCPPlugin.Forsk
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper,
-                Items = { _header, _chip, _daylight }
+                Items = { _header, _chip, _import, _daylight }
             };
 
             _thread = new StackLayout
@@ -228,6 +231,9 @@ namespace RhinoMCPPlugin.Forsk
             _chipState = ForskBake.Detect();
             _chip.Visible = _chipState.Visible;
             _chip.Text = _chipState.Label;
+            _import.Visible = _chipState.ShowImport;
+            _import.Text = _chipState.ImportLabel;
+            _import.EnabledClick = !_busy;
             _daylight.Visible = _chipState.ShowDaylight;
             _daylight.Text = _chipState.DaylightLabel;
             _daylight.EnabledClick = !_busy && _chipState.DaylightEnabled;
@@ -407,6 +413,51 @@ namespace RhinoMCPPlugin.Forsk
             });
         }
 
+        void ImportPlan()
+        {
+            if (_busy || !_chipState.ShowImport) return;
+            var action = _chipState.Import;
+            var label = _chipState.ImportLabel;
+            string image = null;
+            string plan = null;
+            // The file dialogs run here, on the UI thread, before the panel goes busy.
+            if (action == ImportAction.ImportPlan && !ForskPlanImport.PickFiles(out image, out plan)) return;
+            _busy = true;
+            _composer.Send.EnabledClick = false;
+            _chip.EnabledClick = false;
+            _import.EnabledClick = false;
+            AddLine("user", label);
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string line;
+                string note;
+                try
+                {
+                    ForskPlanImport.Chip(action, image, plan, out line, out note);
+                }
+                catch (Exception e)
+                {
+                    line = label + " · error · " + ForskTools.Clip(e.Message);
+                    note = "";
+                }
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    AddLine("receipt", line);
+                    AddLine("assistant", note);
+                    _history.Add(new JObject { ["role"] = "user", ["content"] = label });
+                    _history.Add(new JObject
+                    {
+                        ["role"] = "assistant",
+                        ["content"] = string.IsNullOrEmpty(note) ? line : line + "\n" + note
+                    });
+                    _busy = false;
+                    _composer.Send.EnabledClick = true;
+                    _chip.EnabledClick = true;
+                    RefreshChrome();
+                });
+            });
+        }
+
         void AddLine(string role, string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
@@ -450,6 +501,7 @@ namespace RhinoMCPPlugin.Forsk
             int inner = Math.Max(200, Width - 32);
             _header.Reflow(inner);
             _chip.Width = inner;
+            _import.Width = inner;
             _daylight.Width = inner;
             _composer.Width = inner;
             _composer.Place();

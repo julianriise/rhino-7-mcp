@@ -52,6 +52,8 @@
             "rooms_from_layer",
             "rooms_detect",
             "dxf_import",
+            "plan_import",
+            "plan_scale",
             "mark_as_existing",
             "delete_opening",
             "add_opening",

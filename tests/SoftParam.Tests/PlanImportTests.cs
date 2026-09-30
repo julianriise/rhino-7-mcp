@@ -287,6 +287,7 @@ public class PlanImportTests
       ""schema"": ""forsk.plan_import.v0"", ""units"": ""mm"", ""y_axis"": ""up"",
       ""source"": { ""vendor"": ""synthetic"" },
       ""scale"": { ""status"": ""detected"", ""ratio"": ""1:50"" },
+      ""image"": { ""width_mm"": 21006, ""height_mm"": 14852 },
       ""walls"": [
         { ""start"": [0, 0], ""end"": [5000, 0], ""thickness"": 203 },
         { ""start"": [5000, 0], ""end"": [5000, -4000], ""thickness"": 198, ""class"": ""wall"" },
@@ -315,6 +316,8 @@ public class PlanImportTests
         Assert.Equal("synthetic", plan.Vendor);
         Assert.Equal("detected", plan.ScaleStatus);
         Assert.Equal("1:50", plan.ScaleRatio);
+        Assert.Equal(21006.0, plan.ImageWidthMm);
+        Assert.Equal(0.0, PlanImport.Parse(@"{ ""schema"": ""forsk.plan_import.v0"" }").ImageWidthMm);
 
         var door = plan.Openings[1];
         Assert.Equal("door", door.Kind);
@@ -352,6 +355,33 @@ public class PlanImportTests
             "Imported 5 walls, 1 door, 1 window, 2 rooms. Scale 1:50 read from the plan, not confirmed: "
             + "check it with two points and a known length. Review: 1 room without a label.",
             PlanImport.Message(result, PlanImport.ScaleLine("detected", "1:50")));
+    }
+
+    /// <summary>
+    /// The file the server's Tectly adapter writes from its synthetic fixture
+    /// (server/tests/fixtures): the same bytes on both sides of the schema.
+    /// </summary>
+    [Fact]
+    public void AdapterOutput_ReadsAndCleansOnThePluginSide()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "fixtures", "plan_import_synthetic.json");
+        var plan = PlanImport.Parse(File.ReadAllText(path));
+        Assert.Equal("tectly", plan.Vendor);
+        Assert.Equal("assumed", plan.ScaleStatus);
+        Assert.Equal("1:100", plan.ScaleRatio);
+        Assert.Equal(12000.0, plan.ImageWidthMm);
+
+        var result = PlanImport.Clean(plan);
+        Assert.Equal(new[] { 180.0, 250.0 }, result.Walls.Select(w => w.Thickness));
+        // The horizontal wall stopped at the vertical wall's near face: it runs to the far one.
+        Assert.Equal(6250.0, result.Walls[0].B.X, 6);
+        Assert.Equal(new[] { 0, 1 }, result.Openings.Select(o => o.Host));
+        Assert.Equal(new[] { "window", "door" }, result.Openings.Select(o => o.Kind));
+        Assert.Equal(new[] { "Stue", "Bad", null }, result.Rooms.Select(r => r.Label));
+        Assert.Equal(1, result.Unlabelled);
+        Assert.Equal(
+            "Scale not detected (assumed 1:100): set it with two points and a known length.",
+            PlanImport.ScaleLine("unconfirmed", plan.ScaleRatio));
     }
 
     [Theory]

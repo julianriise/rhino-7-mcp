@@ -39,4 +39,15 @@ namespace RhinoMCPPlugin.Commands
             return Result.Success;
         }
     }
+
+    /// <summary>Set the imported plan's scale: two points and the real length between them.</summary>
+    public class ForskSetScaleCommand : Command
+    {
+        public override string EnglishName => ForskPlanImport.ScaleCommand;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            return ForskPlanImport.RunScaleCommand();
+        }
+    }
 }

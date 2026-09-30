@@ -291,6 +291,13 @@ def test_new_commands():
         ("commands/panel_daylight.json", {"action": "rooms"}),
         ("commands/rooms_detect.json", {}),
         ("commands/dxf_import.json", {"path": "/tmp/office_2D.dxf"}),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json"}),
+        ("commands/plan_import.json", {
+            "image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json",
+            "scale_hint": "1:100", "image_dpi": 200, "image_width_mm": 42012, "replace": True,
+        }),
+        ("commands/plan_scale.json", {"p1": [1000, -2000], "p2": [4900, -2000]}),
+        ("commands/plan_scale.json", {"p1": [1000, -2000], "p2": [4900, -2000], "length_mm": 4000, "frame": "source"}),
         ("commands/make2d_view.json", {"view": "plan"}),
         ("commands/make2d_view.json", {
             "view": "south",
@@ -661,6 +668,43 @@ def test_responses():
         "ok": False, "line": "Daylight · error · No rooms.",
     }):
         all_passed = False
+    if not validate("responses/panel_daylight_result.json", {
+        "visible": False, "enabled": True, "label": "Make rooms", "intent": "import",
+        "import_visible": True, "import_label": "Set scale",
+    }):
+        all_passed = False
+
+    print("  plan_import_result:")
+    if not validate("responses/plan_import_result.json", {
+        "walls": 30, "walls_detected": 41, "merged": 11, "squared": 0, "diagonal": 0, "joined": 40, "extended": 5,
+        "doors": 7, "windows": 12, "loose": 1, "rooms": 11, "unlabelled": 3, "outside": 8,
+        "dropped": [], "review": ["window at 18.2, -16.4 m: no wall in reach, nearest face 212 mm away."],
+        "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
+        "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan.png",
+                     "width_mm": 42011.6, "height_mm": 29705.4},
+        "objects": 72, "replaced": 0, "warnings": [],
+        "message": "Imported 30 walls (41 detected, 11 merged), 7 doors, 12 windows, 11 rooms.",
+    }):
+        all_passed = False
+    if not validate("responses/plan_import_result.json", {
+        "walls": 0, "walls_detected": 0, "doors": 0, "windows": 0, "loose": 0, "rooms": 0, "unlabelled": 0,
+        "dropped": [], "review": [], "scale": {"status": "detected", "ratio": None, "factor": 1.0},
+        "underlay": {"id": "12345678-1234-1234-1234-123456789012", "layer": "X-PLAN", "image": "plan.png",
+                     "width_mm": 1.0, "height_mm": 1.0},
+        "message": "Imported 0 walls, 0 doors, 0 windows, 0 rooms.",
+    }):
+        all_passed = False
+    if not validate("responses/plan_scale_result.json", {
+        "measured_mm": 3900.0, "factor": 1.0, "status": "detected", "scaled": 0,
+        "message": "The two points are 3900 mm apart at the scale the plan has now.",
+    }):
+        all_passed = False
+    if not validate("responses/plan_scale_result.json", {
+        "measured_mm": 3900.0, "length_mm": 4000, "factor": 1.0256410256410255, "previous_factor": 1.0,
+        "relative": 1.0256410256410255, "status": "user", "scaled": 73, "walls_rounded": 30,
+        "message": "Scale set: 4000 mm between the two points (was 3900 mm, x1.0256).",
+    }):
+        all_passed = False
     if not validate("responses/rooms_detect_result.json", {
         "ids": ["12345678-1234-1234-1234-123456789012"], "rooms": [{"id": "rd-01", "name": "Garasje", "area_m2": 27.36, "x": 4000.0, "y": 2000.0}],
         "count": 1, "detected": 1, "kept": 0, "removed": 0, "slivers": 1, "area_m2": 27.4,
@@ -882,6 +926,12 @@ def test_invalid_examples():
         ("commands/rooms_detect.json", {"layer": "A-ROOM"}, "rooms_detect takes no parameters"),
         ("commands/dxf_import.json", {}, "dxf_import needs a path"),
         ("commands/dxf_import.json", {"path": "/tmp/a.dxf", "units": "mm"}, "dxf_import unknown field"),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png"}, "plan_import needs a plan_path"),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "scale_hint": "100"}, "plan_import scale_hint is a ratio"),
+        ("commands/plan_import.json", {"image_path": "/tmp/plan.png", "plan_path": "/tmp/plan.json", "tectly_key": "x"}, "plan_import unknown field"),
+        ("commands/plan_scale.json", {"p1": [0, 0]}, "plan_scale needs two points"),
+        ("commands/plan_scale.json", {"p1": [0, 0], "p2": [1000, 0], "length_mm": 0}, "plan_scale length above 0"),
+        ("commands/plan_scale.json", {"p1": [0, 0], "p2": [1000, 0], "frame": "page"}, "plan_scale unknown frame"),
         # delete_object: all=false is meaningless and must be rejected
         ("commands/delete_object.json", {"all": False}, "delete_object all=false"),
         # delete_object: unknown properties rejected

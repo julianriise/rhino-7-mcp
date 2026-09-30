@@ -162,7 +162,7 @@ public partial class RhinoMCPFunctions
 
         var deleted = DeleteAnalysisOverlay(doc);
         var layer = EnsureLayer(doc, AnalysisLayerName, Color.FromArgb(16, 118, 128));
-        KeepAnalysisOffPrint(doc, layer);
+        KeepLayerOffPrint(doc, layer);
         var mode = AnalysisDisplayMode();
         var box = BoundingBox.Empty;
 
@@ -287,10 +287,11 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Print never shows the overlay: off in every layout detail, and plot weight
-    /// -1 (do not print). Layout packs made later keep it off because it is not clay.
+    /// Print never shows this layer (the daylight overlay, the imported plan
+    /// image): off in every layout detail, and plot weight -1 (do not print).
+    /// Layout packs made later keep it off because it is not clay.
     /// </summary>
-    private static void KeepAnalysisOffPrint(RhinoDoc doc, Layer layer)
+    private static void KeepLayerOffPrint(RhinoDoc doc, Layer layer)
     {
         layer.PlotWeight = -1;
         foreach (var page in doc.Views.GetPageViews())

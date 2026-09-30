@@ -8,7 +8,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Smoke hook for the Forsk panel's Daylight chip. The same chip state, run, and
-/// clear the button uses, plus the chat intent for a message. No UI.
+/// clear the button uses, plus the chat intent for a message and the Import
+/// chip as it stands (Import plan, or Set scale on an imported plan). No UI.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -44,7 +45,9 @@ public partial class RhinoMCPFunctions
         {
             ["visible"] = chip.ShowDaylight,
             ["enabled"] = chip.DaylightEnabled,
-            ["label"] = chip.DaylightLabel
+            ["label"] = chip.DaylightLabel,
+            ["import_visible"] = chip.ShowImport,
+            ["import_label"] = chip.ImportLabel
         };
         if (text != null)
             result["intent"] = ForskIntentRouter.Classify(text, "").ToString().ToLowerInvariant();
@@ -72,7 +75,9 @@ public partial class RhinoMCPFunctions
                 Generated = IsForskGenerated(obj),
                 Kind = GetForskKind(obj),
                 OpeningKind = obj.Attributes.GetUserString("forsk:opening_kind"),
-                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : ""
+                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
+                ImportKind = obj.Attributes.GetUserString(ImportKindKey),
+                ScaleStatus = obj.Attributes.GetUserString(ImportScaleStatusKey)
             });
         }
         return rows;

@@ -11,11 +11,12 @@ namespace RhinoMCPPlugin.Forsk
         Sheets,
         Print,
         Daylight,
+        Import,
         General
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is print, daylight, sheets, edit, build.
+    /// One-turn tool bias from the message. Order is print, daylight, sheets, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -26,6 +27,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
             if (IsSheets(t)) return ForskIntent.Sheets;
+            if (IsImport(t)) return ForskIntent.Import;
             if (IsEdit(t)) return ForskIntent.Edit;
             if (IsBuild(t)) return ForskIntent.Build;
             if (TargetIsOpening(target)) return ForskIntent.Edit;
@@ -80,6 +82,18 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
             if (IsDimensions(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
+        }
+
+        /// <summary>A plan image brought in as an underlay with its detection, and the plan's scale from two points.</summary>
+        static bool IsImport(string t)
+        {
+            if (HasWord(t, "underlay") || HasWord(t, "plantegning") || HasWord(t, "plantegningen")) return true;
+            if (t.Contains("floor plan") || HasWord(t, "floorplan") || t.Contains("plan image")) return true;
+            if (t.Contains("set scale") || t.Contains("set the scale") || t.Contains("scale the plan")
+                || t.Contains("plan scale") || t.Contains("sett målestokk"))
+                return true;
+            var verb = HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere");
+            return verb && (HasWord(t, "plan") || HasWord(t, "planen") || HasWord(t, "image") || HasWord(t, "bilde"));
         }
 
         /// <summary>The plan's dimensions, unless a door or window is named: its size is an edit.</summary>
@@ -165,6 +179,13 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
+    public enum ImportAction
+    {
+        None,
+        ImportPlan,
+        SetScale
+    }
+
     public enum DaylightAction
     {
         None,
@@ -184,12 +205,18 @@ namespace RhinoMCPPlugin.Forsk
         public string Kind;
         public string OpeningKind;
         public string Layer;
+        /// <summary>forsk:import_kind: underlay for the imported plan image.</summary>
+        public string ImportKind;
+        /// <summary>forsk:import_scale_status on the underlay: user once two points set it.</summary>
+        public string ScaleStatus;
     }
 
     /// <summary>
     /// Chip state. The primary chip is Generate or Print. The secondary Daylight
     /// chip sits under Print: it runs when walls, windows, and rooms exist, clears
     /// while an overlay is on A-ANALYSE, and offers Make rooms when rooms are missing.
+    /// The Import chip offers Import plan in a document with no plan, and Set scale
+    /// on an imported plan until two points have set its scale.
     /// </summary>
     public sealed class BakeChip
     {
@@ -236,6 +263,34 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         public string DaylightHint => Daylight == DaylightAction.None ? NeedsWindowsHint : null;
+
+        public bool HasUnderlay;
+        public bool ScaleSet;
+
+        public ImportAction Import
+        {
+            get
+            {
+                if (HasWalls) return ImportAction.None;
+                if (HasUnderlay) return ScaleSet ? ImportAction.None : ImportAction.SetScale;
+                return HasPlan ? ImportAction.None : ImportAction.ImportPlan;
+            }
+        }
+
+        public bool ShowImport => Import != ImportAction.None;
+        public string ImportLabel => Import == ImportAction.SetScale ? "Set scale" : "Import plan";
+
+        /// <summary>Import facts from the model rows: the plan underlay and whether its scale was set.</summary>
+        public void ReadImport(IEnumerable<ChipRow> rows)
+        {
+            HasUnderlay = ScaleSet = false;
+            foreach (var row in rows)
+            {
+                if (row == null || !Is(row.ImportKind, "underlay")) continue;
+                HasUnderlay = true;
+                if (Is(row.ScaleStatus, "user")) ScaleSet = true;
+            }
+        }
 
         /// <summary>Daylight facts from the model rows. Called on every refresh; nothing is cached.</summary>
         public void ReadDaylight(IEnumerable<ChipRow> rows)

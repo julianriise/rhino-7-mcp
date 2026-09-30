@@ -31,6 +31,8 @@
 
   <ItemGroup>
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- What the server's Tectly adapter writes: the plugin reads the same file. -->
+    <None Include="..\..\server\tests\fixtures\plan_import_synthetic.json" Link="fixtures\plan_import_synthetic.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

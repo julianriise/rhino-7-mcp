@@ -8,7 +8,9 @@
     "visible": { "type": "boolean" },
     "enabled": { "type": "boolean" },
     "label": { "type": "string" },
-    "intent": { "type": "string", "enum": ["build", "edit", "sheets", "print", "daylight", "general"] },
+    "import_visible": { "type": "boolean", "description": "The Import chip shows" },
+    "import_label": { "type": "string", "enum": ["Import plan", "Set scale"], "description": "Import plan in a document with no plan; Set scale on an imported plan until two points have set it" },
+    "intent": { "type": "string", "enum": ["build", "edit", "sheets", "print", "daylight", "import", "general"] },
     "ok": { "type": "boolean" },
     "line": { "type": "string" }
   },

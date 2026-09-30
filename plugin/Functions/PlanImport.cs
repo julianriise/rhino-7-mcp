@@ -93,6 +93,8 @@ public static class PlanImport
         public string ScaleStatus;
         /// <summary>1:100, or null.</summary>
         public string ScaleRatio;
+        /// <summary>Width on the plan of the image the detection was made from, top-left at (0, 0). 0 when the file does not say.</summary>
+        public double ImageWidthMm;
     }
 
     public sealed class Result
@@ -147,7 +149,8 @@ public static class PlanImport
         {
             Vendor = root["source"]?["vendor"]?.ToString(),
             ScaleStatus = root["scale"]?["status"]?.ToString(),
-            ScaleRatio = root["scale"]?["ratio"]?.ToString()
+            ScaleRatio = root["scale"]?["ratio"]?.ToString(),
+            ImageWidthMm = root["image"]?["width_mm"]?.ToObject<double?>() ?? 0
         };
 
         var index = 0;

@@ -79,6 +79,12 @@ namespace RhinoMCPPlugin.Forsk
             "daylight_clear"
         };
 
+        static readonly string[] ImportOnly =
+        {
+            ForskPlanImport.ImportTool,
+            ForskPlanImport.ScaleTool
+        };
+
         public static JArray ToolsFor()
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -88,6 +94,7 @@ namespace RhinoMCPPlugin.Forsk
             AddTools(EditOnly, seen, tools);
             AddTools(SheetsOnly, seen, tools);
             AddTools(DaylightOnly, seen, tools);
+            AddTools(ImportOnly, seen, tools);
             return tools;
         }
 
@@ -204,7 +211,8 @@ namespace RhinoMCPPlugin.Forsk
                 || Array.IndexOf(BuildOnly, name) >= 0
                 || Array.IndexOf(EditOnly, name) >= 0
                 || Array.IndexOf(SheetsOnly, name) >= 0
-                || Array.IndexOf(DaylightOnly, name) >= 0;
+                || Array.IndexOf(DaylightOnly, name) >= 0
+                || Array.IndexOf(ImportOnly, name) >= 0;
         }
 
         static JObject Dispatch(string name, JObject parameters)
@@ -283,6 +291,18 @@ namespace RhinoMCPPlugin.Forsk
         static JObject Bool(string description)
         {
             return new JObject { ["type"] = "boolean", ["description"] = description };
+        }
+
+        static JObject Pair(string description)
+        {
+            return new JObject
+            {
+                ["type"] = "array",
+                ["items"] = new JObject { ["type"] = "number" },
+                ["minItems"] = 2,
+                ["maxItems"] = 2,
+                ["description"] = description
+            };
         }
 
         static JObject ViewEnum(string description)
@@ -398,6 +418,27 @@ namespace RhinoMCPPlugin.Forsk
                         ["path"] = Str("Absolute path of the .dxf file.")
                     },
                     "path"),
+                Fn(ForskPlanImport.ImportTool,
+                    "Import a floor plan image with its detection (a forsk.plan_import.v0 JSON): the image as a locked, faded underlay on X-PLAN, the detected walls, doors, windows and rooms as 2D review geometry on wall, door, window, A-ROOM and label. Nothing is 3D until the user generates. Reports counts, how the scale stands, and what needs review.",
+                    new JObject
+                    {
+                        ["image_path"] = Str("Absolute path of the plan image."),
+                        ["plan_path"] = Str("Absolute path of the forsk.plan_import.v0 JSON."),
+                        ["scale_hint"] = Str("The drawing's scale when the user states it, such as 1:100. It sizes the image; two points still set the scale."),
+                        ["image_dpi"] = Num("Image resolution when the file does not carry it."),
+                        ["image_width_mm"] = Num("Width of the image on the plan in mm, when known."),
+                        ["replace"] = Bool("Swap an earlier import. Default false.")
+                    },
+                    "image_path", "plan_path"),
+                Fn(ForskPlanImport.ScaleTool,
+                    "Set the imported plan's scale from two points and the real length between them. The underlay and the plan geometry move together. With no points the user picks them in the viewport and types the length. With points and no length it only measures.",
+                    new JObject
+                    {
+                        ["p1"] = Pair("First point [x, y] in mm. Omit to let the user pick."),
+                        ["p2"] = Pair("Second point [x, y] in mm."),
+                        ["length_mm"] = Num("Real length between the points in mm."),
+                        ["frame"] = Str("model (as the plan lies now, default) or source (the detection's own mm).")
+                    }),
                 Fn("rooms_from_layer",
                     "Room markers from closed curves on A-ROOM (alias room): each the boundary curve with its tag data, no surface. Count 0 if the layer is missing. Does not find rooms from walls; rooms_detect does.",
                     new JObject
@@ -568,6 +609,8 @@ Plan to 3D order is floor_from_layer, walls_from_layer, roof_flat_from_walls, op
 
 Import a DXF with dxf_import and its absolute .dxf path, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room.
 
+Import a floor plan image with plan_import: the image path and its forsk.plan_import.v0 detection. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
+
 Defaults: walls 3000, floor thickness 400, roof 200, doors sill 0 head 2100 width 900, windows sill 900 head 2100 width 1200. Pass stated heights as tool params. If the user states none, use the defaults and say so once.
 
 Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake source.
@@ -645,6 +688,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print) return "ui_print.md";
             if (intent == ForskIntent.Build) return "ui_build.md";
             if (intent == ForskIntent.Daylight) return "daylight.md";
+            if (intent == ForskIntent.Import) return "plan_import.md";
             return null;
         }
 
@@ -686,6 +730,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Reply with spaces, windows, and the time, then the tool's disclaimer line word for word. "
                     + "No rooms: offer rooms_detect, which finds them from the walls. "
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
+            }
+            if (intent == ForskIntent.Import)
+            {
+                return "Turn bias: Import. plan_import brings in the plan image and its detection; plan_scale sets the scale. "
+                    + "Reply with the counts, how the scale stands, and what needs review, from the tool message. "
+                    + "Set scale with no points given is plan_scale with no arguments: the user picks two points and types the length. "
+                    + "Do not generate 3D here. The user reviews and traces missing walls on the wall layer first, then asks to generate.";
             }
             if (intent == ForskIntent.Build)
             {
@@ -990,6 +1041,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print) return "Print";
             if (intent == ForskIntent.Build) return "Build";
             if (intent == ForskIntent.Daylight) return "Daylight";
+            if (intent == ForskIntent.Import) return "Import";
             return "General";
         }
 
@@ -1005,6 +1057,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
             }
+            // No points given: the user picks them in the viewport and types the length.
+            if (name == ForskPlanImport.ScaleTool && ForskPlanImport.NeedsPick(args))
+                return ForskPlanImport.PickScaleFromBackground();
             // The tracer runs here, off the UI thread. Scene and paint hop onto it.
             if (name == ForskDaylight.ToolName)
                 return ForskDaylight.Run(args?["target"]?.ToString(), ForskTools.CommandOnUi);
@@ -1156,7 +1211,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 if (IsPlanLayer(LayerName(doc, obj)))
                     chip.HasPlan = true;
             }
-            chip.ReadDaylight(RhinoMCPFunctions.ChipRows(doc));
+            var rows = RhinoMCPFunctions.ChipRows(doc);
+            chip.ReadDaylight(rows);
+            chip.ReadImport(rows);
             return chip;
         }
 
