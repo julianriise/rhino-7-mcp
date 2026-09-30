@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- PlanImport reads forsk.plan_import.v0 with the plugin's JSON library. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +26,7 @@
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />
     <Compile Include="..\..\plugin\Functions\PreviewFrame.cs" Link="PreviewFrame.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanImport.cs" Link="PlanImport.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -130,6 +130,41 @@ public partial class RhinoMCPFunctions
         }
         if (outermost.Count == 0)
             outermost.Add(closed.OrderByDescending(CurveArea).First());
-        return outermost;
+        return MergeOverlapping(outermost, tol);
+    }
+
+    /// <summary>
+    /// Outlines that overlap or touch are one footprint: separate wall
+    /// rectangles around a room give the slab under the room, not a slab per
+    /// wall. Polylines only. Outlines that touch nothing stay as drawn.
+    /// </summary>
+    private static List<Curve> MergeOverlapping(List<Curve> outlines, double tol)
+    {
+        if (outlines.Count < 2) return outlines;
+        var rings = new List<List<RoomDetect.Pt>>();
+        var z = 0.0;
+        foreach (var outline in outlines)
+        {
+            if (!outline.TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count < 4)
+                return outlines;
+            z = polyline[0].Z;
+            var ring = new List<RoomDetect.Pt>(polyline.Count - 1);
+            for (var i = 0; i < polyline.Count - 1; i++)
+                ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
+            rings.Add(ring);
+        }
+
+        var footprints = RoomDetect.Footprints(rings, Math.Max(tol, 1.0));
+        if (footprints.Count == 0 || footprints.Count >= outlines.Count) return outlines;
+        var merged = new List<Curve>();
+        foreach (var footprint in footprints)
+        {
+            if (footprint.Count < 3) continue;
+            var points = new List<Point3d>(footprint.Count + 1);
+            foreach (var p in footprint) points.Add(new Point3d(p.X, p.Y, z));
+            points.Add(points[0]);
+            merged.Add(new PolylineCurve(points));
+        }
+        return merged.Count > 0 ? merged : outlines;
     }
 }

@@ -144,6 +144,21 @@ public static class RoomDetect
     }
 
     /// <summary>
+    /// The outer outline of each group of closed outlines that overlap or
+    /// touch, with what they enclose: separate wall rectangles around a room
+    /// read as the one footprint they close. An outline that touches nothing
+    /// comes back as drawn; one inside another group's footprint is left out.
+    /// Counterclockwise.
+    /// </summary>
+    public static List<List<Pt>> Footprints(IList<List<Pt>> rings, double tol)
+    {
+        var segs = new List<Seg>();
+        foreach (var ring in rings)
+            AddPath(segs, ring, true, Kind.Wall, -1, 0);
+        return Plan.Build(segs, tol > 0 ? tol : 1.0).Outlines();
+    }
+
+    /// <summary>
     /// Stable ids across runs. A room keeps the id of the earlier outline it
     /// overlaps; a new room takes the next free number after prefix.
     /// </summary>
@@ -712,6 +727,20 @@ public static class RoomDetect
             var pts = new List<Pt>(cycle.Verts.Count);
             foreach (var v in cycle.Verts) pts.Add(_v[v]);
             return pts;
+        }
+
+        /// <summary>Each component's outer boundary that no other component's face holds, counterclockwise.</summary>
+        public List<List<Pt>> Outlines()
+        {
+            var outlines = new List<List<Pt>>();
+            foreach (var cycle in _cycles)
+            {
+                if (cycle.Area >= -_tol * _tol || cycle.Owner != null) continue;
+                var pts = Points(cycle);
+                pts.Reverse();
+                outlines.Add(Simplify(pts, _tol));
+            }
+            return outlines;
         }
 
         /// <summary>A face is free (not wall) when a point inside it is outside every wall.</summary>
