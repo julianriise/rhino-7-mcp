@@ -5,7 +5,7 @@
   "description": "What the import drew and what needs a look. message is the one-line receipt: counts, how the scale stands, and how much there is to review. review has one line per thing to look at.",
   "type": "object",
   "properties": {
-    "walls": { "type": "integer", "description": "Wall rectangles drawn on the wall layer" },
+    "walls": { "type": "integer", "description": "Walls after the clean-up. They are drawn merged, as outlines" },
     "walls_detected": { "type": "integer", "description": "Walls in the plan file" },
     "merged": { "type": "integer", "description": "Pieces merged into a collinear neighbour" },
     "squared": { "type": "integer", "description": "Walls turned onto an axis (within 3 degrees of it)" },
@@ -17,7 +17,10 @@
     "windows": { "type": "integer" },
     "loose": { "type": "integer", "description": "Openings with no wall in reach, once every wall end has been run and joined: left where detected, drawn red, not cut by the bake" },
     "uncut": { "type": "integer", "description": "Openings the bake will not cut: the loose ones, and those on a block the bake skips" },
-    "outlines": { "type": "integer", "description": "Separate wall outlines once touching rectangles are read together, as the bake reads them: one wall solid, one floor and one roof each. 1 when the walls make one building." },
+    "outlines": { "type": "integer", "description": "Wall outlines drawn on the wall layer: walls that overlap or touch are merged into one closed outline per connected run. The bake makes one wall solid, one floor and one roof of each. 1 when the walls make one building." },
+    "outline_holes": { "type": "integer", "description": "Holes those outlines close, each drawn as a loop of its own on the wall layer (forsk:import_kind wall-hole)" },
+    "wall_pieces": { "type": "integer", "description": "Detected wall pieces that went into the outlines" },
+    "overlaps": { "type": "integer", "description": "Outlines that still overlap or touch another, measured on the outlines as drawn. 0 after a clean merge." },
     "free_walls": { "type": "integer", "description": "Outlines standing free of the rest as a lone block, each in review. A slender one is a wall run and bakes as a wall on its own; one wider across than a wall (600 mm) reads as a room outline at the bake and is skipped." },
     "blocks_skipped": { "type": "integer", "description": "Of free_walls, the blocks wider than a wall: the bake makes no wall solid of them" },
     "rooms": { "type": "integer", "description": "Room outlines drawn on A-ROOM" },
@@ -51,7 +54,7 @@
     "objects": { "type": "integer", "description": "Objects added, the underlay included" },
     "replaced": { "type": "integer", "description": "Objects of an earlier import deleted first" },
     "warnings": { "type": "array", "items": { "type": "string" } },
-    "message": { "type": "string", "description": "Imported 30 walls (41 detected, 11 merged), 7 doors, 12 windows, 11 rooms. Scale not detected (assumed 1:100): set it with two points and a known length. Review: 3 rooms without a label, walls open around 8 rooms, 1 wall standing free, 3 wall gaps closed." }
+    "message": { "type": "string", "description": "Imported 30 walls (41 detected, 11 merged), 7 doors, 12 windows, 11 rooms. Wall cleanup: 41 wall pieces merged into 2 outlines, 3 gaps closed, 0 overlaps left. Scale not detected (assumed 1:100): set it with two points and a known length. Review: 3 rooms without a label, walls open around 8 rooms, 1 wall standing free, 3 wall gaps closed." }
   },
   "required": ["walls", "walls_detected", "doors", "windows", "loose", "rooms", "unlabelled", "dropped", "review", "scale", "underlay", "message"],
   "additionalProperties": false

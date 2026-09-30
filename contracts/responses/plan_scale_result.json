@@ -12,7 +12,6 @@
     "relative": { "type": "number", "description": "factor / previous_factor: what the geometry was multiplied by. 1 on a repeat." },
     "status": { "type": "string", "enum": ["detected", "unconfirmed", "user"] },
     "scaled": { "type": "integer", "description": "Objects moved, the underlay included. 0 when only measuring." },
-    "walls_rounded": { "type": "integer", "description": "Imported wall rectangles rebuilt at a thickness rounded to 10 mm" },
     "message": { "type": "string" }
   },
   "required": ["measured_mm", "factor", "status", "scaled", "message"],

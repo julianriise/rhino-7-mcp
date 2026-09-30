@@ -677,8 +677,8 @@ def test_responses():
     print("  plan_import_result:")
     if not validate("responses/plan_import_result.json", {
         "walls": 30, "walls_detected": 41, "merged": 11, "squared": 0, "diagonal": 0, "joined": 43, "gaps_closed": 3,
-        "extended": 5, "doors": 7, "windows": 12, "loose": 0, "uncut": 0, "outlines": 2, "free_walls": 1,
-        "blocks_skipped": 0,
+        "extended": 5, "doors": 7, "windows": 12, "loose": 0, "uncut": 0, "outlines": 2, "outline_holes": 3,
+        "wall_pieces": 41, "overlaps": 0, "free_walls": 1, "blocks_skipped": 0,
         "rooms": 11, "unlabelled": 3, "outside": 8,
         "dropped": [], "review": ["Closed a 250 mm gap at 5.0, 3.6 m: the wall end was run to the wall it stopped short of. Check that nothing opens there."],
         "scale": {"status": "unconfirmed", "ratio": "1:100", "factor": 1.0},
@@ -703,7 +703,7 @@ def test_responses():
         all_passed = False
     if not validate("responses/plan_scale_result.json", {
         "measured_mm": 3900.0, "length_mm": 4000, "factor": 1.0256410256410255, "previous_factor": 1.0,
-        "relative": 1.0256410256410255, "status": "user", "scaled": 73, "walls_rounded": 30,
+        "relative": 1.0256410256410255, "status": "user", "scaled": 73,
         "message": "Scale set: 4000 mm between the two points (was 3900 mm, x1.0256).",
     }):
         all_passed = False

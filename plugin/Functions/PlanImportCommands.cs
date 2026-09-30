@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.Display;
@@ -15,8 +16,9 @@ namespace RhinoMCPPlugin.Functions;
 /// Plan import (F7) in the document. plan_import places the plan image as a
 /// locked, faded underlay on X-PLAN, shown in every view's display mode and
 /// kept off Print, and draws the cleaned
-/// detection on the 2D layers the bake reads: a closed rectangle per wall on
-/// wall, opening footprints on door and window, room outlines on A-ROOM and
+/// detection on the 2D layers the bake reads: a closed outline per connected
+/// run of walls on wall, with the holes it closes as loops of their own,
+/// opening footprints on door and window, room outlines on A-ROOM and
 /// their names on label. Nothing is 3D until the user bakes. plan_scale sets
 /// the scale from two points and a known length, moving the underlay and the
 /// plan together about the plan's top-left corner.
@@ -29,7 +31,8 @@ public partial class RhinoMCPFunctions
     private const string ImportScaleKey = "forsk:import_scale";
     private const string ImportScaleStatusKey = "forsk:import_scale_status";
     private const string ImportRatioKey = "forsk:import_ratio";
-    private const string ImportDetectedKey = "forsk:import_detected";
+    /// <summary>forsk:import_kind of a hole in a wall outline: the bake reads it with the outline around it, never as a wall.</summary>
+    private const string ImportWallHoleKind = "wall-hole";
     private const string ImportReviewKey = "forsk:import_review";
 
     /// <summary>The image lies just under the plan curves, so they draw on top of it.</summary>
@@ -117,15 +120,19 @@ public partial class RhinoMCPFunctions
 
         var objects = 1;
         var wallNames = new List<string>();
-        for (var i = 0; i < cleaned.Walls.Count; i++)
+        for (var i = 0; i < cleaned.Networks.Count; i++)
         {
-            var wall = cleaned.Walls[i];
+            var outline = cleaned.Networks[i];
             var name = "import-wall-" + (i + 1).ToString("D2", CultureInfo.InvariantCulture);
             wallNames.Add(name);
             var attr = ImportAttributes(wallLayer, name, "wall");
-            attr.SetUserString(ImportDetectedKey, wall.Detected.ToString("R", CultureInfo.InvariantCulture));
-            if (!string.IsNullOrEmpty(wall.Class)) attr.SetUserString("forsk:import_class", wall.Class);
-            if (doc.Objects.AddCurve(RoomOutline(PlanImport.Ring(wall), 0), attr) != Guid.Empty) objects++;
+            attr.SetUserString("forsk:import_pieces", outline.Pieces.ToString(CultureInfo.InvariantCulture));
+            if (doc.Objects.AddCurve(RoomOutline(outline.Outer, 0), attr) != Guid.Empty) objects++;
+            for (var h = 0; h < outline.Holes.Count; h++)
+            {
+                var hole = ImportAttributes(wallLayer, name + "-hole-" + (h + 1).ToString("D2", CultureInfo.InvariantCulture), ImportWallHoleKind);
+                if (doc.Objects.AddCurve(RoomOutline(outline.Holes[h], 0), hole) != Guid.Empty) objects++;
+            }
         }
 
         int doors = 0, windows = 0;
@@ -135,7 +142,8 @@ public partial class RhinoMCPFunctions
             var name = "import-" + opening.Kind + "-" + (window ? ++windows : ++doors).ToString("D2", CultureInfo.InvariantCulture);
             var attr = ImportAttributes(window ? windowLayer : doorLayer, name, opening.Kind);
             attr.SetUserString("forsk:import_width", FormatMm(opening.Width));
-            if (opening.Host >= 0) attr.SetUserString("forsk:import_host", wallNames[opening.Host]);
+            if (opening.Host >= 0 && cleaned.Walls[opening.Host].Network >= 0)
+                attr.SetUserString("forsk:import_host", wallNames[cleaned.Walls[opening.Host].Network]);
             if (opening.Note != null) attr.SetUserString(ImportReviewKey, opening.Note);
             if (opening.Host < 0)
             {
@@ -184,6 +192,9 @@ public partial class RhinoMCPFunctions
             ["loose"] = cleaned.Loose,
             ["uncut"] = cleaned.Uncut,
             ["outlines"] = cleaned.Outlines,
+            ["outline_holes"] = cleaned.Networks.Sum(outline => outline.Holes.Count),
+            ["wall_pieces"] = cleaned.Networks.Sum(outline => outline.Pieces),
+            ["overlaps"] = cleaned.Overlaps,
             ["free_walls"] = cleaned.Blocks,
             ["blocks_skipped"] = cleaned.Skipped,
             ["rooms"] = cleaned.Rooms.Count,
@@ -355,17 +366,10 @@ public partial class RhinoMCPFunctions
             if (imported || layers.Exists(layer => ObjectOnLayer(doc, obj, layer))) targets.Add(obj);
         }
 
-        int scaled = 0, rounded = 0;
+        // A wall outline scales as drawn, like the rest: nothing is rounded again, so nothing can drift.
+        var scaled = 0;
         foreach (var obj in targets)
-        {
-            if (obj.Attributes.GetUserString(ImportKindKey) == "wall" && TryRescaleImportedWall(doc, obj, now, factor))
-            {
-                rounded++;
-                scaled++;
-                continue;
-            }
             if (doc.Objects.Transform(obj, xform, true) != Guid.Empty) scaled++;
-        }
 
         // The underlay sits on a locked layer: unlocked for the move, locked again after.
         var underlayLayer = doc.Layers[underlay.Attributes.LayerIndex];
@@ -400,32 +404,12 @@ public partial class RhinoMCPFunctions
             ["relative"] = relative,
             ["status"] = "user",
             ["scaled"] = scaled + 1,
-            ["walls_rounded"] = rounded,
             ["message"] = Math.Abs(relative - 1.0) < 1e-9
                 ? "Scale confirmed: the two points are " + FormatMm(Math.Round(length.Value)) + " mm apart. Nothing moved."
                 : "Scale set: " + FormatMm(Math.Round(length.Value)) + " mm between the two points (was "
                     + FormatMm(Math.Round(measured)) + " mm, x" + times + "). The underlay and "
                     + scaled + " plan object" + (scaled == 1 ? "" : "s") + " moved together about the plan's top-left corner."
         };
-    }
-
-    /// <summary>
-    /// A wall rectangle as the import left it: its centreline scales and its
-    /// thickness is rounded again from the detected value. False for a wall
-    /// the user has reshaped; that one scales as drawn. The wall carries its
-    /// detected thickness only. A rounded-thickness stamp was kept beside it
-    /// once and did not follow the rectangle, so a wall scaled away and back
-    /// came home 5 mm off.
-    /// </summary>
-    private static bool TryRescaleImportedWall(RhinoDoc doc, RhinoObject obj, PlanImport.Scale now, double factor)
-    {
-        if (!(obj.Geometry is Curve curve) || !curve.TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count != 5)
-            return false;
-        if (!double.TryParse(obj.Attributes.GetUserString(ImportDetectedKey), NumberStyles.Float, CultureInfo.InvariantCulture, out var detected)) return false;
-        var ring = new List<RoomDetect.Pt>(4);
-        for (var i = 0; i < 4; i++) ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
-        var scaled = PlanImport.RescaleWall(now, factor, ring, detected, 10.0, out var thickness);
-        return !double.IsNaN(thickness) && doc.Objects.Replace(obj.Id, RoomOutline(scaled, polyline[0].Z));
     }
 
     private static bool TryPlanPoint(JToken token, out RoomDetect.Pt point)

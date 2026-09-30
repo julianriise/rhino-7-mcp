@@ -79,11 +79,10 @@ public class PlanImportTests
     [InlineData(255, 260)]
     [InlineData(98, 100)]
     [InlineData(3, 10)]
-    public void Thickness_RoundsToTenAndKeepsTheDetectedValue(double detected, double rounded)
+    public void Thickness_RoundsToTen(double detected, double rounded)
     {
         var wall = Assert.Single(PlanImport.Clean(PlanOf(W(0, 0, 4000, 0, detected))).Walls);
         Assert.Equal(rounded, wall.Thickness);
-        Assert.Equal(detected, wall.Detected);
     }
 
     [Fact]
@@ -341,8 +340,8 @@ public class PlanImportTests
         Assert.Equal(1, result.Outlines);
         Assert.Equal(!closes, Assert.Single(result.Rooms).Outside);
         var receipt = PlanImport.Message(result, "");
-        if (reported > 0) Assert.Contains("1 wall gap closed", receipt);
-        else Assert.DoesNotContain("closed", receipt);
+        Assert.Contains(reported > 0 ? ", 1 gap closed, " : ", 0 gaps closed, ", receipt);
+        Assert.Equal(reported > 0, receipt.Contains("1 wall gap closed"));
     }
 
     [Fact]
@@ -522,7 +521,8 @@ public class PlanImportTests
         Assert.Equal(0, result.Outside);
         Assert.Contains("1 room without a label (3.7, -2.0 m)", Assert.Single(result.Review));
         Assert.Equal(
-            "Imported 5 walls, 1 door, 1 window, 2 rooms. Scale 1:50 read from the plan, not confirmed: "
+            "Imported 5 walls, 1 door, 1 window, 2 rooms. Wall cleanup: 5 wall pieces merged into 1 outline, "
+            + "0 gaps closed, 0 overlaps left. Scale 1:50 read from the plan, not confirmed: "
             + "check it with two points and a known length. Review: 1 room without a label.",
             PlanImport.Message(result, PlanImport.ScaleLine("detected", "1:50")));
     }
@@ -600,11 +600,11 @@ public class PlanImportTests
         Assert.Equal(42012 * factor, scaledUnderlay[1].X, 6);
         Assert.Equal(-29700 * factor, scaledUnderlay[2].Y, 6);
 
-        var wall = PlanImport.Ring(W(1000, -2000, 4900, -2000, 250));
-        var scaledWall = PlanImport.RescaleWall(now, factor, wall, 247, 10, out var thickness);
-        Assert.Equal(250.0, thickness);
-        Assert.Equal(1000 * factor, (scaledWall[0].X + scaledWall[3].X) / 2, 6);
-        Assert.Equal(-2000 * factor, (scaledWall[0].Y + scaledWall[3].Y) / 2, 6);
+        // A wall outline scales as drawn, corner by corner, about the same corner.
+        var wall = PlanImport.Ring(W(1000, -2000, 4900, -2000, 250)).Select(p => PlanImport.Rescale(now, factor, p)).ToList();
+        Assert.Equal(1000 * factor, (wall[0].X + wall[3].X) / 2, 6);
+        Assert.Equal(-2000 * factor, (wall[0].Y + wall[3].Y) / 2, 6);
+        Assert.Equal(250 * factor, wall[3].Y - wall[0].Y, 6);
 
         // The two picked points are now the known length apart.
         var a = PlanImport.Rescale(now, factor, p1);
@@ -644,91 +644,24 @@ public class PlanImportTests
         var corner = new Pt(42012, -29700);
         var ring = PlanImport.Ring(W(1000, -2000, 4900, -2000, 250));
         var now = At(1.0);
-        var stamped = 250.0;
         var factors = new[] { 1.037, 0.5, 2.0, 0.998, 1.25, 0.013, 3.3, 0.73, 1.0001, 1.0 };
         for (var round = 0; round < 5; round++)
         {
             foreach (var factor in factors)
             {
                 corner = PlanImport.Rescale(now, factor, corner);
-                ring = PlanImport.RescaleWall(now, factor, ring, 247, 10, out stamped);
+                ring = ring.Select(p => PlanImport.Rescale(now, factor, p)).ToList();
                 now = At(factor);
             }
         }
         Assert.Equal(42012.0, corner.X, 6);
         Assert.Equal(-29700.0, corner.Y, 6);
-        Assert.Equal(250.0, stamped);
         var start = PlanImport.Ring(W(1000, -2000, 4900, -2000, 250));
         for (var i = 0; i < 4; i++)
         {
             Assert.Equal(start[i].X, ring[i].X, 6);
             Assert.Equal(start[i].Y, ring[i].Y, 6);
         }
-    }
-
-    /// <summary>
-    /// The smoke's round trip on a document: set the scale, repeat it, scale
-    /// to twice the length and back. The only thing a wall carries between
-    /// steps is its rectangle and the thickness as detected. Any detected
-    /// thickness, any direction: the wall ends where the first step left it.
-    /// </summary>
-    [Theory]
-    [InlineData(1000, -2000, 4900, -2000)]
-    [InlineData(1000, -2000, 1000, -6100)]
-    [InlineData(1000, -2000, 3000, -4000)]
-    public void ScaleAwayAndBack_LeavesEveryWallWhereItWas(double ax, double ay, double bx, double by)
-    {
-        var set = 42000.0 / 42011.6;
-        for (var detected = 95.0; detected <= 505.0; detected += 1.0)
-        {
-            var ring = PlanImport.Ring(W(ax, ay, bx, by, Math.Round(detected / 10.0, MidpointRounding.AwayFromZero) * 10.0));
-            var now = At(1.0);
-            List<Pt> first = null;
-            foreach (var factor in new[] { set, set, 2.0 * set, set })
-            {
-                ring = PlanImport.RescaleWall(now, factor, ring, detected, 10, out var thickness);
-                Assert.Equal(0.0, thickness % 10.0, 9);
-                now = At(factor);
-                first ??= ring;
-            }
-            for (var i = 0; i < 4; i++)
-            {
-                Assert.True(Math.Abs(first[i].X - ring[i].X) < 1e-6 && Math.Abs(first[i].Y - ring[i].Y) < 1e-6,
-                    "detected " + detected + " corner " + i + " moved "
-                    + Math.Max(Math.Abs(first[i].X - ring[i].X), Math.Abs(first[i].Y - ring[i].Y)).ToString("0.###") + " mm");
-            }
-        }
-    }
-
-    [Fact]
-    public void RescaledWall_RoundsItsThicknessFromTheDetectedValue()
-    {
-        var ring = PlanImport.Ring(W(0, 0, 4000, 0, 250));
-        var scaled = PlanImport.RescaleWall(At(1.0), 1.1, ring, 247, 10, out var thickness);
-        Assert.Equal(270.0, thickness);
-        Assert.Equal(270.0, scaled.Max(p => p.Y) - scaled.Min(p => p.Y), 6);
-        Assert.Equal(4400.0, scaled.Max(p => p.X) - scaled.Min(p => p.X), 6);
-
-        var back = PlanImport.RescaleWall(At(1.1), 1.0, scaled, 247, 10, out thickness);
-        Assert.Equal(250.0, thickness);
-        Assert.Equal(250.0, back.Max(p => p.Y) - back.Min(p => p.Y), 6);
-    }
-
-    [Fact]
-    public void WallTheUserReshaped_ScalesAsDrawn()
-    {
-        // Detected 247, so drawn 250 by the import; since made 300 thick by hand.
-        var ring = PlanImport.Ring(W(0, 0, 4000, 0, 300));
-        var scaled = PlanImport.RescaleWall(At(1.0), 1.1, ring, 247, 10, out var thickness);
-        Assert.True(double.IsNaN(thickness));
-        Assert.Equal(330.0, scaled.Max(p => p.Y) - scaled.Min(p => p.Y), 6);
-
-        // A diagonal drawn on the wall layer has no import stamp at all.
-        var drawn = new List<Pt> { new Pt(0, 0), new Pt(1000, 1000), new Pt(900, 1100), new Pt(-100, 100) };
-        var moved = PlanImport.RescaleWall(At(1.0), 2.0, drawn, 0, 10, out thickness);
-        Assert.True(double.IsNaN(thickness));
-        Assert.Equal(2000.0, moved[1].X, 9);
-        Assert.Equal(2200.0, moved[2].Y, 9);
     }
 
     [Fact]
@@ -897,7 +830,9 @@ public class PlanImportTests
         Assert.DoesNotContain(result.Walls, w => w.Skipped);
         // The run bakes as a wall, so every opening cuts.
         Assert.Equal(0, result.Uncut);
-        Assert.Equal(3, RoomDetect.Union(result.Walls.Select(PlanImport.Ring).ToList(), 1.0).Count(l => RoomDetect.Area(l) < 0));
+        Assert.Equal(3, result.Networks.Sum(n => n.Holes.Count));
+        Assert.Equal(41, result.Networks.Sum(n => n.Pieces));
+        WallCleanupTests.AssertSound(result, 5.0);
     }
 
     [Fact]
@@ -920,8 +855,9 @@ public class PlanImportTests
         Assert.Equal(0, result.Blocks);
         // Drawn from the vector file, no end stops short: nothing to close.
         Assert.Equal(0, result.Closed);
-        var loops = RoomDetect.Union(result.Walls.Select(PlanImport.Ring).ToList(), 1.0);
-        Assert.Equal(12, loops.Count(loop => RoomDetect.Area(loop) < 0));
+        Assert.Equal(12, result.Networks[0].Holes.Count);
+        Assert.Equal(54, result.Networks[0].Pieces);
         Assert.Equal(0, result.Uncut);
+        WallCleanupTests.AssertSound(result, 5.0);
     }
 }

@@ -10,10 +10,11 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// Plan import (F7): a detection of a floor plan in forsk.plan_import.v0 (mm,
 /// y up), cleaned into review geometry for the 2D layers the bake reads: one
-/// closed rectangle per wall, a footprint across the host wall per opening,
-/// room outlines and their labels. Pure geometry, no RhinoCommon, so it tests
-/// headless. The clean-up tidies what is safe to tidy and reports the rest:
-/// nothing is dropped, left loose or unnamed without a line in the receipt.
+/// closed outline per connected run of walls with the holes it closes, a
+/// footprint across the host wall per opening, room outlines and their
+/// labels. Pure geometry, no RhinoCommon, so it tests headless. The clean-up
+/// tidies what is safe to tidy and reports the rest: nothing is dropped, left
+/// loose or unnamed without a line in the receipt.
 /// </summary>
 public static class PlanImport
 {
@@ -53,8 +54,6 @@ public static class PlanImport
         public Pt A;
         public Pt B;
         public double Thickness;
-        /// <summary>Thickness as detected, before rounding. The scale step rounds from this and nothing else.</summary>
-        public double Detected;
         public string Class;
         public int Pieces = 1;
         public bool Snapped;
@@ -63,7 +62,23 @@ public static class PlanImport
         public bool Free;
         /// <summary>Free, and wider across than a wall: the bake reads that block as a room outline and skips it.</summary>
         public bool Skipped;
+        /// <summary>Index in Result.Networks of the outline this wall is merged into.</summary>
+        public int Network = -1;
         public double Length => Dist(A, B);
+    }
+
+    /// <summary>
+    /// One connected run of walls as the wall layer shows it: the outline
+    /// the wall rectangles make together, and the holes it closes.
+    /// </summary>
+    public sealed class Outline
+    {
+        /// <summary>Counterclockwise.</summary>
+        public List<Pt> Outer;
+        /// <summary>Clockwise, each inside Outer.</summary>
+        public List<List<Pt>> Holes = new List<List<Pt>>();
+        /// <summary>Detected wall pieces merged into it.</summary>
+        public int Pieces;
     }
 
     public sealed class Opening
@@ -132,8 +147,11 @@ public static class PlanImport
         public int Unlabelled;
         /// <summary>Rooms the walls do not close around.</summary>
         public int Outside;
-        /// <summary>Separate wall outlines once touching rectangles are read together: what the bake extrudes.</summary>
-        public int Outlines;
+        /// <summary>The walls merged into closed outlines, one per connected run: what is drawn on the wall layer and what the bake extrudes.</summary>
+        public List<Outline> Networks = new List<Outline>();
+        public int Outlines => Networks.Count;
+        /// <summary>Outlines that still overlap or touch another, measured on the outlines as drawn. 0 after a clean merge.</summary>
+        public int Overlaps;
         /// <summary>Outlines standing free of the rest as a lone block: a wall run, or a block the bake skips.</summary>
         public int Blocks;
         /// <summary>Of those, blocks wider than a wall: the bake reads each as a room outline and skips it.</summary>
@@ -258,7 +276,6 @@ public static class PlanImport
             {
                 A = w.A,
                 B = w.B,
-                Detected = w.Thickness,
                 Thickness = RoundTo(w.Thickness, s.Round),
                 Class = w.Class
             };
@@ -285,11 +302,97 @@ public static class PlanImport
             if (wall.Diagonal) result.Diagonal++;
         }
 
-        var loops = RoomDetect.Union(walls.Select(Ring).ToList(), 1.0);
-        Outlines(loops, result);
-        Rooms(plan, loops, result);
+        result.Networks = Networks(walls, s);
+        result.Overlaps = Overlaps(result.Networks);
+        Blocks(result);
+        Rooms(plan, result);
         Summarise(result);
         return result;
+    }
+
+    /// <summary>
+    /// The wall rectangles merged: those that overlap or touch become the
+    /// one outline they make together, with the holes it closes, so no two
+    /// outlines overlap and a connected run of walls is one closed outline.
+    /// Each wall is told which outline it went into.
+    /// </summary>
+    static List<Outline> Networks(List<Wall> walls, Settings s)
+    {
+        var loops = RoomDetect.Union(walls.Select(Ring).ToList(), 1.0);
+        for (var i = 0; i < loops.Count; i++) loops[i] = Flush(loops[i], s.Round / 2.0);
+        var networks = loops.Where(loop => RoomDetect.Area(loop) > 0).Select(loop => new Outline { Outer = loop }).ToList();
+        foreach (var hole in loops.Where(loop => RoomDetect.Area(loop) < 0))
+        {
+            Outline owner = null;
+            foreach (var network in networks)
+            {
+                if (!RoomDetect.Contains(network.Outer, hole[0])) continue;
+                if (owner == null || RoomDetect.Area(network.Outer) < RoomDetect.Area(owner.Outer)) owner = network;
+            }
+            owner?.Holes.Add(hole);
+        }
+        foreach (var wall in walls)
+        {
+            var middle = Mid(wall.A, wall.B);
+            wall.Network = networks.FindIndex(n => RoomDetect.Contains(n.Outer, middle) && !n.Holes.Exists(h => RoomDetect.Contains(h, middle)));
+            if (wall.Network >= 0) networks[wall.Network].Pieces += wall.Pieces;
+        }
+        return networks;
+    }
+
+    /// <summary>
+    /// Two faces that run the same way with a step between them smaller than
+    /// half the rounding step are one face the detection drew twice: the
+    /// shorter moves onto the line of the longer, so the outline has no
+    /// sliver of an edge. A step that size or more is a real change in the
+    /// wall and stays. The face that moves keeps its far corner on the line
+    /// of the edge it ends at, so a diagonal there keeps its angle.
+    /// </summary>
+    static List<Pt> Flush(List<Pt> loop, double step)
+    {
+        var pts = new List<Pt>(loop);
+        for (var i = 0; i < pts.Count && pts.Count > 4; i++)
+        {
+            var n = pts.Count;
+            Pt a = pts[i], b = pts[(i + 1) % n], c = pts[(i + 2) % n], d = pts[(i + 3) % n];
+            var jog = Dist(b, c);
+            if (jog >= step || jog <= 1e-9) continue;
+            var along = Unit(a, b);
+            if (Dot(along, Unit(c, d)) < 1.0 - 1e-9 || Math.Abs(Dot(along, Unit(b, c))) > 1e-6) continue;
+            var before = pts[(i - 1 + n) % n];
+            var after = pts[(i + 4) % n];
+            var firstSlides = TryMeet(before, Unit(before, a), c, along, out var a2);
+            var secondSlides = TryMeet(after, Unit(after, d), b, along, out var d2);
+            if (!firstSlides && !secondSlides) continue;
+            var first = firstSlides && (!secondSlides || Dist(a, b) <= Dist(c, d));
+            if (first) pts[i] = a2;
+            else pts[(i + 3) % n] = d2;
+            pts.RemoveAt((i + (first ? 1 : 2)) % n);
+            i = -1;
+        }
+        return RoomDetect.Simplify(pts, 1.0);
+    }
+
+    /// <summary>Where the line through p along u meets the line through q along v. False when they run nearly the same way.</summary>
+    static bool TryMeet(Pt p, Pt u, Pt q, Pt v, out Pt at)
+    {
+        at = default;
+        var cross = Cross(u, v);
+        if (Math.Abs(cross) < Sin(10.0)) return false;
+        at = Along(p, u, Cross(Sub(q, p), v) / cross);
+        return true;
+    }
+
+    /// <summary>
+    /// Outlines that would still merge with another when read together
+    /// again: 0 when none overlaps or touches another.
+    /// </summary>
+    static int Overlaps(List<Outline> networks)
+    {
+        var regions = new List<List<List<Pt>>>();
+        foreach (var network in networks)
+            regions.Add(new List<List<Pt>> { network.Outer }.Concat(network.Holes).ToList());
+        return networks.Count - RoomDetect.Union(regions, 1.0).Count(loop => RoomDetect.Area(loop) > 0);
     }
 
     static void Square(Wall wall, double deg)
@@ -382,7 +485,6 @@ public static class PlanImport
             A = Along(origin, u, Math.Min(0, lo)),
             B = Along(origin, u, Math.Max(length, hi)),
             Thickness = p.Thickness,
-            Detected = p.Detected,
             Class = p.Class,
             Pieces = a.Pieces + b.Pieces,
             Snapped = a.Snapped || b.Snapped,
@@ -551,7 +653,9 @@ public static class PlanImport
 
     /// <summary>
     /// A wall end within reach of another wall runs to that wall's far face,
-    /// so a corner is a full corner and the outline closes. A collinear
+    /// so a corner is a full corner and the outline closes. A diagonal's end
+    /// stops with its leading corner on that face: the two outer faces meet
+    /// in one corner and the merged outline has no spike. A collinear
     /// neighbour a small gap away is met. An end that stood more than
     /// JoinReach short closed a gap in the detection: counted, with its line
     /// in Review. Every move is measured on the walls as detected, then
@@ -620,7 +724,8 @@ public static class PlanImport
             var along = Dot(Sub(Along(at, outward, (near + far) / 2.0), other.A), u);
             var slack = wall.Thickness / 2.0 + s.JoinReach;
             if (along < -slack || along > other.Length + slack) return false;
-            move = far;
+            // Met at an angle, the square end stops where its leading corner reaches the far face, so no corner pokes past it.
+            move = far - wall.Thickness / 2.0 * Math.Abs(Dot(outward, u) / rate);
             gap = Math.Max(0, near);
             return true;
         }
@@ -681,23 +786,20 @@ public static class PlanImport
     }
 
     /// <summary>
-    /// The bake reads walls that touch as one outline. An outline standing
-    /// free of the rest that fills most of its bounding box is a lone block.
-    /// A slender one is a wall run: the bake keeps it as a wall on its own.
-    /// One wider than a wall reads as a room outline there and is skipped.
-    /// Either way it is reported here first.
+    /// An outline standing free of the rest that fills most of its bounding
+    /// box is a lone block. A slender one is a wall run: the bake keeps it as
+    /// a wall on its own. One wider than a wall reads as a room outline
+    /// there and is skipped. Either way it is reported here first.
     /// </summary>
-    static void Outlines(List<List<Pt>> loops, Result result)
+    static void Blocks(Result result)
     {
-        foreach (var outer in loops)
+        for (var i = 0; i < result.Networks.Count; i++)
         {
+            var outer = result.Networks[i].Outer;
             var area = RoomDetect.Area(outer);
-            if (area <= 0) continue;
-            result.Outlines++;
             var edge = Length(outer);
-            foreach (var hole in loops)
+            foreach (var hole in result.Networks[i].Holes)
             {
-                if (RoomDetect.Area(hole) >= 0 || !RoomDetect.Contains(outer, hole[0])) continue;
                 area += RoomDetect.Area(hole);
                 edge += Length(hole);
             }
@@ -708,7 +810,7 @@ public static class PlanImport
             if (!run) result.Skipped++;
             foreach (var wall in result.Walls)
             {
-                if (!RoomDetect.Contains(outer, Mid(wall.A, wall.B))) continue;
+                if (wall.Network != i) continue;
                 wall.Free = true;
                 wall.Skipped = !run;
             }
@@ -728,9 +830,9 @@ public static class PlanImport
         return length;
     }
 
-    static void Rooms(Plan plan, List<List<Pt>> loops, Result result)
+    static void Rooms(Plan plan, Result result)
     {
-        var footprints = loops.Where(loop => RoomDetect.Area(loop) > 0).ToList();
+        var footprints = result.Networks.Select(network => network.Outer).ToList();
         foreach (var room in plan.Rooms)
         {
             var ring = new List<Pt>();
@@ -797,7 +899,9 @@ public static class PlanImport
             walls += " (" + result.Detected + " detected" + (result.Merged > 0 ? ", " + result.Merged + " merged" : "")
                 + (result.Walls.Count + result.Merged < result.Detected ? ", " + (result.Detected - result.Merged - result.Walls.Count) + " dropped" : "") + ")";
         var text = "Imported " + walls + ", " + Count(result.Doors, "door") + ", " + Count(result.Windows, "window")
-            + ", " + Count(result.Rooms.Count, "room") + ". " + scale;
+            + ", " + Count(result.Rooms.Count, "room") + ". Wall cleanup: "
+            + Count(result.Networks.Sum(network => network.Pieces), "wall piece") + " merged into " + Count(result.Outlines, "outline")
+            + ", " + Count(result.Closed, "gap") + " closed, " + Count(result.Overlaps, "overlap") + " left. " + scale;
         var review = new List<string>();
         if (result.Loose > 0) review.Add(Count(result.Loose, "opening") + " not on a wall");
         var noted = result.Openings.Count(o => o.Host >= 0 && o.Note != null);
@@ -872,41 +976,6 @@ public static class PlanImport
     {
         var rel = factor / now.Factor;
         return new Pt(now.Origin.X + (p.X - now.Origin.X) * rel, now.Origin.Y + (p.Y - now.Origin.Y) * rel);
-    }
-
-    /// <summary>
-    /// A wall rectangle at the new scale. One still as the import made it
-    /// (four corners, square, as thick as its detected thickness rounds to at
-    /// the scale the plan has now) keeps a round thickness: its centreline
-    /// scales and the thickness is rounded again from the detected value, so
-    /// scaling away and back does not drift. The detected thickness and the
-    /// plan's scale are all it reads: there is no second stamp to go stale.
-    /// One the user has reshaped scales as drawn. thickness is the wall's new
-    /// thickness, or NaN for a wall that scaled as drawn.
-    /// </summary>
-    public static List<Pt> RescaleWall(
-        Scale now, double factor, IList<Pt> ring, double detected, double round, out double thickness)
-    {
-        thickness = double.NaN;
-        if (ring.Count == 4 && detected > 0)
-        {
-            var drawn = RoundTo(detected * now.Factor, round);
-            var side = Dist(ring[1], ring[2]);
-            var square = Math.Abs(Dot(Sub(ring[1], ring[0]), Sub(ring[2], ring[1])))
-                <= 1e-3 * Math.Max(1.0, Dist(ring[0], ring[1]) * side);
-            if (square && Math.Abs(side - drawn) <= 1.0 && Math.Abs(Dist(ring[3], ring[0]) - drawn) <= 1.0
-                && Dist(ring[0], ring[1]) > 1e-6)
-            {
-                thickness = RoundTo(detected * factor, round);
-                return Band(
-                    Rescale(now, factor, Mid(ring[0], ring[3])),
-                    Rescale(now, factor, Mid(ring[1], ring[2])),
-                    thickness);
-            }
-        }
-        var scaled = new List<Pt>(ring.Count);
-        foreach (var p in ring) scaled.Add(Rescale(now, factor, p));
-        return scaled;
     }
 
     /// <summary>100 from 1:100.</summary>

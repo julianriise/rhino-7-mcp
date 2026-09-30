@@ -55,13 +55,18 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException($"Layer '{layerName}' not found.");
 
         var rawCurves = new List<Curve>();
+        var holes = new List<Curve>();
         var imported = false;
         foreach (var obj in doc.Objects)
         {
             if (!ObjectOnLayer(doc, obj, sourceLayer) || IsRoomMarker(obj)) continue;
             if (obj.Geometry is Curve curve)
             {
-                rawCurves.Add(curve.DuplicateCurve());
+                // A hole of an imported wall outline is no outline of its own: it is read with the outline around it.
+                if (wallOutlines && curve.IsClosed && obj.Attributes.GetUserString(ImportKindKey) == ImportWallHoleKind)
+                    holes.Add(FlattenToWorldXY(curve, tol));
+                else
+                    rawCurves.Add(curve.DuplicateCurve());
                 if (!string.IsNullOrEmpty(obj.Attributes.GetUserString(ImportKey))) imported = true;
             }
         }
@@ -70,7 +75,7 @@ public partial class RhinoMCPFunctions
         var profiles = new ClosedPlanCurves
         {
             SourceLayer = sourceLayer,
-            SourceCount = rawCurves.Count,
+            SourceCount = rawCurves.Count + holes.Count,
             JoinedCount = 0,
             Closed = new List<Curve>(),
             Skipped = 0,
@@ -79,11 +84,11 @@ public partial class RhinoMCPFunctions
             JoinTol = joinTol
         };
 
-        if (rawCurves.Count == 0)
+        if (profiles.SourceCount == 0)
             return profiles;
 
         var joined = JoinAndCloseCurves(rawCurves, joinTol);
-        profiles.JoinedCount = joined.Length;
+        profiles.JoinedCount = joined.Length + holes.Count;
 
         foreach (var curve in joined)
         {
@@ -118,36 +123,41 @@ public partial class RhinoMCPFunctions
 
         // Room outlines may share an edge and stay separate rooms; wall outlines that touch are one wall plan.
         if (wallOutlines)
-            profiles.Closed = MergeTouchingOutlines(profiles.Closed, tol, imported);
+            profiles.Closed = MergeTouchingOutlines(profiles.Closed, holes, tol, imported);
         return profiles;
     }
 
     /// <summary>
-    /// A plan drawn as one closed rectangle per wall (an imported plan, or
-    /// walls traced by hand) has outlines that overlap or touch and none
-    /// inside another. Those are read as the outline they make together: its
-    /// outer loops and the holes they close, which then bake as a wall band
-    /// with the floor and roof under the whole footprint. A plan drawn as
+    /// A plan drawn as one closed rectangle per wall (walls traced by hand)
+    /// has outlines that overlap or touch and none inside another. Those are
+    /// read as the outline they make together: its outer loops and the holes
+    /// they close, which then bake as a wall band with the floor and roof
+    /// under the whole footprint. A plan drawn as
     /// nested outlines (the outer wall face and the room faces inside it), or
     /// with any outline that is not a polyline, is left exactly as drawn.
-    /// A layer that holds an imported plan is a rectangle per wall by
-    /// construction: there an outline inside another is a wall drawn inside a
-    /// wall, which the union absorbs, not a room face.
+    /// The import draws its walls already merged, each outline with the
+    /// holes it closes (holes). Those are read as the walls they are, and a
+    /// wall drawn or moved since merges with them here. On that layer an
+    /// outline inside another is a wall drawn inside a wall, which the union
+    /// absorbs, not a room face.
     /// </summary>
-    private static List<Curve> MergeTouchingOutlines(List<Curve> closed, double tol, bool imported)
+    private static List<Curve> MergeTouchingOutlines(List<Curve> closed, List<Curve> holes, double tol, bool imported)
     {
-        if (closed.Count < 2) return closed;
+        var drawn = new List<Curve>(closed);
+        drawn.AddRange(holes);
+        if (drawn.Count < 2) return drawn;
         var rings = new List<List<RoomDetect.Pt>>();
+        var holeRings = new List<List<RoomDetect.Pt>>();
         var z = 0.0;
-        foreach (var outline in closed)
+        for (var c = 0; c < drawn.Count; c++)
         {
-            if (!outline.TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count < 4)
-                return closed;
+            if (!drawn[c].TryGetPolyline(out Polyline polyline) || polyline == null || polyline.Count < 4)
+                return drawn;
             z = polyline[0].Z;
             var ring = new List<RoomDetect.Pt>(polyline.Count - 1);
             for (var i = 0; i < polyline.Count - 1; i++)
                 ring.Add(new RoomDetect.Pt(polyline[i].X, polyline[i].Y));
-            rings.Add(ring);
+            (c < closed.Count ? rings : holeRings).Add(ring);
         }
 
         var containTol = Math.Max(tol, 1.0);
@@ -156,14 +166,14 @@ public partial class RhinoMCPFunctions
             for (var j = 0; j < closed.Count; j++)
             {
                 if (i != j && CurveContainsPointOf(closed[j], closed[i], containTol))
-                    return closed;
+                    return drawn;
             }
         }
 
-        var loops = RoomDetect.Union(rings, containTol);
+        var loops = RoomDetect.Union(RoomDetect.Regions(rings, holeRings), containTol);
         // As many outer loops as outlines and no hole: nothing touched.
-        if (loops.Count == 0 || (loops.Count == closed.Count && loops.TrueForAll(loop => RoomDetect.Area(loop) > 0)))
-            return closed;
+        if (loops.Count == 0 || (loops.Count == drawn.Count && loops.TrueForAll(loop => RoomDetect.Area(loop) > 0)))
+            return drawn;
         var merged = new List<Curve>(loops.Count);
         foreach (var loop in loops)
         {

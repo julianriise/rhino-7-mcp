@@ -6,10 +6,12 @@ One detection per run, into a blank millimetre document:
              reference conversion within 10 mm), then imported
   pdfvector  the vector-PDF extractor's plan file, imported as it is
 
-Import and check the counts and the receipt. Set the scale from a known
+Import and check the counts and the receipt: the walls come in merged, one
+closed outline per connected run with its holes, none overlapping another,
+and the wall layer holds exactly those loops. Set the scale from a known
 dimension: the sheet is A3 at 1:100, so the page image's two top corners are
 42 000 mm apart. Repeat the step, scale away and back, and check no corner of
-any wall drifted. Capture the plan with the underlay. Bake with the panel's
+any wall outline drifted. Capture the plan with the underlay. Bake with the panel's
 own sequence, run rooms_detect, capture again. The bake is checked against
 what the import's receipt said it would do (outlines, blocks the bake skips,
 uncut openings), never against numbers written here.
@@ -29,7 +31,6 @@ from __future__ import annotations
 
 import base64
 import json
-import math
 import os
 import socket
 import sys
@@ -56,12 +57,12 @@ PAGE_WIDTH_MM = 42000.0
 EXPECT = {
     "tectly": dict(
         walls_detected=41, walls=30, doors=7, windows=12, loose=0, uncut=0, rooms=11,
-        unlabelled=3, outlines=2, free_walls=1, blocks_skipped=0, gaps_closed=3, diagonal=0,
-        status="unconfirmed"),
+        unlabelled=3, outlines=2, outline_holes=3, wall_pieces=41, overlaps=0, free_walls=1, blocks_skipped=0,
+        gaps_closed=3, diagonal=0, status="unconfirmed"),
     "pdfvector": dict(
         walls_detected=54, walls=47, doors=12, windows=10, loose=0, uncut=0, rooms=12,
-        unlabelled=0, outside=0, outlines=1, free_walls=0, blocks_skipped=0, gaps_closed=0, diagonal=4,
-        status="detected"),
+        unlabelled=0, outside=0, outlines=1, outline_holes=12, wall_pieces=54, overlaps=0, free_walls=0,
+        blocks_skipped=0, gaps_closed=0, diagonal=4, status="detected"),
 }
 CAPTURE_MARGIN_MM = 1500.0
 # get_objects gives corners to 0.01 mm: any drift it can show is a failure.
@@ -154,15 +155,15 @@ def convert_tectly(plan1: Path, out: Path, failures: list) -> str:
     )
 
 
-def wall_rings(sock: socket.socket) -> dict[str, list]:
-    """The four corners of every imported wall rectangle, by object id."""
-    ids = {row.get("id") for row in by_kind(layer_objects(sock, "wall"), "wall")}
+def wall_loops(sock: socket.socket) -> dict[str, list]:
+    """The corners of every imported wall outline and of every hole in one, by object name."""
     rows = send_command(sock, "get_objects", {
-        "layer_filter": "wall", "limit": 200, "include_geometry": True, "include_hidden": True,
+        "layer_filter": "wall", "limit": 200, "include_geometry": True, "include_attributes": True,
+        "include_hidden": True,
     }).get("objects") or []
     return {
-        row.get("id"): [(float(p[0]), float(p[1])) for p in ((row.get("geometry") or {}).get("points") or [])[:4]]
-        for row in rows if row.get("id") in ids
+        row.get("name"): [(float(p[0]), float(p[1])) for p in ((row.get("geometry") or {}).get("points") or [])]
+        for row in by_kind(rows, "wall") + by_kind(rows, "wall-hole")
     }
 
 
@@ -236,13 +237,22 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     if wrong:
         failures.append("import " + ", ".join(f"{key} {have} expected {want}" for key, (have, want) in wrong.items()))
     review = imported.get("review") or []
+    # The wall layer holds the merged outlines and their holes, and nothing else of the import.
+    drawn = layer_objects(sock, "wall")
+    outers, holes = len(by_kind(drawn, "wall")), len(by_kind(drawn, "wall-hole"))
     lines.append(
-        f"import walls {imported.get('walls')}/{imported.get('walls_detected')} doors {imported.get('doors')} "
+        f"import overlaps {imported.get('overlaps')}, outlines {imported.get('outlines')} with {imported.get('outline_holes')} holes "
+        f"from {imported.get('wall_pieces')} wall pieces ({outers} + {holes} loops on wall), "
+        f"walls {imported.get('walls')}/{imported.get('walls_detected')} doors {imported.get('doors')} "
         f"windows {imported.get('windows')} loose {imported.get('loose')} uncut {imported.get('uncut')} "
         f"rooms {imported.get('rooms')} unlabelled {imported.get('unlabelled')} walls open around {imported.get('outside')} "
-        f"outlines {imported.get('outlines')} free {imported.get('free_walls')} gaps closed {imported.get('gaps_closed')} "
+        f"free {imported.get('free_walls')} gaps closed {imported.get('gaps_closed')} "
         f"diagonal {imported.get('diagonal')} review {len(review)}"
     )
+    if outers != imported.get("outlines") or holes != imported.get("outline_holes") or len(drawn) != outers + holes:
+        failures.append(
+            f"wall layer holds {len(drawn)} objects, {outers} outlines and {holes} holes, for "
+            f"{imported.get('outlines')} outlines and {imported.get('outline_holes')} holes")
     message = str(imported.get("message") or "")
     lines.append("receipt " + clip(message))
     if "Scale" not in message or ("Review:" not in message and "Nothing to review" not in message):
@@ -272,47 +282,40 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     ends = {"p1": [0, 0], "p2": [width, 0], "frame": "source"}
     measured = send_command(sock, "plan_scale", ends)
     first = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
-    # Every corner of every wall, before and after: one wall is not the plan.
-    before = wall_rings(sock)
+    # Every corner of every wall outline and hole, before and after: one wall is not the plan.
+    before = wall_loops(sock)
     repeat = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
     away = send_command(sock, "plan_scale", {**ends, "length_mm": 2 * PAGE_WIDTH_MM})
     back = send_command(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
-    after = wall_rings(sock)
+    after = wall_loops(sock)
     moved = [
         max(abs(a[0] - b[0]), abs(a[1] - b[1]))
         for key, ring in before.items() for a, b in zip(ring, after.get(key) or [])
     ]
-    whole = len(before) == imported.get("walls") and all(len(ring) == 4 and len(after.get(key) or []) == 4 for key, ring in before.items())
+    whole = len(before) == int(imported.get("outlines") or 0) + int(imported.get("outline_holes") or 0) and all(
+        len(ring) >= 4 and len(after.get(key) or []) == len(ring) for key, ring in before.items())
     drift = max(moved) if whole and moved else -1.0
     pictures = by_kind(layer_objects(sock, "X-PLAN"), "underlay")
     page = bbox_of(sock, pictures[0].get("id")) if pictures else [0, 0, 0, 0]
-    # The rectangle as drawn is the thickness: across is its second side.
-    thick = [math.dist(ring[1], ring[2]) for ring in after.values() if len(ring) == 4]
     chip = send_command(sock, "panel_daylight", {"action": "state"})
     lines.append(
         f"scale {float(measured.get('measured_mm') or 0):.1f} -> {PAGE_WIDTH_MM:.0f} mm x{float(first.get('relative') or 0):.6f} "
-        f"moved {first.get('scaled')} rounded {first.get('walls_rounded')}, repeat x{float(repeat.get('relative') or 0):.9f}, "
-        f"x2 and back {len(before)} walls drift {drift:.2f} mm at most, page {page[2] - page[0]:.2f} mm wide, "
+        f"moved {first.get('scaled')}, repeat x{float(repeat.get('relative') or 0):.9f}, "
+        f"x2 and back {len(before)} wall loops drift {drift:.2f} mm at most, page {page[2] - page[0]:.2f} mm wide, "
         f"status {back.get('status')}, chip visible {chip.get('import_visible')}"
     )
     if abs(float(measured.get("measured_mm") or 0) - width) > 0.1 or measured.get("scaled") != 0:
         failures.append(f"scale measure {measured.get('measured_mm')} scaled {measured.get('scaled')}")
     if abs(float(first.get("relative") or 0) - PAGE_WIDTH_MM / width) > 1e-9:
         failures.append(f"scale relative {first.get('relative')}")
-    if first.get("scaled") != imported.get("objects") or first.get("walls_rounded") != imported.get("walls"):
-        failures.append(
-            f"scale moved {first.get('scaled')} of {imported.get('objects')} rounded {first.get('walls_rounded')}")
+    if first.get("scaled") != imported.get("objects"):
+        failures.append(f"scale moved {first.get('scaled')} of {imported.get('objects')}")
     if abs(float(repeat.get("relative") or 0) - 1.0) > 1e-12:
         failures.append(f"scale repeat moved the plan x{repeat.get('relative')}")
     if abs(float(away.get("relative") or 0) - 2.0) > 1e-9 or abs(float(back.get("relative") or 0) - 0.5) > 1e-9:
         failures.append(f"scale x2 {away.get('relative')} back {back.get('relative')}")
     if drift < 0 or drift > DRIFT_MM or abs(page[2] - page[0] - PAGE_WIDTH_MM) > 0.01 or abs(page[0]) > 0.01 or abs(page[3]) > 0.01:
         failures.append(f"scale drift {drift} page {page}")
-    if away.get("walls_rounded") != imported.get("walls") or back.get("walls_rounded") != imported.get("walls"):
-        failures.append(f"scale x2 rounded {away.get('walls_rounded')} walls, back {back.get('walls_rounded')}, of {imported.get('walls')}")
-    # Corners come to 0.01 mm, so a side is good to 0.03.
-    if any(t <= 0 or abs(t - round(t / 10) * 10) > 0.03 for t in thick) or len(thick) != imported.get("walls"):
-        failures.append("a wall is not a round 10 mm thick after the scale")
     if back.get("status") != "user" or chip.get("import_visible") is not False:
         failures.append(f"scale status {back.get('status')} chip visible {chip.get('import_visible')}")
 

@@ -167,16 +167,53 @@ public static class RoomDetect
     /// </summary>
     public static List<List<Pt>> Union(IList<List<Pt>> rings, double tol)
     {
+        var regions = new List<List<List<Pt>>>();
+        foreach (var ring in rings) regions.Add(new List<List<Pt>> { ring });
+        return Union(regions, tol);
+    }
+
+    /// <summary>
+    /// The same for outlines that carry holes. Each region is an outer loop
+    /// with the holes it closes, so a wall outline that is already merged is
+    /// read as the wall it is, not as a filled block.
+    /// </summary>
+    public static List<List<Pt>> Union(IList<List<List<Pt>>> regions, double tol)
+    {
         var scene = new Scene { Tol = tol > 0 ? tol : 1.0 };
         var segs = new List<Seg>();
-        foreach (var ring in rings)
+        foreach (var region in regions)
         {
-            scene.Walls.Add(new List<List<Pt>> { ring });
-            AddPath(segs, ring, true, Kind.Wall, -1, 0);
+            scene.Walls.Add(region);
+            foreach (var ring in region) AddPath(segs, ring, true, Kind.Wall, -1, 0);
         }
         var plan = Plan.Build(segs, scene.Tol);
         plan.Classify(scene);
         return plan.Boundary();
+    }
+
+    /// <summary>
+    /// Wall outlines and the hole loops drawn with them, as regions for
+    /// Union. A hole goes to the smallest outline around the whole of it. One
+    /// with no outline around it any more is read as an outline itself.
+    /// </summary>
+    public static List<List<List<Pt>>> Regions(IList<List<Pt>> outlines, IList<List<Pt>> holes)
+    {
+        var regions = new List<List<List<Pt>>>();
+        foreach (var outline in outlines) regions.Add(new List<List<Pt>> { outline });
+        foreach (var hole in holes)
+        {
+            List<List<Pt>> owner = null;
+            for (var i = 0; i < outlines.Count; i++)
+            {
+                var around = true;
+                foreach (var p in hole)
+                    if (!Contains(outlines[i], p)) around = false;
+                if (around && (owner == null || Math.Abs(Area(outlines[i])) < Math.Abs(Area(owner[0])))) owner = regions[i];
+            }
+            if (owner != null) owner.Add(hole);
+            else regions.Add(new List<List<Pt>> { hole });
+        }
+        return regions;
     }
 
     /// <summary>
