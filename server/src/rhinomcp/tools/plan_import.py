@@ -26,7 +26,9 @@ def plan_import(
     goes on top as 2D review geometry on the layers the bake reads: a closed
     rectangle per wall on wall, opening footprints on door and window, room
     outlines on A-ROOM and their names on label. Nothing is 3D until the user
-    asks to generate, and anything they draw on those layers bakes with it.
+    asks to generate. Wall rectangles that touch bake as the outline they make
+    together, so a wall the user draws bakes with the rest when it touches the
+    walls it meets; one standing free is a lone block the bake skips.
 
     Clean-up: walls within 3 degrees of an axis are squared (diagonals stay),
     thickness is rounded to 10 mm, collinear pieces merge (through an opening
@@ -45,9 +47,11 @@ def plan_import(
 
     Returns:
     Dictionary with walls, walls_detected, merged, squared, diagonal, joined,
-    extended, doors, windows, loose (openings with no wall), rooms, unlabelled,
-    outside (rooms the walls do not close around), dropped, review (one line
-    per thing to look at), scale (status, ratio, factor), underlay, and message.
+    extended, doors, windows, loose (openings with no wall), uncut (openings
+    the bake will not cut), outlines (what the bake extrudes), free_walls
+    (lone blocks it skips), rooms, unlabelled, outside (rooms the walls do not
+    close around), dropped, review (one line per thing to look at), scale
+    (status, ratio, factor), underlay, and message.
     Always pass on the scale status and the review lines.
     """
     try:
