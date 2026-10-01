@@ -2866,6 +2866,70 @@ class TestSetOpeningTypeTool:
         mock_get_conn.assert_not_called()
 
 
+class TestMoveWallTool:
+    """F3.1: one wall run moves across itself; the wire carries side or at."""
+
+    @patch("rhinomcp.tools.move_wall.get_rhino_connection")
+    def test_side_passes_through(self, mock_get_conn):
+        from rhinomcp.tools.move_wall import move_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "forsk_id": "w01",
+            "wall": "the north wall",
+            "toward": "north",
+            "distance_mm": 500,
+            "faces_before": [3800, 4000],
+            "faces_after": [4300, 4500],
+            "openings_moved": ["m1"],
+            "host_openings": 5,
+            "host_voids": 5,
+            "ok": True,
+            "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and rooms are unchanged.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = move_wall(ctx=None, toward="north", distance_mm=500, side="north")
+        mock_conn.send_command.assert_called_once_with(
+            "move_wall", {"toward": "north", "distance_mm": 500, "side": "north"}
+        )
+        assert result["success"] is True
+        assert result["faces_after"] == [4300, 4500]
+        assert result["openings_moved"] == ["m1"]
+
+    @patch("rhinomcp.tools.move_wall.get_rhino_connection")
+    def test_point_and_id_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.move_wall import move_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"ok": True, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        move_wall(ctx=None, toward="east", distance_mm=300, at=[4000, 2000], id="g1")
+        assert mock_conn.send_command.call_args[0] == (
+            "move_wall", {"toward": "east", "distance_mm": 300, "at": [4000, 2000], "id": "g1"}
+        )
+
+    @patch("rhinomcp.tools.move_wall.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.move_wall import move_wall
+
+        assert move_wall(ctx=None, toward="up", distance_mm=500, side="north")["success"] is False
+        assert move_wall(ctx=None, toward="north", distance_mm=0, side="north")["success"] is False
+        assert move_wall(ctx=None, toward="north", distance_mm=500)["success"] is False
+        assert move_wall(ctx=None, toward="north", distance_mm=500, side="north", at=[0, 0])["success"] is False
+        assert move_wall(ctx=None, toward="north", distance_mm=500, side="top")["success"] is False
+        assert move_wall(ctx=None, toward="north", distance_mm=500, at=[0, 0, 0])["success"] is False
+        mock_get_conn.assert_not_called()
+
+    def test_marked_destructive(self):
+        from pathlib import Path
+
+        src = (Path(__file__).parent.parent / "src" / "rhinomcp" / "tools" / "move_wall.py").read_text()
+        assert "destructiveHint=True" in src
+
+
 class TestRebuildHostWallTool:
     @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
     def test_selection_omits_id(self, mock_get_conn):

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move_wall.json",
+  "title": "MoveWall Command",
+  "description": "Move one straight wall run across itself, then rebuild that host wall from its path. A baked plan is one wall record (forsk:path: the outer outline and the rooms it closes), so the run is picked inside it: side for an outer wall, or the face nearest at. Both faces move; the walls that meet the run stretch to follow, and the openings on the run move with it. Floor, roof and rooms do not follow. A move that would close a room or cross a wall is refused with the depth it ran into, and a refused rebuild leaves the document unchanged. Id omitted uses the one selected wall, else the wall nearest at, else the only wall. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID. Omit to use the selected wall, or the only one."
+    },
+    "side": {
+      "type": "string",
+      "enum": ["north", "south", "east", "west"],
+      "description": "The outer wall facing this way. Exclusive with at."
+    },
+    "at": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in mm on or beside the wall: the face nearest it, within 1000 mm. Exclusive with side."
+    },
+    "toward": {
+      "type": "string",
+      "enum": ["north", "south", "east", "west"],
+      "description": "The way the wall moves: across the run (an east–west wall moves north or south)."
+    },
+    "distance_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "How far, in mm."
+    }
+  },
+  "required": ["toward", "distance_mm"],
+  "oneOf": [
+    { "required": ["side"] },
+    { "required": ["at"] }
+  ],
+  "additionalProperties": false
+}

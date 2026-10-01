@@ -270,6 +270,89 @@ def dashed_leaf(attrs: list) -> bool:
     )
 
 
+def path_points(path) -> list:
+    """forsk:path as sorted points, so two paths compare whatever their start vertex."""
+    try:
+        data = json.loads(path or "")
+    except ValueError:
+        return []
+    loops = [data.get("outer") or []] + list(data.get("holes") or [])
+    return sorted((round(float(x), 1), round(float(y), 1)) for loop in loops for x, y in loop)
+
+
+def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_thick, failures: list) -> None:
+    """F3.1: the door's wall moves 500 mm out and back with the door, and a
+    move of the wall across it that would land on the door is refused."""
+    print("==> F3.1 wall: move the door's wall out 500 mm and back")
+    sides = {"south": "north", "north": "south", "west": "east", "east": "west"}
+
+    def door_at() -> tuple[float, float]:
+        return center_of(send_command(sock, "get_object_info", {"id": door_id}))
+
+    def wall_attr() -> dict:
+        return send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {}
+
+    cx, cy = door_at()
+    reach = {"south": abs(cy - 100), "north": abs(cy - 3900), "west": abs(cx - 100), "east": abs(cx - 7900)}
+    side = min(reach, key=reach.get)
+    path_before = path_points(wall_attr().get("forsk:path"))
+
+    def move(label: str, toward: str, expect_shift: float, faces: list | None) -> list | None:
+        reply = send_raw(sock, "move_wall", {"side": side, "toward": toward, "distance_mm": 500})
+        if reply.get("status") == "error":
+            print(f"    {label} move_wall: {reply.get('message')}")
+            failures.append(f"wall {label} move_wall: {reply.get('message')}")
+            return None
+        result = reply.get("result") or {}
+        x, y = door_at()
+        shift = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+        carried = [str(item).lower() for item in result.get("openings_moved") or []]
+        after = result.get("faces_after") or []
+        print(
+            f"    {label} {result.get('message')} faces {result.get('faces_before')} -> {after} "
+            f"openings={result.get('host_openings')} voids={result.get('host_voids')} door {shift:.1f}"
+        )
+        if result.get("host_id") != host_id:
+            failures.append(f"wall {label} changed the host id")
+        if result.get("host_openings") != 1 or result.get("host_voids") != 1:
+            failures.append(f"wall {label} openings={result.get('host_openings')} voids={result.get('host_voids')}")
+        if carried != [door_id.lower()]:
+            failures.append(f"wall {label} carried {carried}, expected the door")
+        if abs(shift - expect_shift) > 1:
+            failures.append(f"wall {label} door shift {shift:.1f} expected {expect_shift}")
+        if faces is not None and (len(after) != 2 or any(abs(float(a) - b) > 0.5 for a, b in zip(after, faces))):
+            failures.append(f"wall {label} faces {after} expected {faces}")
+        attr = wall_attr()
+        if attr.get("forsk:id") != wall_fid or attr.get("forsk:thickness") != wall_thick:
+            failures.append(f"wall {label} id {attr.get('forsk:id')} thickness {attr.get('forsk:thickness')}")
+        return result.get("faces_before")
+
+    before = move("out", side, 500.0, None)
+    if not before or len(before) != 2:
+        failures.append(f"wall out faces_before {before}")
+        return
+    move("back", sides[side], 0.0, [float(v) for v in before])
+    if path_points(wall_attr().get("forsk:path")) != path_before:
+        failures.append("wall back: the path is not the one it started from")
+
+    # The wall across the door's wall, moved onto the door: refused, nothing changed.
+    if side in ("south", "north"):
+        across, toward, distance = ("west", "east", cx) if cx < 4000 else ("east", "west", 8000 - cx)
+    else:
+        across, toward, distance = ("south", "north", cy) if cy < 2000 else ("north", "south", 4000 - cy)
+    refused = send_raw(sock, "move_wall", {"side": across, "toward": toward, "distance_mm": round(distance)})
+    message = str(refused.get("message") or "")
+    same = path_points(wall_attr().get("forsk:path")) == path_before
+    print(f"    refused {across} {round(distance)} status={refused.get('status')} {message} path {'same' if same else 'changed'}")
+    if refused.get("status") != "error" or "would sit in the moved wall" not in message:
+        failures.append(f"wall onto the door status={refused.get('status')} {message!r}")
+    if not same:
+        failures.append("wall onto the door changed the path")
+    x, y = door_at()
+    if abs(x - cx) > 0.5 or abs(y - cy) > 0.5:
+        failures.append("wall onto the door moved the door")
+
+
 def capture_only() -> int:
     """Export the open plan page twice more. Never fails the symbol run."""
     print("==> repeat capture")
@@ -621,6 +704,8 @@ def main() -> int:
         wall_last = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_last.get("forsk:id") != wall_fid or wall_last.get("forsk:thickness") != wall_thick:
             failures.append("pocket flip changed the wall")
+
+        wall_move(sock, host_id, door_id, wall_fid, wall_thick, failures)
 
         print("==> plan symbols: room, roof, high window, door swings")
 

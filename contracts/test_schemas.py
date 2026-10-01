@@ -265,6 +265,8 @@ def test_new_commands():
         ("commands/set_opening_type.json", {"type": "door.sliding"}),
         ("commands/set_opening_type.json", {"id": GUID, "hand": "flip"}),
         ("commands/set_opening_type.json", {"swing": "out", "type": "window.top_hung"}),
+        ("commands/move_wall.json", {"side": "north", "toward": "north", "distance_mm": 500}),
+        ("commands/move_wall.json", {"id": GUID, "at": [4000, 2000], "toward": "east", "distance_mm": 300}),
         ("commands/rebuild_host_wall.json", {}),
         ("commands/rebuild_host_wall.json", {"id": GUID}),
         ("commands/clear_generated.json", {}),
@@ -974,6 +976,31 @@ def test_responses():
     if not validate("responses/set_opening_type_result.json", set_opening_type):
         all_passed = False
 
+    print("  move_wall_result:")
+    move_wall = {
+        "host_id": guid,
+        "forsk_id": "w01",
+        "wall": "the north wall",
+        "toward": "north",
+        "distance_mm": 500,
+        "normal": [0, 1],
+        "faces_before": [3800, 4000],
+        "faces_after": [4300, 4500],
+        "length_mm": 8000,
+        "thickness": 200,
+        "path_points": 4,
+        "openings_moved": [guid],
+        "host_openings": 2,
+        "host_voids": 2,
+        "max_frame_mm": 0,
+        "markers": [],
+        "warnings": [],
+        "ok": True,
+        "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and rooms are unchanged.",
+    }
+    if not validate("responses/move_wall_result.json", move_wall):
+        all_passed = False
+
     return all_passed
 
 
@@ -1114,6 +1141,12 @@ def test_invalid_examples():
         ("commands/add_opening.json", {"opening_kind": "door", "width": 0}, "add_opening width 0"),
         ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
+        ("commands/move_wall.json", {"toward": "north", "distance_mm": 500}, "move_wall needs side or at"),
+        ("commands/move_wall.json", {"side": "north", "at": [0, 0], "toward": "north", "distance_mm": 500}, "move_wall side and at"),
+        ("commands/move_wall.json", {"side": "north", "toward": "up", "distance_mm": 500}, "move_wall unknown toward"),
+        ("commands/move_wall.json", {"side": "north", "toward": "north", "distance_mm": 0}, "move_wall distance above 0"),
+        ("commands/move_wall.json", {"at": [0, 0, 0], "toward": "north", "distance_mm": 500}, "move_wall at is x, y"),
+        ("commands/move_wall.json", {"side": "north", "distance_mm": 500}, "move_wall missing toward"),
         ("commands/set_opening.json", {"bogus": 1}, "set_opening unknown field"),
         ("commands/set_opening.json", {"width": 0}, "set_opening width 0"),
         ("commands/set_opening.json", {"id": "not-a-guid", "sill": 900}, "set_opening bad guid"),
@@ -1367,7 +1400,7 @@ def test_protocol_envelope():
         "rooms_from_layer",
         "mark_as_existing",
         "delete_opening", "add_opening", "move_opening", "set_opening", "set_opening_type",
-        "rebuild_host_wall",
+        "move_wall", "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
         "set_project_meta", "layout_pack", "export_pdf", "clear_layouts",

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move_wall_result.json",
+  "title": "MoveWallResult",
+  "description": "One wall run moved and its host rebuilt from the new path; the host GUID is kept when the wall stays one solid.",
+  "type": "object",
+  "properties": {
+    "host_id": { "type": "string" },
+    "forsk_id": { "type": "string" },
+    "wall": { "type": "string", "description": "The run as the receipt names it: the north wall, or the wall at (x, y)." },
+    "toward": { "type": "string", "enum": ["north", "south", "east", "west"] },
+    "distance_mm": { "type": "number" },
+    "normal": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Unit normal of the run, east or north." },
+    "faces_before": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "The two faces along normal, mm, before the move." },
+    "faces_after": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "length_mm": { "type": "number" },
+    "thickness": { "type": ["number", "null"] },
+    "path_points": { "type": ["integer", "null"] },
+    "openings_moved": { "type": "array", "items": { "type": "string" }, "description": "Marker GUIDs of the openings that moved with the run." },
+    "host_openings": { "type": "integer" },
+    "host_voids": { "type": "integer" },
+    "max_frame_mm": { "type": "number" },
+    "markers": { "type": "array" },
+    "warnings": { "type": "array" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["host_id", "toward", "distance_mm", "faces_before", "faces_after", "openings_moved", "ok", "message"]
+}

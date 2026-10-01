@@ -149,12 +149,28 @@ namespace RhinoMCPPlugin.Forsk
                 return true;
             if (HasWord(t, "set") && (HasWord(t, "width") || HasWord(t, "sill") || HasWord(t, "head")))
                 return true;
+            if (IsWallMove(t))
+                return true;
             var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove")
                 || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")
                 || HasWord(t, "narrow") || HasWord(t, "narrower");
             var noun = HasWord(t, "window") || HasWord(t, "windows")
                 || HasWord(t, "door") || HasWord(t, "doors")
                 || HasWord(t, "opening") || HasWord(t, "openings");
+            return verb && noun;
+        }
+
+        /// <summary>
+        /// A wall moved across itself: move the north wall 500 mm north, flytt veggen.
+        /// It comes before build, where "wall 500" would read as a wall height.
+        /// </summary>
+        static bool IsWallMove(string t)
+        {
+            var verb = HasWord(t, "move") || HasWord(t, "shift") || HasWord(t, "nudge") || HasWord(t, "push")
+                || HasWord(t, "flytt");
+            var noun = HasWord(t, "wall") || HasWord(t, "walls") || HasWord(t, "partition")
+                || HasWord(t, "vegg") || HasWord(t, "veggen") || HasWord(t, "veggene")
+                || HasWord(t, "skillevegg") || HasWord(t, "skilleveggen");
             return verb && noun;
         }
 

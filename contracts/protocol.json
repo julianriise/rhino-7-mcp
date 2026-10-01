@@ -60,6 +60,7 @@
             "move_opening",
             "set_opening",
             "set_opening_type",
+            "move_wall",
             "rebuild_host_wall",
             "clear_generated",
             "daylight_scene",

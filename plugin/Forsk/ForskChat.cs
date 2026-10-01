@@ -58,7 +58,8 @@ namespace RhinoMCPPlugin.Forsk
             "move_opening",
             "set_opening",
             "set_opening_type",
-            "delete_opening"
+            "delete_opening",
+            "move_wall"
         };
 
         static readonly string[] SheetsOnly =
@@ -307,6 +308,16 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
+        static JObject Compass(string description)
+        {
+            return new JObject
+            {
+                ["type"] = "string",
+                ["enum"] = new JArray("north", "south", "east", "west"),
+                ["description"] = description
+            };
+        }
+
         static JObject ViewEnum(string description)
         {
             return new JObject
@@ -506,6 +517,17 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")
                     }),
+                Fn("move_wall",
+                    "Move one straight wall run across itself, then rebuild that host from its path. The whole plan is one wall record, so name the run: side for an outer wall, or at for the face nearest a point. Both faces move, the walls that meet it stretch, the openings on it move with it. Floor, roof and rooms do not follow. A move that would close a room is refused with its depth. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
+                        ["at"] = Pair("[x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side."),
+                        ["toward"] = Compass("The way it moves. An east–west wall moves north or south."),
+                        ["distance_mm"] = Num("How far in mm, above 0."),
+                        ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
+                    },
+                    "toward", "distance_mm"),
                 Fn("sheet_pack",
                     "Make2D plan plus north, east, south, and west on S-* layers. Model space, not a Layout page.",
                     new JObject
@@ -736,6 +758,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Two or more selected openings are one set_opening_type with no id. "
                     + "Two or more selected windows are one delete_opening with no id. "
                     + "Status line for that call: Removed 2 windows from w01. "
+                    + "Move a wall is move_wall: side for an outer wall or at [x, y], toward, distance_mm. With neither, ask which wall. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
                     + "Bake, sheets, and print stay available when the user asks.";
