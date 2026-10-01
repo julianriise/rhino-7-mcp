@@ -5,6 +5,7 @@ using Eto.Drawing;
 using Eto.Forms;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using RhinoMCPPlugin.Functions;
 using Rhino.DocObjects;
 using Rhino.UI;
 
@@ -259,6 +260,11 @@ namespace RhinoMCPPlugin.Forsk
                 RunDaylight(toggle, mapLabel, false);
                 return;
             }
+            if (Sections.IsPickPhrase(text))
+            {
+                RunSectionPick(text);
+                return;
+            }
             _busy = true;
             _composer.Send.EnabledClick = false;
             AddLine("user", text);
@@ -416,6 +422,43 @@ namespace RhinoMCPPlugin.Forsk
                         ["role"] = "assistant",
                         ["content"] = string.IsNullOrEmpty(note) ? line : line + "\n" + note
                     });
+                    _busy = false;
+                    _composer.Send.EnabledClick = true;
+                    _chip.EnabledClick = true;
+                    RefreshChrome();
+                });
+            });
+        }
+
+        void RunSectionPick(string text)
+        {
+            if (_busy) return;
+            _busy = true;
+            _composer.Send.EnabledClick = false;
+            _chip.EnabledClick = false;
+            _daylight.EnabledClick = false;
+            AddLine("user", text);
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string line;
+                try
+                {
+                    JObject envelope = null;
+                    RhinoApp.InvokeOnUiThread(new Action(() =>
+                    {
+                        envelope = ForskSection.RunOnUi(true);
+                    }));
+                    line = ForskTools.Receipt("section_pick", envelope);
+                }
+                catch (Exception e)
+                {
+                    line = "section_pick · error · " + ForskTools.Clip(e.Message);
+                }
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    AddLine("receipt", line);
+                    _history.Add(new JObject { ["role"] = "user", ["content"] = text });
+                    _history.Add(new JObject { ["role"] = "assistant", ["content"] = line });
                     _busy = false;
                     _composer.Send.EnabledClick = true;
                     _chip.EnabledClick = true;

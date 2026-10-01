@@ -85,6 +85,10 @@ public partial class RhinoMCPFunctions
         }
         if (def == null)
             throw new InvalidOperationException(NoSectionMessage);
+        // The viewport dialog's label. The marker and the sheet stay the letter.
+        var givenName = parameters?["name"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(givenName))
+            def.Name = givenName.Trim();
 
         var replaced = defs.RemoveAll(d => string.Equals(d.Letter, letter, StringComparison.OrdinalIgnoreCase)) > 0;
         defs.Add(def);

@@ -770,6 +770,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Door, window or room schedules are the schedules page: layout_pack views schedules; schedule_kinds picks the lists. "
                     + "Dimensions are on the plan sheet: layout_pack views plan draws them from the model. Never draw or type dimensions. "
                     + "A section (snitt) A–A is section_add (a room by name, axis cross or long, or from and to, or line_id), then layout_pack views plan and section_<letter>. Never draw a section yourself. "
+                    + "add cross section is the viewport command ForskSection. Do not call section_add for that phrase and do not draw the line. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)

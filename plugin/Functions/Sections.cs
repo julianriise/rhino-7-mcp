@@ -68,7 +68,23 @@ public static class Sections
         public Pt Look;
         public string Room = "";
         public string Axis = "";
+        /// <summary>Dialog label (A1, A2, …). The marker and the sheet stay the letter.</summary>
+        public string Name = "";
     }
+
+    /// <summary>A picked line that is ready to store. Null from Decide means the user cancelled.</summary>
+    public sealed class Drawn
+    {
+        public string Name;
+        public string Letter;
+        public Pt A;
+        public Pt B;
+        /// <summary>Set when nothing can be stored. Letter is then null.</summary>
+        public string Error;
+    }
+
+    public const string TooShortMessage = "The line is under 1 mm.";
+    public const string LettersFullMessage = "Every section letter A to Z is already used.";
 
     public static string View(string letter) => ViewPrefix + (letter ?? "").Trim().ToLowerInvariant();
 
@@ -97,6 +113,103 @@ public static class Sections
         return null;
     }
 
+    /// <summary>Panel phrases that start the viewport line. A section through a room stays section_add.</summary>
+    public static bool IsPickPhrase(string text)
+    {
+        var compact = new System.Text.StringBuilder();
+        var space = false;
+        foreach (var c in (text ?? "").ToLowerInvariant())
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                if (compact.Length > 0) space = true;
+                continue;
+            }
+            if (space)
+            {
+                compact.Append(' ');
+                space = false;
+            }
+            compact.Append(c);
+        }
+        var phrase = compact.ToString();
+        return phrase.Contains("add cross section")
+            || phrase.Contains("add a cross section")
+            || phrase.Contains("new cross section")
+            || phrase.Contains("draw cross section");
+    }
+
+    /// <summary>A1, then the smallest missing A&lt;n&gt;. A letter with no such name counts as none, so the first is A1.</summary>
+    public static string NextSectionName(IEnumerable<Def> defs)
+    {
+        var used = new HashSet<int>();
+        foreach (var def in defs ?? new Def[0])
+            if (TrySectionNumber(def?.Name, out var number)) used.Add(number);
+        var n = 1;
+        while (used.Contains(n)) n++;
+        return "A" + n.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>True for A1, a12. False for A, A0, A1b.</summary>
+    public static bool TrySectionNumber(string name, out int number)
+    {
+        number = 0;
+        var text = (name ?? "").Trim();
+        if (text.Length < 2 || (text[0] != 'A' && text[0] != 'a')) return false;
+        for (var i = 1; i < text.Length; i++)
+            if (text[i] < '0' || text[i] > '9') return false;
+        if (text[1] == '0') return false;
+        return int.TryParse(text.Substring(1), NumberStyles.None, CultureInfo.InvariantCulture, out number) && number > 0;
+    }
+
+    /// <summary>
+    /// A single A–Z letter replaces that section, as section_add does.
+    /// Anything else, including A1, takes the next free letter. Never strips A1 down to A.
+    /// </summary>
+    public static string LetterFor(string name, IEnumerable<Def> defs)
+    {
+        var trimmed = (name ?? "").Trim();
+        if (trimmed.Length == 1)
+        {
+            var c = char.ToUpperInvariant(trimmed[0]);
+            if (c >= 'A' && c <= 'Z') return c.ToString();
+        }
+        return NextLetter(defs);
+    }
+
+    /// <summary>
+    /// Lock the drag to X or Y in plan. The caller drops Z. Equal |dx| and |dy| lock to X.
+    /// False when the locked line is under 1 mm.
+    /// </summary>
+    public static bool TrySnapAxis(Pt from, Pt to, out Pt snapped)
+    {
+        snapped = default;
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        snapped = Math.Abs(dx) >= Math.Abs(dy) ? new Pt(to.X, from.Y) : new Pt(from.X, to.Y);
+        var sx = snapped.X - from.X;
+        var sy = snapped.Y - from.Y;
+        if (sx * sx + sy * sy < 1.0) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// What a finished pick stores. Null when the line or the name was cancelled:
+    /// the document stays as it was, including no new layer.
+    /// </summary>
+    public static Drawn Decide(bool haveLine, string dialogName, IEnumerable<Def> defs, Pt from, Pt rawTo)
+    {
+        if (!haveLine || dialogName == null) return null;
+        var name = dialogName.Trim();
+        if (name.Length == 0) name = NextSectionName(defs);
+        if (!TrySnapAxis(from, rawTo, out var snapped))
+            return new Drawn { Error = TooShortMessage };
+        var letter = LetterFor(name, defs);
+        if (letter == null)
+            return new Drawn { Error = LettersFullMessage };
+        return new Drawn { Name = name, Letter = letter, A = from, B = snapped };
+    }
+
     public static List<Def> Read(string json)
     {
         var defs = new List<Def>();
@@ -118,7 +231,8 @@ public static class Sections
                 B = b.Value,
                 Look = look.Value,
                 Room = row["room"]?.ToString() ?? "",
-                Axis = row["axis"]?.ToString() ?? ""
+                Axis = row["axis"]?.ToString() ?? "",
+                Name = row["name"]?.ToString() ?? ""
             });
         }
         return defs.OrderBy(d => d.Letter, StringComparer.Ordinal).ToList();
@@ -142,7 +256,8 @@ public static class Sections
             ["b"] = new JArray(Math.Round(d.B.X, 3), Math.Round(d.B.Y, 3)),
             ["look"] = new JArray(Math.Round(d.Look.X, 6), Math.Round(d.Look.Y, 6)),
             ["room"] = d.Room ?? "",
-            ["axis"] = d.Axis ?? ""
+            ["axis"] = d.Axis ?? "",
+            ["name"] = d.Name ?? ""
         };
     }
 
