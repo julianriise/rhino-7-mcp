@@ -1,6 +1,8 @@
 """Headless checks for scripts/section_smoke.py: the F5.3 smoke step against a
-fake Rhino that serves the garage smoke's model. A right sheet passes; a
-missing poché, a wrong free height or level, and a marker on a tag fail."""
+fake Rhino that serves the garage smoke's model (A-ROOF hidden, as in Rhino).
+A right sheet passes, with a slab or without; a missing poché, a wrong or
+missing free height or level, an expectation the model cannot give, and a
+marker on a tag fail."""
 
 import copy
 import sys
@@ -28,13 +30,17 @@ def row(role=None, box=((0, 0, 0), (1, 1, 0)), kind="drawing", **attrs):
     return {"id": attrs.get("forsk:id", role or "x"), "bounding_box": [list(box[0]), list(box[1])], "attributes": attributes}
 
 
-def section_rows(letter):
+SLAB = [row(box=((0, 0, -400), (8000, 4000, 0)), kind="floor")]
+
+
+def section_rows(letter, ground=-400):
+    """The sheet's records. ground -400 is the slab's underside; 0 is a slabless garage's wall base."""
     view = f"section_{letter.lower()}"
     stamp = {"forsk:view": view, "forsk:section": letter}
     rows = [row("section_fill", **stamp, **{"forsk:source": wall}) for wall in CUT[letter]]
-    rows.append(row("section_fill", **stamp, **{"forsk:source": "floor"}))
-    rows.append(row("ground_line", **stamp, **{"forsk:z": "-400"}))
-    for kind, z in (("ground", -400), ("floor", 0), ("gesims,mone", 3000)):
+    rows.append(row("section_fill", **stamp, **{"forsk:source": "roof"}))
+    rows.append(row("ground_line", **stamp, **{"forsk:z": str(ground)}))
+    for kind, z in (("ground", ground), ("floor", 0), ("gesims,mone", 3000)):
         rows.append(row("level", **stamp, **{"forsk:symbol": "text", "forsk:level_kind": kind, "forsk:level_z": str(z)}))
     rows.append(row("free_height", **stamp, **{
         "forsk:symbol": "text", "forsk:room": "rd-01", "forsk:free_height": "2800", "forsk:floor_z": "0"}))
@@ -80,9 +86,12 @@ def fake_rhino(model=None):
             if layer == "A-WALL":
                 return {"objects": [row(box=box, kind="wall", **{"forsk:id": wid}) for wid, box in WALLS.items()]}
             if layer == "A-FLOR":
-                return {"objects": [row(box=((0, 0, -400), (8000, 4000, 0)), kind="floor")]}
+                return {"objects": model.get("floors", SLAB)}
             if layer == "A-ROOF":
-                return {"objects": [row(box=((-500, -500, 2800), (8500, 4500, 3000)), kind="roof")]}
+                # A-ROOF is a hidden layer: only include_hidden finds it, as in Rhino.
+                if not params.get("include_hidden"):
+                    return {"objects": []}
+                return {"objects": model.get("roofs", [row(box=((-500, -500, 2800), (8500, 4500, 3000)), kind="roof")])}
             if layer == "S-DRAW::Plan":
                 return {"objects": plan}
             if layer.startswith("S-DRAW::Section "):
@@ -114,6 +123,54 @@ def test_a_right_sheet_passes():
     assert calls.index("layout_pack") < calls.index("export_pdf")
 
 
+def slabless(**extra):
+    """The live garage: walls and a roof, no slab. Ground at the wall base, floor at the room's floor."""
+    return {"floors": [], "sections": {letter: section_rows(letter, ground=0) for letter in "AB"}, **extra}
+
+
+def test_a_garage_without_a_slab_reads_its_floor_and_ground_from_the_walls_and_room():
+    failures, _ = run(slabless())
+    assert failures == []
+
+
+def test_a_slabless_garage_drawn_with_the_slab_ground_fails():
+    failures, _ = run({"floors": []})
+    assert any("A ground line 1" in f and "expected 0" in f for f in failures)
+
+
+def test_a_model_without_a_roof_fails_instead_of_comparing_none_to_none():
+    sections = {letter: [r for r in section_rows(letter)
+                         if r["attributes"].get("forsk:level_kind") != "gesims,mone"
+                         and r["attributes"].get("forsk:role") != "free_height"] for letter in "AB"}
+    failures, _ = run({"roofs": [], "sections": sections})
+    assert any("model has no roof" in f for f in failures)
+    assert any("A no expected gesims,mone level" in f for f in failures)
+
+
+def test_a_model_without_walls_or_slab_has_no_ground_and_fails():
+    send, _ = fake_rhino()
+    failures = []
+    def bare(cmd, params):
+        if cmd == "get_objects" and params["layer_filter"] in ("A-WALL", "A-FLOR"):
+            return {"objects": []}
+        return send(cmd, params)
+    section_smoke.run_step(bare, "garage", "Garasje", "/tmp/x.pdf", failures)
+    assert any("no expected ground" in f for f in failures)
+    assert any("model has no walls" in f for f in failures)
+
+
+def test_a_missing_free_height_fails_with_the_expected_value():
+    sections = {letter: [r for r in section_rows(letter) if r["attributes"].get("forsk:role") != "free_height"] for letter in "AB"}
+    failures, _ = run({"sections": sections})
+    assert any("A free height rd-01=None expected (2800, 0.0)" in f for f in failures)
+
+
+def test_a_missing_floor_level_fails():
+    sections = {letter: [r for r in section_rows(letter) if r["attributes"].get("forsk:level_kind") != "floor"] for letter in "AB"}
+    failures, _ = run({"sections": sections})
+    assert any("A floor levels [] expected [0.0]" in f for f in failures)
+
+
 def test_a_cut_wall_without_poche_fails():
     sections = {letter: section_rows(letter) for letter in "AB"}
     sections["A"] = [r for r in sections["A"] if r["attributes"].get("forsk:source") != "w-east"]
@@ -129,8 +186,8 @@ def test_a_wrong_free_height_or_level_fails():
         if r["attributes"].get("forsk:level_kind") == "gesims,mone":
             r["attributes"]["forsk:level_z"] = "2800"
     failures, _ = run({"sections": sections})
-    assert any("B free height rd-01=2700.0 expected 2800" in f for f in failures)
-    assert any(f.startswith("garage sections: B levels") for f in failures)
+    assert any("B free height rd-01=(2700.0, 0.0) expected (2800, 0.0)" in f for f in failures)
+    assert any("B gesims,mone levels [2800.0] expected [3000.0]" in f for f in failures)
 
 
 def test_a_missing_ground_line_fails():

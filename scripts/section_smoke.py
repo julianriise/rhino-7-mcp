@@ -10,9 +10,15 @@ and the S-DRAW objects must agree:
 - the marker A–A on the plan: both ends, clear of every room tag and
   opening mark;
 - at least one poché hatch per cut wall (forsk:source is the wall);
-- the ground line at the lowest slab's underside;
-- level marks at each slab top, the ground, and gesims/møne at the roof top;
+- the ground line at the lowest slab's underside, or with no slab at the
+  lowest wall base;
+- level marks at each slab top (with no slab: the floor of each room the line
+  crosses), the ground, and gesims/møne at the roof top;
 - a free height for each room the line crosses: roof underside less floor.
+
+A-ROOF is a hidden layer, so the roof is read with include_hidden. An
+expectation the model cannot give (no wall, no roof, no floor, an empty level
+list) is a failure of its own, never a pass by comparing nothing to nothing.
 
 One summary line per run ("sections ..."), the rest in failures.
 """
@@ -135,11 +141,12 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
     plan = pages.get("plan") or {}
 
     # The model the sheets were drawn from.
-    walls = [r for r in _rows(send, "A-WALL") if str(_attr(r).get("forsk:kind")).lower() == "wall"]
-    floors = [_box(r) for r in _rows(send, "A-FLOR") if str(_attr(r).get("forsk:kind")).lower() == "floor"]
-    roofs = [_box(r) for r in _rows(send, "A-ROOF") if str(_attr(r).get("forsk:kind")).lower() == "roof"]
+    walls = [r for r in _rows(send, "A-WALL", hidden=True) if str(_attr(r).get("forsk:kind")).lower() == "wall"]
+    floors = [_box(r) for r in _rows(send, "A-FLOR", hidden=True) if str(_attr(r).get("forsk:kind")).lower() == "floor"]
+    roofs = [_box(r) for r in _rows(send, "A-ROOF", hidden=True) if str(_attr(r).get("forsk:kind")).lower() == "roof"]
     floors = [b for b in floors if b]
     roofs = [b for b in roofs if b]
+    wall_boxes = [b for b in (_box(w) for w in walls) if b]
     rooms = send("rooms_detect", {})
     rings = {}
     for item, marker in zip(rooms.get("rooms") or [], rooms.get("ids") or []):
@@ -168,10 +175,26 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
         reasons.append(f"plan markers on tags or marks {on_tags}")
 
     summary = []
-    ground_expect = min(b[2] for b in floors) if floors else None
-    tops = sorted({round(b[5], 1) for b in floors})
+    # What the model gives. Ground: the lowest slab's underside, else the lowest wall base.
+    # Floors: the slab tops, else (below, per section) the floor of each crossed room.
+    if floors:
+        ground_expect = min(b[2] for b in floors)
+    elif wall_boxes:
+        ground_expect = min(b[2] for b in wall_boxes)
+    else:
+        ground_expect = None
+    slab_tops = sorted({round(b[5], 1) for b in floors})
     roof_top = max(b[5] for b in roofs) if roofs else None
     roof_under = min(b[2] for b in roofs) if roofs else None
+    # An expectation the model cannot give fails the run; it is never compared as None.
+    if not wall_boxes:
+        reasons.append("model has no walls: nothing to cut")
+    if ground_expect is None:
+        reasons.append("no expected ground: the model has no slab and no wall")
+    if roof_top is None or roof_under is None:
+        reasons.append("no expected gesims/møne or free height: the model has no roof (A-ROOF, include_hidden)")
+    if not rings:
+        reasons.append("no expected free height: rooms_detect gave no room outline")
     for letter in LETTERS:
         view = f"section_{letter.lower()}"
         page = pages.get(view) or {}
@@ -202,23 +225,35 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
         grounds = [r for r in rows if _attr(r).get("forsk:role") == "ground_line"]
         ground_ok = bool(grounds) and ground_expect is not None and all(
             abs(float(_attr(r).get("forsk:z")) - ground_expect) <= TOL for r in grounds)
-        if not ground_ok:
+        if not ground_ok and ground_expect is not None:
             reasons.append(f"{letter} ground line {len(grounds)} z {[ _attr(r).get('forsk:z') for r in grounds[:1]]} expected {ground_expect}")
 
-        # Level marks: every slab top, the ground, gesims and møne at the roof top.
+        # Rooms the line runs through, and the floors they stand on.
+        crossing = [rid for rid, ring in rings.items() if crossed([(p[0], p[1]) for p in ring], a, b)]
+        if not crossing:
+            reasons.append(f"{letter} crosses no room")
+
+        # Level marks: every slab top (no slab: each crossed room's floor), the ground, gesims and møne at the roof top.
         marks = {}
         for row in rows:
             attr = _attr(row)
             if attr.get("forsk:role") == "level" and attr.get("forsk:symbol") == "text":
                 marks.setdefault(attr.get("forsk:level_kind"), []).append(float(attr.get("forsk:level_z")))
-        want = {"floor": tops, "ground": [ground_expect] if ground_expect is not None else []}
-        if roof_top is not None:
-            want["gesims,mone"] = [roof_top]
-        level_ok = all(
-            sorted(round(z, 1) for z in marks.get(kind, [])) == sorted(round(z, 1) for z in zs)
-            for kind, zs in want.items())
-        if not level_ok:
-            reasons.append(f"{letter} levels {marks} expected {want}")
+        tops = slab_tops or sorted({round(rings[rid][0][2], 1) for rid in crossing})
+        want = {
+            "floor": tops,
+            "ground": [ground_expect] if ground_expect is not None else [],
+            "gesims,mone": [roof_top] if roof_top is not None else [],
+        }
+        level_ok = True
+        for kind, zs in want.items():
+            got_z = sorted(round(z, 1) for z in marks.get(kind, []))
+            if not zs:
+                level_ok = False
+                reasons.append(f"{letter} no expected {kind} level from the model")
+            elif got_z != sorted(round(z, 1) for z in zs):
+                level_ok = False
+                reasons.append(f"{letter} {kind} levels {got_z} expected {sorted(round(z, 1) for z in zs)}")
 
         # Free height in each room the line runs through.
         frees = {}
@@ -226,18 +261,17 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
             attr = _attr(row)
             if attr.get("forsk:role") == "free_height" and attr.get("forsk:symbol") == "text":
                 frees[attr.get("forsk:room")] = (float(attr.get("forsk:free_height")), float(attr.get("forsk:floor_z")))
-        crossing = [rid for rid, ring in rings.items() if crossed([(p[0], p[1]) for p in ring], a, b)]
         free_ok = 0
         for rid in crossing:
             got = frees.get(rid)
             floor_z = rings[rid][0][2]
-            expect = None if roof_under is None else round(roof_under - floor_z)
-            if got and expect is not None and abs(got[0] - expect) <= TOL:
+            if roof_under is None:
+                continue
+            expect = round(roof_under - floor_z)
+            if got and abs(got[0] - expect) <= TOL and abs(got[1] - floor_z) <= TOL:
                 free_ok += 1
             else:
-                reasons.append(f"{letter} free height {rid}={got and got[0]} expected {expect}")
-        if not crossing:
-            reasons.append(f"{letter} crosses no room")
+                reasons.append(f"{letter} free height {rid}={got} expected ({expect}, {floor_z})")
         summary.append(
             f"{letter} poché {filled}/{len(cut)} ground {'ok' if ground_ok else 'bad'} "
             f"levels {sum(len(v) for v in marks.values())} free {free_ok}/{len(crossing)} 1:{page.get('scale')}"
