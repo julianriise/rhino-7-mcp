@@ -18,8 +18,7 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    /// <summary>Paper weight of a dimension tick: heavier than the 0.13 mm line, as drafters draw them.</summary>
-    private const double DimTickMm = 0.35;
+    // A dimension tick is drawn at the profile's silhouette tier: heavier than the thin line, as drafters draw them.
 
     /// <summary>Paper diameter of the dot a room tag's leader starts from, inside the room.</summary>
     private const double LeaderDotMm = 0.8;
@@ -95,13 +94,13 @@ public partial class RhinoMCPFunctions
             for (var i = 0; i < chain.Lines.Count; i++)
             {
                 using (var curve = new LineCurve(DrawingPoint(chain.Lines[i].A), DrawingPoint(chain.Lines[i].B)))
-                    added += AddStroke(doc, layer, curve, PlanThinMm, scale, false, pattern, tol,
+                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
                         "dimension", i == 0 ? "line" : "witness", null, null, ref box, ref index, ref count, stamp);
             }
             foreach (var tick in chain.Ticks)
             {
                 using (var curve = new LineCurve(DrawingPoint(tick.A), DrawingPoint(tick.B)))
-                    added += AddStroke(doc, layer, curve, DimTickMm, scale, false, pattern, tol,
+                    added += AddStroke(doc, layer, curve, PenSilhouette, scale, false, pattern, tol,
                         "dimension", "tick", null, null, ref box, ref index, ref count, stamp);
             }
             foreach (var label in chain.Texts)

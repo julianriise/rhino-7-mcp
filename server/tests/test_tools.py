@@ -4097,3 +4097,62 @@ class TestGetObjectsTool:
         assert mock_conn.send_command.call_args[0][1]["include_hidden"] is True
         get_objects(ctx=None, layer_filter="A-OPEN")
         assert "include_hidden" not in mock_conn.send_command.call_args[0][1]
+
+
+class TestPrintProfileTool:
+    """F5.4: print_profile on the wire, and the plugin and the panel know it."""
+
+    @patch("rhinomcp.tools.print_profile.get_rhino_connection")
+    def test_name_goes_to_the_plugin_and_the_profile_comes_back(self, mock_get_conn):
+        from rhinomcp.tools.print_profile import print_profile
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "profile": {"name": "grey"},
+            "available": [{"name": "default"}, {"name": "grey"}, {"name": "hatch"}],
+            "changed": True,
+            "message": "Print profile: grey.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = print_profile(ctx=None, name=" grey ")
+        assert result["success"] is True
+        assert result["profile"]["name"] == "grey"
+        assert result["changed"] is True
+        assert mock_conn.send_command.call_args[0] == ("print_profile", {"name": "grey"})
+
+    @patch("rhinomcp.tools.print_profile.get_rhino_connection")
+    def test_no_name_reads_the_current_profile(self, mock_get_conn):
+        from rhinomcp.tools.print_profile import print_profile
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"profile": {"name": "default"}, "available": [], "message": "x"}
+        mock_get_conn.return_value = mock_conn
+
+        assert print_profile(ctx=None)["changed"] is False
+        assert mock_conn.send_command.call_args[0] == ("print_profile", {})
+        print_profile(ctx=None, name="  ")
+        assert mock_conn.send_command.call_args[0] == ("print_profile", {})
+
+    @patch("rhinomcp.tools.print_profile.get_rhino_connection")
+    def test_a_name_that_is_not_text_is_refused_before_the_wire(self, mock_get_conn):
+        from rhinomcp.tools.print_profile import print_profile
+
+        assert print_profile(ctx=None, name=3)["success"] is False
+        mock_get_conn.assert_not_called()
+
+    def test_the_command_the_panel_and_the_prompts_agree_on_the_profiles(self):
+        from pathlib import Path
+        from rhinomcp.tools.print_profile import PROFILES
+
+        root = Path(__file__).resolve().parents[2]
+        profiles_cs = (root / "plugin" / "Functions" / "PrintProfiles.cs").read_text()
+        assert "Name = DefaultName" in profiles_cs
+        for name in PROFILES:
+            if name != "default":
+                assert f'Name = "{name}"' in profiles_cs
+        chat = (root / "plugin" / "Forsk" / "ForskChat.cs").read_text()
+        assert '"print_profile"' in chat
+        assert 'new JArray("default", "grey", "hatch")' in chat
+        commands = (root / "plugin" / "Functions" / "PrintProfileCommands.cs").read_text()
+        assert '[McpCommand("print_profile")]' in commands

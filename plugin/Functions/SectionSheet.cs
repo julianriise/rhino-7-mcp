@@ -328,14 +328,14 @@ public partial class RhinoMCPFunctions
             var curve = item.Curve;
             if (curve == null || !curve.IsValid) continue;
             if (Sections.IsCut(EdgeSamples(curve), rings, 2.0)) continue;
-            var n = AddStroke(doc, layer, curve, PlanBeyondMm, scale, false, pattern, tol,
+            var n = AddStroke(doc, layer, curve, PenBeyond, scale, false, pattern, tol,
                 "beyond", null, null, null, ref box, ref index, ref count, stamp);
             stats.Beyond += n;
             added += n;
         }
         foreach (var loop in loops)
         {
-            var n = AddStroke(doc, layer, loop, PlanCutMm, scale, false, pattern, tol,
+            var n = AddStroke(doc, layer, loop, PenCut, scale, false, pattern, tol,
                 "cut", null, null, null, ref box, ref index, ref count, stamp);
             stats.CutLines += n;
             added += n;
@@ -355,7 +355,7 @@ public partial class RhinoMCPFunctions
             using (var ground = new LineCurve(new Point3d(left - over, y, 0), new Point3d(right + over, y, 0)))
             {
                 var extra = new SymbolStamp { Extra = new Dictionary<string, string>(stamp.Extra) { ["forsk:z"] = Mm(groundZ.Value) } };
-                if (AddStroke(doc, layer, ground, PlanCutMm, scale, false, pattern, tol,
+                if (AddStroke(doc, layer, ground, PenCut, scale, false, pattern, tol,
                         "ground_line", null, null, null, ref box, ref index, ref count, extra) > 0)
                     stats.GroundZ = groundZ.Value;
             }
@@ -389,7 +389,7 @@ public partial class RhinoMCPFunctions
                 ["forsk:level_value"] = mark.Level.Value.ToString(CultureInfo.InvariantCulture)
             };
             using (var line = new LineCurve(Sheet(mark.LineA), Sheet(mark.LineB)))
-                added += AddStroke(doc, layer, line, PlanThinMm, scale, false, pattern, tol,
+                added += AddStroke(doc, layer, line, PenThin, scale, false, pattern, tol,
                     "level", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
             added += AddSolidTriangle(doc, layer, mark.Triangle, pattern, tol, "level", extra, ref box, ref index, ref count);
             if (AddSheetText(doc, layer, mark.Level.Text, new Plane(Sheet(mark.TextAt), Vector3d.XAxis, Vector3d.YAxis),
@@ -419,13 +419,13 @@ public partial class RhinoMCPFunctions
             var foot = ToSheet(Model(u, floorZ), worldToHld, delta);
             var head = ToSheet(Model(u, floorZ + free.Value), worldToHld, delta);
             using (var line = new LineCurve(foot, head))
-                added += AddStroke(doc, layer, line, PlanThinMm, scale, false, pattern, tol,
+                added += AddStroke(doc, layer, line, PenThin, scale, false, pattern, tol,
                     "free_height", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
             foreach (var end in new[] { foot, head })
             {
                 var tick = PlanDims.TickMm * 0.5 * scale;
                 using (var line = new LineCurve(end + new Vector3d(-tick, -tick, 0), end + new Vector3d(tick, tick, 0)))
-                    added += AddStroke(doc, layer, line, PlanThinMm, scale, false, pattern, tol,
+                    added += AddStroke(doc, layer, line, PenThin, scale, false, pattern, tol,
                         "free_height", "tick", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
             }
             // Reads bottom to top, left of its line, like a vertical dimension's value.
@@ -589,7 +589,7 @@ public partial class RhinoMCPFunctions
             foreach (var end in marker.Ends)
             {
                 using (var stroke = new LineCurve(Sheet(end.StrokeA), Sheet(end.StrokeB)))
-                    drawn += AddStroke(doc, layer, stroke, PlanCutMm, scale, false, pattern, tol,
+                    drawn += AddStroke(doc, layer, stroke, PenCut, scale, false, pattern, tol,
                         "section_marker", "stroke", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = stamps });
                 drawn += AddSolidTriangle(doc, layer, end.Arrow, pattern, tol, "section_marker", stamps, ref box, ref index, ref count);
                 var letterStamps = new Dictionary<string, string>(stamps) { ["forsk:symbol"] = "letter" };

@@ -342,6 +342,8 @@ def test_new_commands():
         ("commands/section_add.json", {"letter": "c", "line_id": "8f8e7d6c-0000-0000-0000-000000000001"}),
         ("commands/section_clear.json", {}),
         ("commands/section_clear.json", {"letter": "A"}),
+        ("commands/print_profile.json", {}),
+        ("commands/print_profile.json", {"name": "grey"}),
         ("commands/section_pick.json", {}),
         ("commands/layout_pack.json", {"views": ["schedules"], "schedule_kinds": ["door", "window", "room"]}),
         ("commands/clear_layouts.json", {"views": ["schedules"]}),
@@ -852,6 +854,23 @@ def test_responses():
     if not validate("responses/set_project_meta_result.json", meta_result):
         all_passed = False
 
+    print("  print_profile_result:")
+    pen = {"mm": 0.5, "rgb": "0,0,0"}
+    profile_result = {
+        "profile": {
+            "name": "default", "label": "Default: solid black poché, black lines",
+            "cut": pen, "silhouette": {"mm": 0.35, "rgb": "0,0,0"},
+            "beyond": {"mm": 0.18, "rgb": "0,0,0"}, "thin": {"mm": 0.13, "rgb": "0,0,0"},
+            "dashed": "0,0,0", "text": "0,0,0",
+            "poche": {"rgb": "0,0,0", "pattern": "Solid", "spacing_mm": 0},
+        },
+        "available": [{"name": "default", "label": "Default"}, {"name": "grey", "label": "Grey"}],
+        "changed": False,
+        "message": "Print profile: default.",
+    }
+    if not validate("responses/print_profile_result.json", profile_result):
+        all_passed = False
+
     print("  layout_pack_result:")
     layout_result = {
         "pages": [{
@@ -1239,6 +1258,8 @@ def test_invalid_examples():
         ("commands/section_add.json", {"room": "Stue", "look": "up"}, "section_add unknown look"),
         ("commands/section_add.json", {"bogus": 1}, "section_add unknown field"),
         ("commands/section_clear.json", {"letter": "AA"}, "section_clear letter is one letter"),
+        ("commands/print_profile.json", {"name": "neon"}, "print_profile name is a shipped profile"),
+        ("commands/print_profile.json", {"bogus": 1}, "print_profile unknown field"),
         ("commands/section_pick.json", {"letter": "A"}, "section_pick takes no fields"),
         ("commands/layout_pack.json", {"paper": "A1"}, "layout_pack paper not A3"),
         ("commands/layout_pack.json", {"scale": 0}, "layout_pack scale 0"),
@@ -1360,7 +1381,7 @@ KEEPS_VIEW = {
     "delete_object", "delete_layer", "clear_generated", "clear_drawings", "daylight_clear",
     "section_clear", "select_objects", "modify_object", "modify_objects",
     "update_object_attributes", "mark_as_existing", "create_layer", "get_or_set_current_layer",
-    "set_layer_material", "set_project_meta", "section_add",
+    "set_layer_material", "set_project_meta", "section_add", "print_profile",
 }
 
 
@@ -1463,7 +1484,7 @@ def test_protocol_envelope():
         "move_wall", "delete_wall", "add_wall", "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
-        "set_project_meta", "layout_pack", "export_pdf", "clear_layouts",
+        "set_project_meta", "layout_pack", "export_pdf", "clear_layouts", "print_profile",
         "set_layer_material", "set_display_mode",
         "run_command", "get_commands",
         "gh_create_document",

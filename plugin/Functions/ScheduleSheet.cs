@@ -235,9 +235,15 @@ public partial class RhinoMCPFunctions
         var pageId = page.MainViewport.Id;
         const double left = LayoutMarginMm;
         const double top = A3HeightMm - LayoutMarginMm;
+        // F5.4: the rules are the profile's thin pen, the cells its text ink.
+        var profile = ReadPrintProfile(doc);
+        PrintProfiles.Active = profile;
         ObjectAttributes Attr(string role, string kind)
         {
             var attr = LayoutAttr(layer.Index, pageId, SchedulesView, stableId);
+            var ink = role == "schedule_line" ? profile.Thin.Color : profile.Text;
+            attr.ObjectColor = ink;
+            attr.PlotColor = ink;
             attr.SetUserString("forsk:role", role);
             attr.SetUserString("forsk:schedule", kind);
             return attr;

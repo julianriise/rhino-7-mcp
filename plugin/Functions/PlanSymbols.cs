@@ -63,9 +63,11 @@ public partial class RhinoMCPFunctions
         public string RoomText;
     }
 
-    private const double PlanCutMm = 0.50;
-    private const double PlanBeyondMm = 0.18;
-    private const double PlanThinMm = 0.13;
+    // F5.4: the tiers come from the active print profile. The default is 0.50 / 0.35 / 0.18 / 0.13 mm, black.
+    private static PrintPen PenCut => PrintProfiles.Active.Cut;
+    private static PrintPen PenSilhouette => PrintProfiles.Active.Silhouette;
+    private static PrintPen PenBeyond => PrintProfiles.Active.Beyond;
+    private static PrintPen PenThin => PrintProfiles.Active.Thin;
 
     /// <summary>
     /// Replace plan centre-lines with width ribbons, then add symbols with
@@ -123,14 +125,14 @@ public partial class RhinoMCPFunctions
                 if (curve == null || !curve.IsValid) continue;
                 if (LiesOnLoops(curve, loops, 2.0)) continue;
                 if (InsideOpening(curve, openings, tol)) continue;
-                added += AddStroke(doc, layer, curve, PlanBeyondMm, scale, false, pattern, tol,
+                added += AddStroke(doc, layer, curve, PenBeyond, scale, false, pattern, tol,
                     "greyscale", null, null, null, ref box, ref index, ref count);
             }
         }
 
         foreach (var loop in loops)
         {
-            added += AddStroke(doc, layer, loop, PlanCutMm, scale, false, pattern, tol,
+            added += AddStroke(doc, layer, loop, PenCut, scale, false, pattern, tol,
                 "cut", null, null, null, ref box, ref index, ref count);
         }
 
@@ -242,7 +244,7 @@ public partial class RhinoMCPFunctions
                     curve = MarkCurve(mark, plane, worldToHld, delta);
                     if (curve == null) continue;
                     var onWall = mark.Part == "sill" || mark.Part == "frame" || mark.Part == "jamb";
-                    var n = AddStroke(doc, layer, curve, PlanThinMm, scale, mark.Dashed, pattern, tol,
+                    var n = AddStroke(doc, layer, curve, PenThin, scale, mark.Dashed, pattern, tol,
                         "symbol", mark.Part, markerId,
                         mark.Part == "leaf" || mark.Part == "arc" ? mark.Y1 * frame.YInward : (double?)null,
                         ref box, ref index, ref count, onWall ? faces : null);
@@ -725,7 +727,7 @@ public partial class RhinoMCPFunctions
                         continue;
                     }
                     curve.Translate(delta);
-                    var n = AddStroke(doc, layer, curve, PlanThinMm, scale, true, pattern, tol,
+                    var n = AddStroke(doc, layer, curve, PenThin, scale, true, pattern, tol,
                         "roof_outline", null, null, null, ref box, ref index, ref count);
                     curve.Dispose();
                     if (n > 0) stats.Roof += n;
@@ -896,7 +898,7 @@ public partial class RhinoMCPFunctions
                 };
                 var added = TagDown(doc, planRoom, nameId, areaId, line, tagBoxes, texts, ref stats);
                 using (var curve = new LineCurve(DrawingPoint(lead.A), DrawingPoint(lead.B)))
-                    added += AddStroke(doc, layer, curve, PlanThinMm, scale, false, pattern, tol,
+                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
                         "room_leader", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = ends });
                 added += AddLeaderDot(doc, layer, DrawingPoint(lead.A), scale, pattern, tol, ends, ref box, ref index, ref count);
                 leaders.Add(PlanDims.SegBox(lead));
@@ -1274,7 +1276,7 @@ public partial class RhinoMCPFunctions
         RhinoDoc doc,
         Layer layer,
         Curve curve,
-        double paperMm,
+        PrintPen pen,
         int scale,
         bool dashed,
         int pattern,
@@ -1288,12 +1290,15 @@ public partial class RhinoMCPFunctions
         ref int count,
         SymbolStamp faces = null)
     {
+        var paperMm = pen.Mm;
+        // A dashed line takes the profile's linetype colour, whatever tier it is drawn at.
+        var ink = dashed ? PrintProfiles.Active.Dashed : pen.Color;
         if (curve == null || paperMm <= 0 || scale < 1) return 0;
         // A swing arc ribbon fills the sector. Draw the arc as a thin curve.
         if (part == "arc")
         {
             var stableId = FormatStableId("d", index);
-            var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+            var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed, ink);
             attr.PlotWeight = paperMm;
             Guid id;
             try { id = doc.Objects.AddCurve(curve, attr); }
@@ -1309,9 +1314,9 @@ public partial class RhinoMCPFunctions
         var added = 0;
         if (!dashed)
         {
-            added += AddRibbon(doc, layer, curve, width, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
+            added += AddRibbon(doc, layer, curve, width, ink, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             if (added == 0)
-                added += AddPlainCurve(doc, layer, curve, paperMm, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
+                added += AddPlainCurve(doc, layer, curve, paperMm, ink, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             return added;
         }
 
@@ -1337,9 +1342,9 @@ public partial class RhinoMCPFunctions
                     catch (Exception) { piece = null; }
                     if (piece != null)
                     {
-                        var n = AddRibbon(doc, layer, piece, width, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
+                        var n = AddRibbon(doc, layer, piece, width, ink, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         if (n == 0)
-                            n = AddPlainCurve(doc, layer, piece, paperMm, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
+                            n = AddPlainCurve(doc, layer, piece, paperMm, ink, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         added += n;
                         piece.Dispose();
                     }
@@ -1356,6 +1361,7 @@ public partial class RhinoMCPFunctions
         Layer layer,
         Curve curve,
         double width,
+        Color ink,
         int pattern,
         double tol,
         string role,
@@ -1398,7 +1404,7 @@ public partial class RhinoMCPFunctions
         {
             if (hatch == null) continue;
             var stableId = FormatStableId("d", index);
-            var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+            var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed, ink);
             StampSymbolLine(attr, curve, part, faces);
             Guid id;
             try { id = doc.Objects.AddHatch(hatch, attr); }
@@ -1557,6 +1563,7 @@ public partial class RhinoMCPFunctions
         Layer layer,
         Curve curve,
         double plotMm,
+        Color ink,
         string role,
         string part,
         string markerId,
@@ -1568,7 +1575,7 @@ public partial class RhinoMCPFunctions
         SymbolStamp faces = null)
     {
         var stableId = FormatStableId("d", index);
-        var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed);
+        var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed, ink);
         StampSymbolLine(attr, curve, part, faces);
         if (plotMm > 0) attr.PlotWeight = plotMm;
         Guid id;
@@ -1619,8 +1626,11 @@ public partial class RhinoMCPFunctions
     }
 
     private static ObjectAttributes DrawAttr(
-        Layer layer, string stableId, string role, string part, string markerId, double? openY = null, bool dashed = false)
+        Layer layer, string stableId, string role, string part, string markerId, double? openY = null, bool dashed = false,
+        Color? ink = null)
     {
+        // Text, dots and arrows take the profile's annotation ink; strokes pass their pen's.
+        var color = ink ?? PrintProfiles.Active.Text;
         var attr = new ObjectAttributes
         {
             LayerIndex = layer.Index,
@@ -1628,11 +1638,11 @@ public partial class RhinoMCPFunctions
             Space = ActiveSpace.ModelSpace,
             ViewportId = Guid.Empty,
             ColorSource = ObjectColorSource.ColorFromObject,
-            ObjectColor = Color.Black,
+            ObjectColor = color,
             PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
-            PlotColor = Color.Black,
+            PlotColor = color,
             PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
-            PlotWeight = PlanThinMm,
+            PlotWeight = PrintProfiles.Active.Thin.Mm,
             DisplayOrder = string.Equals(role, "symbol", StringComparison.Ordinal) ? 3 : 2
         };
         StampForskTags(attr, new ForskStamp

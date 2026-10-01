@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "print_profile_result.json",
+  "title": "PrintProfileResult",
+  "description": "The document's print profile after the call, the profiles it can take, and whether this call changed it.",
+  "type": "object",
+  "definitions": {
+    "pen": {
+      "type": "object",
+      "properties": {
+        "mm": { "type": "number", "description": "Paper weight in mm." },
+        "rgb": { "type": "string", "description": "r,g,b." }
+      },
+      "required": ["mm", "rgb"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "profile": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "cut": { "$ref": "#/definitions/pen" },
+        "silhouette": { "$ref": "#/definitions/pen" },
+        "beyond": { "$ref": "#/definitions/pen" },
+        "thin": { "$ref": "#/definitions/pen" },
+        "dashed": { "type": "string", "description": "r,g,b of every dashed line." },
+        "text": { "type": "string", "description": "r,g,b of tags, marks, dimension text." },
+        "poche": {
+          "type": "object",
+          "properties": {
+            "rgb": { "type": "string" },
+            "pattern": { "type": "string", "enum": ["Solid", "Hatch1"] },
+            "spacing_mm": { "type": "number", "description": "Paper spacing of the hatch lines; 0 for Solid." }
+          },
+          "required": ["rgb", "pattern", "spacing_mm"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["name", "label", "cut", "silhouette", "beyond", "thin", "dashed", "text", "poche"],
+      "additionalProperties": false
+    },
+    "available": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "label": { "type": "string" }
+        },
+        "required": ["name", "label"],
+        "additionalProperties": false
+      }
+    },
+    "changed": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["profile", "available", "changed", "message"],
+  "additionalProperties": false
+}

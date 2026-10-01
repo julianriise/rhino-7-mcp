@@ -98,6 +98,7 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
             if (IsDimensions(t)) return true;
             if (IsSection(t)) return true;
+            if (IsProfile(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
         }
 
@@ -126,6 +127,15 @@ namespace RhinoMCPPlugin.Forsk
         {
             return HasWord(t, "section") || HasWord(t, "sections") || HasWord(t, "snitt") || HasWord(t, "snittet")
                 || HasWord(t, "tverrsnitt") || HasWord(t, "lengdesnitt") || HasWord(t, "snitter");
+        }
+
+        /// <summary>A print profile asked for: use the grey profile, bytt profil, hatched poché, skravert poché.</summary>
+        static bool IsProfile(string t)
+        {
+            if (HasWord(t, "profile") || HasWord(t, "profiles") || HasWord(t, "profil") || HasWord(t, "profiler"))
+                return true;
+            return t.Contains("poch") && (HasWord(t, "grey") || HasWord(t, "gray") || HasWord(t, "grå") || HasWord(t, "hatch")
+                || HasWord(t, "hatched") || HasWord(t, "skravert") || HasWord(t, "skravur") || HasWord(t, "black") || HasWord(t, "svart"));
         }
 
         /// <summary>The plan's dimensions, unless a door or window is named: its size is an edit.</summary>

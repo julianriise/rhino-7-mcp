@@ -18,6 +18,7 @@ namespace RhinoMCPPlugin.Forsk
         ForskButton _chip;
         ForskButton _import;
         ForskButton _daylight;
+        ForskButton _profile;
         ForskComposer _composer;
         Scrollable _scroll;
         StackLayout _thread;
@@ -65,6 +66,7 @@ namespace RhinoMCPPlugin.Forsk
             _chip = new ForskButton { Text = "Generate 3D model", Visible = false };
             _import = new ForskButton { Text = "Import plan", Visible = false, Secondary = true };
             _daylight = new ForskButton { Text = "Daylight", Visible = false, Secondary = true };
+            _profile = new ForskButton { Text = "Print profile", Visible = false, Secondary = true };
             _composer = new ForskComposer();
 
             _chip.Click += (s, e) =>
@@ -74,6 +76,7 @@ namespace RhinoMCPPlugin.Forsk
             };
             _import.Click += (s, e) => ImportPlan();
             _daylight.Click += (s, e) => Daylight();
+            _profile.Click += (s, e) => NextProfile();
             _composer.Send.Click += (s, e) => Send();
             _composer.Input.LoadComplete += (s, e) => ForskField.Style(_composer.Input);
             _composer.Input.GotFocus += (s, e) =>
@@ -101,7 +104,7 @@ namespace RhinoMCPPlugin.Forsk
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 AlignLabels = false,
                 BackgroundColor = ForskPaint.Paper,
-                Items = { _header, _chip, _import, _daylight }
+                Items = { _header, _chip, _import, _daylight, _profile }
             };
 
             _thread = new StackLayout
@@ -239,6 +242,12 @@ namespace RhinoMCPPlugin.Forsk
             _daylight.Text = _chipState.DaylightLabel;
             _daylight.EnabledClick = !_busy && _chipState.DaylightEnabled;
             _daylight.ToolTip = _chipState.DaylightHint;
+            // F5.4: shown with Print, since the profile is how the sheets are inked.
+            _profile.Visible = _chipState.ShowPrint;
+            var profile = RhinoMCPFunctions.ReadPrintProfile(RhinoDoc.ActiveDoc);
+            _profile.Text = "Print profile · " + profile.Name;
+            _profile.ToolTip = profile.Label + ". Click for the next profile.";
+            _profile.EnabledClick = !_busy;
             RefreshTarget();
         }
 
@@ -383,6 +392,28 @@ namespace RhinoMCPPlugin.Forsk
                     RefreshChrome();
                 });
             });
+        }
+
+        /// <summary>The profile button: the next print profile, stored in the document. Nothing is redrawn until Print.</summary>
+        void NextProfile()
+        {
+            if (_busy) return;
+            var next = PrintProfiles.Next(RhinoMCPFunctions.ReadPrintProfile(RhinoDoc.ActiveDoc));
+            var label = "Print profile · " + next.Name;
+            AddLine("user", label);
+            string line;
+            try
+            {
+                line = ForskTools.Receipt("print_profile", ForskTools.Command("print_profile", new JObject { ["name"] = next.Name }));
+            }
+            catch (Exception e)
+            {
+                line = "print_profile · error · " + ForskTools.Clip(e.Message);
+            }
+            AddLine("receipt", line);
+            _history.Add(new JObject { ["role"] = "user", ["content"] = label });
+            _history.Add(new JObject { ["role"] = "assistant", ["content"] = line });
+            RefreshChrome();
         }
 
         void Daylight()
@@ -556,6 +587,7 @@ namespace RhinoMCPPlugin.Forsk
             _chip.Width = inner;
             _import.Width = inner;
             _daylight.Width = inner;
+            _profile.Width = inner;
             _composer.Width = inner;
             _composer.Place();
             int threadW = _scroll.Width > 100 ? _scroll.Width - 20 : inner;

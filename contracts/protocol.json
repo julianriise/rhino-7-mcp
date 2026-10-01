@@ -79,6 +79,7 @@
             "section_add",
             "section_pick",
             "section_clear",
+            "print_profile",
             "set_layer_material",
             "set_display_mode",
             "run_command",

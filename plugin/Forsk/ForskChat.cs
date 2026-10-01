@@ -75,7 +75,8 @@ namespace RhinoMCPPlugin.Forsk
             "export_pdf",
             "clear_layouts",
             "section_add",
-            "section_clear"
+            "section_clear",
+            "print_profile"
         };
 
         static readonly string[] DaylightOnly =
@@ -652,6 +653,17 @@ namespace RhinoMCPPlugin.Forsk
                     new JObject
                     {
                         ["letter"] = Str("A to Z. Omit for all.")
+                    }),
+                Fn("print_profile",
+                    "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, coloured lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",
+                    new JObject
+                    {
+                        ["name"] = new JObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JArray("default", "grey", "hatch"),
+                            ["description"] = "The profile to use. Omit to read the current one."
+                        }
                     })
             };
 
@@ -793,12 +805,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Dimensions are on the plan sheet: layout_pack views plan draws them from the model. Never draw or type dimensions. "
                     + "A section (snitt) A–A is section_add (a room by name, axis cross or long, or from and to, or line_id), then layout_pack views plan and section_<letter>. Never draw a section yourself. "
                     + "add cross section is the viewport command ForskSection. Do not call section_add for that phrase and do not draw the line. "
+                    + "A profile (use the grey profile, hatched poché, svart poché) is print_profile: default, grey or hatch; then layout_pack draws with it. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
                     + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page, the plan's dimensions and every stored section. "
+                    + "Print in a profile (grey, hatch) is print_profile first, then Print. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";
@@ -1536,6 +1550,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (t.Contains("project is") || t.Contains("client") || t.Contains("address")) return false;
             if (t.Contains("make sheet") || t.Contains("tegning") || t.Contains("drawing")) return false;
             if (t.Contains("make2d") || t.Contains("sheet_pack")) return false;
+            // Print in a profile is the chat's: print_profile, then Print.
+            if (t.Contains("profile") || t.Contains("profil") || t.Contains("poch")) return false;
 
             if (t == "pdf" || t == "print" || t == "print pdf" || t == "skriv ut") return true;
             if (HasWord(t, "print")) return true;

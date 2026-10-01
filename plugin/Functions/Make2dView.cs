@@ -935,6 +935,25 @@ public partial class RhinoMCPFunctions
         return doc.HatchPatterns.Add(solid);
     }
 
+    /// <summary>
+    /// The profile's poché pattern in the document: Solid, or the hatch pattern it names (added from
+    /// RhinoCommon's defaults when the file lacks it). A pattern that cannot be had falls back to Solid.
+    /// </summary>
+    private static int PochePatternIndex(RhinoDoc doc, PrintProfile profile)
+    {
+        if (doc == null) return -1;
+        if (profile == null || profile.PocheSolid) return SolidPatternIndex(doc);
+        var pattern = doc.HatchPatterns.FindName(profile.PochePattern);
+        if (pattern == null || pattern.IsDeleted || pattern.Index < 0)
+        {
+            var made = HatchPattern.Defaults.Hatch1;
+            if (made == null) return SolidPatternIndex(doc);
+            var added = doc.HatchPatterns.Add(made);
+            pattern = added >= 0 ? doc.HatchPatterns.FindIndex(added) : null;
+        }
+        return pattern == null ? SolidPatternIndex(doc) : pattern.Index;
+    }
+
     private static bool TryInsideProbe(Curve curve, Plane plane, double tolerance, out Point3d probe)
     {
         probe = Point3d.Unset;
@@ -973,7 +992,7 @@ public partial class RhinoMCPFunctions
     /// a void still closed inside the mass). Hatches use the Solid pattern.
     /// </summary>
     private static Hatch[] HatchesForGroup(
-        List<Curve> group, Plane plane, int pattern, double tolerance)
+        List<Curve> group, Plane plane, int pattern, double patternScale, double tolerance)
     {
         var loops = new List<SectionLoop>();
         foreach (var curve in group)
@@ -986,7 +1005,7 @@ public partial class RhinoMCPFunctions
         }
         if (loops.Count == 0)
         {
-            try { return Hatch.Create(group, pattern, 0.0, 1.0, tolerance); }
+            try { return Hatch.Create(group, pattern, 0.0, patternScale, tolerance); }
             catch (Exception) { return null; }
         }
         var unique = new List<SectionLoop>();
@@ -1046,7 +1065,7 @@ public partial class RhinoMCPFunctions
             var curves = new List<Curve> { loop.Curve };
             curves.AddRange(holes);
             Hatch[] many = null;
-            try { many = Hatch.Create(curves, pattern, 0.0, 1.0, tolerance); }
+            try { many = Hatch.Create(curves, pattern, 0.0, patternScale, tolerance); }
             catch (Exception) { many = null; }
             if (many == null) continue;
             foreach (var one in many)
@@ -1055,23 +1074,28 @@ public partial class RhinoMCPFunctions
             }
         }
         if (built.Count > 0) return built.ToArray();
-        try { return Hatch.Create(group, pattern, 0.0, 1.0, tolerance); }
+        try { return Hatch.Create(group, pattern, 0.0, patternScale, tolerance); }
         catch (Exception) { return null; }
     }
 
     /// <summary>
-    /// The poché: a solid black hatch per closed loop group. With owners
+    /// The poché: a hatch per closed loop group, filled as the active print profile says
+    /// (solid black by default). With owners
     /// (SectionFillLoops), each hatch is stamped forsk:source with its solid
     /// and perOwner counts them.
     /// </summary>
     private static int BakeSectionFills(
         RhinoDoc doc, Layer layer, string view, List<List<Curve>> groups,
         double tolerance, ref int index, ref BoundingBox box,
-        List<string> owners = null, Dictionary<string, int> perOwner = null)
+        List<string> owners = null, Dictionary<string, int> perOwner = null, int strokeScale = 1)
     {
         if (doc == null || layer == null || groups == null || groups.Count == 0) return 0;
-        var pattern = SolidPatternIndex(doc);
+        var profile = PrintProfiles.Active;
+        var pattern = PochePatternIndex(doc, profile);
         if (pattern < 0) return 0;
+        var patternScale = PrintProfiles.HatchScale(profile, strokeScale);
+        // What the fill really is, so a smoke can tell a hatch from the Solid fallback.
+        var patternName = doc.HatchPatterns.FindIndex(pattern)?.Name ?? "";
         var plane = Plane.WorldXY;
         var count = 0;
         for (var g = 0; g < groups.Count; g++)
@@ -1080,7 +1104,7 @@ public partial class RhinoMCPFunctions
             var owner = owners != null && g < owners.Count ? owners[g] : null;
             if (group == null || group.Count == 0) continue;
             Hatch[] hatches = null;
-            try { hatches = HatchesForGroup(group, plane, pattern, tolerance); }
+            try { hatches = HatchesForGroup(group, plane, pattern, patternScale, tolerance); }
             catch (Exception) { hatches = null; }
             if (hatches == null) continue;
             foreach (var hatch in hatches)
@@ -1095,9 +1119,9 @@ public partial class RhinoMCPFunctions
                     Space = ActiveSpace.ModelSpace,
                     ViewportId = Guid.Empty,
                     ColorSource = ObjectColorSource.ColorFromObject,
-                    ObjectColor = Color.Black,
+                    ObjectColor = profile.Poche,
                     PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
-                    PlotColor = Color.Black,
+                    PlotColor = profile.Poche,
                     PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
                     PlotWeight = DrawHairlineMm,
                     DisplayOrder = SectionFillOrder
@@ -1110,6 +1134,7 @@ public partial class RhinoMCPFunctions
                     View = view
                 });
                 attr.SetUserString("forsk:role", SectionFillRole);
+                attr.SetUserString("forsk:poche_pattern", patternName);
                 if (!string.IsNullOrEmpty(owner))
                     attr.SetUserString("forsk:source", owner);
                 var id = Guid.Empty;
@@ -1169,11 +1194,12 @@ public partial class RhinoMCPFunctions
     {
         public Curve Curve;
         public double Weight;
+        public Color Color;
     }
 
     private const string DrawParentName = "S-DRAW";
+    /// <summary>The weight of a S-DRAW layer and of an object that sets none. The sheet's pens come from the print profile.</summary>
     private const double DrawHairlineMm = 0.18;
-    private const double DrawSilhouetteMm = 0.35;
 
     private static string DrawChildName(string view)
     {
@@ -1201,6 +1227,8 @@ public partial class RhinoMCPFunctions
             Box = BoundingBox.Empty,
             Error = null
         };
+        // F5.4: every stroke, fill and rule of this pass is drawn in the document's print profile.
+        PrintProfiles.Active = ReadPrintProfile(doc);
         Sections.Def section = null;
         if (doc == null || (!TryGetSheetView(view, out var spec) && !TryGetSectionView(doc, view, out spec, out section)))
         {
@@ -1310,12 +1338,14 @@ public partial class RhinoMCPFunctions
                             var dup = seg.CurveGeometry?.DuplicateCurve();
                             if (dup == null) continue;
                             var sectionCut = IsSectionCut(seg);
+                            var pen = seg.IsSceneSilhouette || sectionCut
+                                ? PrintProfiles.Active.Silhouette
+                                : PrintProfiles.Active.Beyond;
                             visible.Add(new WeightedCurve
                             {
                                 Curve = dup,
-                                Weight = seg.IsSceneSilhouette || sectionCut
-                                    ? DrawSilhouetteMm
-                                    : DrawHairlineMm
+                                Weight = pen.Mm,
+                                Color = pen.Color
                             });
                         }
                     }
@@ -1472,9 +1502,9 @@ public partial class RhinoMCPFunctions
                     LayerIndex = layer.Index,
                     Name = stableId,
                     ColorSource = ObjectColorSource.ColorFromObject,
-                    ObjectColor = Color.Black,
+                    ObjectColor = item.Color,
                     PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
-                    PlotColor = Color.Black,
+                    PlotColor = item.Color,
                     PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
                     PlotWeight = item.Weight < 0 ? DrawHairlineMm : item.Weight,
                     DisplayOrder = SectionLineOrder
@@ -1500,7 +1530,7 @@ public partial class RhinoMCPFunctions
                 try
                 {
                     fills = BakeSectionFills(
-                        doc, layer, spec.View, fillGroups, tolerance, ref index, ref box, fillOwners, perOwner);
+                        doc, layer, spec.View, fillGroups, tolerance, ref index, ref box, fillOwners, perOwner, strokeScale);
                 }
                 catch (Exception)
                 {

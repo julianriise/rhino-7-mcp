@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "print_profile.json",
+  "title": "PrintProfile Command",
+  "description": "Choose the document's print profile, or read the current one. A profile sets the poché fill and the colour and weight of the plan's line tiers and dashed lines; it drives the plan, the section sheets and the schedule rules. Stored in the document. The next layout_pack draws with it.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "enum": ["default", "grey", "hatch"],
+      "description": "default: solid black poché, black lines. grey: grey poché, coloured lines. hatch: hatched poché, lighter cut line. Omit to read the current profile."
+    }
+  },
+  "additionalProperties": false
+}

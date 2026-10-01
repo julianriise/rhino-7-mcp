@@ -20,6 +20,7 @@ import sys
 
 import daylight_smoke
 import plan_smoke
+import profile_smoke
 import section_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
@@ -594,6 +595,38 @@ def sections_only() -> int:
     return 0
 
 
+def profile_only() -> int:
+    """F5.4: the three print profiles on the plan and section A, checked on the
+    objects the sheets are drawn with. After the sections step (which stored
+    section A's room), before the wall edits, and it leaves the default set."""
+    print("==> profile")
+    failures: list[str] = []
+    sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
+    sock.settimeout(TIMEOUT)
+    try:
+        def send(cmd: str, params: dict) -> dict:
+            return send_command(sock, cmd, params)
+
+        rooms = send("rooms_detect", {}).get("rooms") or [{}]
+        named = next((r for r in rooms if r.get("name")), rooms[0])
+        profile_smoke.run_step(
+            send, "garage", str(named.get("name") or named.get("id") or ""),
+            "/tmp/forsk-f5-garage-profile", failures,
+            panel=lambda action, extra: send("panel_daylight", {"action": action, **extra}),
+        )
+    except SmokeError as exc:
+        failures.append(f"garage profile: {exc}")
+    finally:
+        sock.close()
+    if failures:
+        print(f"FAIL {len(failures)}")
+        for item in failures:
+            print(f"  - {item}")
+        return 1
+    print("PASS")
+    return 0
+
+
 def main() -> int:
     failures = []
     sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
@@ -1151,8 +1184,11 @@ if __name__ == "__main__":
     capture = len(sys.argv) > 1 and sys.argv[1] == "--capture-only"
     sections = len(sys.argv) > 1 and sys.argv[1] == "--sections"
     walls = len(sys.argv) > 1 and sys.argv[1] == "--walls"
+    profile = len(sys.argv) > 1 and sys.argv[1] == "--profile"
     try:
-        sys.exit(capture_only() if capture else sections_only() if sections else walls_only() if walls else main())
+        sys.exit(
+            capture_only() if capture else sections_only() if sections else profile_only() if profile
+            else walls_only() if walls else main())
     except (SmokeError, OSError, socket.timeout) as exc:
         if capture:
             print(f"    capture {exc}")
