@@ -36,7 +36,7 @@ public class PanelDaylightTests
     static ChipRow Window() => new ChipRow { Generated = true, Kind = "opening_marker", OpeningKind = "window", Layer = "A-OPEN" };
     static ChipRow Door() => new ChipRow { Generated = true, Kind = "opening_marker", OpeningKind = "door", Layer = "A-OPEN" };
     static ChipRow Room() => new ChipRow { Generated = true, Kind = "room", Layer = "A-ROOM" };
-    static ChipRow Overlay() => new ChipRow { Generated = true, Kind = "analysis", Layer = "A-ANALYSE" };
+    static ChipRow Overlay(bool visible = true) => new ChipRow { Generated = true, Kind = "analysis", Layer = "A-ANALYSE", Visible = visible };
 
     static BakeChip Chip(params ChipRow[] rows)
     {
@@ -67,11 +67,30 @@ public class PanelDaylightTests
     }
 
     [Fact]
-    public void OverlayPresent_ClearsDaylight()
+    public void OverlayVisible_HidesTheMap()
     {
         var chip = Chip(Wall(), Window(), Room(), Overlay());
-        Assert.Equal(DaylightAction.Clear, chip.Daylight);
-        Assert.Equal("Clear daylight", chip.DaylightLabel);
+        Assert.Equal(DaylightAction.Hide, chip.Daylight);
+        Assert.True(chip.DaylightEnabled);
+        Assert.Equal("Hide daylight map", chip.DaylightLabel);
+    }
+
+    [Fact]
+    public void OverlayHidden_ShowsTheMap()
+    {
+        var chip = Chip(Wall(), Window(), Room(), Overlay(false));
+        Assert.True(chip.HasOverlay);
+        Assert.False(chip.OverlayVisible);
+        Assert.Equal(DaylightAction.Show, chip.Daylight);
+        Assert.Equal("Show daylight map", chip.DaylightLabel);
+    }
+
+    [Fact]
+    public void HiddenMap_StaysAheadOfMakeRooms()
+    {
+        var chip = Chip(Wall(), Window(), Overlay(false));
+        Assert.False(chip.HasRooms);
+        Assert.Equal(DaylightAction.Show, chip.Daylight);
     }
 
     [Fact]
@@ -80,7 +99,34 @@ public class PanelDaylightTests
         var chip = Chip(Wall(), Window(), Room(), Overlay());
         chip.ReadDaylight(new[] { Wall(), Window(), Room() });
         Assert.False(chip.HasOverlay);
+        Assert.False(chip.OverlayVisible);
         Assert.Equal("Daylight", chip.DaylightLabel);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(2, false)]
+    public void AutoRooms_OnlyWhenNoneWereFound(int? count, bool detect)
+    {
+        Assert.Equal(detect, BakeChip.ShouldDetectRooms(count));
+    }
+
+    [Fact]
+    public void AutoRooms_SkipsWhenTheRoomStepFailed()
+    {
+        Assert.False(BakeChip.ShouldDetectRooms(null));
+    }
+
+    [Theory]
+    [InlineData("clear daylight", DaylightAction.Hide)]
+    [InlineData("fjern dagslys", DaylightAction.Hide)]
+    [InlineData("Hide daylight map", DaylightAction.Hide)]
+    [InlineData("Show daylight map", DaylightAction.Show)]
+    [InlineData("run daylight", DaylightAction.None)]
+    [InlineData("is this room dark?", DaylightAction.None)]
+    public void MapToggle_HidesOrShowsWithoutARerun(string text, DaylightAction action)
+    {
+        Assert.Equal(action, BakeChip.MapToggle(text));
     }
 
     [Fact]

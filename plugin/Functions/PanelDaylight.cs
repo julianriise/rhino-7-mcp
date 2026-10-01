@@ -8,12 +8,12 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Smoke hook for the Forsk panel's Daylight chip. The same chip state, run, and
-/// clear the button uses, plus the chat intent for a message and the Import
+/// hide or show the button uses, plus the chat intent for a message and the Import
 /// chip as it stands (Import plan, or Set scale on an imported plan). No UI.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    // ReadOnly: the panel dispatch records its own undo for paint and clear, as the chip does.
+    // ReadOnly: run goes through the panel dispatch, which records undo. Hide and show record their own.
     [McpCommand("panel_daylight", ReadOnly = true)]
     public JObject PanelDaylight(JObject parameters)
     {
@@ -26,10 +26,10 @@ public partial class RhinoMCPFunctions
             label = "Daylight";
             envelope = ForskDaylight.Run("floor", ForskTools.Command);
         }
-        else if (action == "clear")
+        else if (action == "hide" || action == "show")
         {
-            label = "Clear daylight";
-            envelope = ForskDaylight.Clear(ForskTools.Command);
+            label = action == "hide" ? "Hide daylight map" : "Show daylight map";
+            envelope = ForskDaylight.ApplyVisible(action == "show");
         }
         else if (action == "rooms")
         {
@@ -37,7 +37,7 @@ public partial class RhinoMCPFunctions
         }
         else if (action != "state")
         {
-            throw new ArgumentException("action must be state, run, clear, or rooms.");
+            throw new ArgumentException("action must be state, run, hide, show, or rooms.");
         }
 
         var chip = ForskBake.Detect();
@@ -76,6 +76,7 @@ public partial class RhinoMCPFunctions
                 Kind = GetForskKind(obj),
                 OpeningKind = obj.Attributes.GetUserString("forsk:opening_kind"),
                 Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
+                Visible = obj.Visible,
                 ImportKind = obj.Attributes.GetUserString(ImportKindKey),
                 ScaleStatus = obj.Attributes.GetUserString(ImportScaleStatusKey)
             });

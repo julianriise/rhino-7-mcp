@@ -340,14 +340,16 @@ namespace RhinoMCPPlugin.Forsk
     {
         None,
         Run,
-        Clear,
+        Hide,
+        Show,
         MakeRooms
     }
 
     /// <summary>
     /// One document object as the Daylight chip sees it. The rows come from the
     /// same enumeration daylight_scene uses: hidden layers such as A-OPEN
-    /// included, X-EXIST left out.
+    /// included, X-EXIST left out. Visible is false when the object or its
+    /// layer is hidden, so a hidden daylight mesh still counts.
     /// </summary>
     public sealed class ChipRow
     {
@@ -355,6 +357,7 @@ namespace RhinoMCPPlugin.Forsk
         public string Kind;
         public string OpeningKind;
         public string Layer;
+        public bool Visible;
         /// <summary>forsk:import_kind: underlay for the imported plan image.</summary>
         public string ImportKind;
         /// <summary>forsk:import_scale_status on the underlay: user once two points set it.</summary>
@@ -363,8 +366,8 @@ namespace RhinoMCPPlugin.Forsk
 
     /// <summary>
     /// Chip state. The primary chip is Generate or Print. The secondary Daylight
-    /// chip sits under Print: it runs when walls, windows, and rooms exist, clears
-    /// while an overlay is on A-ANALYSE, and offers Make rooms when rooms are missing.
+    /// chip sits under Print: it runs when walls, windows, and rooms exist, hides
+    /// or shows the mesh on A-ANALYSE, and offers Make rooms when rooms are missing.
     /// The Import chip offers Import plan in a document with no plan, and Set scale
     /// on an imported plan until two points have set its scale.
     /// </summary>
@@ -378,6 +381,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool HasWindows;
         public bool HasRooms;
         public bool HasOverlay;
+        /// <summary>A daylight mesh is in the model and currently shown.</summary>
+        public bool OverlayVisible;
         public bool ShowPrint => HasWalls;
         public bool ShowGenerate => HasPlan && !HasWalls;
         public bool Visible => ShowPrint || ShowGenerate;
@@ -389,7 +394,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             get
             {
-                if (HasOverlay) return DaylightAction.Clear;
+                if (HasOverlay) return OverlayVisible ? DaylightAction.Hide : DaylightAction.Show;
                 if (!HasRooms) return DaylightAction.MakeRooms;
                 if (!HasWindows) return DaylightAction.None;
                 return DaylightAction.Run;
@@ -404,7 +409,8 @@ namespace RhinoMCPPlugin.Forsk
             {
                 switch (Daylight)
                 {
-                    case DaylightAction.Clear: return "Clear daylight";
+                    case DaylightAction.Hide: return "Hide daylight map";
+                    case DaylightAction.Show: return "Show daylight map";
                     case DaylightAction.MakeRooms: return "Make rooms";
                     case DaylightAction.None: return NeedsWindows;
                     default: return "Daylight";
@@ -445,15 +451,44 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>Daylight facts from the model rows. Called on every refresh; nothing is cached.</summary>
         public void ReadDaylight(IEnumerable<ChipRow> rows)
         {
-            HasWindows = HasRooms = HasOverlay = false;
+            HasWindows = HasRooms = HasOverlay = OverlayVisible = false;
             foreach (var row in rows)
             {
                 if (row == null) continue;
                 if (!row.Generated) continue;
                 if (Is(row.Kind, "room")) HasRooms = true;
-                else if (Is(row.Kind, "analysis")) HasOverlay = true;
+                else if (Is(row.Kind, "analysis"))
+                {
+                    HasOverlay = true;
+                    if (row.Visible) OverlayVisible = true;
+                }
                 else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "window")) HasWindows = true;
             }
+        }
+
+        /// <summary>
+        /// Generate 3D already ran rooms_from_layer. A count above zero means drawn
+        /// A-ROOM outlines became markers, and they win. Zero means no rooms were
+        /// found, so rooms_detect runs. Null means that step failed: do not detect.
+        /// </summary>
+        public static bool ShouldDetectRooms(int? roomsFromLayerCount)
+        {
+            return roomsFromLayerCount == 0;
+        }
+
+        /// <summary>
+        /// A panel sentence that hides or shows the daylight map. Run, dark, and
+        /// bright stay with the daylight chat. Clear means hide: the mesh stays.
+        /// </summary>
+        public static DaylightAction MapToggle(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return DaylightAction.None;
+            var t = text.Trim().ToLowerInvariant();
+            var aboutMap = t.Contains("daylight map") || t.Contains("clear daylight") || t.Contains("fjern dagslys")
+                || t.Contains("hide daylight") || t.Contains("show daylight");
+            if (!aboutMap) return DaylightAction.None;
+            if (t.Contains("show")) return DaylightAction.Show;
+            return DaylightAction.Hide;
         }
 
         static bool Is(string value, string expected)

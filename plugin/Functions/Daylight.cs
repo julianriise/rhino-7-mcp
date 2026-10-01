@@ -250,6 +250,49 @@ public partial class RhinoMCPFunctions
         return Color.FromArgb(c[0].ToObject<int>(), c[1].ToObject<int>(), c[2].ToObject<int>());
     }
 
+    /// <summary>
+    /// Hide or show the daylight meshes. They stay in the document, so Show
+    /// brings the same map back. Layout details keep their own per-viewport off.
+    /// </summary>
+    public static JObject SetAnalysisVisible(RhinoDoc doc, bool visible)
+    {
+        if (visible)
+        {
+            foreach (var candidate in doc.Layers)
+            {
+                if (candidate == null || candidate.IsDeleted) continue;
+                if (!candidate.Name.Equals(AnalysisLayerName, StringComparison.OrdinalIgnoreCase)) continue;
+                if (candidate.IsVisible) break;
+                candidate.IsVisible = true;
+                doc.Layers.Modify(candidate, candidate.Index, true);
+                break;
+            }
+        }
+
+        var meshes = AnalysisOverlays(doc);
+        var changed = 0;
+        foreach (var obj in meshes)
+        {
+            var id = obj.Id;
+            if (visible)
+            {
+                if (obj.IsHidden && doc.Objects.Show(id, false)) changed++;
+            }
+            else if (!obj.IsHidden && doc.Objects.Hide(id, false)) changed++;
+        }
+        doc.Views.Redraw();
+        var kept = AnalysisOverlays(doc).Count;
+        var verb = visible ? "Showed" : "Hid";
+        return new JObject
+        {
+            ["count"] = meshes.Count,
+            ["visible"] = visible,
+            ["changed"] = changed,
+            ["remaining"] = kept,
+            ["message"] = $"{verb} {meshes.Count} daylight mesh(es) on {AnalysisLayerName}. Kept {kept}."
+        };
+    }
+
     [McpCommand("daylight_clear")]
     public JObject DaylightClear(JObject parameters)
     {

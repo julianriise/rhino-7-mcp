@@ -252,6 +252,13 @@ namespace RhinoMCPPlugin.Forsk
             var text = (_composer.Input.Text ?? "").Trim();
             if (text.Length == 0) return;
             _composer.Input.Text = "";
+            var toggle = BakeChip.MapToggle(text);
+            if (toggle != DaylightAction.None)
+            {
+                var mapLabel = toggle == DaylightAction.Show ? "Show daylight map" : "Hide daylight map";
+                RunDaylight(toggle, mapLabel, false);
+                return;
+            }
             _busy = true;
             _composer.Send.EnabledClick = false;
             AddLine("user", text);
@@ -374,13 +381,17 @@ namespace RhinoMCPPlugin.Forsk
 
         void Daylight()
         {
-            if (_busy || !_chipState.DaylightEnabled) return;
+            RunDaylight(_chipState.Daylight, _chipState.DaylightLabel, true);
+        }
+
+        void RunDaylight(DaylightAction action, string label, bool requireEnabled)
+        {
+            if (_busy) return;
+            if (requireEnabled && !_chipState.DaylightEnabled) return;
             _busy = true;
             _composer.Send.EnabledClick = false;
             _chip.EnabledClick = false;
             _daylight.EnabledClick = false;
-            var action = _chipState.Daylight;
-            var label = _chipState.DaylightLabel;
             AddLine("user", label);
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
