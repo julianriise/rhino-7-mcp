@@ -33,6 +33,12 @@ def row(role=None, box=((0, 0, 0), (1, 1, 0)), kind="drawing", **attrs):
 SLAB = [row(box=((0, 0, -400), (8000, 4000, 0)), kind="floor")]
 
 
+def marker(rid, x0=200, x1=7800):
+    """A room marker as get_object_info gives it: its room id stamped, its outline's points."""
+    return {"name": rid, "attributes": {"forsk:kind": "room", "forsk:room_id": rid},
+            "geometry": {"points": [[x0, 200, 0], [x1, 200, 0], [x1, 3800, 0], [x0, 3800, 0], [x0, 200, 0]]}}
+
+
 def section_rows(letter, ground=-400):
     """The sheet's records. ground -400 is the slab's underside; 0 is a slabless garage's wall base."""
     view = f"section_{letter.lower()}"
@@ -98,9 +104,9 @@ def fake_rhino(model=None):
                 return {"objects": sections[layer[-1]]}
             return {"objects": []}
         if cmd == "rooms_detect":
-            return {"rooms": [{"id": "rd-01", "name": "Garasje"}], "ids": ["m-01"]}
+            return model.get("rooms_detect") or {"rooms": [{"id": "rd-01", "name": "Garasje"}], "ids": ["m-01"]}
         if cmd == "get_object_info":
-            return {"geometry": {"points": [[200, 200, 0], [7800, 200, 0], [7800, 3800, 0], [200, 3800, 0], [200, 200, 0]]}}
+            return (model.get("markers") or {"m-01": marker("rd-01")})[params["id"]]
         if cmd == "export_pdf":
             return {"pages": ["Forsk — Plan", "Forsk — Section A", "Forsk — Section B"], "message": "ok"}
         raise AssertionError(cmd)
@@ -157,6 +163,23 @@ def test_a_model_without_walls_or_slab_has_no_ground_and_fails():
     section_smoke.run_step(bare, "garage", "Garasje", "/tmp/x.pdf", failures)
     assert any("no expected ground" in f for f in failures)
     assert any("model has no walls" in f for f in failures)
+
+
+def test_each_room_keeps_its_own_outline_when_rooms_and_ids_differ_in_order():
+    """rooms_detect lists the rooms detected first and the ids in marker order; the
+    live office had them reversed. A reads both rooms, B (x 4000) only rd-02."""
+    def free(letter, rid):
+        return row("free_height", **{"forsk:view": f"section_{letter.lower()}", "forsk:section": letter,
+                                     "forsk:symbol": "text", "forsk:room": rid, "forsk:free_height": "2800", "forsk:floor_z": "0"})
+    sections = {letter: [r for r in section_rows(letter) if r["attributes"].get("forsk:role") != "free_height"] for letter in "AB"}
+    sections["A"] += [free("A", "rd-01"), free("A", "rd-02")]
+    sections["B"] += [free("B", "rd-02")]
+    failures, _ = run({
+        "rooms_detect": {"rooms": [{"id": "rd-01", "name": "Kontor"}, {"id": "rd-02", "name": "Lager"}], "ids": ["m-02", "m-01"]},
+        "markers": {"m-01": marker("rd-01", 200, 3900), "m-02": marker("rd-02", 3900, 7800)},
+        "sections": sections,
+    })
+    assert failures == []
 
 
 def test_a_missing_free_height_fails_with_the_expected_value():

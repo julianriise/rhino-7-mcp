@@ -149,12 +149,15 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
     wall_boxes = [b for b in (_box(w) for w in walls) if b]
     rooms = send("rooms_detect", {})
     rings = {}
-    for item, marker in zip(rooms.get("rooms") or [], rooms.get("ids") or []):
+    # ids (marker order) and rooms (detected first) are not parallel: the marker
+    # names its room, forsk:room_id, or for an outline drawn by hand its name.
+    for marker in rooms.get("ids") or []:
         info = send("get_object_info", {"id": marker})
+        rid = (info.get("attributes") or {}).get("forsk:room_id") or info.get("name")
         points = ((info.get("geometry") or {}).get("points")) or []
         ring = [(float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0) for p in points]
-        if ring:
-            rings[str(item.get("id"))] = ring
+        if ring and rid:
+            rings[str(rid)] = ring
 
     # Marker on the plan, clear of tags and marks.
     plan_rows = _rows(send, "S-DRAW::Plan")
