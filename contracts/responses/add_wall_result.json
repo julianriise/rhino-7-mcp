@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_wall_result.json",
+  "title": "AddWallResult",
+  "description": "One wall added: joined to the record it touched (host rebuilt), or a new record of its own.",
+  "type": "object",
+  "properties": {
+    "host_id": { "type": "string" },
+    "forsk_id": { "type": "string" },
+    "joined": { "type": "boolean", "description": "True when the wall joined an existing record." },
+    "from": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Centreline start after it reached a wall face." },
+    "to": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "length_mm": { "type": "number" },
+    "thickness": { "type": "number" },
+    "height": { "type": "number" },
+    "path_points": { "type": ["integer", "null"] },
+    "holes": { "type": "integer" },
+    "host_openings": { "type": "integer" },
+    "host_voids": { "type": "integer" },
+    "max_frame_mm": { "type": "number" },
+    "markers": { "type": "array" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["host_id", "forsk_id", "joined", "from", "to", "thickness", "holes", "ok", "message"]
+}

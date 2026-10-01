@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_wall.json",
+  "title": "DeleteWall Command",
+  "description": "Delete one straight wall run, and the openings in it, then rebuild that host wall from its path. A baked plan is one wall record, so the run is picked inside it: side for an outer wall, or the face nearest at. Taking a partition out joins the two rooms it parted; taking an outer wall out opens the ring. A wall standing on its own is deleted whole. Refused, with nothing changed: a delete that would leave the record in two separate pieces (not in this version), and one that would leave another opening past the end of its wall. Floor, roof and rooms do not follow. Id omitted uses the one selected wall, else the wall nearest at, else the only wall. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID. Omit to use the selected wall, or the only one."
+    },
+    "side": {
+      "type": "string",
+      "enum": ["north", "south", "east", "west"],
+      "description": "The outer wall facing this way. Exclusive with at."
+    },
+    "at": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in mm on or beside the wall: the face nearest it, within 1000 mm. Exclusive with side."
+    }
+  },
+  "oneOf": [
+    { "required": ["side"] },
+    { "required": ["at"] }
+  ],
+  "additionalProperties": false
+}

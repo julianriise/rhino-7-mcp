@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_wall.json",
+  "title": "AddWall Command",
+  "description": "Add one straight wall on a centreline: from and to, or a straight line the user drew (line_id). Each end that stops short of a wall face by at most 300 mm runs on to it. The wall joins the one wall record it touches and that host is rebuilt from its path (a partition across a room splits it); a wall that touches none stands as a record of its own (the next forsk:id, w02). Refused, with nothing changed: a wall that would join two separate wall records (not in this version), and one that would run across an opening. Floor, roof and rooms do not follow.",
+  "type": "object",
+  "properties": {
+    "from": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Centreline start [x, y] in mm."
+    },
+    "to": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Centreline end [x, y] in mm."
+    },
+    "line_id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "A straight line in the document: the centreline from its start to its end. Exclusive with from and to."
+    },
+    "thickness": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 600,
+      "description": "mm. Default: the nearest wall's thickness, else 200."
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "mm, for a wall standing on its own. A wall that joins a record takes that record's height. Default: the nearest wall's height, else 3000."
+    }
+  },
+  "oneOf": [
+    { "required": ["from", "to"], "not": { "required": ["line_id"] } },
+    { "required": ["line_id"], "not": { "anyOf": [{ "required": ["from"] }, { "required": ["to"] }] } }
+  ],
+  "additionalProperties": false
+}

@@ -247,24 +247,176 @@ public static class WallEdit
     {
         var center = new Pt((marker.MinX + marker.MaxX) / 2.0, (marker.MinY + marker.MaxY) / 2.0);
         if (!InRegion(moved, center)) return false;
-        double sLo = double.MaxValue, sHi = double.MinValue, cLo = double.MaxValue, cHi = double.MinValue;
+        return !Overlaps(run.Dir, run.Normal, run.Lo, run.Hi, run.Near + by, run.Far + by, marker, tol);
+    }
+
+    /// <summary>The run's wall as a closed loop: its length between its two faces.</summary>
+    public static List<Pt> Band(Run run) => new List<Pt>
+    {
+        At(run, run.Lo, run.Near), At(run, run.Hi, run.Near), At(run, run.Hi, run.Far), At(run, run.Lo, run.Far)
+    };
+
+    /// <summary>
+    /// The record with the run taken out. Left is null when the run was the
+    /// whole record (a wall standing free). A delete that would leave the
+    /// record in two or more pieces is refused: this version keeps one record.
+    /// </summary>
+    public static bool TryDelete(List<List<Pt>> rings, Run run, double tol, out List<List<Pt>> left, out string why)
+    {
+        left = null;
+        why = null;
+        var regions = Group(RoomDetect.Difference(new[] { rings }, new[] { Band(run) }, tol));
+        if (regions.Count > 1)
+        {
+            why = "Not deleted: the walls left would stand in " + regions.Count + " separate pieces, and this version keeps one wall record.";
+            return false;
+        }
+        if (regions.Count == 1) left = regions[0];
+        return true;
+    }
+
+    /// <summary>An opening that stays is still held: both ends of its marker, along its longer side, sit in the walls.</summary>
+    public static bool Holds(List<List<Pt>> rings, RoomDetect.Box marker)
+    {
+        var cx = (marker.MinX + marker.MaxX) / 2.0;
+        var cy = (marker.MinY + marker.MaxY) / 2.0;
+        var alongX = marker.MaxX - marker.MinX >= marker.MaxY - marker.MinY;
+        var a = alongX ? new Pt(marker.MinX, cy) : new Pt(cx, marker.MinY);
+        var b = alongX ? new Pt(marker.MaxX, cy) : new Pt(cx, marker.MaxY);
+        return InRegion(rings, a) && InRegion(rings, b);
+    }
+
+    public sealed class Added
+    {
+        /// <summary>The record the new wall joins (its index in the records given), or -1 for a record of its own.</summary>
+        public int Joined = -1;
+        /// <summary>The joined record's loops with the wall in, or the new wall's own loop.</summary>
+        public List<List<Pt>> Rings;
+        public List<Pt> Band;
+        /// <summary>The centreline's ends after each has reached the wall face it stops short of.</summary>
+        public Pt From, To;
+    }
+
+    /// <summary>
+    /// A straight wall of the thickness on the centreline from to to. Each end
+    /// that stops short of a wall face by at most RoomDetect.ReachMm runs on to
+    /// it. The wall joins the one record it touches, or stands as a record of
+    /// its own. One that would join two records is refused: this version keeps
+    /// each record as it is.
+    /// </summary>
+    public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why)
+    {
+        added = null;
+        why = null;
+        if (thickness <= 0 || thickness > MaxThickMm)
+        {
+            why = "thickness is above 0 and at most " + Mm(MaxThickMm) + " mm.";
+            return false;
+        }
+        if (Dist(from, to) <= thickness)
+        {
+            why = "The wall is no longer than it is thick: give two points further apart.";
+            return false;
+        }
+        var dir = Unit(from, to);
+        from = Reach(records, from, new Pt(-dir.X, -dir.Y), tol);
+        to = Reach(records, to, dir, tol);
+        var band = Strip(from, to, thickness);
+        var joined = new List<int>();
+        for (var i = 0; i < records.Count; i++)
+            if (Group(RoomDetect.Union(new[] { records[i], new List<List<Pt>> { band } }, tol)).Count == 1)
+                joined.Add(i);
+        if (joined.Count > 1)
+        {
+            why = "Not added: the wall would join " + joined.Count + " separate walls into one, and this version keeps each wall record as it is.";
+            return false;
+        }
+        added = new Added { Band = band, From = from, To = to };
+        if (joined.Count == 0)
+        {
+            added.Rings = new List<List<Pt>> { band };
+            return true;
+        }
+        added.Joined = joined[0];
+        added.Rings = Group(RoomDetect.Union(new[] { records[joined[0]], new List<List<Pt>> { band } }, tol))[0];
+        return true;
+    }
+
+    /// <summary>An opening's marker the new wall would run across.</summary>
+    public static bool InTheWay(Added added, double thickness, RoomDetect.Box marker, double tol)
+    {
+        var u = Unit(added.From, added.To);
+        var n = new Pt(-u.Y, u.X);
+        var c = Dot(added.From, n);
+        return Overlaps(u, n, Dot(added.From, u), Dot(added.To, u), c - thickness / 2.0, c + thickness / 2.0, marker, tol);
+    }
+
+    /// <summary>A loop of the thickness around the centreline a to b.</summary>
+    static List<Pt> Strip(Pt a, Pt b, double thickness)
+    {
+        var u = Unit(a, b);
+        var h = new Pt(-u.Y * thickness / 2.0, u.X * thickness / 2.0);
+        return new List<Pt>
+        {
+            new Pt(Round(a.X - h.X), Round(a.Y - h.Y)), new Pt(Round(b.X - h.X), Round(b.Y - h.Y)),
+            new Pt(Round(b.X + h.X), Round(b.Y + h.Y)), new Pt(Round(a.X + h.X), Round(a.Y + h.Y))
+        };
+    }
+
+    /// <summary>An end outside the walls runs on along dir to the first wall face within reach.</summary>
+    static Pt Reach(IList<List<List<Pt>>> records, Pt end, Pt dir, double tol)
+    {
+        foreach (var rings in records)
+            if (InRegion(rings, end) || Distance(rings, end, tol) <= tol) return end;
+        var reach = RoomDetect.ReachMm + tol;
+        var best = double.MaxValue;
+        foreach (var rings in records)
+            foreach (var e in Edges(rings, tol))
+            {
+                var a = A(rings, e);
+                var ab = Sub(B(rings, e), a);
+                var denom = Cross(dir, ab);
+                if (Math.Abs(denom) < 1e-9) continue;
+                var ae = Sub(a, end);
+                var t = Cross(ae, ab) / denom;
+                var s = Cross(ae, dir) / denom;
+                if (t > tol && t <= reach && t < best && s >= 0 && s <= 1) best = t;
+            }
+        return best < double.MaxValue ? Along(end, dir, best) : end;
+    }
+
+    /// <summary>Loops from Union or Difference as records: each outline with the holes it closes.</summary>
+    static List<List<List<Pt>>> Group(List<List<Pt>> loops)
+    {
+        var outlines = new List<List<Pt>>();
+        var holes = new List<List<Pt>>();
+        foreach (var loop in loops)
+            (RoomDetect.Area(loop) > 0 ? outlines : holes).Add(loop);
+        return RoomDetect.Regions(outlines, holes);
+    }
+
+    /// <summary>A marker box overlaps the strip between sLo..sHi along u and cLo..cHi along n, by more than tol both ways.</summary>
+    static bool Overlaps(Pt u, Pt n, double sLo, double sHi, double cLo, double cHi, RoomDetect.Box marker, double tol)
+    {
+        double bsLo = double.MaxValue, bsHi = double.MinValue, bcLo = double.MaxValue, bcHi = double.MinValue;
         foreach (var p in new[]
                  {
                      new Pt(marker.MinX, marker.MinY), new Pt(marker.MaxX, marker.MinY),
                      new Pt(marker.MaxX, marker.MaxY), new Pt(marker.MinX, marker.MaxY)
                  })
         {
-            var s = Dot(p, run.Dir);
-            var c = Dot(p, run.Normal);
-            sLo = Math.Min(sLo, s);
-            sHi = Math.Max(sHi, s);
-            cLo = Math.Min(cLo, c);
-            cHi = Math.Max(cHi, c);
+            bsLo = Math.Min(bsLo, Dot(p, u));
+            bsHi = Math.Max(bsHi, Dot(p, u));
+            bcLo = Math.Min(bcLo, Dot(p, n));
+            bcHi = Math.Max(bcHi, Dot(p, n));
         }
-        var alongRun = Math.Min(sHi, run.Hi) - Math.Max(sLo, run.Lo);
-        var acrossRun = Math.Min(cHi, run.Far + by) - Math.Max(cLo, run.Near + by);
-        return alongRun <= tol || acrossRun <= tol;
+        var along = Math.Min(bsHi, Math.Max(sLo, sHi)) - Math.Max(bsLo, Math.Min(sLo, sHi));
+        var across = Math.Min(bcHi, cHi) - Math.Max(bcLo, cLo);
+        return along > tol && across > tol;
     }
+
+    static Pt At(Run run, double s, double c) =>
+        new Pt(Round(run.Dir.X * s + run.Normal.X * c), Round(run.Dir.Y * s + run.Normal.Y * c));
 
     /// <summary>A plan point in the run's wall band, ends and faces included.</summary>
     public static bool InBand(Run run, Pt p, double tol)

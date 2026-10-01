@@ -59,7 +59,9 @@ namespace RhinoMCPPlugin.Forsk
             "set_opening",
             "set_opening_type",
             "delete_opening",
-            "move_wall"
+            "move_wall",
+            "delete_wall",
+            "add_wall"
         };
 
         static readonly string[] SheetsOnly =
@@ -527,6 +529,24 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
                     },
                     "toward", "distance_mm"),
+                Fn("delete_wall",
+                    "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole. Refused when the walls left would stand in two pieces. Floor, roof and rooms do not follow. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
+                        ["at"] = Pair("[x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side."),
+                        ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
+                    }),
+                Fn("add_wall",
+                    "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it) or stands on its own as a new wall. Refused when it would join two separate walls or run across an opening. Floor, roof and rooms do not follow.",
+                    new JObject
+                    {
+                        ["from"] = Pair("Centreline start [x, y] in mm."),
+                        ["to"] = Pair("Centreline end [x, y] in mm."),
+                        ["line_id"] = Str("A straight line's GUID: the centreline from its start to its end. Exclusive with from and to."),
+                        ["thickness"] = Num("mm, at most 600. Omit for the nearest wall's thickness."),
+                        ["height"] = Num("mm, for a wall standing on its own. Omit for the nearest wall's height.")
+                    }),
                 Fn("sheet_pack",
                     "Make2D plan plus north, east, south, and west on S-* layers. Model space, not a Layout page.",
                     new JObject
@@ -758,6 +778,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Two or more selected windows are one delete_opening with no id. "
                     + "Status line for that call: Removed 2 windows from w01. "
                     + "Move a wall is move_wall: side for an outer wall or at [x, y], toward, distance_mm. With neither, ask which wall. "
+                    + "Delete a wall is delete_wall, named the same way; its openings go with it. "
+                    + "Add a wall is add_wall: from and to [x, y], or line_id for a drawn line. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "
                     + "Refuse X-EXIST hosts with: Existing underlay is not a Forsk host wall. "
                     + "Bake, sheets, and print stay available when the user asks.";

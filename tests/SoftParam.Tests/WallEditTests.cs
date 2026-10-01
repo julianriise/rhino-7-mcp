@@ -206,6 +206,140 @@ public class WallEditTests
     }
 
     [Fact]
+    public void DeleteNorth_OpensTheRingIntoAU()
+    {
+        var rings = Garage();
+        Assert.True(WallEdit.TryPickSide(rings, "north", Tol, out var run, out _));
+        Assert.True(WallEdit.TryDelete(rings, run, Tol, out var left, out var why), why);
+        Assert.Single(left);
+        // The corners go with the run: the side walls end at the old inner face.
+        Assert.Equal(Box(0, 0, 8000, 3800), Sorted(left[0]));
+        Assert.Equal(8000.0 * 200 + 2 * 200.0 * 3600, RoomDetect.Area(left[0]), 3);
+    }
+
+    [Fact]
+    public void DeletePartition_TheTwoRoomsBecomeOne()
+    {
+        var rings = TwoRooms();
+        Assert.True(WallEdit.TryPick(rings, new Pt(4000, 2000), Tol, out var run, out _));
+        Assert.True(WallEdit.TryDelete(rings, run, Tol, out var left, out var why), why);
+        Assert.Equal(2, left.Count);
+        Assert.Equal(Box(0, 0, 8000, 4000), Sorted(left[0]));
+        Assert.Equal(Box(200, 200, 7800, 3800), Sorted(left[1]));
+        Assert.Equal(-7600.0 * 3600.0, RoomDetect.Area(left[1]), 3);
+    }
+
+    [Fact]
+    public void DeleteFreeStanding_TakesTheWholeRecord()
+    {
+        var rings = new List<List<Pt>> { Rect(1000, 1000, 4000, 1200) };
+        Assert.True(WallEdit.TryPick(rings, new Pt(2000, 1100), Tol, out var run, out _));
+        Assert.True(WallEdit.TryDelete(rings, run, Tol, out var left, out var why), why);
+        Assert.Null(left);
+    }
+
+    [Fact]
+    public void Delete_ThatSplitsTheRecord_IsRefused()
+    {
+        // The U left after the north wall went: its south wall holds the two arms together.
+        var u = new List<List<Pt>>
+        {
+            new List<Pt> { new(0, 0), new(8000, 0), new(8000, 3800), new(7800, 3800), new(7800, 200), new(200, 200), new(200, 3800), new(0, 3800) }
+        };
+        Assert.True(WallEdit.TryPickSide(u, "south", Tol, out var run, out var why), why);
+        Assert.False(WallEdit.TryDelete(u, run, Tol, out _, out why));
+        Assert.Equal("Not deleted: the walls left would stand in 2 separate pieces, and this version keeps one wall record.", why);
+    }
+
+    [Fact]
+    public void Holds_AnOpeningPastTheEndOfItsShortenedWall_DoesNot()
+    {
+        var rings = Garage();
+        Assert.True(WallEdit.TryPickSide(rings, "north", Tol, out var run, out _));
+        Assert.True(WallEdit.TryDelete(rings, run, Tol, out var left, out _));
+        // A window on the east wall: one low enough stays held, one running into the old corner does not.
+        Assert.True(WallEdit.Holds(left, new RoomDetect.Box(7875, 2000, 7925, 3200)));
+        Assert.False(WallEdit.Holds(left, new RoomDetect.Box(7875, 3000, 7925, 3900)));
+    }
+
+    [Fact]
+    public void Add_APartitionAcrossTheRoom_JoinsTheRecord_AndSplitsTheRoom()
+    {
+        var records = new List<List<List<Pt>>> { Garage() };
+        Assert.True(WallEdit.TryAdd(records, new Pt(5000, 200), new Pt(5000, 3800), 100, Tol, out var added, out var why), why);
+        Assert.Equal(0, added.Joined);
+        // Ends on the faces stay on them: they do not run on through the wall.
+        Assert.Equal(new Pt(5000, 200), added.From);
+        Assert.Equal(new Pt(5000, 3800), added.To);
+        Assert.Equal(3, added.Rings.Count);
+        Assert.Equal(Box(0, 0, 8000, 4000), Sorted(added.Rings[0]));
+        Assert.Contains(added.Rings.Skip(1), ring => Sorted(ring) == Box(200, 200, 4950, 3800));
+        Assert.Contains(added.Rings.Skip(1), ring => Sorted(ring) == Box(5050, 200, 7800, 3800));
+
+        // The partition is a run of its own: a delete gives back the one room.
+        Assert.True(WallEdit.TryPick(added.Rings, new Pt(5000, 2000), Tol, out var run, out why), why);
+        Assert.Equal(100, run.Thickness, 6);
+        Assert.True(WallEdit.TryDelete(added.Rings, run, Tol, out var left, out why), why);
+        Assert.Equal(2, left.Count);
+        Assert.Equal(Box(200, 200, 7800, 3800), Sorted(left[1]));
+    }
+
+    [Fact]
+    public void Add_EndsShortOfTheFaces_RunOnToThem()
+    {
+        var records = new List<List<List<Pt>>> { Garage() };
+        Assert.True(WallEdit.TryAdd(records, new Pt(5000, 450), new Pt(5000, 3600), 100, Tol, out var added, out var why), why);
+        Assert.Equal(new Pt(5000, 200), added.From);
+        Assert.Equal(new Pt(5000, 3800), added.To);
+        Assert.Equal(3, added.Rings.Count);
+    }
+
+    [Fact]
+    public void Add_TooFarFromAWall_StandsFree_AsItsOwnRecord()
+    {
+        var records = new List<List<List<Pt>>> { Garage() };
+        Assert.True(WallEdit.TryAdd(records, new Pt(2000, 6000), new Pt(6000, 6000), 200, Tol, out var added, out var why), why);
+        Assert.Equal(-1, added.Joined);
+        Assert.Single(added.Rings);
+        Assert.Equal(Box(2000, 5900, 6000, 6100), Sorted(added.Rings[0]));
+        // A free wall in the room touches nothing either.
+        Assert.True(WallEdit.TryAdd(records, new Pt(2000, 2000), new Pt(4000, 2000), 100, Tol, out var inRoom, out why), why);
+        Assert.Equal(-1, inRoom.Joined);
+    }
+
+    [Fact]
+    public void Add_JoiningTwoRecords_IsRefused()
+    {
+        var records = new List<List<List<Pt>>>
+        {
+            Garage(),
+            new List<List<Pt>> { Rect(2000, 5900, 6000, 6100) }
+        };
+        Assert.False(WallEdit.TryAdd(records, new Pt(4000, 4000), new Pt(4000, 5900), 200, Tol, out _, out var why));
+        Assert.Equal("Not added: the wall would join 2 separate walls into one, and this version keeps each wall record as it is.", why);
+    }
+
+    [Fact]
+    public void Add_RefusesABadThicknessOrAStub()
+    {
+        var records = new List<List<List<Pt>>> { Garage() };
+        Assert.False(WallEdit.TryAdd(records, new Pt(0, 6000), new Pt(4000, 6000), 0, Tol, out _, out var why));
+        Assert.Equal("thickness is above 0 and at most 600 mm.", why);
+        Assert.False(WallEdit.TryAdd(records, new Pt(0, 6000), new Pt(150, 6000), 200, Tol, out _, out why));
+        Assert.Equal("The wall is no longer than it is thick: give two points further apart.", why);
+    }
+
+    [Fact]
+    public void InTheWay_AnOpeningUnderTheNewWall()
+    {
+        var records = new List<List<List<Pt>>> { Garage() };
+        // Drawn from the south wall's centre: the strip runs into the wall, over its door.
+        Assert.True(WallEdit.TryAdd(records, new Pt(5000, 100), new Pt(5000, 3800), 100, Tol, out var added, out _));
+        Assert.True(WallEdit.InTheWay(added, 100, new RoomDetect.Box(4600, 75, 5500, 125), Tol));
+        Assert.False(WallEdit.InTheWay(added, 100, new RoomDetect.Box(1200, 75, 2100, 125), Tol));
+    }
+
+    [Fact]
     public void Path_RoundTrips_InThePluginsForm()
     {
         const string path = "{\"outer\":[[0,0],[8000,0],[8000,4000],[0,4000]],\"holes\":[[[200,200],[7800,200],[7800,3800],[200,3800]]]}";
@@ -223,7 +357,15 @@ public class WallEditTests
     [InlineData("nudge the partition 200 mm west")]
     [InlineData("flytt veggen 500 mot nord")]
     [InlineData("move the window 200 along the wall")]
-    public void WallMoves_RouteToEdit(string text)
+    [InlineData("delete the north wall")]
+    [InlineData("remove this wall")]
+    [InlineData("fjern veggen")]
+    [InlineData("slett skilleveggen mellom rommene")]
+    [InlineData("add a wall from 5000,200 to 5000,3800")]
+    [InlineData("draw a partition across the garage")]
+    [InlineData("make this line a wall")]
+    [InlineData("tegn en vegg")]
+    public void WallEdits_RouteToEdit(string text)
     {
         Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify(text, ""));
     }
@@ -232,6 +374,8 @@ public class WallEditTests
     [InlineData("walls 3000")]
     [InlineData("generate walls 2700")]
     [InlineData("wall height 2700")]
+    [InlineData("make the wall 3000 high")]
+    [InlineData("delete the walls and rebuild")]
     public void WallHeights_StayBuild(string text)
     {
         Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text, ""));

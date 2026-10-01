@@ -71,6 +71,8 @@ public static class RoomDetect
         public List<List<Pt>> Dividers = new List<List<Pt>>();
         /// <summary>Closed room outlines already drawn. They win over detection.</summary>
         public List<List<Pt>> Keep = new List<List<Pt>>();
+        /// <summary>Closed outlines taken out of the walls (Difference). Empty for detection.</summary>
+        public List<List<Pt>> Cuts = new List<List<Pt>>();
         public double MinArea = MinAreaMm2;
         public double Tol = 1.0;
     }
@@ -185,6 +187,30 @@ public static class RoomDetect
         {
             scene.Walls.Add(region);
             foreach (var ring in region) AddPath(segs, ring, true, Kind.Wall, -1, 0);
+        }
+        var plan = Plan.Build(segs, scene.Tol);
+        plan.Classify(scene);
+        return plan.Boundary();
+    }
+
+    /// <summary>
+    /// The regions with the cuts taken out: the boundary loops of what the
+    /// regions cover and no cut does, wound as Union winds them. A wall run
+    /// cut out of a wall outline leaves the outline it makes without it.
+    /// </summary>
+    public static List<List<Pt>> Difference(IList<List<List<Pt>>> regions, IList<List<Pt>> cuts, double tol)
+    {
+        var scene = new Scene { Tol = tol > 0 ? tol : 1.0 };
+        var segs = new List<Seg>();
+        foreach (var region in regions)
+        {
+            scene.Walls.Add(region);
+            foreach (var ring in region) AddPath(segs, ring, true, Kind.Wall, -1, 0);
+        }
+        foreach (var cut in cuts)
+        {
+            scene.Cuts.Add(cut);
+            AddPath(segs, cut, true, Kind.Wall, -1, 0);
         }
         var plan = Plan.Build(segs, scene.Tol);
         plan.Classify(scene);
@@ -929,6 +955,8 @@ public static class RoomDetect
 
         static bool InWall(Scene scene, Pt p)
         {
+            foreach (var cut in scene.Cuts)
+                if (Contains(cut, p)) return false;
             foreach (var wall in scene.Walls)
                 if (InRings(wall, p)) return true;
             return false;

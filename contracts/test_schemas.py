@@ -267,6 +267,11 @@ def test_new_commands():
         ("commands/set_opening_type.json", {"swing": "out", "type": "window.top_hung"}),
         ("commands/move_wall.json", {"side": "north", "toward": "north", "distance_mm": 500}),
         ("commands/move_wall.json", {"id": GUID, "at": [4000, 2000], "toward": "east", "distance_mm": 300}),
+        ("commands/delete_wall.json", {"side": "north"}),
+        ("commands/delete_wall.json", {"id": GUID, "at": [5000, 2000]}),
+        ("commands/add_wall.json", {"from": [5000, 200], "to": [5000, 3800]}),
+        ("commands/add_wall.json", {"from": [2000, 6000], "to": [6000, 6000], "thickness": 100, "height": 2400}),
+        ("commands/add_wall.json", {"line_id": GUID}),
         ("commands/rebuild_host_wall.json", {}),
         ("commands/rebuild_host_wall.json", {"id": GUID}),
         ("commands/clear_generated.json", {}),
@@ -1003,6 +1008,48 @@ def test_responses():
     if not validate("responses/move_wall_result.json", move_wall):
         all_passed = False
 
+    print("  delete_wall_result:")
+    delete_wall = {
+        "host_id": guid,
+        "forsk_id": "w01",
+        "wall": "the wall at (5000, 2000)",
+        "record_deleted": False,
+        "openings_deleted": [],
+        "length_mm": 3600,
+        "thickness": 100,
+        "path_points": 4,
+        "holes": 1,
+        "host_openings": 2,
+        "host_voids": 2,
+        "warnings": [],
+        "ok": True,
+        "message": "Deleted the wall at (5000, 2000) of w01. Floor, roof and rooms are unchanged.",
+    }
+    if not validate("responses/delete_wall_result.json", delete_wall):
+        all_passed = False
+    if not validate("responses/delete_wall_result.json", {**delete_wall, "host_id": "", "record_deleted": True, "path_points": 0, "holes": 0}):
+        all_passed = False
+
+    print("  add_wall_result:")
+    add_wall = {
+        "host_id": guid,
+        "forsk_id": "w01",
+        "joined": True,
+        "from": [5000, 200],
+        "to": [5000, 3800],
+        "length_mm": 3600,
+        "thickness": 100,
+        "height": 3000,
+        "path_points": 4,
+        "holes": 2,
+        "host_openings": 2,
+        "host_voids": 2,
+        "ok": True,
+        "message": "Added a 100 mm wall to w01, 3600 mm long. Floor, roof and rooms are unchanged.",
+    }
+    if not validate("responses/add_wall_result.json", add_wall):
+        all_passed = False
+
     return all_passed
 
 
@@ -1150,6 +1197,14 @@ def test_invalid_examples():
         ("commands/move_wall.json", {"side": "north", "toward": "north", "distance_mm": 0}, "move_wall distance above 0"),
         ("commands/move_wall.json", {"at": [0, 0, 0], "toward": "north", "distance_mm": 500}, "move_wall at is x, y"),
         ("commands/move_wall.json", {"side": "north", "distance_mm": 500}, "move_wall missing toward"),
+        ("commands/delete_wall.json", {}, "delete_wall needs side or at"),
+        ("commands/delete_wall.json", {"side": "north", "at": [0, 0]}, "delete_wall side and at"),
+        ("commands/delete_wall.json", {"side": "up"}, "delete_wall unknown side"),
+        ("commands/add_wall.json", {}, "add_wall needs a centreline"),
+        ("commands/add_wall.json", {"from": [0, 0]}, "add_wall needs both ends"),
+        ("commands/add_wall.json", {"from": [0, 0], "to": [1000, 0], "line_id": "12345678-1234-1234-1234-123456789012"}, "add_wall points and line_id"),
+        ("commands/add_wall.json", {"from": [0, 0], "to": [1000, 0], "thickness": 700}, "add_wall thickness at most 600"),
+        ("commands/add_wall.json", {"from": [0, 0, 0], "to": [1000, 0]}, "add_wall from is x, y"),
         ("commands/set_opening.json", {"bogus": 1}, "set_opening unknown field"),
         ("commands/set_opening.json", {"width": 0}, "set_opening width 0"),
         ("commands/set_opening.json", {"id": "not-a-guid", "sill": 900}, "set_opening bad guid"),
@@ -1403,7 +1458,7 @@ def test_protocol_envelope():
         "rooms_from_layer",
         "mark_as_existing",
         "delete_opening", "add_opening", "move_opening", "set_opening", "set_opening_type",
-        "move_wall", "rebuild_host_wall",
+        "move_wall", "delete_wall", "add_wall", "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
         "set_project_meta", "layout_pack", "export_pdf", "clear_layouts",

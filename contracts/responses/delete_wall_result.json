@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_wall_result.json",
+  "title": "DeleteWallResult",
+  "description": "One wall run deleted with the openings in it; the host rebuilt from the path left, or the whole record gone (record_deleted, host_id empty).",
+  "type": "object",
+  "properties": {
+    "host_id": { "type": "string", "description": "The host after the delete; empty when the record went." },
+    "forsk_id": { "type": "string" },
+    "wall": { "type": "string" },
+    "record_deleted": { "type": "boolean" },
+    "openings_deleted": { "type": "array", "items": { "type": "string" }, "description": "Marker GUIDs of the openings that went with the run." },
+    "length_mm": { "type": "number" },
+    "thickness": { "type": "number" },
+    "path_points": { "type": ["integer", "null"] },
+    "holes": { "type": "integer", "description": "Room loops left in the record's path." },
+    "host_openings": { "type": "integer" },
+    "host_voids": { "type": "integer" },
+    "max_frame_mm": { "type": "number" },
+    "markers": { "type": "array" },
+    "warnings": { "type": "array" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["host_id", "record_deleted", "openings_deleted", "holes", "ok", "message"]
+}

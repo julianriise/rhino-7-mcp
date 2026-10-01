@@ -2930,6 +2930,118 @@ class TestMoveWallTool:
         assert "destructiveHint=True" in src
 
 
+class TestDeleteWallTool:
+    """F3.2: one wall run and its openings go; the wire carries side or at."""
+
+    @patch("rhinomcp.tools.delete_wall.get_rhino_connection")
+    def test_side_passes_through(self, mock_get_conn):
+        from rhinomcp.tools.delete_wall import delete_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "record_deleted": False,
+            "openings_deleted": ["m1", "m2"],
+            "holes": 0,
+            "host_openings": 0,
+            "host_voids": 0,
+            "ok": True,
+            "message": "Deleted the south wall of w01, and its 1 door and 1 window. Floor, roof and rooms are unchanged.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = delete_wall(ctx=None, side="south")
+        mock_conn.send_command.assert_called_once_with("delete_wall", {"side": "south"})
+        assert result["success"] is True
+        assert result["openings_deleted"] == ["m1", "m2"]
+        assert result["record_deleted"] is False
+
+    @patch("rhinomcp.tools.delete_wall.get_rhino_connection")
+    def test_point_and_id_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.delete_wall import delete_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"record_deleted": True, "ok": True, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        result = delete_wall(ctx=None, at=[5000, 2000], id="g1")
+        assert mock_conn.send_command.call_args[0] == ("delete_wall", {"at": [5000, 2000], "id": "g1"})
+        assert result["record_deleted"] is True
+
+    @patch("rhinomcp.tools.delete_wall.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.delete_wall import delete_wall
+
+        assert delete_wall(ctx=None)["success"] is False
+        assert delete_wall(ctx=None, side="north", at=[0, 0])["success"] is False
+        assert delete_wall(ctx=None, side="top")["success"] is False
+        assert delete_wall(ctx=None, at=[0, 0, 0])["success"] is False
+        mock_get_conn.assert_not_called()
+
+
+class TestAddWallTool:
+    """F3.3: a wall on a centreline, joined or standing on its own."""
+
+    @patch("rhinomcp.tools.add_wall.get_rhino_connection")
+    def test_points_go_as_from_and_to(self, mock_get_conn):
+        from rhinomcp.tools.add_wall import add_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "forsk_id": "w01",
+            "joined": True,
+            "from": [5000, 200],
+            "to": [5000, 3800],
+            "thickness": 100,
+            "height": 3000,
+            "holes": 2,
+            "ok": True,
+            "message": "Added a 100 mm wall to w01, 3600 mm long. Floor, roof and rooms are unchanged.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = add_wall(ctx=None, from_point=[5000, 450], to_point=[5000, 3600], thickness=100)
+        mock_conn.send_command.assert_called_once_with(
+            "add_wall", {"from": [5000, 450], "to": [5000, 3600], "thickness": 100}
+        )
+        assert result["success"] is True
+        assert result["joined"] is True
+        assert result["from"] == [5000, 200]
+        assert result["holes"] == 2
+
+    @patch("rhinomcp.tools.add_wall.get_rhino_connection")
+    def test_line_id_and_height_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.add_wall import add_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"forsk_id": "w02", "joined": False, "ok": True, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        result = add_wall(ctx=None, line_id="l1", height=2400)
+        assert mock_conn.send_command.call_args[0] == ("add_wall", {"line_id": "l1", "height": 2400})
+        assert result["forsk_id"] == "w02"
+
+    @patch("rhinomcp.tools.add_wall.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.add_wall import add_wall
+
+        assert add_wall(ctx=None)["success"] is False
+        assert add_wall(ctx=None, from_point=[0, 0])["success"] is False
+        assert add_wall(ctx=None, from_point=[0, 0], to_point=[1000, 0], line_id="l1")["success"] is False
+        assert add_wall(ctx=None, from_point=[0, 0, 0], to_point=[1000, 0])["success"] is False
+        assert add_wall(ctx=None, from_point=[0, 0], to_point=[1000, 0], thickness=700)["success"] is False
+        assert add_wall(ctx=None, from_point=[0, 0], to_point=[1000, 0], height=0)["success"] is False
+        mock_get_conn.assert_not_called()
+
+    def test_both_marked_destructive(self):
+        from pathlib import Path
+
+        tools = Path(__file__).parent.parent / "src" / "rhinomcp" / "tools"
+        for name in ("add_wall.py", "delete_wall.py"):
+            assert "destructiveHint=True" in (tools / name).read_text(), name
+
+
 class TestRebuildHostWallTool:
     @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
     def test_selection_omits_id(self, mock_get_conn):

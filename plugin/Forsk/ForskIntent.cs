@@ -149,7 +149,7 @@ namespace RhinoMCPPlugin.Forsk
                 return true;
             if (HasWord(t, "set") && (HasWord(t, "width") || HasWord(t, "sill") || HasWord(t, "head")))
                 return true;
-            if (IsWallMove(t))
+            if (IsWallEdit(t))
                 return true;
             var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove")
                 || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")
@@ -161,17 +161,27 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// A wall moved across itself: move the north wall 500 mm north, flytt veggen.
-        /// It comes before build, where "wall 500" would read as a wall height.
+        /// One wall moved, deleted or added: move the north wall 500 mm north,
+        /// fjern veggen, add a wall from … to …, make this line a wall. It comes
+        /// before build, where "wall 500" would read as a wall height. Delete and
+        /// add name one wall: "delete the walls and rebuild" and "make the wall
+        /// 3000 high" stay build.
         /// </summary>
-        static bool IsWallMove(string t)
+        static bool IsWallEdit(string t)
         {
-            var verb = HasWord(t, "move") || HasWord(t, "shift") || HasWord(t, "nudge") || HasWord(t, "push")
-                || HasWord(t, "flytt");
-            var noun = HasWord(t, "wall") || HasWord(t, "walls") || HasWord(t, "partition")
-                || HasWord(t, "vegg") || HasWord(t, "veggen") || HasWord(t, "veggene")
+            var one = HasWord(t, "wall") || HasWord(t, "partition")
+                || HasWord(t, "vegg") || HasWord(t, "veggen")
                 || HasWord(t, "skillevegg") || HasWord(t, "skilleveggen");
-            return verb && noun;
+            var move = HasWord(t, "move") || HasWord(t, "shift") || HasWord(t, "nudge") || HasWord(t, "push")
+                || HasWord(t, "flytt");
+            if (move && (one || HasWord(t, "walls") || HasWord(t, "veggene"))) return true;
+            if (!one) return false;
+            if (HasWord(t, "delete") || HasWord(t, "remove") || HasWord(t, "fjern") || HasWord(t, "slett"))
+                return true;
+            var height = HasWord(t, "high") || HasWord(t, "height") || HasWord(t, "tall")
+                || HasWord(t, "høy") || HasWord(t, "høyde");
+            return !height && (HasWord(t, "add") || HasWord(t, "draw") || HasWord(t, "make")
+                || HasWord(t, "tegn") || HasWord(t, "lag") || HasWord(t, "legg"));
         }
 
         static bool IsBuild(string t)
