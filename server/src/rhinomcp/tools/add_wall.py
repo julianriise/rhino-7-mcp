@@ -37,7 +37,8 @@ def add_wall(
 
     Refused, with nothing changed: a wall that would join two separate wall
     records (not in this version), and one that would run across an opening.
-    Floor, roof and rooms do not follow: rooms_detect again for the new rooms.
+    The floor slab and flat roof from that record are rebuilt, and rooms are
+    detected again. A shown daylight map is hidden as out of date.
 
     Parameters (from_point with to_point, or line_id):
     - from_point, to_point: The centreline's ends [x, y] in model mm.

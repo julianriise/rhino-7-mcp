@@ -342,4 +342,32 @@ public class RoomDetectTests
         var next = RoomDetect.Match(new[] { left, right }, seven, "rd-");
         Assert.Equal(new[] { "rd-08", "rd-07" }, next);
     }
+
+    static RoomDetect.Room RoomOf(List<Pt> ring)
+    {
+        RoomDetect.TryInside(new List<List<Pt>> { ring }, out var at);
+        return new RoomDetect.Room { Ring = ring, Inside = at, Area = Math.Abs(RoomDetect.Area(ring)) };
+    }
+
+    [Fact]
+    public void MergedRoomsKeepTheLargerId_ASplitKeepsItOnTheLargerPiece()
+    {
+        var small = RoomOf(Rect(0, 0, 2000, 2000));
+        var large = RoomOf(Rect(2000, 0, 6000, 4000));
+        var merged = RoomOf(Rect(0, 0, 6000, 4000));
+        var earlier = new List<KeyValuePair<string, List<Pt>>>
+        {
+            new KeyValuePair<string, List<Pt>>("rd-01", small.Ring),
+            new KeyValuePair<string, List<Pt>>("rd-04", large.Ring)
+        };
+        Assert.Equal("rd-04", RoomDetect.Match(new[] { merged }, earlier, "rd-")[0]);
+
+        var left = RoomOf(Rect(0, 0, 2000, 2000));
+        var right = RoomOf(Rect(2000, 0, 8000, 4000));
+        var whole = new List<KeyValuePair<string, List<Pt>>>
+        {
+            new KeyValuePair<string, List<Pt>>("rd-03", Rect(0, 0, 8000, 4000))
+        };
+        Assert.Equal(new[] { "rd-04", "rd-03" }, RoomDetect.Match(new[] { left, right }, whole, "rd-"));
+    }
 }

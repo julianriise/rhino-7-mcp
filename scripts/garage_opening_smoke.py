@@ -318,6 +318,9 @@ def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_th
             failures.append(f"wall {label} openings={result.get('host_openings')} voids={result.get('host_voids')}")
         if carried != [door_id.lower()]:
             failures.append(f"wall {label} carried {carried}, expected the door")
+        followed = str(result.get("message") or "")
+        if "updated" not in followed:
+            failures.append(f"wall {label} receipt did not say what followed: {followed}")
         if abs(shift - expect_shift) > 1:
             failures.append(f"wall {label} door shift {shift:.1f} expected {expect_shift}")
         if faces is not None and (len(after) != 2 or any(abs(float(a) - b) > 0.5 for a, b in zip(after, faces))):
@@ -346,6 +349,8 @@ def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_th
     print(f"    refused {across} {round(distance)} status={refused.get('status')} {message} path {'same' if same else 'changed'}")
     if refused.get("status") != "error" or "would sit in the moved wall" not in message:
         failures.append(f"wall onto the door status={refused.get('status')} {message!r}")
+    if "updated" in message:
+        failures.append(f"wall onto the door said updated: {message}")
     if not same:
         failures.append("wall onto the door changed the path")
     x, y = door_at()
@@ -433,6 +438,8 @@ def walls_step(sock: socket.socket, failures: list) -> None:
         failures.append(f"walls partition holes {added.get('holes')}, expected {holes0 + 1}")
     if added.get("host_openings") != len(markers) or added.get("host_voids") != len(markers):
         failures.append(f"walls partition openings={added.get('host_openings')} voids={added.get('host_voids')}, expected {len(markers)}")
+    if "updated" not in str(added.get("message") or ""):
+        failures.append(f"walls partition receipt did not say what followed: {added.get('message')}")
 
     gone, err = call("delete_wall", {"id": host, "at": [x, 2000]})
     if gone is None:
@@ -464,6 +471,8 @@ def walls_step(sock: socket.socket, failures: list) -> None:
         )
     if taken.get("holes") != holes0 - 1:
         failures.append(f"walls {side} delete holes {taken.get('holes')}, expected {holes0 - 1}")
+    if "updated" not in str(taken.get("message") or ""):
+        failures.append(f"walls {side} delete receipt did not say what followed: {taken.get('message')}")
 
     other = OPPOSITE[side]
     u_path = path_points(path_of(host))
@@ -473,6 +482,8 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     print(f"    split refused: {err or 'went through'} path {'same' if same else 'changed'}")
     if not split or not same:
         failures.append(f"walls split {err or 'went through'} path {'same' if same else 'changed'}")
+    if "updated" in err:
+        failures.append(f"walls split said updated: {err}")
 
     a, b, join_from, join_to = FREE_WALL[other]
     free, err = call("add_wall", {"from": a, "to": b})
@@ -488,6 +499,8 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     print(f"    join refused: {err or 'went through'}")
     if not joined:
         failures.append(f"walls join {err or 'went through'}")
+    if "updated" in err:
+        failures.append(f"walls join said updated: {err}")
 
     whole, err = call("delete_wall", {"id": free.get("host_id"), "at": [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]})
     if whole is None:
@@ -879,15 +892,12 @@ def main() -> int:
         if wall_last.get("forsk:id") != wall_fid or wall_last.get("forsk:thickness") != wall_thick:
             failures.append("pocket flip changed the wall")
 
-        wall_move(sock, host_id, door_id, wall_fid, wall_thick, failures)
-
-        print("==> plan symbols: room, roof, high window, door swings")
-
         def panel(action: str, **extra) -> dict:
             return send_command(sock, "panel_daylight", {"action": action, **extra})
 
         # F4.3: before any room the panel chip offers Make rooms, and a chat
-        # run is refused with the A-ROOM reason.
+        # run is refused with the A-ROOM reason. This is before the wall move:
+        # that move detects the room, so the chip would already say Needs windows.
         bare = panel("state")
         refused = panel("run")
         no_rooms = []
@@ -895,6 +905,11 @@ def main() -> int:
             no_rooms.append(f"label={bare.get('label')} enabled={bare.get('enabled')} expected Make rooms")
         if refused.get("ok") is not False or "A-ROOM" not in str(refused.get("line")):
             no_rooms.append(f"run={refused.get('line')}")
+
+        wall_move(sock, host_id, door_id, wall_fid, wall_thick, failures)
+
+        print("==> plan symbols: room, roof, high window, door swings")
+
         # F2.5: Make rooms finds the room inside the wall band (A-ROOM does not
         # exist yet). A rerun keeps its id. No window now, so the chip says so.
         made = panel("rooms")
