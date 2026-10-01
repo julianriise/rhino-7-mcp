@@ -353,6 +353,180 @@ def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_th
         failures.append("wall onto the door moved the door")
 
 
+OPPOSITE = {"south": "north", "north": "south", "west": "east", "east": "west"}
+# Per side the remaining wall faces: a free wall 2 m out, and a line from it to that face.
+FREE_WALL = {
+    "north": ([2000, 6000], [6000, 6000], [4000, 5900], [4000, 4000]),
+    "south": ([2000, -2000], [6000, -2000], [4000, -1900], [4000, 0]),
+    "east": ([10000, 1000], [10000, 3000], [9900, 2000], [8000, 2000]),
+    "west": ([-2000, 1000], [-2000, 3000], [-1900, 2000], [0, 2000]),
+}
+
+
+def walls_step(sock: socket.socket, failures: list) -> None:
+    """F3.2/F3.3 on the garage ring and its openings: a partition across the
+    room, added and deleted again; the wall with the openings deleted with
+    them; a delete that would split the walls refused; a wall standing on its
+    own added and deleted whole; a wall that would join the two refused."""
+
+    def call(cmd: str, params: dict) -> tuple[dict | None, str]:
+        reply = send_raw(sock, cmd, params)
+        if reply.get("status") == "error":
+            return None, str(reply.get("message") or "")
+        return reply.get("result") or {}, ""
+
+    def kind_rows(layer_name: str, kind: str) -> list:
+        rows = send_command(sock, "get_objects", {
+            "layer_filter": layer_name, "include_attributes": True, "include_geometry": False,
+            "include_hidden": True, "limit": 200,
+        }).get("objects") or []
+        return [row for row in rows if (row.get("attributes") or {}).get("forsk:kind") == kind]
+
+    def path_of(wall_id: str) -> str:
+        return (send_command(sock, "get_object_info", {"id": wall_id}).get("attributes") or {}).get("forsk:path") or ""
+
+    def holes(path: str) -> int:
+        try:
+            return len(json.loads(path).get("holes") or [])
+        except ValueError:
+            return -1
+
+    walls = kind_rows("A-WALL", "wall")
+    if len(walls) != 1:
+        failures.append(f"walls before: {len(walls)} wall records, expected 1")
+        return
+    host = walls[0]["id"]
+    path0 = path_of(host)
+    holes0 = holes(path0)
+    markers = [
+        row for row in kind_rows("A-OPEN", "opening_marker")
+        if str((row.get("attributes") or {}).get("forsk:host") or "").lower() == host.lower()
+    ]
+    centres = [center_of(row) for row in markers]
+    per_side = {
+        "south": sum(1 for _, y in centres if y < 300), "north": sum(1 for _, y in centres if y > 3700),
+        "west": sum(1 for x, _ in centres if x < 300), "east": sum(1 for x, _ in centres if x > 7700),
+    }
+    # A partition clear of every opening on the south and north walls.
+    spans = [xy_box(row) for row in markers]
+    x = next((c for c in (4000, 3000, 5000, 2000, 6000, 1000, 7000)
+              if all(not box or not (box[0] - 200 < c < box[2] + 200) for box in spans)), None)
+    if x is None:
+        failures.append("walls: no place for a partition clear of the openings")
+        return
+
+    added, err = call("add_wall", {"from": [x, 450], "to": [x, 3600], "thickness": 100})
+    if added is None:
+        failures.append(f"walls partition add: {err}")
+        return
+    print(
+        f"    partition at x {x}: {added.get('message')} from {added.get('from')} to {added.get('to')} "
+        f"holes {added.get('holes')} openings={added.get('host_openings')} voids={added.get('host_voids')}"
+    )
+    if added.get("joined") is not True or added.get("host_id") != host:
+        failures.append(f"walls partition joined={added.get('joined')} host {added.get('host_id')}")
+    ends = [added.get("from") or [], added.get("to") or []]
+    if any(len(end) != 2 or abs(float(end[0]) - x) > 0.5 or abs(float(end[1]) - want) > 0.5
+           for end, want in zip(ends, (200, 3800))):
+        failures.append(f"walls partition ends {added.get('from')} {added.get('to')}, expected the faces at 200 and 3800")
+    if added.get("holes") != holes0 + 1:
+        failures.append(f"walls partition holes {added.get('holes')}, expected {holes0 + 1}")
+    if added.get("host_openings") != len(markers) or added.get("host_voids") != len(markers):
+        failures.append(f"walls partition openings={added.get('host_openings')} voids={added.get('host_voids')}, expected {len(markers)}")
+
+    gone, err = call("delete_wall", {"id": host, "at": [x, 2000]})
+    if gone is None:
+        failures.append(f"walls partition delete: {err}")
+        return
+    same = path_points(path_of(host)) == path_points(path0)
+    print(f"    partition delete: {gone.get('message')} holes {gone.get('holes')} path {'same' if same else 'changed'}")
+    if gone.get("openings_deleted") or gone.get("record_deleted") is not False or gone.get("holes") != holes0 or not same:
+        failures.append(
+            f"walls partition delete deleted={gone.get('openings_deleted')} record={gone.get('record_deleted')} "
+            f"holes {gone.get('holes')} path {'same' if same else 'changed'}"
+        )
+
+    side = max(per_side, key=per_side.get)
+    taken, err = call("delete_wall", {"id": host, "side": side})
+    if taken is None:
+        failures.append(f"walls {side} delete: {err}")
+        return
+    deleted = len(taken.get("openings_deleted") or [])
+    left = len(markers) - per_side[side]
+    print(
+        f"    {side} delete: {taken.get('message')} deleted {deleted} "
+        f"openings={taken.get('host_openings')} voids={taken.get('host_voids')} holes {taken.get('holes')}"
+    )
+    if deleted != per_side[side] or taken.get("host_openings") != left or taken.get("host_voids") != left:
+        failures.append(
+            f"walls {side} delete deleted {deleted}, expected {per_side[side]}; "
+            f"openings={taken.get('host_openings')} voids={taken.get('host_voids')}, expected {left}"
+        )
+    if taken.get("holes") != holes0 - 1:
+        failures.append(f"walls {side} delete holes {taken.get('holes')}, expected {holes0 - 1}")
+
+    other = OPPOSITE[side]
+    u_path = path_points(path_of(host))
+    _, err = call("delete_wall", {"id": host, "side": other})
+    split = "separate pieces" in err
+    same = path_points(path_of(host)) == u_path
+    print(f"    split refused: {err or 'went through'} path {'same' if same else 'changed'}")
+    if not split or not same:
+        failures.append(f"walls split {err or 'went through'} path {'same' if same else 'changed'}")
+
+    a, b, join_from, join_to = FREE_WALL[other]
+    free, err = call("add_wall", {"from": a, "to": b})
+    if free is None:
+        failures.append(f"walls free add: {err}")
+        return
+    print(f"    free add: {free.get('message')} id {free.get('forsk_id')} joined {free.get('joined')}")
+    if free.get("joined") is not False or free.get("forsk_id") != "w02" or len(kind_rows("A-WALL", "wall")) != 2:
+        failures.append(f"walls free add joined={free.get('joined')} id {free.get('forsk_id')}, expected a new w02")
+
+    _, err = call("add_wall", {"from": join_from, "to": join_to})
+    joined = "join 2 separate walls" in err
+    print(f"    join refused: {err or 'went through'}")
+    if not joined:
+        failures.append(f"walls join {err or 'went through'}")
+
+    whole, err = call("delete_wall", {"id": free.get("host_id"), "at": [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]})
+    if whole is None:
+        failures.append(f"walls free delete: {err}")
+        return
+    print(f"    free delete: {whole.get('message')} record_deleted {whole.get('record_deleted')}")
+    if whole.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 1:
+        failures.append(f"walls free delete record_deleted={whole.get('record_deleted')}")
+
+    print(
+        f"    walls summary partition holes {added.get('holes')}->{gone.get('holes')}, "
+        f"{side} deleted {deleted} openings {taken.get('host_openings')}/{taken.get('host_voids')} holes {taken.get('holes')}, "
+        f"split {'refused' if split else 'not refused'}, {free.get('forsk_id')} free added and deleted, "
+        f"join {'refused' if joined else 'not refused'}"
+    )
+
+
+def walls_only() -> int:
+    """F3.2/F3.3, the garage's last step: it deletes and adds walls, so
+    nothing after it reads the model."""
+    print("==> F3.2/F3.3 walls: add, delete, refuse")
+    failures: list[str] = []
+    sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
+    sock.settimeout(TIMEOUT)
+    try:
+        walls_step(sock, failures)
+    except SmokeError as exc:
+        failures.append(f"walls: {exc}")
+    finally:
+        sock.close()
+    if failures:
+        print(f"FAIL {len(failures)}")
+        for item in failures:
+            print(f"  - {item}")
+        return 1
+    print("PASS")
+    return 0
+
+
 def capture_only() -> int:
     """Export the open plan page twice more. Never fails the symbol run."""
     print("==> repeat capture")
@@ -976,8 +1150,9 @@ def main() -> int:
 if __name__ == "__main__":
     capture = len(sys.argv) > 1 and sys.argv[1] == "--capture-only"
     sections = len(sys.argv) > 1 and sys.argv[1] == "--sections"
+    walls = len(sys.argv) > 1 and sys.argv[1] == "--walls"
     try:
-        sys.exit(capture_only() if capture else sections_only() if sections else main())
+        sys.exit(capture_only() if capture else sections_only() if sections else walls_only() if walls else main())
     except (SmokeError, OSError, socket.timeout) as exc:
         if capture:
             print(f"    capture {exc}")
