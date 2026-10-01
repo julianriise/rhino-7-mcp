@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Rhino;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
@@ -51,9 +53,39 @@ namespace RhinoMCPPlugin.Forsk
             return new JObject { ["status"] = "success", ["result"] = traced };
         }
 
-        public static JObject Clear(Func<string, JObject, JObject> call)
+        /// <summary>Already on the UI thread. Hides or shows the mesh and records one undo.</summary>
+        public static JObject ApplyVisible(bool visible)
         {
-            return call("daylight_clear", new JObject());
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc == null) return ForskTools.Fail("No active document.");
+            var record = doc.BeginUndoRecord(visible ? "Forsk: show daylight" : "Forsk: hide daylight");
+            try
+            {
+                return new JObject
+                {
+                    ["status"] = "success",
+                    ["result"] = RhinoMCPFunctions.SetAnalysisVisible(doc, visible)
+                };
+            }
+            catch (Exception e)
+            {
+                return ForskTools.Fail(e.Message);
+            }
+            finally
+            {
+                doc.EndUndoRecord(record);
+            }
+        }
+
+        /// <summary>From a background thread. The panel chip calls this.</summary>
+        public static JObject SetVisible(bool visible)
+        {
+            JObject envelope = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                envelope = ApplyVisible(visible);
+            }));
+            return envelope ?? ForskTools.Fail("No result");
         }
 
         public const string NoRooms =
@@ -75,9 +107,14 @@ namespace RhinoMCPPlugin.Forsk
                     note = NoRooms;
                 return;
             }
-            if (action == DaylightAction.Clear)
+            if (action == DaylightAction.Hide)
             {
-                line = Line("Clear daylight", Clear(ForskTools.CommandOnUi));
+                line = Line("Hide daylight map", SetVisible(false));
+                return;
+            }
+            if (action == DaylightAction.Show)
+            {
+                line = Line("Show daylight map", SetVisible(true));
                 return;
             }
             if (action == DaylightAction.Run)

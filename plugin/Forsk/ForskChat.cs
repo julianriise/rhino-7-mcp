@@ -77,8 +77,7 @@ namespace RhinoMCPPlugin.Forsk
 
         static readonly string[] DaylightOnly =
         {
-            ForskDaylight.ToolName,
-            "daylight_clear"
+            ForskDaylight.ToolName
         };
 
         static readonly string[] ImportOnly =
@@ -760,7 +759,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
             if (intent == ForskIntent.Daylight)
             {
-                return "Turn bias: Daylight. daylight_from_model runs it, daylight_clear clears it. "
+                return "Turn bias: Daylight. daylight_from_model runs it. "
+                    + "Hide daylight map and Show daylight map keep the mesh; do not delete it and do not call daylight_clear. "
                     + "Reply with spaces, windows, and the time, then the tool's disclaimer line word for word. "
                     + "No rooms: offer rooms_detect, which finds them from the walls. "
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
@@ -778,8 +778,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             {
                 return "Turn bias: Build. At most two sentences. A full bake is one line. "
                     + "Bake, heights, tilbygg, clear_generated. "
-                    + "Order: floor, walls, roof, openings, rooms. "
-                    + "Make rooms or find rooms is rooms_detect: reply with rooms, total area, and any open region's reason. "
+                    + "Order: floor, walls, roof, openings, rooms_from_layer. "
+                    + "When that count is 0, call rooms_detect. Drawn A-ROOM markers win; do not detect over them. "
+                    + "Make rooms or find rooms is rooms_detect again: reply with rooms, total area, and any open region's reason. "
                     + "Rebuild is clear_generated, then that order. There is no Rebuild button. "
                     + "Refuse X-EXIST as a bake source.";
             }
@@ -1341,8 +1342,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
             Opening("door", lines);
             Opening("window", lines);
-            Step("rooms_from_layer", new JObject(), lines, false);
+            var rooms = Call("rooms_from_layer", new JObject());
+            lines.Add(ForskTools.Receipt("rooms_from_layer", rooms));
+            // Drawn outlines already became markers when the count is above zero.
+            if (BakeChip.ShouldDetectRooms(ResultCount(rooms)))
+                Step("rooms_detect", new JObject(), lines, false);
             return Finish(lines);
+        }
+
+        static int? ResultCount(JObject envelope)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return (envelope["result"] as JObject)?["count"]?.ToObject<int?>();
         }
 
         static List<string> Finish(List<string> lines)

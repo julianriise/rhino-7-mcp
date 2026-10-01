@@ -729,8 +729,8 @@ def main() -> int:
             rerun=True,
         )
 
-        # F4.3: the panel path (chat intent, then the chip). The chip sets up
-        # its own state: clear, run, clear. The sheet below sees no overlay.
+        # The chip hides the mesh and shows it again. The mesh stays.
+        # daylight_clear afterwards keeps it off the sheet, as before.
         texts = ("run daylight", "is this room dark", "clear daylight")
         intent = [f"{t}={i}" for t in texts if (i := panel("state", text=t).get("intent")) != "daylight"]
         chip: list[str] = []
@@ -743,15 +743,19 @@ def main() -> int:
             elif got.get("label") != label or got.get("enabled") is not True:
                 chip.append(f"{step} label={got.get('label')} expected {label}")
 
-        expect("clear", panel("clear"), "Daylight")
-        expect("run", panel("run"), "Clear daylight")
-        expect("clear", panel("clear"), "Daylight")
+        expect("run", panel("run"), "Hide daylight map")
+        hid = panel("hide")
+        expect("hide", hid, "Show daylight map")
+        if chip == [] and "Kept 1" not in str(hid.get("line")):
+            chip.append(f"hide deleted the map: {hid.get('line')}")
+        expect("show", panel("show"), "Hide daylight map")
+        send_command(sock, "daylight_clear", {})
 
         def verdict(reasons: list[str]) -> str:
             return "FAIL: " + "; ".join(reasons) if reasons else "ok"
 
         print(
-            f"    panel daylight intent {verdict(intent)}, chip run/clear {verdict(chip)}, "
+            f"    panel daylight intent {verdict(intent)}, chip run/hide {verdict(chip)}, "
             f"no-rooms refusal {verdict(no_rooms)}"
         )
         for reasons in (intent, chip, no_rooms):

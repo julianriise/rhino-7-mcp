@@ -10,16 +10,17 @@ from rhinomcp.server import get_rhino_connection, mcp, logger
 def panel_daylight(ctx: Context, action: str = "state", text: Optional[str] = None) -> Dict[str, Any]:
     """
     Drive the Forsk panel's Daylight chip the way the button does. Prefer
-    daylight_from_model and daylight_clear for daylight itself.
+    daylight_from_model for a new run. Hide and show keep the mesh.
 
     Parameters:
     - action: "state" (read the chip), "run" (panel daylight on the floor),
-      "clear" (remove the overlay), or "rooms" (Make rooms: rooms_detect)
+      "hide" or "show" (toggle the A-ANALYSE mesh; it stays), or "rooms"
+      (Make rooms: rooms_detect)
     - text: optional chat message; the result then carries the panel intent
 
     Returns:
     Dictionary with visible, enabled, label (the chip after the action),
-    intent when text is given, and ok and line after run, clear, or rooms.
+    intent when text is given, and ok and line after run, hide, show, or rooms.
     """
     try:
         params: Dict[str, Any] = {"action": action}
