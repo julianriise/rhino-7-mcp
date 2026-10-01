@@ -11,6 +11,7 @@ namespace RhinoMCPPlugin.Forsk
     /// A face loaded from a file is not an NSFont, so the view falls back to a
     /// tiny size until these setters run, after the panel exists.
     /// The field stays opaque. A clear background paints the whole dock black.
+    /// Colours are pinned too (see Paint), so dark appearance cannot blacken it.
     /// </summary>
     static class ForskField
     {
@@ -50,6 +51,7 @@ namespace RhinoMCPPlugin.Forsk
                 // Leave its background and scrollers alone. Those blanked the dock.
                 var scroll = Get(view, "EnclosingScrollView");
                 if (scroll != null) SetEnum(scroll, "BorderType", "NoBorder");
+                Paint(view, scroll);
                 Log(font == null
                     ? "styled without a native font (" + _lookup + ")"
                     : "styled " + Describe(font) + " via " + _lookup);
@@ -58,6 +60,71 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Log(e.GetType().Name + ": " + e.Message);
             }
+        }
+
+        /// <summary>
+        /// The panel is a light card. Under macOS dark appearance the text view
+        /// inherits dark system colours: a black field, light text and a light
+        /// caret. Pin the view to Aqua and set the colours natively.
+        /// </summary>
+        static void Paint(object view, object scroll)
+        {
+            var mono = view.GetType().Assembly;
+            var aqua = Aqua(mono);
+            if (aqua != null)
+            {
+                Set(view, "Appearance", aqua);
+                if (scroll != null) Set(scroll, "Appearance", aqua);
+            }
+            var nsColor = TypeIn(mono, "AppKit.NSColor");
+            if (nsColor == null) return;
+            var paper = NsColor(nsColor, FieldInk.Background);
+            var ink = NsColor(nsColor, FieldInk.Text);
+            Set(view, "BackgroundColor", paper);
+            Set(view, "TextColor", ink);
+            Set(view, "InsertionPointColor", ink);
+            Set(view, "DrawsBackground", true);
+            if (scroll != null)
+            {
+                Set(scroll, "BackgroundColor", paper);
+                Set(scroll, "DrawsBackground", true);
+            }
+        }
+
+        static object Aqua(Assembly mono)
+        {
+            var type = TypeIn(mono, "AppKit.NSAppearance");
+            if (type == null) return null;
+            var name = type.GetProperty("NameAqua", BindingFlags.Public | BindingFlags.Static);
+            if (name == null) return null;
+            var value = name.GetValue(null, null);
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (method.Name != "GetAppearance" || method.GetParameters().Length != 1) continue;
+                try { return method.Invoke(null, new[] { value }); }
+                catch { }
+            }
+            return null;
+        }
+
+        static object NsColor(Type nsColor, int[] rgb)
+        {
+            foreach (var method in nsColor.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                var args = method.GetParameters();
+                if (method.Name != "FromRgb" || args.Length != 3) continue;
+                try
+                {
+                    var values = new object[3];
+                    for (int i = 0; i < 3; i++)
+                        values[i] = args[i].ParameterType == typeof(byte)
+                            ? (object)(byte)rgb[i]
+                            : Size(args[i].ParameterType, rgb[i] / 255.0);
+                    return method.Invoke(null, values);
+                }
+                catch { }
+            }
+            return null;
         }
 
         static object InputFont(Assembly mono)

@@ -27,6 +27,7 @@
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />
+    <Compile Include="..\..\plugin\Forsk\FieldInk.cs" Link="FieldInk.cs" />
     <Compile Include="..\..\plugin\Functions\WallEdit.cs" Link="WallEdit.cs" />
     <Compile Include="..\..\plugin\Functions\WallFollowPlan.cs" Link="WallFollowPlan.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />
