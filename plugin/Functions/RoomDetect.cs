@@ -244,7 +244,9 @@ public static class RoomDetect
 
     /// <summary>
     /// Stable ids across runs. A room keeps the id of the earlier outline it
-    /// overlaps; a new room takes the next free number after prefix.
+    /// overlaps. Two earlier rooms that became one keep the larger room's id.
+    /// One room that became two keeps its id on the larger piece. A new room
+    /// takes the next free number after prefix.
     /// </summary>
     public static string[] Match(IList<Room> rooms, IList<KeyValuePair<string, List<Pt>>> earlier, string prefix)
     {
@@ -258,21 +260,63 @@ public static class RoomDetect
                 && int.TryParse(id.Substring(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
                 next = Math.Max(next, n + 1);
         }
+
+        var pairs = new List<Overlap>();
         for (var r = 0; r < rooms.Count; r++)
         {
-            for (var o = 0; o < earlier.Count && ids[r] == null; o++)
+            if (rooms[r] == null) continue;
+            var roomArea = rooms[r].Area > 0 ? rooms[r].Area : Math.Abs(Area(rooms[r].Ring));
+            for (var o = 0; o < earlier.Count; o++)
             {
-                if (used[o] || earlier[o].Value == null || earlier[o].Value.Count < 3) continue;
-                var overlap = Contains(earlier[o].Value, rooms[r].Inside)
-                    || (TryInside(new List<List<Pt>> { earlier[o].Value }, out var at) && Contains(rooms[r].Ring, at));
-                if (!overlap) continue;
-                used[o] = true;
-                ids[r] = earlier[o].Key;
+                if (earlier[o].Value == null || earlier[o].Value.Count < 3 || !Overlaps(rooms[r], earlier[o].Value))
+                    continue;
+                pairs.Add(new Overlap(r, o, Math.Abs(Area(earlier[o].Value)), roomArea));
             }
+        }
+        pairs.Sort((a, b) =>
+        {
+            var byEarlier = b.EarlierArea.CompareTo(a.EarlierArea);
+            if (byEarlier != 0) return byEarlier;
+            var byRoom = b.RoomArea.CompareTo(a.RoomArea);
+            if (byRoom != 0) return byRoom;
+            var byIndex = a.Earlier.CompareTo(b.Earlier);
+            return byIndex != 0 ? byIndex : a.Room.CompareTo(b.Room);
+        });
+        foreach (var pair in pairs)
+        {
+            if (used[pair.Earlier] || ids[pair.Room] != null) continue;
+            used[pair.Earlier] = true;
+            ids[pair.Room] = earlier[pair.Earlier].Key;
+        }
+        for (var r = 0; r < rooms.Count; r++)
+        {
             if (ids[r] == null)
                 ids[r] = prefix + (next++).ToString("00", CultureInfo.InvariantCulture);
         }
         return ids;
+    }
+
+    readonly struct Overlap
+    {
+        public readonly int Room;
+        public readonly int Earlier;
+        public readonly double EarlierArea;
+        public readonly double RoomArea;
+
+        public Overlap(int room, int earlier, double earlierArea, double roomArea)
+        {
+            Room = room;
+            Earlier = earlier;
+            EarlierArea = earlierArea;
+            RoomArea = roomArea;
+        }
+    }
+
+    static bool Overlaps(Room room, List<Pt> earlier)
+    {
+        if (room?.Ring == null || earlier == null || earlier.Count < 3) return false;
+        return Contains(earlier, room.Inside)
+            || (TryInside(new List<List<Pt>> { earlier }, out var at) && Contains(room.Ring, at));
     }
 
     /// <summary>Name for a room with no label inside it.</summary>

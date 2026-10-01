@@ -55,7 +55,7 @@ class FakeRhino:
                 "openings_moved": [DOOR] if self.carry else [],
                 "host_openings": 1,
                 "host_voids": 1,
-                "message": "Moved the south wall of w01 500 mm.",
+                "message": "Moved the south wall of w01 500 mm. 1 room updated.",
             }}
         if cmd == "move_wall" and self.refuse:
             return {"status": "error", "message": REFUSAL}
@@ -128,7 +128,7 @@ class FakeWalls:
             self.paths[HOST] = {**RING, "holes": [[[200, 200], [x - 50, 200], [x - 50, 3800], [200, 3800]],
                                                   [[x + 50, 200], [7800, 200], [7800, 3800], [x + 50, 3800]]]}
             return self.ok({"joined": True, "host_id": HOST, "from": [x, 200.0], "to": [x, 3800.0], "holes": 2,
-                            "host_openings": 5, "host_voids": 5, "message": "Added a 100 mm wall to w01."})
+                            "host_openings": 5, "host_voids": 5, "message": "Added a 100 mm wall to w01. Roof and 2 rooms updated."})
         if cmd == "add_wall" and params["from"] == [2000, 6000]:
             self.paths["free"] = {"outer": [[2000, 5900], [6000, 5900], [6000, 6100], [2000, 6100]]}
             return self.ok({"joined": self.free_joins, "host_id": "free", "forsk_id": "w02", "message": "Added w02."})
@@ -141,7 +141,7 @@ class FakeWalls:
             gone = [mid for mid, _, _ in self.markers]
             self.markers, self.paths[HOST] = [], U
             return self.ok({"record_deleted": False, "openings_deleted": gone, "host_openings": 0, "host_voids": 0,
-                            "holes": 0, "message": "Deleted the south wall of w01, and its 5 doors."})
+                            "holes": 0, "message": "Deleted the south wall of w01, and its 5 doors. Roof updated."})
         if cmd == "delete_wall" and params.get("side") == "north":
             if self.split:
                 return {"status": "error", "message": SPLIT}

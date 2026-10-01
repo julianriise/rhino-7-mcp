@@ -31,8 +31,9 @@ def move_wall(
     north"), then rebuild that host wall from its path. A baked plan is one
     wall record, so the run is picked inside it: side for an outer wall, or
     at for the face nearest a point. Both faces move; the walls that meet the
-    run stretch to follow, and the openings on the run move with it. Floor,
-    roof and rooms do not follow: rooms_detect again for the new rooms.
+    run stretch to follow, and the openings on the run move with it. The floor
+    slab and flat roof from that record are rebuilt, and rooms are detected
+    again. A shown daylight map is hidden as out of date.
 
     A move that would close a room or cross a wall is refused with the depth
     it ran into. A refused rebuild leaves the document unchanged. Does not

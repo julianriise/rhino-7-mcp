@@ -2886,7 +2886,7 @@ class TestMoveWallTool:
             "host_openings": 5,
             "host_voids": 5,
             "ok": True,
-            "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and rooms are unchanged.",
+            "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and 1 room updated.",
         }
         mock_get_conn.return_value = mock_conn
 
@@ -2946,7 +2946,7 @@ class TestDeleteWallTool:
             "host_openings": 0,
             "host_voids": 0,
             "ok": True,
-            "message": "Deleted the south wall of w01, and its 1 door and 1 window. Floor, roof and rooms are unchanged.",
+            "message": "Deleted the south wall of w01, and its 1 door and 1 window. Roof updated.",
         }
         mock_get_conn.return_value = mock_conn
 
@@ -2997,7 +2997,7 @@ class TestAddWallTool:
             "height": 3000,
             "holes": 2,
             "ok": True,
-            "message": "Added a 100 mm wall to w01, 3600 mm long. Floor, roof and rooms are unchanged.",
+            "message": "Added a 100 mm wall to w01, 3600 mm long. Roof and 2 rooms updated.",
         }
         mock_get_conn.return_value = mock_conn
 

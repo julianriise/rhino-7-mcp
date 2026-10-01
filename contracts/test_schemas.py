@@ -1023,7 +1023,7 @@ def test_responses():
         "markers": [],
         "warnings": [],
         "ok": True,
-        "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and rooms are unchanged.",
+        "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and 1 room updated.",
     }
     if not validate("responses/move_wall_result.json", move_wall):
         all_passed = False
@@ -1043,7 +1043,7 @@ def test_responses():
         "host_voids": 2,
         "warnings": [],
         "ok": True,
-        "message": "Deleted the wall at (5000, 2000) of w01. Floor, roof and rooms are unchanged.",
+        "message": "Deleted the wall at (5000, 2000) of w01. Roof and 1 room updated.",
     }
     if not validate("responses/delete_wall_result.json", delete_wall):
         all_passed = False
@@ -1065,7 +1065,7 @@ def test_responses():
         "host_openings": 2,
         "host_voids": 2,
         "ok": True,
-        "message": "Added a 100 mm wall to w01, 3600 mm long. Floor, roof and rooms are unchanged.",
+        "message": "Added a 100 mm wall to w01, 3600 mm long. Roof and 2 rooms updated.",
     }
     if not validate("responses/add_wall_result.json", add_wall):
         all_passed = False

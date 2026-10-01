@@ -34,8 +34,9 @@ def delete_wall(
 
     Refused, with nothing changed: a delete that would leave the record in
     two separate pieces (not in this version), and one that would leave
-    another opening past the end of its wall. Floor, roof and rooms do not
-    follow: rooms_detect again for the new rooms. Refuses X-EXIST.
+    another opening past the end of its wall. The floor slab and flat roof
+    from that record are rebuilt, and rooms are detected again. A shown
+    daylight map is hidden as out of date. Refuses X-EXIST.
 
     Parameters:
     - side: north, south, east or west: the outer wall facing that way. Exclusive with at.

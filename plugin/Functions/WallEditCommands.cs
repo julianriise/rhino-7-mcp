@@ -13,8 +13,9 @@ namespace RhinoMCPPlugin.Functions;
 /// F3 wall edits on the soft-param record. A baked plan is one wall record, so
 /// an edit works on one straight run inside its outline (WallEdit): the path
 /// is written, the openings on the run go with it, and the host is rebuilt
-/// from its path. A refused edit puts the record back and the document is
-/// unchanged. Floor, roof and rooms do not follow (naive neighbours).
+/// from its path. The floor slab and flat roof that came from that record
+/// are rebuilt, and rooms are detected again. A refused edit puts the record
+/// back and the document is unchanged.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -58,8 +59,10 @@ public partial class RhinoMCPFunctions
 
         var shift = new Vector3d(pick.Run.Normal.X * by, pick.Run.Normal.Y * by, 0);
         var undo = SnapshotWholeHost(doc, host.Id);
+        var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
         var carried = new JArray();
         JObject rebuilt;
+        string followed;
         try
         {
             WriteWallPath(doc, host.Id, WallEdit.Path(moved));
@@ -71,6 +74,7 @@ public partial class RhinoMCPFunctions
                 carried.Add(marker.Id.ToString());
             }
             rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
+            followed = FollowNeighbours(doc, sourceLayer, pick.Rings, moved);
         }
         catch (Exception ex)
         {
@@ -99,7 +103,7 @@ public partial class RhinoMCPFunctions
             ["ok"] = true,
             ["message"] = "Moved " + pick.Label + " of " + (string.IsNullOrEmpty(forskId) ? "the wall" : forskId) + " "
                 + FormatMm(Math.Round(distance.Value)) + " mm " + heading + with
-                + ". Floor, roof and rooms are unchanged."
+                + ". " + followed
         };
         var report = HostOpeningReport(doc, hostId, Guid.Empty, Point3d.Unset);
         if (report != null) result.Merge(report);
@@ -131,7 +135,9 @@ public partial class RhinoMCPFunctions
         }
 
         var undo = SnapshotWholeHost(doc, host.Id);
+        var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
         JObject rebuilt = null;
+        string followed;
         try
         {
             foreach (var marker in orphans)
@@ -147,6 +153,7 @@ public partial class RhinoMCPFunctions
                 WriteWallPath(doc, host.Id, WallEdit.Path(left));
                 rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
             }
+            followed = FollowNeighbours(doc, sourceLayer, pick.Rings, left);
         }
         catch (Exception ex)
         {
@@ -177,7 +184,7 @@ public partial class RhinoMCPFunctions
             ["message"] = (left == null
                     ? "Deleted " + label + ", a wall standing on its own"
                     : "Deleted " + pick.Label + " of " + label)
-                + (openings.Length == 0 ? "" : ", and its " + openings) + ". Floor, roof and rooms are unchanged."
+                + (openings.Length == 0 ? "" : ", and its " + openings) + ". " + followed
         };
         if (hostId != Guid.Empty)
         {
@@ -233,11 +240,14 @@ public partial class RhinoMCPFunctions
                     throw new InvalidOperationException("Not added: " + MarkerLabel(marker) + " is in the way.");
             }
             var undo = SnapshotWholeHost(doc, host.Id);
+            var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
             JObject rebuilt;
+            string followed;
             try
             {
                 WriteWallPath(doc, host.Id, WallEdit.Path(added.Rings));
                 rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
+                followed = FollowNeighbours(doc, sourceLayer, records[added.Joined], added.Rings);
             }
             catch (Exception ex)
             {
@@ -249,7 +259,7 @@ public partial class RhinoMCPFunctions
             result = AddedWall(added, hostId, forskId, thickness, height, true, rebuilt?["path_points"]);
             result["message"] = "Added a " + FormatMm(Math.Round(thickness)) + " mm wall to "
                 + (string.IsNullOrEmpty(forskId) ? "the wall" : forskId) + ", "
-                + FormatMm(Math.Round(Length(added))) + " mm long. Floor, roof and rooms are unchanged.";
+                + FormatMm(Math.Round(Length(added))) + " mm long. " + followed;
             var report = HostOpeningReport(doc, hostId, Guid.Empty, Point3d.Unset);
             if (report != null) result.Merge(report);
         }
@@ -286,9 +296,21 @@ public partial class RhinoMCPFunctions
             var id = doc.Objects.AddBrep(solid, attr);
             if (id == Guid.Empty)
                 throw new InvalidOperationException("Wall not added. Rhino did not take the solid.");
+            string followed;
+            try
+            {
+                followed = FollowNeighbours(doc, null, added.Rings, added.Rings);
+            }
+            catch (Exception ex)
+            {
+                if (doc.Objects.FindId(id) != null)
+                    doc.Objects.Delete(id, true);
+                throw new InvalidOperationException("Wall not added. " + ex.Message, ex);
+            }
             result = AddedWall(added, id, forskId, thickness, height, false, WallEdit.Rings(path)[0].Count);
             result["message"] = "Added " + forskId + ", a " + FormatMm(Math.Round(thickness)) + " mm wall standing on its own, "
-                + FormatMm(Math.Round(Length(added))) + " mm long and " + FormatMm(Math.Round(height)) + " mm high.";
+                + FormatMm(Math.Round(Length(added))) + " mm long and " + FormatMm(Math.Round(height)) + " mm high. "
+                + followed;
         }
         doc.Views.Redraw();
         return result;
