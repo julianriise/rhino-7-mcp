@@ -1,3 +1,4 @@
+using System;
 using Rhino;
 using Rhino.Commands;
 using Rhino.UI;
@@ -48,6 +49,24 @@ namespace RhinoMCPPlugin.Commands
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             return ForskPlanImport.RunScaleCommand();
+        }
+    }
+
+    /// <summary>Drag a cross-section line in Top, name it, store it with section_add.</summary>
+    public class ForskSectionCommand : Command
+    {
+        public override string EnglishName => ForskSection.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            var envelope = ForskSection.RunOnUi(true);
+            RhinoApp.WriteLine(ForskTools.Receipt("section_pick", envelope));
+            if (string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                return Result.Success;
+            var message = envelope?["message"]?.ToString() ?? "";
+            if (message.IndexOf("cancelled", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Result.Cancel;
+            return Result.Failure;
         }
     }
 }

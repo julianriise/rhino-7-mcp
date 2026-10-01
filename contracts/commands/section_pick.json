@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "section_pick.json",
+  "title": "SectionPick Command",
+  "description": "Switch to the Top view and let the user drag a cross-section line locked to X or Y at z=0. After the name dialog, store it with section_add. Cancelling the line or the dialog changes nothing.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

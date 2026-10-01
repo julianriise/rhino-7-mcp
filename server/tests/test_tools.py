@@ -3890,6 +3890,26 @@ class TestSectionTools:
         assert mock_conn.send_command.call_args[0][1]["views"] == ["plan", "section_a", "section_b"]
         assert layout_pack(ctx=None, views=["section_ab"])["success"] is False
 
+    @patch("rhinomcp.tools.section_pick.get_rhino_connection")
+    def test_section_pick_has_no_parameters(self, mock_get_conn):
+        from rhinomcp.tools.section_pick import section_pick
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "section": {"letter": "A", "view": "section_a"},
+            "sections": [],
+            "view": "section_a",
+            "name": "A1",
+            "message": "Added section A–A.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = section_pick(ctx=None)
+        assert result["success"] is True
+        assert result["view"] == "section_a"
+        assert result["name"] == "A1"
+        assert mock_conn.send_command.call_args[0] == ("section_pick", {})
+
     @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
     def test_clear_layouts_takes_section_views(self, mock_get_conn):
         from rhinomcp.tools.clear_layouts import clear_layouts

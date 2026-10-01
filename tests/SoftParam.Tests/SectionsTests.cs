@@ -247,4 +247,105 @@ public class SectionsTests
     {
         Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
     }
+
+    [Theory]
+    [InlineData(5000, 100, 5000, 0)]
+    [InlineData(100, 5000, 0, 5000)]
+    [InlineData(100, 100, 100, 0)]
+    [InlineData(-2000, -2000, -2000, 0)]
+    public void A_drag_locks_to_the_nearer_axis(double x, double y, double sx, double sy)
+    {
+        Assert.True(Sections.TrySnapAxis(P(0, 0), P(x, y), out var snapped));
+        Assert.Equal(sx, snapped.X, 6);
+        Assert.Equal(sy, snapped.Y, 6);
+    }
+
+    [Fact]
+    public void A_drag_from_another_point_keeps_the_start_on_the_locked_axis()
+    {
+        Assert.True(Sections.TrySnapAxis(P(1000, 2000), P(1100, 7000), out var snapped));
+        Assert.Equal(1000, snapped.X, 6);
+        Assert.Equal(7000, snapped.Y, 6);
+        Assert.False(Sections.TrySnapAxis(P(0, 0), P(0.4, 0.9), out _));
+    }
+
+    [Fact]
+    public void Section_names_count_A_numbers_and_leave_the_letter_alone()
+    {
+        Assert.Equal("A1", Sections.NextSectionName(null));
+        Assert.Equal("A1", Sections.NextSectionName(new[]
+        {
+            new Sections.Def { Letter = "A", Name = "A" },
+            new Sections.Def { Name = "A0" }
+        }));
+        Assert.Equal("A2", Sections.NextSectionName(new[]
+        {
+            new Sections.Def { Letter = "B", Name = "A1" },
+            new Sections.Def { Name = "a3" }
+        }));
+        Assert.Equal("A2", Sections.NextSectionName(new[]
+        {
+            new Sections.Def { Name = "A1" },
+            new Sections.Def { Name = "A10" }
+        }));
+        var oneThroughTen = new List<Sections.Def>();
+        for (var i = 1; i <= 10; i++)
+            oneThroughTen.Add(new Sections.Def { Name = "A" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+        Assert.Equal("A11", Sections.NextSectionName(oneThroughTen));
+        var existing = new[] { new Sections.Def { Letter = "B", Name = "A1" } };
+        Assert.Equal("A", Sections.LetterFor("A1", existing));
+        Assert.Equal("A", Sections.LetterFor("Kitchen", existing));
+        Assert.Equal("B", Sections.LetterFor("b", existing));
+        Assert.False(Sections.TryLetter("section_ab", out _));
+
+        var stored = Sections.Along("A", P(0, 0), P(1000, 0), null);
+        stored.Name = "A1";
+        var back = Sections.Read(Sections.Write(new[] { stored }));
+        Assert.Equal("A", back[0].Letter);
+        Assert.Equal("A1", back[0].Name);
+        Assert.Equal("A2", Sections.NextSectionName(back));
+        var legacy = Sections.Read("[{\"letter\":\"C\",\"a\":[0,0],\"b\":[0,2000],\"look\":[-1,0]}]");
+        Assert.Equal("", legacy[0].Name);
+        Assert.Equal("A1", Sections.NextSectionName(legacy));
+    }
+
+    [Theory]
+    [InlineData("add cross section", true)]
+    [InlineData("Please add a cross section now", true)]
+    [InlineData("Add  Cross   Section", true)]
+    [InlineData("new cross section", true)]
+    [InlineData("draw cross section", true)]
+    [InlineData("section A through the living room", false)]
+    [InlineData("add a long section through the garage", false)]
+    [InlineData("tverrsnitt gjennom stua", false)]
+    public void Add_cross_section_is_the_viewport_phrase(string text, bool pick)
+    {
+        Assert.Equal(pick, Sections.IsPickPhrase(text));
+    }
+
+    [Fact]
+    public void Cancelling_the_line_or_the_name_stores_nothing()
+    {
+        var defs = new List<Sections.Def> { new Sections.Def { Letter = "A", Name = "A1" } };
+        Assert.Null(Sections.Decide(false, "A2", defs, P(0, 0), P(4000, 10)));
+        Assert.Null(Sections.Decide(true, null, defs, P(0, 0), P(4000, 10)));
+        var blank = Sections.Decide(true, "  ", defs, P(0, 0), P(10, 4000));
+        Assert.Equal("A2", blank.Name);
+        Assert.Equal("B", blank.Letter);
+        Assert.Equal(0, blank.B.X, 6);
+        Assert.Equal(4000, blank.B.Y, 6);
+        var shortLine = Sections.Decide(true, "A2", defs, P(0, 0), P(0.2, 0));
+        Assert.Equal(Sections.TooShortMessage, shortLine.Error);
+        Assert.Null(shortLine.Letter);
+
+        var full = new List<Sections.Def>();
+        for (var c = 'A'; c <= 'Z'; c++)
+            full.Add(new Sections.Def { Letter = c.ToString() });
+        var blocked = Sections.Decide(true, "Kitchen", full, P(0, 0), P(4000, 10));
+        Assert.Equal(Sections.LettersFullMessage, blocked.Error);
+        Assert.Null(blocked.Letter);
+        var replaced = Sections.Decide(true, "C", full, P(0, 0), P(10, 4000));
+        Assert.Equal("C", replaced.Letter);
+        Assert.Null(replaced.Error);
+    }
 }
