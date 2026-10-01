@@ -128,16 +128,16 @@ public static class PrintProfiles
         PocheSpacingMm = 0
     };
 
-    /// <summary>Grey poché with coloured tiers: red cut, blue beyond, green thin, orange dashed.</summary>
+    /// <summary>Grey poché and grey lines. The cut is darker than what lies beyond. No saturated ink.</summary>
     public static PrintProfile Grey => new PrintProfile
     {
         Name = "grey",
-        Label = "Grey poché, coloured lines",
-        Cut = new PrintPen(0.50, Color.FromArgb(170, 30, 30)),
-        Silhouette = new PrintPen(0.35, Color.FromArgb(170, 30, 30)),
-        Beyond = new PrintPen(0.18, Color.FromArgb(40, 90, 170)),
-        Thin = new PrintPen(0.13, Color.FromArgb(30, 120, 60)),
-        Dashed = Color.FromArgb(210, 110, 0),
+        Label = "Grey poché, grey lines",
+        Cut = new PrintPen(0.50, Color.FromArgb(30, 30, 30)),
+        Silhouette = new PrintPen(0.35, Color.FromArgb(30, 30, 30)),
+        Beyond = new PrintPen(0.18, Color.FromArgb(110, 110, 110)),
+        Thin = new PrintPen(0.13, Color.FromArgb(150, 150, 150)),
+        Dashed = Color.FromArgb(130, 130, 130),
         Text = Color.Black,
         Poche = Color.FromArgb(150, 150, 150),
         PochePattern = SolidPattern,

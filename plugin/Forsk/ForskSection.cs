@@ -204,16 +204,19 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     hid = true;
                     layer.IsVisible = false;
-                    doc.Layers.Modify(layer, layer.Index, true);
                 }
+                if (hid || RhinoMCPFunctions.StampPrintInk(layer))
+                    doc.Layers.Modify(layer, layer.Index, true);
                 return layer.Index;
             }
-            var index = doc.Layers.Add(new Layer
+            var createdLayer = new Layer
             {
                 Name = LayerName,
                 Color = System.Drawing.Color.FromArgb(90, 90, 90),
                 IsVisible = false
-            });
+            };
+            RhinoMCPFunctions.StampPrintInk(createdLayer);
+            var index = doc.Layers.Add(createdLayer);
             created = index >= 0;
             return index;
         }

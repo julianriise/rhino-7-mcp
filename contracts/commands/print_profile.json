@@ -8,7 +8,7 @@
     "name": {
       "type": "string",
       "enum": ["default", "grey", "hatch"],
-      "description": "default: solid black poché, black lines. grey: grey poché, coloured lines. hatch: hatched poché, lighter cut line. Omit to read the current profile."
+      "description": "default: solid black poché, black lines. grey: grey poché, grey lines. hatch: hatched poché, lighter cut line. Omit to read the current profile."
     }
   },
   "additionalProperties": false

@@ -168,6 +168,7 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         if (doc == null)
             throw new InvalidOperationException("No active document.");
+        ApplyDocumentPrintInk(doc);
 
         var paper = parameters?["paper"]?.ToString();
         if (string.IsNullOrWhiteSpace(paper)) paper = "A3";
@@ -522,6 +523,7 @@ public partial class RhinoMCPFunctions
             return ExportPdfResult("", new JArray(), ExportNeedsPdfMessage);
 
         RestorePrintColors(doc);
+        ApplyDocumentPrintInk(doc);
         var layout = parameters?["layout"]?.ToString();
         var pages = MatchingForskPages(doc, layout);
         if (pages.Count == 0)
@@ -567,7 +569,7 @@ public partial class RhinoMCPFunctions
                 var settings = new ViewCaptureSettings(page, PdfDpi)
                 {
                     RasterMode = false,
-                    OutputColor = ViewCaptureSettings.ColorMode.BlackAndWhite,
+                    OutputColor = PdfOutputColor(),
                     DrawGrid = false,
                     DrawAxis = false,
                     DrawMargins = false,
@@ -592,6 +594,13 @@ public partial class RhinoMCPFunctions
             foreach (var settings in captures)
                 settings.Dispose();
         }
+    }
+
+    /// <summary>PrintColor, the name <see cref="PrintInk.OutputColorMode"/> pins.</summary>
+    private static ViewCaptureSettings.ColorMode PdfOutputColor()
+    {
+        return (ViewCaptureSettings.ColorMode)Enum.Parse(
+            typeof(ViewCaptureSettings.ColorMode), PrintInk.OutputColorMode, false);
     }
 
     /// <summary>
@@ -1125,6 +1134,9 @@ public partial class RhinoMCPFunctions
     {
         var clock = Stopwatch.StartNew();
         log.Paint = watch.Page;
+        // false keeps colour. The bitmap paints object colour, which sheet
+        // objects set to the same pen as their print colour. Modelling layers
+        // keep their display colour and stay off in the detail.
         var raw = page.GetPreviewImage(size, false);
         log.PreviewMs = clock.ElapsedMilliseconds;
         log.ReadPaint = watch.Page - log.Paint;
@@ -2546,13 +2558,6 @@ public partial class RhinoMCPFunctions
             var show = layer.Index == drawLayer.Index
                 || (parent != null && layer.Index == parent.Index);
             layer.SetPerViewportVisible(viewportId, show);
-            if (show)
-            {
-                // GetPreviewImage paints this display color. Plot color does
-                // not affect that bitmap. Black keeps the solid hatch inked.
-                layer.SetPerViewportColor(viewportId, Color.Black);
-                layer.SetPerViewportPlotColor(viewportId, Color.Black);
-            }
             doc.Layers.Modify(layer, layer.Index, true);
         }
     }
@@ -2573,17 +2578,10 @@ public partial class RhinoMCPFunctions
             if (layer == null || layer.IsDeleted) continue;
             var show = ShowsInClayDetail(layer, includeExisting, clayLayers);
             layer.SetPerViewportVisible(viewportId, show);
-            if (show)
-            {
-                // GetPreviewImage reads this display color. Plot color is for a
-                // vector print such as ExportAll and does not affect that bitmap.
-                layer.SetPerViewportColor(viewportId, Color.Black);
-                layer.SetPerViewportPlotColor(viewportId, Color.Black);
-                // PlotWeight -1 is "do not print". 0.18 mm is the vector pen.
-                layer.SetPerViewportPlotWeight(viewportId, 0.18);
-                if (layer.PlotWeight < 0)
-                    layer.PlotWeight = 0;
-            }
+            // -1 does not print. A shown layer needs a pen, except one PrintInk keeps off.
+            if (show && layer.PlotWeight < 0
+                && !(PrintInk.TryResolve(layer.FullPath, layer.Name, out var spec) && !spec.Prints))
+                layer.PlotWeight = 0;
             doc.Layers.Modify(layer, layer.Index, true);
         }
     }

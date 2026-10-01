@@ -99,7 +99,7 @@ that page active (detail not active), keeps the paper and the detail in
 Wireframe, shows only that `S-DRAW` child, redraws, calls `RhinoApp.Wait`,
 lets one idle pass, and calls `GetPreviewImage`. A blank frame is discarded
 and that sequence runs again, up to five times. Off Mac the capture stays
-vector (`RasterMode` false, `OutputColor` BlackAndWhite). Do not put
+vector (`RasterMode` false, `OutputColor` PrintColor). Do not put
 `ViewCaptureSettings` back on the Mac path.
 
 Each export appends one line to `/tmp/forsk-print.log` and prints that path

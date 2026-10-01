@@ -655,7 +655,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["letter"] = Str("A to Z. Omit for all.")
                     }),
                 Fn("print_profile",
-                    "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, coloured lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",
+                    "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, grey lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",
                     new JObject
                     {
                         ["name"] = new JObject

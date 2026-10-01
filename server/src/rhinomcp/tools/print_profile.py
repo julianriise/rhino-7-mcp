@@ -21,7 +21,7 @@ def print_profile(ctx: Context, name: Optional[str] = None) -> Dict[str, Any]:
 
     Parameters:
     - name: default (solid black poché, black lines), grey (grey poché,
-      coloured lines) or hatch (hatched poché, lighter cut line). Omit to read
+      grey lines) or hatch (hatched poché, lighter cut line). Omit to read
       the current profile.
 
     Returns:

@@ -69,6 +69,23 @@ public class PrintProfilesTests
     }
 
     [Fact]
+    public void Every_shipped_pen_is_black_or_grey()
+    {
+        foreach (var profile in PrintProfiles.All)
+        {
+            foreach (var colour in new[]
+            {
+                profile.Cut.Color, profile.Silhouette.Color, profile.Beyond.Color,
+                profile.Thin.Color, profile.Dashed, profile.Text, profile.Poche
+            })
+            {
+                Assert.Equal(colour.R, colour.G);
+                Assert.Equal(colour.G, colour.B);
+            }
+        }
+    }
+
+    [Fact]
     public void The_hatch_profile_hatches_the_poche_and_lightens_the_cut()
     {
         var h = PrintProfiles.Hatched;
@@ -145,7 +162,7 @@ public class PrintProfilesTests
         var record = PrintProfiles.Grey.Record();
         Assert.Equal("grey", (string)record["name"]);
         Assert.Equal(0.5, (double)record["cut"]["mm"]);
-        Assert.Equal("170,30,30", (string)record["cut"]["rgb"]);
+        Assert.Equal("30,30,30", (string)record["cut"]["rgb"]);
         Assert.Equal("150,150,150", (string)record["poche"]["rgb"]);
         Assert.Equal("Solid", (string)record["poche"]["pattern"]);
         Assert.Equal(PrintProfiles.All.Count, PrintProfiles.Available().Count);

@@ -48,6 +48,8 @@ public partial class RhinoMCPFunctions
         if (existing != null)
         {
             ApplyDefaultLayerVisibility(doc, existing, name);
+            if (StampPrintInk(existing))
+                doc.Layers.Modify(existing, existing.Index, true);
             return existing;
         }
 
@@ -58,7 +60,51 @@ public partial class RhinoMCPFunctions
             IsVisible = !LayerHiddenByDefault(name)
         };
         var index = doc.Layers.Add(layer);
-        return doc.Layers.FindIndex(index);
+        var created = doc.Layers.FindIndex(index);
+        if (created != null && StampPrintInk(created))
+            doc.Layers.Modify(created, created.Index, true);
+        return created;
+    }
+
+    /// <summary>
+    /// Plot colour and weight from <see cref="PrintInk"/>. Display colour is left as it is.
+    /// </summary>
+    internal static bool StampPrintInk(Layer layer)
+    {
+        if (layer == null) return false;
+        if (!PrintInk.TryResolve(layer.FullPath, layer.Name, out var spec)) return false;
+        layer.PlotColor = Color.FromArgb(spec.R, spec.G, spec.B);
+        layer.PlotWeight = spec.WeightMm;
+        return true;
+    }
+
+    /// <summary>
+    /// Every Forsk layer gets its print colour. An object that would print in its
+    /// display colour prints by layer instead. Sheet objects keep their own pen.
+    /// </summary>
+    internal static void ApplyDocumentPrintInk(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        for (int i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            if (!StampPrintInk(layer)) continue;
+            doc.Layers.Modify(layer, layer.Index, true);
+        }
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            var attrs = obj?.Attributes;
+            if (attrs == null) continue;
+            if (attrs.PlotColorSource != ObjectPlotColorSource.PlotColorFromDisplay) continue;
+            var layer = attrs.LayerIndex >= 0 && attrs.LayerIndex < doc.Layers.Count
+                ? doc.Layers[attrs.LayerIndex]
+                : null;
+            if (layer == null || layer.IsDeleted) continue;
+            if (!PrintInk.TryResolve(layer.FullPath, layer.Name, out _)) continue;
+            attrs.PlotColorSource = ObjectPlotColorSource.PlotColorFromLayer;
+            obj.CommitChanges();
+        }
     }
 
     private static void ApplyDefaultLayerVisibility(RhinoDoc doc, Layer layer, string name)

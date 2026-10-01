@@ -49,11 +49,14 @@ public partial class RhinoMCPFunctions
         var existing = FindLayerCaseInsensitive(doc, OpeningBlockLayerPath);
         if (existing != null)
         {
+            var changed = StampPrintInk(existing);
             if (!existing.IsVisible)
             {
                 existing.IsVisible = true;
-                doc.Layers.Modify(existing, existing.Index, true);
+                changed = true;
             }
+            if (changed)
+                doc.Layers.Modify(existing, existing.Index, true);
             return existing;
         }
 
@@ -67,10 +70,16 @@ public partial class RhinoMCPFunctions
         var index = doc.Layers.Add(created);
         if (index < 0) return parent;
         var layer = doc.Layers.FindIndex(index);
-        if (layer != null && !layer.IsVisible)
+        if (layer != null)
         {
-            layer.IsVisible = true;
-            doc.Layers.Modify(layer, layer.Index, true);
+            var changed = StampPrintInk(layer);
+            if (!layer.IsVisible)
+            {
+                layer.IsVisible = true;
+                changed = true;
+            }
+            if (changed)
+                doc.Layers.Modify(layer, layer.Index, true);
         }
         return layer ?? parent;
     }
@@ -296,6 +305,7 @@ public partial class RhinoMCPFunctions
         {
             attr.ColorSource = ObjectColorSource.ColorFromObject;
             attr.ObjectColor = Color.FromArgb(180, 196, 216, 220);
+            attr.PlotColorSource = ObjectPlotColorSource.PlotColorFromLayer;
         }
         else
         {

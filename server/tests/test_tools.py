@@ -3958,7 +3958,10 @@ class TestPrintGuards:
         assert "spec.Look" not in pan
         assert "-Vector3d.ZAxis" in pan
         assert "TechId" not in src
-        assert "BlackAndWhite" in src
+        assert "OutputColor = PdfOutputColor()" in src
+        assert "BlackAndWhite" not in src
+        ink = self._text("plugin", "Functions", "PrintInk.cs")
+        assert 'public const string OutputColorMode = "PrintColor"' in ink
         assert "doc.Layers.Count" in src
         assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
@@ -4002,7 +4005,10 @@ class TestPrintGuards:
         assert "forsk:role" not in deleter
         assert "SetPageAsActive" in src
         assert "GetFrustumBoundingBox" in src
-        assert "SetPerViewportPlotWeight" in src
+        assert "SetPerViewportPlotWeight" not in src
+        assert "SetPerViewportPlotColor" not in src
+        assert "SetPerViewportColor" not in src
+        assert "ApplyDocumentPrintInk" in src
         assert "SetPerViewportVisible" in src
         assert "RunningOnOSX" in src
         assert "GetPreviewImage" in src
