@@ -792,6 +792,7 @@ public static class OpeningTypes
         if (key == "east") return "Fasade mot øst";
         if (key == "south") return "Fasade mot sør";
         if (key == "west") return "Fasade mot vest";
+        if (Sections.TryLetter(key, out var letter)) return Sections.Title(letter);
         return "";
     }
 

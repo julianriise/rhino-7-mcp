@@ -819,6 +819,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             "Not an opening marker.",
             "Not a Forsk wall.",
             "Unknown view. Use plan, north, east, south, or west.",
+            "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a).",
             "Document units must be millimetres. Switch the .3dm to millimetres."
         };
 

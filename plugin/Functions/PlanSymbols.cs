@@ -55,6 +55,10 @@ public partial class RhinoMCPFunctions
         public int DimsCollisions;
         public int DimOpenings;
         public int DimOpeningsShown;
+        // F5.3: the sections whose marker A–A is on the plan, and those whose
+        // marker found no spot clear of everything (drawn at its first spot).
+        public List<string> SectionMarkers;
+        public List<string> SectionMarkersBlocked;
         public string Note;
         public string RoomText;
     }
@@ -65,7 +69,8 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Replace plan centre-lines with width ribbons, then add symbols with
-    /// their marks, the dashed roof outline, and room tags. Returns false when
+    /// their marks, the dashed roof outline, room tags, the dimensions and
+    /// the section markers. Returns false when
     /// nothing was added so the caller keeps the v1 curves.
     /// </summary>
     private bool TryBakePlanLinework(
@@ -88,7 +93,9 @@ public partial class RhinoMCPFunctions
             RoomsUntagged = new List<string>(),
             RoomsLeading = new List<string>(),
             RoomsOverflowing = new List<string>(),
-            MarksOnTags = new List<string>()
+            MarksOnTags = new List<string>(),
+            SectionMarkers = new List<string>(),
+            SectionMarkersBlocked = new List<string>()
         };
         if (doc == null || layer == null || scale < 1) return false;
         var pattern = SolidPatternIndex(doc);
@@ -150,6 +157,8 @@ public partial class RhinoMCPFunctions
         added += BakeMarks(doc, layer, scale, worldToHld, delta, pending, tagBoxes, leaders, poche,
             ref box, ref index, ref count, ref stats);
         added += BakeDimensions(doc, layer, scale, worldToHld, delta, pending, rooms, poche, pattern, tol,
+            ref box, ref index, ref count, ref stats);
+        added += BakeSectionMarkers(doc, layer, scale, worldToHld, delta, pattern, tol,
             ref box, ref index, ref count, ref stats);
 
         foreach (var rect in openings)

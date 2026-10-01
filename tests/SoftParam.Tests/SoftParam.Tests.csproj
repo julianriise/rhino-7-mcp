@@ -24,6 +24,7 @@
     <Compile Include="..\..\plugin\Functions\RoomDetect.cs" Link="RoomDetect.cs" />
     <Compile Include="..\..\plugin\Functions\Schedules.cs" Link="Schedules.cs" />
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
+    <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />
     <Compile Include="..\..\plugin\Functions\DxfUnits.cs" Link="DxfUnits.cs" />
     <Compile Include="..\..\plugin\Functions\PreviewFrame.cs" Link="PreviewFrame.cs" />

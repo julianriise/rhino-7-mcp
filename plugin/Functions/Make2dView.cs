@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.DocObjects;
@@ -666,25 +667,36 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Closed section loops of each solid that crosses the cut, one group
-    /// per solid. Floor, openings, rooms, and drawings are not filled.
-    /// A roof fully above the plane does not cross, so it is not filled.
+    /// Closed section loops of each solid that crosses the cut plane, one
+    /// group per solid, and in owners each group's solid (its forsk:id, or
+    /// its object id). Openings, rooms, and drawings are not filled. The plan
+    /// does not fill the floor either; a section fills its slabs. A roof
+    /// fully above the plan's plane does not cross, so it is not filled.
     /// </summary>
     private static List<List<Curve>> SectionFillLoops(
-        IList<RhinoObject> sources, Plane clip, double tolerance)
+        IList<RhinoObject> sources, Plane cut, bool fillFloors, double tolerance, List<string> owners = null)
     {
         var groups = new List<List<Curve>>();
         if (sources == null) return groups;
-        var cut = new Plane(new Point3d(0, 0, clip.Origin.Z), Vector3d.ZAxis);
         foreach (var obj in sources)
-            CollectSectionGroups(obj, Transform.Identity, cut, tolerance, groups, 0);
+        {
+            var before = groups.Count;
+            CollectSectionGroups(obj, Transform.Identity, cut, fillFloors, tolerance, groups, 0);
+            var owner = obj?.Attributes?.GetUserString("forsk:id");
+            if (string.IsNullOrEmpty(owner)) owner = obj?.Id.ToString() ?? "";
+            for (var i = before; i < groups.Count; i++)
+                owners?.Add(owner);
+        }
         return groups;
     }
 
-    private static bool IsSkippedFillKind(string kind)
+    /// <summary>The plan's horizontal cut at the clip's height.</summary>
+    private static Plane PlanFillPlane(Plane clip) => new Plane(new Point3d(0, 0, clip.Origin.Z), Vector3d.ZAxis);
+
+    private static bool IsSkippedFillKind(string kind, bool fillFloors)
     {
         if (string.IsNullOrEmpty(kind)) return false;
-        return kind.Equals("floor", StringComparison.OrdinalIgnoreCase)
+        return (!fillFloors && kind.Equals("floor", StringComparison.OrdinalIgnoreCase))
             || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("room", StringComparison.OrdinalIgnoreCase)
@@ -693,11 +705,11 @@ public partial class RhinoMCPFunctions
     }
 
     private static void CollectSectionGroups(
-        RhinoObject obj, Transform xform, Plane cutPlane, double tolerance,
+        RhinoObject obj, Transform xform, Plane cutPlane, bool fillFloors, double tolerance,
         List<List<Curve>> groups, int depth)
     {
         if (obj == null || depth > 6) return;
-        if (IsSkippedFillKind(GetForskKind(obj))) return;
+        if (IsSkippedFillKind(GetForskKind(obj), fillFloors)) return;
         if (obj is InstanceObject iref)
         {
             var idef = iref.InstanceDefinition;
@@ -706,7 +718,7 @@ public partial class RhinoMCPFunctions
             var members = idef.GetObjects();
             if (members == null) return;
             foreach (var member in members)
-                CollectSectionGroups(member, next, cutPlane, tolerance, groups, depth + 1);
+                CollectSectionGroups(member, next, cutPlane, fillFloors, tolerance, groups, depth + 1);
             return;
         }
 
@@ -1036,17 +1048,25 @@ public partial class RhinoMCPFunctions
         catch (Exception) { return null; }
     }
 
+    /// <summary>
+    /// The poché: a solid black hatch per closed loop group. With owners
+    /// (SectionFillLoops), each hatch is stamped forsk:source with its solid
+    /// and perOwner counts them.
+    /// </summary>
     private static int BakeSectionFills(
         RhinoDoc doc, Layer layer, string view, List<List<Curve>> groups,
-        double tolerance, ref int index, ref BoundingBox box)
+        double tolerance, ref int index, ref BoundingBox box,
+        List<string> owners = null, Dictionary<string, int> perOwner = null)
     {
         if (doc == null || layer == null || groups == null || groups.Count == 0) return 0;
         var pattern = SolidPatternIndex(doc);
         if (pattern < 0) return 0;
         var plane = Plane.WorldXY;
         var count = 0;
-        foreach (var group in groups)
+        for (var g = 0; g < groups.Count; g++)
         {
+            var group = groups[g];
+            var owner = owners != null && g < owners.Count ? owners[g] : null;
             if (group == null || group.Count == 0) continue;
             Hatch[] hatches = null;
             try { hatches = HatchesForGroup(group, plane, pattern, tolerance); }
@@ -1079,12 +1099,16 @@ public partial class RhinoMCPFunctions
                     View = view
                 });
                 attr.SetUserString("forsk:role", SectionFillRole);
+                if (!string.IsNullOrEmpty(owner))
+                    attr.SetUserString("forsk:source", owner);
                 var id = Guid.Empty;
                 try { id = doc.Objects.AddHatch(hatch, attr); }
                 catch (Exception) { id = Guid.Empty; }
                 hatch.Dispose();
                 if (id == Guid.Empty) continue;
                 if (hatchBox.IsValid) box.Union(hatchBox);
+                if (perOwner != null && !string.IsNullOrEmpty(owner))
+                    perOwner[owner] = (perOwner.TryGetValue(owner, out var had) ? had : 0) + 1;
                 count++;
                 index++;
             }
@@ -1126,6 +1150,8 @@ public partial class RhinoMCPFunctions
         public PlanStats Dims;
         public string SymbolNote;
         public string RoomText;
+        // F5.3: what a section sheet drew. Null on the plan and elevations.
+        public SectionStats Section;
     }
 
     private struct WeightedCurve
@@ -1148,7 +1174,7 @@ public partial class RhinoMCPFunctions
             case "east": return "East";
             case "south": return "South";
             case "west": return "West";
-            default: return null;
+            default: return Sections.TryLetter(view, out var letter) ? Sections.LayerName(letter) : null;
         }
     }
 
@@ -1164,11 +1190,16 @@ public partial class RhinoMCPFunctions
             Box = BoundingBox.Empty,
             Error = null
         };
-        if (doc == null || !TryGetSheetView(view, out var spec))
+        Sections.Def section = null;
+        if (doc == null || (!TryGetSheetView(view, out var spec) && !TryGetSectionView(doc, view, out spec, out section)))
         {
             result.Error = UnknownViewMessage;
             return result;
         }
+        // A section is cut on its own vertical plane; callers pass no clip for it.
+        if (section != null)
+            clip = SectionClip(section);
+        var plan = section == null && clip.HasValue;
 
         var child = DrawChildName(spec.View);
         var sources = ResolveDrawSources(doc, new JObject(), includeExisting, out _);
@@ -1181,8 +1212,8 @@ public partial class RhinoMCPFunctions
         var geometries = new List<GeometryBase>();
         foreach (var obj in sources)
         {
-            // Plan symbols replace the frame. Elevations keep the 3D block.
-            if (clip.HasValue
+            // Plan symbols replace the frame. Elevations and sections keep the 3D block.
+            if (plan
                 && string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
             AppendDrawable(obj, Transform.Identity, geometries, 0);
@@ -1267,11 +1298,11 @@ public partial class RhinoMCPFunctions
                             if (!KeepGreyscaleSegment(seg)) continue;
                             var dup = seg.CurveGeometry?.DuplicateCurve();
                             if (dup == null) continue;
-                            var section = IsSectionCut(seg);
+                            var sectionCut = IsSectionCut(seg);
                             visible.Add(new WeightedCurve
                             {
                                 Curve = dup,
-                                Weight = seg.IsSceneSilhouette || section
+                                Weight = seg.IsSceneSilhouette || sectionCut
                                     ? DrawSilhouetteMm
                                     : DrawHairlineMm
                             });
@@ -1318,6 +1349,10 @@ public partial class RhinoMCPFunctions
         foreach (var item in visible)
             if (item.Curve != null) curves.Add(item.Curve);
         List<List<Curve>> fillGroups = null;
+        List<string> fillOwners = null;
+        List<List<RoomDetect.Pt>> cutUz = null;
+        List<List<RoomDetect.Pt>> roofUz = null;
+        SectionStats sectionStats = null;
         var box = BoundingBox.Empty;
         var count = 0;
         var fills = 0;
@@ -1326,7 +1361,21 @@ public partial class RhinoMCPFunctions
         {
             if (clip.HasValue && haveWorldToHld)
             {
-                fillGroups = SectionFillLoops(sources, clip.Value, tolerance);
+                if (section != null)
+                {
+                    // Slabs and roof fill too. The heights are read off the
+                    // model-space loops before they move onto the sheet.
+                    fillOwners = new List<string>();
+                    fillGroups = SectionFillLoops(sources, clip.Value, true, tolerance, fillOwners);
+                    cutUz = SectionCoords(fillGroups, section);
+                    var roofGroups = SectionFillLoops(
+                        sources.Where(o => string.Equals(GetForskKind(o), "roof", StringComparison.OrdinalIgnoreCase)).ToList(),
+                        clip.Value, true, tolerance);
+                    roofUz = SectionCoords(roofGroups, section);
+                    DisposeFillGroups(roofGroups);
+                }
+                else
+                    fillGroups = SectionFillLoops(sources, PlanFillPlane(clip.Value), false, tolerance);
                 TransformFillGroups(fillGroups, worldToHld);
             }
             // Delta comes from the line drawing only, so the poché cannot
@@ -1340,7 +1389,24 @@ public partial class RhinoMCPFunctions
             }
 
             var planRuled = false;
-            if (clip.HasValue && strokeScale > 0)
+            if (section != null && strokeScale > 0)
+            {
+                sectionStats = new SectionStats { Letter = section.Letter };
+                try
+                {
+                    SectionHeights(sources, out var floorTops, out var groundZ);
+                    planRuled = TryBakeSectionLinework(
+                        doc, layer, strokeScale, section, spec.View, worldToHld, delta, visible, fillGroups,
+                        cutUz, roofUz, floorTops, groundZ, tolerance, ref box, ref index, ref count, sectionStats);
+                }
+                catch (Exception ex)
+                {
+                    planRuled = false;
+                    result.SymbolNote = "Section linework was skipped.";
+                    RhinoApp.WriteLine("Forsk section linework skipped: " + ex.Message);
+                }
+            }
+            if (plan && strokeScale > 0)
             {
                 try
                 {
@@ -1420,14 +1486,25 @@ public partial class RhinoMCPFunctions
 
             if (clip.HasValue && fillGroups != null && OverlapsPlan(box, FillBounds(fillGroups)))
             {
+                var perOwner = new Dictionary<string, int>(StringComparer.Ordinal);
                 try
                 {
                     fills = BakeSectionFills(
-                        doc, layer, spec.View, fillGroups, tolerance, ref index, ref box);
+                        doc, layer, spec.View, fillGroups, tolerance, ref index, ref box, fillOwners, perOwner);
                 }
                 catch (Exception)
                 {
                     fills = 0;
+                }
+                if (sectionStats != null)
+                {
+                    foreach (var pair in perOwner)
+                        sectionStats.Poche[pair.Key] = pair.Value;
+                    var walls = new HashSet<string>(sources
+                        .Where(o => string.Equals(GetForskKind(o), "wall", StringComparison.OrdinalIgnoreCase))
+                        .Select(o => o.Attributes.GetUserString("forsk:id") is string id && id.Length > 0 ? id : o.Id.ToString()));
+                    foreach (var owner in (fillOwners ?? new List<string>()).Distinct())
+                        if (walls.Contains(owner)) sectionStats.CutWalls.Add(owner);
                 }
             }
 
@@ -1442,9 +1519,10 @@ public partial class RhinoMCPFunctions
         result.Count = count;
         result.Fills = fills;
         result.Box = box;
+        result.Section = sectionStats;
         if (count == 0)
             result.Error = "No visible curves for " + spec.View + ".";
-        if (clip.HasValue && strokeScale > 0)
+        if (plan && strokeScale > 0)
         {
             _lastPlanStats = new PlanStats
             {

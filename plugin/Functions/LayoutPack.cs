@@ -51,6 +51,8 @@ public partial class RhinoMCPFunctions
     private const string LayoutMetaSection = "forsk";
     private const string LayoutPagePrefix = "Forsk — ";
     private const string NothingToLayOutMessage = "Nothing to lay out. Bake walls first.";
+    private const string UnknownLayoutViewMessage =
+        "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a).";
     private const string UnknownPaperMessage = "Unknown paper. Use A3.";
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
@@ -126,7 +128,10 @@ public partial class RhinoMCPFunctions
                 spec = LayoutSpec("west", "Forsk — West", Vector3d.XAxis, Vector3d.ZAxis);
                 return true;
             default:
-                return false;
+                // A section's page. Its look lives on the stored section (TryGetSectionView).
+                if (!Sections.TryLetter(view, out var letter)) return false;
+                spec = LayoutSpec(Sections.View(letter), Sections.PageName(letter), Vector3d.Zero, Vector3d.ZAxis);
+                return true;
         }
     }
 
@@ -181,7 +186,7 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException("Scale must be a positive number.");
         }
 
-        var views = ReadLayoutViews(parameters);
+        var views = ReadLayoutViews(doc, parameters);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
         var replace = ReadBoolParam(parameters, "replace", true);
         // The schedules are a page of their own, not a drawing view.
@@ -223,10 +228,15 @@ public partial class RhinoMCPFunctions
         string cutNote = null;
         var planCutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
         var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
+        // Sections print at the plan's scale when the plan is in this pack.
+        var planScale = 0;
         foreach (var viewName in views)
         {
             if (!TryGetLayoutView(viewName, out var spec))
-                throw new InvalidOperationException(UnknownViewMessage);
+                throw new InvalidOperationException(UnknownLayoutViewMessage);
+            var section = Sections.TryLetter(spec.View, out var sectionLetter);
+            if (section && !TryGetSectionView(doc, spec.View, out _, out _))
+                throw new InvalidOperationException("No section " + sectionLetter + ". section_add stores it first.");
 
             if (replace)
                 RemoveLayoutPages(doc, spec.View, false);
@@ -239,8 +249,14 @@ public partial class RhinoMCPFunctions
             double fitNeed = 0;
             if (plan)
                 strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH, fitPlan);
+            else if (section)
+                strokeScale = planScale > 0 ? planScale : requestedScale;
+            // A section with the plan keeps the plan's scale unless it does
+            // not fit; alone, it fits like the plan.
+            var fitBase = plan || planScale <= 0 ? requestedScale : planScale;
+            var fitAll = plan ? fitPlan : (planScale <= 0 && fitPlan);
             var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
-            if (plan)
+            if (plan || section)
             {
                 // Tags, marks and dimensions keep their paper size, so the
                 // drawing grows with the scale: bake again at the scale the
@@ -248,12 +264,14 @@ public partial class RhinoMCPFunctions
                 // scale only goes up, so it cannot swing between two steps.
                 for (var round = 0; round < 4; round++)
                 {
-                    var fitted = FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitPlan);
+                    if (!drawn.Box.IsValid) break;
+                    var fitted = FitLayoutScale(fitBase, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitAll);
                     if (fitted == strokeScale || (round > 0 && fitted < strokeScale)) break;
                     drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
                     strokeScale = fitted;
                 }
                 fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
+                if (plan) planScale = strokeScale;
             }
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
             {
@@ -267,7 +285,7 @@ public partial class RhinoMCPFunctions
 
             // Plan strokes and tags were drawn at strokeScale. The detail, the
             // title block, and the view title use that same value.
-            var scale = plan
+            var scale = plan || section
                 ? strokeScale
                 : FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, false);
             applied.Add(scale);
@@ -354,6 +372,8 @@ public partial class RhinoMCPFunctions
                 };
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
+                pageRecord["section_markers"] = new JArray(drawn.Dims.SectionMarkers ?? new List<string>());
+                pageRecord["section_markers_blocked"] = new JArray(drawn.Dims.SectionMarkersBlocked ?? new List<string>());
                 if (!string.IsNullOrEmpty(drawn.RoomText))
                     pageRecord["room_tag_text"] = drawn.RoomText;
                 _lastPlanStats = new PlanStats
@@ -388,6 +408,12 @@ public partial class RhinoMCPFunctions
                     + "."
                     + (string.IsNullOrEmpty(drawn.SymbolNote) ? "" : " " + drawn.SymbolNote);
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
+            }
+            if (section && drawn.Section != null)
+            {
+                pageRecord["view_title"] = viewTitle;
+                pageRecord["fills"] = drawn.Fills;
+                pageRecord["section"] = SectionPageRecord(doc, spec.View, drawn);
             }
             pages.Add(pageRecord);
         }
@@ -938,6 +964,7 @@ public partial class RhinoMCPFunctions
             var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
             // A type swap must show on the next export without a new layout_pack.
             if (!plan && CountPrintDrawings(doc, view) > 0) continue;
+            var section = Sections.TryLetter(view, out _);
             if (clay == null)
                 clay = CollectLayoutClay(doc, _drawIncludeExisting, out _);
             Plane? clip = null;
@@ -946,6 +973,11 @@ public partial class RhinoMCPFunctions
             {
                 var cutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
                 clip = new Plane(new Point3d(0, 0, cutZ), -Vector3d.ZAxis);
+                strokeScale = DetailModelScale(page);
+                if (strokeScale < 1) strokeScale = 100;
+            }
+            else if (section)
+            {
                 strokeScale = DetailModelScale(page);
                 if (strokeScale < 1) strokeScale = 100;
             }
@@ -992,6 +1024,13 @@ public partial class RhinoMCPFunctions
             if (!TryGetLayoutView(name, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))
                 return spec.View;
+        }
+        for (var c = 'a'; c <= 'z'; c++)
+        {
+            var view = Sections.View(c.ToString());
+            if (TryGetLayoutView(view, out var spec)
+                && string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))
+                return view;
         }
         return null;
     }
@@ -1376,7 +1415,7 @@ public partial class RhinoMCPFunctions
                     continue;
                 }
                 if (!TryGetLayoutView(name, out var spec))
-                    throw new InvalidOperationException(UnknownViewMessage);
+                    throw new InvalidOperationException(UnknownLayoutViewMessage);
                 viewSet.Add(spec.View);
             }
         }
@@ -1422,7 +1461,7 @@ public partial class RhinoMCPFunctions
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 
-    private static List<string> ReadLayoutViews(JObject parameters)
+    private static List<string> ReadLayoutViews(RhinoDoc doc, JObject parameters)
     {
         var views = new List<string>();
         if (parameters?["views"] is JArray requested)
@@ -1434,7 +1473,7 @@ public partial class RhinoMCPFunctions
                     views.Add(text.Trim());
             }
             if (views.Count == 0)
-                throw new InvalidOperationException(UnknownViewMessage);
+                throw new InvalidOperationException(UnknownLayoutViewMessage);
             return views;
         }
 
@@ -1443,6 +1482,8 @@ public partial class RhinoMCPFunctions
         views.Add("east");
         views.Add("south");
         views.Add("west");
+        foreach (var def in ReadSectionDefs(doc))
+            views.Add(Sections.View(def.Letter));
         views.Add(SchedulesView);
         return views;
     }
