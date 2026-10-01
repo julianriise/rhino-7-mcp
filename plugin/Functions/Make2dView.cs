@@ -366,7 +366,7 @@ public partial class RhinoMCPFunctions
     }
 
     private static List<RhinoObject> ResolveDrawSources(
-        RhinoDoc doc, JObject parameters, bool includeExisting, out bool hadIds)
+        RhinoDoc doc, JObject parameters, bool includeExisting, out bool hadIds, bool includeHiddenRoof = false)
     {
         hadIds = false;
         var result = new List<RhinoObject>();
@@ -391,6 +391,17 @@ public partial class RhinoMCPFunctions
             if (obj == null || !seen.Add(obj.Id)) continue;
             if (!IsSheetSource(doc, obj, includeExisting)) continue;
             result.Add(obj);
+        }
+        // A-ROOF is off by default and the plain enumeration skips it. A section
+        // cuts and sees the roof (gesims, møne, the free height under it).
+        if (includeHiddenRoof)
+        {
+            foreach (var obj in EnumerateDocObjects(doc))
+            {
+                if (obj == null || !string.Equals(GetForskKind(obj), "roof", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!seen.Add(obj.Id) || !IsSheetSource(doc, obj, includeExisting)) continue;
+                result.Add(obj);
+            }
         }
         return result;
     }
@@ -1202,7 +1213,7 @@ public partial class RhinoMCPFunctions
         var plan = section == null && clip.HasValue;
 
         var child = DrawChildName(spec.View);
-        var sources = ResolveDrawSources(doc, new JObject(), includeExisting, out _);
+        var sources = ResolveDrawSources(doc, new JObject(), includeExisting, out _, section != null);
         if (sources.Count == 0)
         {
             result.Error = NothingToDrawMessage;

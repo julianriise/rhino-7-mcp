@@ -299,6 +299,17 @@ public static class Sections
         return levels.OrderBy(l => l.Z).ToList();
     }
 
+    /// <summary>
+    /// The floor levels of a section: the slab tops. A model with no slab (a
+    /// garage of walls on grade) has its floor where its rooms stand, so the
+    /// floors of the rooms the line crosses stand in for the slab tops.
+    /// </summary>
+    public static List<double> FloorTops(IEnumerable<double> slabTops, IEnumerable<double> roomFloors)
+    {
+        var slabs = (slabTops ?? new double[0]).ToList();
+        return slabs.Count > 0 ? slabs : (roomFloors ?? new double[0]).ToList();
+    }
+
     static Level Make(string kind, double z, double zero, string name)
     {
         var value = (int)Math.Round(z - zero, MidpointRounding.AwayFromZero);

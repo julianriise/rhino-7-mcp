@@ -12,8 +12,9 @@ namespace SoftParam.Tests;
 /// F5.3 sections, headless: what counts as cut and what as beyond, the level
 /// values and the free height read off the cut, the line through a room,
 /// and the plan marker clear of tags and marks. The garage is the garage
-/// smoke's model: an 8 x 4 m wall band 200 thick and 3000 high on a 400
-/// slab whose top is at 0, under a flat 200 roof with a 500 overhang.
+/// smoke's model, drawn here on a 400 slab whose top is at 0: an 8 x 4 m wall
+/// band 200 thick and 3000 high under a flat 200 roof with a 500 overhang. The
+/// live garage has no slab (see FloorTops_stand_in_with_the_room_floors).
 /// </summary>
 public class SectionsTests
 {
@@ -52,6 +53,18 @@ public class SectionsTests
         Assert.False(Sections.IsCut(new[] { P(1200, 0), P(1200, 1050), P(1200, 2100) }, cut, 0.5));
         // An edge on two different loops (slab top to the wall) is not one cut face.
         Assert.False(Sections.IsCut(new[] { P(100, 0), P(100, 1500) }, new List<List<Pt>> { Rect(0, -400, 8000, 0), Rect(300, 0, 500, 3000) }, 0.5));
+    }
+
+    [Fact]
+    public void FloorTops_stand_in_with_the_room_floors_when_there_is_no_slab()
+    {
+        Assert.Equal(new[] { 0.0, 3200.0 }, Sections.FloorTops(new[] { 0.0, 3200.0 }, new[] { 10.0 }));
+        Assert.Equal(new[] { 0.0 }, Sections.FloorTops(new double[0], new[] { 0.0 }));
+        Assert.Empty(Sections.FloorTops(new double[0], new double[0]));
+        // The floor mark of a slabless garage sits at the room floor, with the ground at the wall base.
+        var levels = Sections.Levels(Sections.FloorTops(new double[0], new[] { 0.0 }), 0, 3000, 3000);
+        Assert.Equal(new[] { "floor", "ground", "gesims,mone" }, levels.Select(l => l.Kind));
+        Assert.Equal("1. etg ±0", levels.First(l => l.Kind == "floor").Text);
     }
 
     [Fact]

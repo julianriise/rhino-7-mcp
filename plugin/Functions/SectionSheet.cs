@@ -363,7 +363,16 @@ public partial class RhinoMCPFunctions
             gesims = g;
             mone = m;
         }
-        var levels = Sections.Levels(floorTops, groundZ, gesims, mone);
+        // Every room with an outline the line runs through, tagged on the plan or too small for its tag.
+        var crossed = new List<(PlanRoom Room, double U, double FloorZ)>();
+        foreach (var room in PlanRooms(doc))
+        {
+            if (room.Ring == null || room.Ring.Count < 3) continue;
+            var ring = room.Ring.Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList();
+            if (!Sections.RoomSpan(ring, def, out var u0, out var u1)) continue;
+            crossed.Add((room, 0.5 * (u0 + u1), room.Ring[0].Z));
+        }
+        var levels = Sections.Levels(Sections.FloorTops(floorTops, crossed.Select(c => c.FloorZ)), groundZ, gesims, mone);
         var valueHeight = Sections.ValueMm * scale;
         var marks = Sections.PlaceLevels(levels, SheetY, right, scale,
             text => ModelTextWidth(doc, text, valueHeight) / scale);
@@ -393,14 +402,8 @@ public partial class RhinoMCPFunctions
             }
         }
 
-        // Every room with an outline, tagged on the plan or too small for its tag.
-        foreach (var room in PlanRooms(doc))
+        foreach (var (room, u, floorZ) in crossed)
         {
-            if (room.Ring == null || room.Ring.Count < 3) continue;
-            var ring = room.Ring.Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList();
-            if (!Sections.RoomSpan(ring, def, out var u0, out var u1)) continue;
-            var floorZ = room.Ring[0].Z;
-            var u = 0.5 * (u0 + u1);
             var free = Sections.FreeHeight(cutUz, u, floorZ, 1.0);
             if (!free.HasValue) continue;
             var extra = new Dictionary<string, string>(stamp.Extra)
@@ -443,7 +446,7 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// The level heights in the model: each floor slab's top, and the ground.
     /// The model has no terrain yet, so the ground is the lowest slab's
-    /// underside (the house stands on it); with no slab, the clay's lowest point.
+    /// underside (the house stands on it); with no slab, the lowest wall base.
     /// </summary>
     private static void SectionHeights(IList<RhinoObject> sources, out List<double> floorTops, out double? groundZ)
     {
@@ -454,8 +457,10 @@ public partial class RhinoMCPFunctions
         {
             var bbox = obj?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
             if (!bbox.IsValid) continue;
-            lowest = lowest.HasValue ? Math.Min(lowest.Value, bbox.Min.Z) : bbox.Min.Z;
-            if (!string.Equals(GetForskKind(obj), "floor", StringComparison.OrdinalIgnoreCase)) continue;
+            var kind = GetForskKind(obj);
+            if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
+                lowest = lowest.HasValue ? Math.Min(lowest.Value, bbox.Min.Z) : bbox.Min.Z;
+            if (!string.Equals(kind, "floor", StringComparison.OrdinalIgnoreCase)) continue;
             floorTops.Add(bbox.Max.Z);
             groundZ = groundZ.HasValue ? Math.Min(groundZ.Value, bbox.Min.Z) : bbox.Min.Z;
         }
