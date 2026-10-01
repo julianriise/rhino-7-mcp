@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "section_add.json",
+  "title": "SectionAdd Command",
+  "description": "Store a cross section A–A in the document: a vertical cut along a line in plan, looking to one side of it. Give room (the line runs through it across the building, or along it with axis long), or from and to, or line_id. The same letter again moves that section and drops its old sheet. layout_pack lays out section_<letter> and draws its marker on the plan.",
+  "type": "object",
+  "properties": {
+    "letter": {
+      "type": "string",
+      "pattern": "^[A-Za-z]$",
+      "description": "A to Z. Omit for the next free letter."
+    },
+    "room": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A room's tag name or id (rd-01). The line runs through the room's tag point."
+    },
+    "axis": {
+      "type": "string",
+      "enum": [
+        "cross",
+        "long"
+      ],
+      "description": "With room: cross runs across the building's longer side (default), long along it."
+    },
+    "from": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Line start [x, y], model mm."
+    },
+    "to": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Line end [x, y], model mm."
+    },
+    "line_id": {
+      "type": "string",
+      "description": "Id of a curve in the document: the line from its start to its end."
+    },
+    "look": {
+      "type": "string",
+      "enum": [
+        "north",
+        "south",
+        "east",
+        "west"
+      ],
+      "description": "The side the section looks toward. Omit for the left of the line (from to to)."
+    }
+  },
+  "additionalProperties": false
+}

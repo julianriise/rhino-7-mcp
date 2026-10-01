@@ -1,5 +1,6 @@
 """Delete Forsk Layout pages only."""
 
+import re
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import Context
@@ -7,7 +8,13 @@ from mcp.types import ToolAnnotations
 from rhinomcp.server import get_rhino_connection, mcp, logger
 
 _VIEWS = ("plan", "north", "east", "south", "west", "schedules")
-_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, or schedules."
+# A section stored by section_add: section_a to section_z.
+_SECTION = re.compile(r"^section_[a-z]$")
+_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a)."
+
+
+def _known_view(view: Any) -> bool:
+    return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)))
 
 
 @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
@@ -34,7 +41,7 @@ def clear_layouts(
     try:
         if views is not None and not isinstance(views, list):
             return {"success": False, "message": "views must be a list."}
-        if views is not None and any(v not in _VIEWS for v in views):
+        if views is not None and any(not _known_view(v) for v in views):
             return {"success": False, "message": _UNKNOWN_VIEW}
         if not isinstance(dry_run, bool):
             return {"success": False, "message": "dry_run must be a boolean"}

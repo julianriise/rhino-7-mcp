@@ -223,4 +223,15 @@ public class SectionsTests
         Assert.Equal("Snitt B–B", OpeningTypes.ViewTitle("section_b", 0));
         Assert.Equal("Forsk — Section A", Sections.PageName("A"));
     }
+
+    [Theory]
+    [InlineData("section A through the living room", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("add a long section through the garage", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("tverrsnitt gjennom stua", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("lag snitt A-A", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("print the sections", RhinoMCPPlugin.Forsk.ForskIntent.Print)]
+    public void Section_words_classify_as_sheets(string text, RhinoMCPPlugin.Forsk.ForskIntent expected)
+    {
+        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
+    }
 }

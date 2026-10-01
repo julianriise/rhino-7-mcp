@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "section_result.json",
+  "title": "SectionResult",
+  "description": "section_add and section_clear: the stored sections after the call. section_add adds section (the one stored), view and replaced; section_clear adds removed (the letters).",
+  "type": "object",
+  "properties": {
+    "section": {
+      "type": "object",
+      "properties": {
+        "letter": {
+          "type": "string",
+          "pattern": "^[A-Z]$"
+        },
+        "view": {
+          "type": "string",
+          "pattern": "^section_[a-z]$"
+        },
+        "a": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "b": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "look": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "room": {
+          "type": "string"
+        },
+        "axis": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "letter",
+        "view",
+        "a",
+        "b",
+        "look"
+      ]
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "letter": {
+            "type": "string",
+            "pattern": "^[A-Z]$"
+          },
+          "view": {
+            "type": "string",
+            "pattern": "^section_[a-z]$"
+          },
+          "a": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "b": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "look": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "room": {
+            "type": "string"
+          },
+          "axis": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "letter",
+          "view",
+          "a",
+          "b",
+          "look"
+        ]
+      }
+    },
+    "view": {
+      "type": "string",
+      "pattern": "^section_[a-z]$"
+    },
+    "replaced": {
+      "type": "boolean"
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]$"
+      }
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sections",
+    "message"
+  ]
+}

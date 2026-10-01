@@ -70,7 +70,9 @@ namespace RhinoMCPPlugin.Forsk
             "set_project_meta",
             "layout_pack",
             "export_pdf",
-            "clear_layouts"
+            "clear_layouts",
+            "section_add",
+            "section_clear"
         };
 
         static readonly string[] DaylightOnly =
@@ -315,13 +317,16 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
-        /// <summary>A Layout page: a drawing view, or the schedules sheet.</summary>
+        /// <summary>A Layout page: a drawing view, the schedules sheet, or a stored section (section_a to section_z).</summary>
         static JObject PageEnum(string description)
         {
+            var pages = new JArray("plan", "north", "east", "south", "west", "schedules");
+            for (var c = 'a'; c <= 'z'; c++)
+                pages.Add("section_" + c);
             return new JObject
             {
                 ["type"] = "string",
-                ["enum"] = new JArray("plan", "north", "east", "south", "west", "schedules"),
+                ["enum"] = pages,
                 ["description"] = description
             };
         }
@@ -578,6 +583,34 @@ namespace RhinoMCPPlugin.Forsk
                             ["description"] = "Omit to clear every Forsk layout."
                         },
                         ["dry_run"] = Bool("List matches without deleting. Default false.")
+                    }),
+                Fn("section_add",
+                    "Store a cross section (snitt) A–A: a vertical cut along a line in plan, looking to one side. Give a room (its name or id: the line runs through it, across the building, or along it with axis long), or from and to points, or line_id of a line the user drew or picked. Then layout_pack views plan and section_<letter> draws the marker on the plan and the section sheet (poché, lines beyond, ground line, levels, free height, gesims and møne). The same letter again moves that section.",
+                    new JObject
+                    {
+                        ["letter"] = Str("A to Z. Omit for the next free letter."),
+                        ["room"] = Str("A room name or id from the plan tags, such as Stue or rd-01."),
+                        ["axis"] = new JObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JArray("cross", "long"),
+                            ["description"] = "With room: cross (tverrsnitt, across the building's long side, default) or long (lengdesnitt)."
+                        },
+                        ["from"] = Pair("Line start [x, y] in model mm."),
+                        ["to"] = Pair("Line end [x, y] in model mm."),
+                        ["line_id"] = Str("Id of a line in the document to cut along."),
+                        ["look"] = new JObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JArray("north", "south", "east", "west"),
+                            ["description"] = "Which side the section looks toward. Omit for the left of the line."
+                        }
+                    }),
+                Fn("section_clear",
+                    "Remove a stored section, its sheet and its plan marker. Omit letter to remove every section.",
+                    new JObject
+                    {
+                        ["letter"] = Str("A to Z. Omit for all.")
                     })
             };
 
@@ -714,12 +747,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Layout pages and a PDF stay available: set_project_meta, layout_pack, export_pdf, clear_layouts. "
                     + "Door, window or room schedules are the schedules page: layout_pack views schedules; schedule_kinds picks the lists. "
                     + "Dimensions are on the plan sheet: layout_pack views plan draws them from the model. Never draw or type dimensions. "
+                    + "A section (snitt) A–A is section_add (a room by name, axis cross or long, or from and to, or line_id), then layout_pack views plan and section_<letter>. Never draw a section yourself. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
-                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page and the plan's dimensions. "
+                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page, the plan's dimensions and every stored section. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";

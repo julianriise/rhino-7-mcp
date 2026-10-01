@@ -325,6 +325,14 @@ def test_new_commands():
             "scale_label": "1:100",
         }),
         ("commands/layout_pack.json", {"views": ["plan", "schedules"]}),
+        ("commands/layout_pack.json", {"views": ["plan", "section_a", "section_b"]}),
+        ("commands/clear_layouts.json", {"views": ["section_a"]}),
+        ("commands/section_add.json", {"room": "Stue"}),
+        ("commands/section_add.json", {"letter": "B", "room": "rd-01", "axis": "long", "look": "north"}),
+        ("commands/section_add.json", {"from": [0, 2000], "to": [8000, 2000]}),
+        ("commands/section_add.json", {"letter": "c", "line_id": "8f8e7d6c-0000-0000-0000-000000000001"}),
+        ("commands/section_clear.json", {}),
+        ("commands/section_clear.json", {"letter": "A"}),
         ("commands/layout_pack.json", {"views": ["schedules"], "schedule_kinds": ["door", "window", "room"]}),
         ("commands/clear_layouts.json", {"views": ["schedules"]}),
         ("commands/layout_pack.json", {}),
@@ -858,6 +866,20 @@ def test_responses():
     if not validate("responses/layout_pack_result.json", layout_empty):
         all_passed = False
 
+    print("  section_result:")
+    section = {
+        "letter": "A", "view": "section_a", "a": [3000, 4000], "b": [3000, 0],
+        "look": [1, 0], "room": "rd-01", "axis": "cross",
+    }
+    added = {
+        "section": section, "sections": [section], "view": "section_a", "replaced": False,
+        "message": "Added section A–A through Garage.",
+    }
+    if not validate("responses/section_result.json", added):
+        all_passed = False
+    if not validate("responses/section_result.json", {"removed": ["A"], "sections": [], "message": "Removed section A."}):
+        all_passed = False
+
     print("  export_pdf_result:")
     pdf_result = {
         "path": "/tmp/forsk-plan.pdf",
@@ -1117,6 +1139,14 @@ def test_invalid_examples():
         ("commands/set_project_meta.json", {"bogus": 1}, "set_project_meta unknown field"),
         ("commands/set_project_meta.json", {"project": 1}, "set_project_meta project not string"),
         ("commands/layout_pack.json", {"views": ["section"]}, "layout_pack unknown view"),
+        ("commands/layout_pack.json", {"views": ["section_ab"]}, "layout_pack section is one letter"),
+        ("commands/clear_layouts.json", {"views": ["section"]}, "clear_layouts unknown view"),
+        ("commands/section_add.json", {"letter": "AB", "room": "Stue"}, "section_add letter is one letter"),
+        ("commands/section_add.json", {"room": "Stue", "axis": "diagonal"}, "section_add unknown axis"),
+        ("commands/section_add.json", {"from": [0, 0, 0], "to": [1, 1]}, "section_add from is x, y"),
+        ("commands/section_add.json", {"room": "Stue", "look": "up"}, "section_add unknown look"),
+        ("commands/section_add.json", {"bogus": 1}, "section_add unknown field"),
+        ("commands/section_clear.json", {"letter": "AA"}, "section_clear letter is one letter"),
         ("commands/layout_pack.json", {"paper": "A1"}, "layout_pack paper not A3"),
         ("commands/layout_pack.json", {"scale": 0}, "layout_pack scale 0"),
         ("commands/layout_pack.json", {"bogus": 1}, "layout_pack unknown field"),

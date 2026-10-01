@@ -3641,6 +3641,90 @@ class TestClearLayoutsTool:
         mock_get_conn.assert_not_called()
 
 
+class TestSectionTools:
+    """F5.3: section_add / section_clear on the wire, and section pages in layout_pack."""
+
+    @patch("rhinomcp.tools.section_add.get_rhino_connection")
+    def test_room_section_passes_through(self, mock_get_conn):
+        from rhinomcp.tools.section_add import section_add
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "section": {"letter": "A", "view": "section_a"},
+            "sections": [{"letter": "A", "view": "section_a"}],
+            "view": "section_a",
+            "replaced": False,
+            "message": "Added section A–A through Garage.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = section_add(ctx=None, letter="a", room="Garage", axis="long", look="north")
+        assert result["success"] is True
+        assert result["view"] == "section_a"
+        assert mock_conn.send_command.call_args[0] == (
+            "section_add", {"letter": "A", "room": "Garage", "axis": "long", "look": "north"}
+        )
+
+    @patch("rhinomcp.tools.section_add.get_rhino_connection")
+    def test_line_points_go_as_from_and_to(self, mock_get_conn):
+        from rhinomcp.tools.section_add import section_add
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"sections": [], "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        section_add(ctx=None, from_point=[0, 2000], to_point=[8000, 2000])
+        assert mock_conn.send_command.call_args[0][1] == {"from": [0, 2000], "to": [8000, 2000]}
+
+    @patch("rhinomcp.tools.section_add.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.section_add import section_add
+
+        assert section_add(ctx=None)["success"] is False
+        assert section_add(ctx=None, room="Stue", letter="AB")["success"] is False
+        assert section_add(ctx=None, room="Stue", axis="diagonal")["success"] is False
+        assert section_add(ctx=None, room="Stue", look="up")["success"] is False
+        assert section_add(ctx=None, from_point=[0, 0])["success"] is False
+        assert section_add(ctx=None, from_point=[0, 0, 0], to_point=[1, 1])["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.section_clear.get_rhino_connection")
+    def test_clear_one_or_all(self, mock_get_conn):
+        from rhinomcp.tools.section_clear import section_clear
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"removed": ["B"], "sections": [], "message": "Removed section B."}
+        mock_get_conn.return_value = mock_conn
+
+        assert section_clear(ctx=None, letter="b")["removed"] == ["B"]
+        assert mock_conn.send_command.call_args[0] == ("section_clear", {"letter": "B"})
+        section_clear(ctx=None)
+        assert mock_conn.send_command.call_args[0] == ("section_clear", {})
+        assert section_clear(ctx=None, letter="12")["success"] is False
+
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_layout_pack_takes_section_views(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"pages": [], "count": 3, "scale": 50, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        assert layout_pack(ctx=None, views=["plan", "section_a", "section_b"])["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["views"] == ["plan", "section_a", "section_b"]
+        assert layout_pack(ctx=None, views=["section_ab"])["success"] is False
+
+    @patch("rhinomcp.tools.clear_layouts.get_rhino_connection")
+    def test_clear_layouts_takes_section_views(self, mock_get_conn):
+        from rhinomcp.tools.clear_layouts import clear_layouts
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"deleted": ["Forsk — Section A"], "object_ids": [], "count": 1}
+        mock_get_conn.return_value = mock_conn
+
+        assert clear_layouts(ctx=None, views=["section_a"])["success"] is True
+
+
 class TestPrintGuards:
     """Lock Layout/PDF engine choice. No live Rhino. No panel dialog."""
 

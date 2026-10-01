@@ -1,13 +1,20 @@
 """A3 Layout pages: one Detail of the clay per view, title block bottom-right."""
 
+import re
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import Context
 from rhinomcp.server import get_rhino_connection, mcp, logger
 
 _VIEWS = ("plan", "north", "east", "south", "west", "schedules")
+# A section stored by section_add: section_a to section_z.
+_SECTION = re.compile(r"^section_[a-z]$")
 _SCHEDULE_KINDS = ("door", "window", "room")
-_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, or schedules."
+_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a)."
+
+
+def _known_view(view: Any) -> bool:
+    return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)))
 _UNKNOWN_PAPER = "Unknown paper. Use A3."
 
 
@@ -35,8 +42,10 @@ def layout_pack(
 
     Parameters:
     - paper: A3 only (default A3)
-    - views: Optional list of plan, north, east, south, west, schedules.
-      Omit for plan, four elevations, and schedules. schedules is its own
+    - views: Optional list of plan, north, east, south, west, schedules,
+      and section_<letter> for a section stored by section_add (its own
+      sheet; the plan carries its marker A–A). Omit for plan, four
+      elevations, every stored section, and schedules. schedules is its own
       A3 page with the door, window and room lists (dørliste, vindusliste,
       romliste) from the model; every door and window gets a stable mark
       (D01, V01) shown on the plan and on its row. Export draws the lists
@@ -57,7 +66,7 @@ def layout_pack(
             return {"success": False, "message": _UNKNOWN_PAPER}
         if views is not None and not isinstance(views, list):
             return {"success": False, "message": "views must be a list."}
-        if views is not None and (len(views) == 0 or any(v not in _VIEWS for v in views)):
+        if views is not None and (len(views) == 0 or any(not _known_view(v) for v in views)):
             return {"success": False, "message": _UNKNOWN_VIEW}
         if scale is not None and (isinstance(scale, bool) or not isinstance(scale, int) or scale < 1):
             return {"success": False, "message": "Scale must be a positive number."}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "section_clear.json",
+  "title": "SectionClear Command",
+  "description": "Remove a stored section, its Layout page, its S-DRAW sheet curves and its marker on the plan. Omit letter to remove every section.",
+  "type": "object",
+  "properties": {
+    "letter": {
+      "type": "string",
+      "pattern": "^[A-Za-z]$",
+      "description": "A to Z. Omit for all."
+    }
+  },
+  "additionalProperties": false
+}

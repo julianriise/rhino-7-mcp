@@ -18,7 +18,7 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is PDF or image import, print, daylight, sheets, DXF, import, edit, build.
+    /// One-turn tool bias from the message. Order is PDF or image import, print, daylight, sheets (sections too), DXF, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -97,6 +97,7 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "schedule") || HasWord(t, "schedules")) return true;
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
             if (IsDimensions(t)) return true;
+            if (IsSection(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
         }
 
@@ -118,6 +119,13 @@ namespace RhinoMCPPlugin.Forsk
                 return true;
             var verb = HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere");
             return verb && (HasWord(t, "plan") || HasWord(t, "planen") || HasWord(t, "image") || HasWord(t, "bilde"));
+        }
+
+        /// <summary>A cross section: section A through the living room, tverrsnitt, lengdesnitt, snitt A-A.</summary>
+        static bool IsSection(string t)
+        {
+            return HasWord(t, "section") || HasWord(t, "sections") || HasWord(t, "snitt") || HasWord(t, "snittet")
+                || HasWord(t, "tverrsnitt") || HasWord(t, "lengdesnitt") || HasWord(t, "snitter");
         }
 
         /// <summary>The plan's dimensions, unless a door or window is named: its size is an edit.</summary>

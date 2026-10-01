@@ -1359,14 +1359,15 @@ public partial class RhinoMCPFunctions
         var index = 1;
         try
         {
+            // A section fills its slabs and roof too, and says whose each loop is.
+            fillOwners = section != null ? new List<string>() : null;
             if (clip.HasValue && haveWorldToHld)
             {
+                fillGroups = SectionFillLoops(
+                    sources, section != null ? clip.Value : PlanFillPlane(clip.Value), section != null, tolerance, fillOwners);
                 if (section != null)
                 {
-                    // Slabs and roof fill too. The heights are read off the
-                    // model-space loops before they move onto the sheet.
-                    fillOwners = new List<string>();
-                    fillGroups = SectionFillLoops(sources, clip.Value, true, tolerance, fillOwners);
+                    // The heights are read off the model-space loops before they move onto the sheet.
                     cutUz = SectionCoords(fillGroups, section);
                     var roofGroups = SectionFillLoops(
                         sources.Where(o => string.Equals(GetForskKind(o), "roof", StringComparison.OrdinalIgnoreCase)).ToList(),
@@ -1374,8 +1375,6 @@ public partial class RhinoMCPFunctions
                     roofUz = SectionCoords(roofGroups, section);
                     DisposeFillGroups(roofGroups);
                 }
-                else
-                    fillGroups = SectionFillLoops(sources, PlanFillPlane(clip.Value), false, tolerance);
                 TransformFillGroups(fillGroups, worldToHld);
             }
             // Delta comes from the line drawing only, so the poché cannot

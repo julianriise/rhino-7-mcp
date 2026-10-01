@@ -7,17 +7,26 @@
   "properties": {
     "paper": {
       "type": "string",
-      "enum": ["A3"],
+      "enum": [
+        "A3"
+      ],
       "default": "A3"
     },
     "views": {
       "type": "array",
-      "description": "Pages to lay out, in order. Default plan, north, east, south, west, schedules. schedules is its own A3 page (Forsk — Schedules) with the door, window and room lists from the model; each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws the lists again from the model.",
+      "description": "Pages to lay out, in order. Default plan, north, east, south, west, every stored section, schedules. schedules is its own A3 page (Forsk — Schedules) with the door, window and room lists from the model; each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws the lists again from the model. section_<letter> is a section stored by section_add (Forsk — Section A): its own sheet, and its marker A–A on the plan.",
       "items": {
         "type": "string",
-        "enum": ["plan", "north", "east", "south", "west", "schedules"]
+        "pattern": "^(plan|north|east|south|west|schedules|section_[a-z])$"
       },
-      "default": ["plan", "north", "east", "south", "west", "schedules"]
+      "default": [
+        "plan",
+        "north",
+        "east",
+        "south",
+        "west",
+        "schedules"
+      ]
     },
     "scale": {
       "type": "integer",
@@ -39,7 +48,11 @@
       "description": "Which lists the schedules page shows. Default door, window, room.",
       "items": {
         "type": "string",
-        "enum": ["door", "window", "room"]
+        "enum": [
+          "door",
+          "window",
+          "room"
+        ]
       },
       "minItems": 1,
       "uniqueItems": true

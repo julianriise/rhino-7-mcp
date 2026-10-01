@@ -73,6 +73,8 @@
             "layout_pack",
             "export_pdf",
             "clear_layouts",
+            "section_add",
+            "section_clear",
             "set_layer_material",
             "set_display_mode",
             "run_command",
