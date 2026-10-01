@@ -21,6 +21,16 @@ public sealed class McpCommandAttribute : Attribute
     /// </summary>
     public bool ReadOnly { get; set; }
 
+    /// <summary>
+    /// If true, the dispatcher makes a model view active before the handler runs.
+    /// Set it on every command that adds objects to the model: while a layout is
+    /// the active view (export_pdf leaves one), Rhino puts a new object in that
+    /// page's space whatever its attributes say, and clear_layouts deletes it with
+    /// the page. contracts/test_schemas.py fails a write command that neither sets
+    /// it nor is listed as keeping the view.
+    /// </summary>
+    public bool ModelView { get; set; }
+
     public McpCommandAttribute(string name)
     {
         Name = name;

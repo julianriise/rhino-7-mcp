@@ -94,7 +94,7 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    [McpCommand("make2d_view")]
+    [McpCommand("make2d_view", ModelView = true)]
     public JObject Make2dView(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -240,7 +240,7 @@ public partial class RhinoMCPFunctions
         return SheetViewResult(spec.View, layer.Name, ids, message);
     }
 
-    [McpCommand("sheet_pack")]
+    [McpCommand("sheet_pack", ModelView = true)]
     public JObject SheetPack(JObject parameters)
     {
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);

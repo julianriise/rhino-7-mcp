@@ -15,7 +15,7 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    [McpCommand("roof_flat_from_walls")]
+    [McpCommand("roof_flat_from_walls", ModelView = true)]
     public JObject RoofFlatFromWalls(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

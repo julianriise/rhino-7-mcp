@@ -15,7 +15,7 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    [McpCommand("rooms_from_layer")]
+    [McpCommand("rooms_from_layer", ModelView = true)]
     public JObject RoomsFromLayer(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

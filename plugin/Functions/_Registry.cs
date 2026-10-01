@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
+using Rhino;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -44,6 +45,15 @@ public partial class RhinoMCPFunctions
 
             var handler = (Func<JObject, JObject>)Delegate.CreateDelegate(
                 typeof(Func<JObject, JObject>), this, method);
+            if (attr.ModelView)
+            {
+                var inner = handler;
+                handler = parameters =>
+                {
+                    UseModelView(RhinoDoc.ActiveDoc);
+                    return inner(parameters);
+                };
+            }
 
             if (table.ContainsKey(attr.Name))
             {

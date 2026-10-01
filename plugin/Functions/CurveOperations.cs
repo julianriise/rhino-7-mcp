@@ -17,7 +17,7 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Project a curve onto surfaces or polysurfaces.
     /// </summary>
-    [McpCommand("project_curve")]
+    [McpCommand("project_curve", ModelView = true)]
     public JObject ProjectCurve(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -108,7 +108,7 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Find intersection points or curves between two curves.
     /// </summary>
-    [McpCommand("intersect_curves")]
+    [McpCommand("intersect_curves", ModelView = true)]
     public JObject IntersectCurves(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -192,7 +192,7 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Split a curve at specified parameters or points.
     /// </summary>
-    [McpCommand("split_curve")]
+    [McpCommand("split_curve", ModelView = true)]
     public JObject SplitCurve(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

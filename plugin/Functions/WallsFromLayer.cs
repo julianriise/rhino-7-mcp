@@ -17,7 +17,7 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    [McpCommand("walls_from_layer")]
+    [McpCommand("walls_from_layer", ModelView = true)]
     public JObject WallsFromLayer(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

@@ -16,7 +16,7 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    [McpCommand("openings_from_layer")]
+    [McpCommand("openings_from_layer", ModelView = true)]
     public JObject OpeningsFromLayer(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

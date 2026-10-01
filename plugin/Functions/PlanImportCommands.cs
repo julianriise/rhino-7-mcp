@@ -48,7 +48,7 @@ public partial class RhinoMCPFunctions
     /// <summary>The 2D layers a plan is reviewed on. The scale step moves what is on them.</summary>
     private static readonly string[] PlanReviewLayers = { "wall", "door", "window", "A-ROOM", "room", RoomLabelLayerName, DividerLayerName };
 
-    [McpCommand("plan_import")]
+    [McpCommand("plan_import", ModelView = true)]
     public JObject ImportPlan(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -330,7 +330,7 @@ public partial class RhinoMCPFunctions
         return null;
     }
 
-    [McpCommand("plan_scale")]
+    [McpCommand("plan_scale", ModelView = true)]
     public JObject ScalePlan(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

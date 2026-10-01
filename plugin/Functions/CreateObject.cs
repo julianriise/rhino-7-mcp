@@ -26,7 +26,7 @@ public partial class RhinoMCPFunctions
     /// </param>
     /// <returns>JSON object with created object info (id, name, type, etc.)</returns>
     /// <exception cref="InvalidOperationException">Thrown when object type is invalid or creation fails</exception>
-    [McpCommand("create_object")]
+    [McpCommand("create_object", ModelView = true)]
     public JObject CreateObject(JObject parameters)
     {
         // parse meta data

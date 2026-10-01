@@ -28,7 +28,7 @@ public partial class RhinoMCPFunctions
     private const string DividerLayerName = "space_divider";
     private const string RoomLabelLayerName = "label";
 
-    [McpCommand("rooms_detect")]
+    [McpCommand("rooms_detect", ModelView = true)]
     public JObject RoomsDetect(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -119,10 +119,6 @@ public partial class RhinoMCPFunctions
         var roomIds = RoomDetect.Match(found.Rooms, earlierRings, DetectedRoomPrefix);
         var layer = EnsureLayer(doc, roomLayer?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
         if (z == double.MaxValue) z = 0;
-        // An export leaves a layout active, and a new outline or marker would land
-        // in its page space: clear_layouts then deletes it with the page and the
-        // sheets lose the room (no tag, no floor level, no free height).
-        UseModelView(doc);
 
         // Each detected room is named once; the marker carries the name to the plan tag.
         var suspect = new List<RoomDetect.Label>();

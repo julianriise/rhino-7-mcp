@@ -24,7 +24,7 @@ public partial class RhinoMCPFunctions
 {
     private const string LabelSourceKey = "forsk:label_source";
 
-    [McpCommand("dxf_import")]
+    [McpCommand("dxf_import", ModelView = true)]
     public JObject DxfImport(JObject parameters)
     {
         var path = parameters["path"]?.ToString();

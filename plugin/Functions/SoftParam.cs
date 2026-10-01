@@ -30,7 +30,7 @@ public partial class RhinoMCPFunctions
         public double Distance;
     }
 
-    [McpCommand("rebuild_host_wall")]
+    [McpCommand("rebuild_host_wall", ModelView = true)]
     public JObject RebuildHostWall(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

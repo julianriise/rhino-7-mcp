@@ -74,7 +74,7 @@ public partial class RhinoMCPFunctions
         public const double DummyThin = 1.0;
     }
 
-    [McpCommand("delete_opening")]
+    [McpCommand("delete_opening", ModelView = true)]
     public JObject DeleteOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -128,7 +128,7 @@ public partial class RhinoMCPFunctions
         return DeleteOpeningResult(doc, removals, commits, before, tol);
     }
 
-    [McpCommand("add_opening")]
+    [McpCommand("add_opening", ModelView = true)]
     public JObject AddOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -197,7 +197,7 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
-    [McpCommand("move_opening")]
+    [McpCommand("move_opening", ModelView = true)]
     public JObject MoveOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -255,7 +255,7 @@ public partial class RhinoMCPFunctions
             doc, rec, host, markerBrep, rec.Width, rec.Sill, rec.Head, slide.T, message);
     }
 
-    [McpCommand("set_opening")]
+    [McpCommand("set_opening", ModelView = true)]
     public JObject SetOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -321,7 +321,7 @@ public partial class RhinoMCPFunctions
             ProjectRecordedT(doc, rec), message);
     }
 
-    [McpCommand("set_opening_type")]
+    [McpCommand("set_opening_type", ModelView = true)]
     public JObject SetOpeningType(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

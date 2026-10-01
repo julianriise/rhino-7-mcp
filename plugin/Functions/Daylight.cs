@@ -147,7 +147,7 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    [McpCommand("daylight_paint")]
+    [McpCommand("daylight_paint", ModelView = true)]
     public JObject DaylightPaint(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

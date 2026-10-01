@@ -1254,6 +1254,66 @@ def test_contract_synchronization_across_tiers():
     return all_passed
 
 
+# Write commands that add nothing to model space, or own the active view.
+# Every other write command carries ModelView = true.
+KEEPS_VIEW = {
+    # Layouts and sheets: they activate their own pages and model views.
+    "layout_pack", "export_pdf", "clear_layouts",
+    # The user's own code or command decides.
+    "run_command", "execute_rhinoscript_python_code", "execute_rhinocommon_csharp_code",
+    # Sets the active view's display mode: switching first would change the target.
+    "set_display_mode",
+    # Delete, select, transform in place, or write attributes, layers or doc strings.
+    "delete_object", "delete_layer", "clear_generated", "clear_drawings", "daylight_clear",
+    "section_clear", "select_objects", "modify_object", "modify_objects",
+    "update_object_attributes", "mark_as_existing", "create_layer", "get_or_set_current_layer",
+    "set_layer_material", "set_project_meta", "section_add",
+}
+
+
+def test_write_commands_choose_model_view():
+    """Every write command either runs in a model view or is listed in KEEPS_VIEW.
+
+    While a layout is the active view (export_pdf leaves one), Rhino puts a new
+    object in that page's space whatever its attributes say, and clear_layouts
+    later deletes it with the page. A new command that adds objects must say so.
+    """
+    import re
+
+    print("\n=== Testing write commands choose a model view ===")
+    funcs_dir = CONTRACTS_DIR.parent / "plugin" / "Functions"
+    attr_pat = re.compile(r'\[McpCommand\(\s*"([a-z_][a-z0-9_]*)"([^)]*)\)\]')
+    model_view, read_only, writes = set(), set(), set()
+    for p in funcs_dir.glob("*.cs"):
+        for name, args in attr_pat.findall(p.read_text()):
+            if re.search(r"ReadOnly\s*=\s*true", args):
+                read_only.add(name)
+            else:
+                writes.add(name)
+            if re.search(r"ModelView\s*=\s*true", args):
+                model_view.add(name)
+
+    # Grasshopper canvas commands add no Rhino objects.
+    undecided = sorted(
+        n for n in writes - model_view - KEEPS_VIEW if not n.startswith("gh_")
+    )
+    both = sorted(model_view & KEEPS_VIEW)
+    stale = sorted(KEEPS_VIEW - writes)
+    on_read_only = sorted(model_view & read_only)
+    if undecided:
+        print(f"  FAIL: write commands with no ModelView and not in KEEPS_VIEW: {undecided}")
+    if both:
+        print(f"  FAIL: ModelView set on a KEEPS_VIEW command: {both}")
+    if stale:
+        print(f"  FAIL: KEEPS_VIEW names no write command: {stale}")
+    if on_read_only:
+        print(f"  FAIL: ModelView on a read-only command: {on_read_only}")
+    ok = not (undecided or both or stale or on_read_only)
+    if ok:
+        print(f"  PASS: {len(model_view)} write commands run in a model view")
+    return ok
+
+
 def test_schema_coverage_against_protocol():
     """Every command in the protocol envelope must have a schema file in commands/."""
     print("\n=== Testing schema coverage matches protocol enum ===")
@@ -1366,6 +1426,7 @@ def main():
     results.append(("invalid rejection", test_invalid_examples()))
     results.append(("schema coverage", test_schema_coverage_against_protocol()))
     results.append(("contract sync (3 tiers)", test_contract_synchronization_across_tiers()))
+    results.append(("model view on write", test_write_commands_choose_model_view()))
     results.append(("protocol envelope", test_protocol_envelope()))
 
     print("\n" + "=" * 40)
