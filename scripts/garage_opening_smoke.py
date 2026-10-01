@@ -20,6 +20,7 @@ import sys
 
 import daylight_smoke
 import plan_smoke
+import section_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
@@ -302,6 +303,38 @@ def layer(sock: socket.socket, name: str) -> None:
         # is what the wall and window curves need.
         pass
     send_command(sock, "get_or_set_current_layer", {"name": name})
+
+
+def sections_only() -> int:
+    """F5.3: a long and a cross section through the garage room, on the
+    document main left. Its own step, after the repeat capture, so the
+    capture still matches the doors sheet."""
+    print("==> sections")
+    failures: list[str] = []
+    sock = socket.create_connection((HOST, PORT), timeout=TIMEOUT)
+    sock.settimeout(TIMEOUT)
+    try:
+        def send(cmd: str, params: dict) -> dict:
+            return send_command(sock, cmd, params)
+
+        rooms = send("rooms_detect", {}).get("rooms") or [{}]
+        named = next((r for r in rooms if r.get("name")), rooms[0])
+        section_smoke.run_step(
+            send, "garage", str(named.get("name") or named.get("id") or ""),
+            "/tmp/forsk-f5-garage-sections.pdf", failures,
+            panel=lambda action, extra: send("panel_daylight", {"action": action, **extra}),
+        )
+    except SmokeError as exc:
+        failures.append(f"garage sections: {exc}")
+    finally:
+        sock.close()
+    if failures:
+        print(f"FAIL {len(failures)}")
+        for item in failures:
+            print(f"  - {item}")
+        return 1
+    print("PASS")
+    return 0
 
 
 def main() -> int:
@@ -853,8 +886,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     capture = len(sys.argv) > 1 and sys.argv[1] == "--capture-only"
+    sections = len(sys.argv) > 1 and sys.argv[1] == "--sections"
     try:
-        sys.exit(capture_only() if capture else main())
+        sys.exit(capture_only() if capture else sections_only() if sections else main())
     except (SmokeError, OSError, socket.timeout) as exc:
         if capture:
             print(f"    capture {exc}")

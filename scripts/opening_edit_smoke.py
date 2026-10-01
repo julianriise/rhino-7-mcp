@@ -22,6 +22,7 @@ from pathlib import Path
 
 import daylight_smoke
 import plan_smoke
+import section_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
@@ -977,6 +978,16 @@ def main() -> int:
         openings_now = expected - 1 if baked else 0
         check_plan("office fit", None, "/tmp/forsk-f5-office-fit.pdf", openings_now, schedules=True)
         check_plan("office 1:200", 200, "/tmp/forsk-f5-office-200.pdf", openings_now)
+        # F5.3: a long and a cross section through a named room, as chat makes them.
+        named = next((r for r in found if r.get("name")), found[0] if found else {})
+        try:
+            section_smoke.run_step(
+                lambda cmd, args: send_command(sock, cmd, args), "office",
+                str(named.get("name") or named.get("id") or ""), "/tmp/forsk-f5-office-sections.pdf", failures,
+                panel=lambda action, extra: send_command(sock, "panel_daylight", {"action": action, **extra}),
+            )
+        except SmokeError as exc:
+            failures.append(f"office sections: {exc}")
     finally:
         sock.close()
 

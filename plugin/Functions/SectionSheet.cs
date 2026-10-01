@@ -70,7 +70,7 @@ public partial class RhinoMCPFunctions
         }
         else if (!string.IsNullOrWhiteSpace(roomQuery))
         {
-            var rooms = PlanRooms(doc).Where(r => r.Tagged).ToList();
+            var rooms = PlanRooms(doc).Where(r => r.Ring != null).ToList();
             var room = MatchRoom(rooms, roomQuery);
             if (room == null)
             {
@@ -393,9 +393,10 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        // Every room with an outline, tagged on the plan or too small for its tag.
         foreach (var room in PlanRooms(doc))
         {
-            if (!room.Tagged || room.Ring == null || room.Ring.Count < 3) continue;
+            if (room.Ring == null || room.Ring.Count < 3) continue;
             var ring = room.Ring.Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList();
             if (!Sections.RoomSpan(ring, def, out var u0, out var u1)) continue;
             var floorZ = room.Ring[0].Z;
