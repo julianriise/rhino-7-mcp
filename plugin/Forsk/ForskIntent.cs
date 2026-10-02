@@ -68,7 +68,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A how-to: "how do I…", "what does … do", "hvordan…".</summary>
         public static bool IsQuestion(string text) => Question(Normalize(text));
 
-        /// <summary>A bug report: "this is broken", "feil".</summary>
+        /// <summary>A bug report: "this is broken", "there is an issue", "feil", "funker ikke".</summary>
         public static bool IsBug(string text) => Bug(Normalize(text));
 
         /// <summary>A feature request: "it would be nice if…", "can you add…".</summary>
@@ -83,7 +83,14 @@ namespace RhinoMCPPlugin.Forsk
 
         static bool Bug(string t)
         {
-            return t.Contains("this is broken") || HasWord(t, "broken") || HasWord(t, "feil");
+            if (t.Contains("this is broken") || HasWord(t, "broken") || HasWord(t, "feil")) return true;
+            if (t.Contains("there is an issue") || t.Contains("issue with") || t.Contains("problem with")) return true;
+            // Normalize turns an apostrophe into a space: "doesn't" is "doesn t".
+            if (t.Contains("doesn t work") || t.Contains("doesnt work") || t.Contains("does not work")) return true;
+            if (t.Contains("not working") || t.Contains("isn t working")) return true;
+            if (t.Contains("selects multiple")) return true;
+            if (HasWord(t, "bug") || HasWord(t, "wrong")) return true;
+            return t.Contains("problem med") || t.Contains("funker ikke") || t.Contains("virker ikke");
         }
 
         static bool Feature(string t)

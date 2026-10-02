@@ -42,7 +42,7 @@ public class PanelImportTests
     [InlineData("run daylight", ForskIntent.Daylight)]
     [InlineData("generate the 3D model", ForskIntent.Build)]
     [InlineData("move the window 200 along the wall", ForskIntent.Edit)]
-    [InlineData("why did my dxf labels come in wrong", ForskIntent.General)]
+    [InlineData("why did my dxf labels come in wrong", ForskIntent.Support)]
     [InlineData("hello", ForskIntent.General)]
     public void OtherTurns_KeepTheirIntent(string text, ForskIntent expected)
     {

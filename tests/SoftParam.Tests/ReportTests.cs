@@ -19,6 +19,18 @@ public class ReportTests
     [InlineData("this is broken", ForskIntent.Support)]
     [InlineData("the print is broken", ForskIntent.Support)]
     [InlineData("feil", ForskIntent.Support)]
+    [InlineData("there is an issue with areas, when i click an area in rhino, it selects multiple area", ForskIntent.Support)]
+    [InlineData("there is an issue", ForskIntent.Support)]
+    [InlineData("issue with the areas", ForskIntent.Support)]
+    [InlineData("problem with the print", ForskIntent.Support)]
+    [InlineData("it doesn't work", ForskIntent.Support)]
+    [InlineData("daylight is not working", ForskIntent.Support)]
+    [InlineData("this is a bug", ForskIntent.Support)]
+    [InlineData("it selects multiple rooms", ForskIntent.Support)]
+    [InlineData("the area is wrong", ForskIntent.Support)]
+    [InlineData("problem med arealene", ForskIntent.Support)]
+    [InlineData("det funker ikke", ForskIntent.Support)]
+    [InlineData("vinduet virker ikke", ForskIntent.Support)]
     [InlineData("it would be nice if walls could curve", ForskIntent.Support)]
     [InlineData("can you add a door", ForskIntent.Support)]
     [InlineData("add a door", ForskIntent.Edit)]
@@ -28,6 +40,16 @@ public class ReportTests
     public void Routing_SendsQuestionsBugsAndRequestsToSupport(string text, ForskIntent intent)
     {
         Assert.Equal(intent, ForskIntentRouter.Classify(text));
+    }
+
+    [Fact]
+    public void ClickingAnAreaThatSelectsTwo_IsABugForSupport()
+    {
+        const string said = "there is an issue with areas, when i click an area in rhino, it selects multiple area";
+        Assert.Equal(ForskIntent.Support, ForskIntentRouter.Classify(said));
+        Assert.True(ForskIntentRouter.IsBug(said));
+        Assert.False(ForskIntentRouter.IsQuestion(said));
+        Assert.Equal(ForskReports.ReportKind.Bug, ForskReports.Of(said));
     }
 
     [Fact]
