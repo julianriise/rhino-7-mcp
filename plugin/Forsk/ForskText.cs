@@ -139,6 +139,16 @@ namespace RhinoMCPPlugin.Forsk
             ["edit.undo.none"] = "Rhino had nothing to undo.",
             ["bridge.start.failed"] = "The bridge did not start: {why}",
 
+            // Roles. One thread and one history; a role sharpens suggestions and tool choice.
+            ["role.control"] = "Answer as",
+            ["role.auto"] = "Auto",
+            ["role.planner"] = "Planner",
+            ["role.modeller"] = "Modeller",
+            ["role.plotter"] = "Plotter",
+            ["role.render"] = "Render",
+            ["role.daylight"] = "Daylight",
+            ["role.title"] = "Auto lets the router name the role for each answer. A pick stays until you choose Auto again.",
+
             // The bar.
             ["bar.because"] = "Suggested because",
             ["bar.help"] = "?",

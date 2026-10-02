@@ -216,38 +216,61 @@
     return box;
   }
 
+  /* The role that answered, once, above the first reply of a turn. */
+  function marked(node, mark) {
+    if (!mark) return node;
+    var wrap = el('div', 'marked');
+    wrap.appendChild(el('span', 'role', mark));
+    wrap.appendChild(node);
+    return wrap;
+  }
+
   function item(entry) {
     if (entry.role === 'user' || entry.role === 'assistant') {
       var row = el('div', 'row ' + entry.role);
-      var bubble = el('div', 'bubble', entry.text);
-      if (entry.role === 'assistant' && entry.mark) {
-        var wrap = el('div');
-        wrap.appendChild(el('span', 'role', entry.mark));
-        wrap.appendChild(bubble);
-        row.appendChild(wrap);
-      } else {
-        row.appendChild(bubble);
-      }
-      return row;
+      row.appendChild(el('div', 'bubble', entry.text));
+      return marked(row, entry.mark);
     }
-    if (entry.role === 'receipt') return receipt(entry);
-    if (entry.role === 'card') return card(entry);
+    if (entry.role === 'receipt') return marked(receipt(entry), entry.mark);
+    if (entry.role === 'card') return marked(card(entry), entry.mark);
     return el('div', 'line', entry.text);
   }
 
   function busy(state) {
     if (state.kind === 'thinking') {
-      var wrap = el('div');
-      if (state.mark) wrap.appendChild(el('span', 'role', state.mark));
       var dots = el('div', 'dots');
       dots.setAttribute('aria-label', state.text || '');
       dots.appendChild(el('span'));
       dots.appendChild(el('span'));
       dots.appendChild(el('span'));
-      wrap.appendChild(dots);
-      return wrap;
+      return marked(dots, state.mark);
     }
-    return el('div', 'step', state.text);
+    return marked(el('div', 'step', state.text), state.mark);
+  }
+
+  /* The role control: Auto, or a pick that stays until Auto clears it. Left alone while it has focus. */
+  function renderRole(role) {
+    var select = document.getElementById('role');
+    if (!role) {
+      select.style.display = 'none';
+      return;
+    }
+    select.style.display = '';
+    if (document.activeElement === select) return;
+    var ids = (role.options || []).map(function (o) { return o.id + ':' + o.label; }).join('|');
+    if (select.dataset.ids !== ids) {
+      while (select.firstChild) select.removeChild(select.firstChild);
+      (role.options || []).forEach(function (o) {
+        var option = el('option', null, o.label);
+        option.value = o.id;
+        select.appendChild(option);
+      });
+      select.dataset.ids = ids;
+    }
+    select.value = role.value;
+    select.className = 'role-pick' + (role.value !== 'auto' ? ' set' : '');
+    select.setAttribute('aria-label', role.label || '');
+    select.title = role.title || '';
   }
 
   function renderBar(bar) {
@@ -319,6 +342,7 @@
     if (atEnd) thread.scrollTop = thread.scrollHeight;
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
+    renderRole(model.role);
     renderSheet(model.help);
     applyPrefill(model.prefill);
   };
@@ -357,6 +381,11 @@
       q.focus();
     });
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
+    var role = document.getElementById('role');
+    role.addEventListener('change', function () {
+      role.className = 'role-pick' + (role.value !== 'auto' ? ' set' : '');
+      sender.send({ kind: 'role', role: role.value });
+    });
     var nav = document.getElementById('bar');
     nav.addEventListener('mouseenter', function () { barHovered = true; });
     nav.addEventListener('mouseleave', function () {

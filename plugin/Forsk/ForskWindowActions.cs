@@ -30,6 +30,24 @@ namespace RhinoMCPPlugin.Forsk
             Application.Instance.AsyncInvoke(action);
         }
 
+        // ------------------------------------------------------------ the role
+
+        /// <summary>The composer's role control: a pick is an override until Auto clears it. Slot 1 does not read it.</summary>
+        void PickRole(string id)
+        {
+            var thread = Active();
+            if (thread == null) return;
+            thread.Override = ForskRoles.Parse(id);
+            Log("role: " + (thread.Override == ForskRole.None ? "auto (the router names each answer)" : thread.Override + " (override)"));
+            Render();
+        }
+
+        /// <summary>A typed turn's mark: the override when one is set, else the router's role for this sentence.</summary>
+        static string TurnMark(DocThread thread, string text)
+        {
+            return ForskRoles.Mark(ForskIntentRouter.Classify(text, ForskTarget.Read()), thread.Override);
+        }
+
         // ------------------------------------------------------------ the bar
 
         /// <summary>Cmd+1..3: that slot of the bar as it is drawn now.</summary>
@@ -185,7 +203,9 @@ namespace RhinoMCPPlugin.Forsk
                     var spec = ForskCards.For(action.Id, facts);
                     if (spec == null) return;
                     thread.Add("user", action.Label);
+                    thread.BeginReply(ForskRoles.MarkForAction(action.Id));
                     thread.AddCard(spec, facts);
+                    thread.EndReply();
                     Models.Persist(thread);
                     Render();
                     return;
@@ -304,17 +324,17 @@ namespace RhinoMCPPlugin.Forsk
             if (toggle != DaylightAction.None)
             {
                 var id = toggle == DaylightAction.Show ? "daylight.show" : "daylight.hide";
-                Job(thread, id, ForskText.Label(id), sink => Daylight(sink, toggle), userText: text);
+                Job(thread, id, ForskText.Label(id), sink => Daylight(sink, toggle), userText: text, mark: TurnMark(thread, text));
                 return;
             }
             if (Sections.IsPickPhrase(text))
             {
-                SectionPick(thread, text);
+                SectionPick(thread, text, TurnMark(thread, text));
                 return;
             }
             if (ForskPrint.IsRequest(text))
             {
-                Print(thread, text);
+                Print(thread, text, mark: TurnMark(thread, text));
                 return;
             }
             Chat(thread, text, "answer");
@@ -329,8 +349,10 @@ namespace RhinoMCPPlugin.Forsk
         {
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
-            thread.Add("user", text);
             var target = ForskTarget.Read();
+            thread.Add("user", text);
+            // The router's role for this sentence, unless an override was set when it was sent.
+            thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify(text, target), thread.Override));
             var undo = ForskUndo.Begin(doc, text);
             _jobChanges = 0;
             var serial = doc?.RuntimeSerialNumber ?? 0;
@@ -443,11 +465,13 @@ namespace RhinoMCPPlugin.Forsk
         /// A pill's work, off the UI thread, inside one undo record named after
         /// the pill. The step line stays on screen; the longest UI stall is logged.
         /// </summary>
-        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true, Action after = null)
+        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true, Action after = null, string mark = null)
         {
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
             thread.Add("user", userText ?? label);
+            // A pill's receipts carry the role that knows the action; a typed shortcut passes the router's.
+            thread.BeginReply(mark ?? ForskRoles.MarkForAction(kind));
             thread.Busy = ForskText.Format("line.running", "what", label);
             var undo = ownRecord ? ForskUndo.Begin(doc, label) : null;
             _jobChanges = 0;
@@ -495,6 +519,7 @@ namespace RhinoMCPPlugin.Forsk
                     + (longest.Value >= FrozenMs ? " · the page could not repaint, the shimmer was frozen" : " · the shimmer kept moving") : ""));
             thread.Busy = null;
             thread.Thinking = false;
+            thread.EndReply();
             _busy = false;
             Models.Persist(thread);
             MarkDirty();
@@ -517,7 +542,7 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>Print, or one sheet of it (view). The save dialog is parented to this window.</summary>
-        void Print(DocThread thread, string userText, string view = null)
+        void Print(DocThread thread, string userText, string view = null, string mark = null)
         {
             var label = ForskText.Label(view == null ? "file.print" : "print.one");
             Job(thread, view == null ? "file.print" : "print.one", label, sink =>
@@ -525,7 +550,7 @@ namespace RhinoMCPPlugin.Forsk
                 sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
                 var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, view);
                 sink.Line(line);
-            }, userText: userText);
+            }, userText: userText, mark: mark);
         }
 
         /// <summary>
@@ -544,7 +569,9 @@ namespace RhinoMCPPlugin.Forsk
                 if (pages > 1)
                 {
                     thread.Add("user", action.Label);
+                    thread.BeginReply(ForskRoles.MarkForAction(action.Id));
                     thread.AddCard(ForskCards.PdfPage(path, pages), null);
+                    thread.EndReply();
                     Models.Persist(thread);
                     Render();
                     return;
@@ -584,6 +611,7 @@ namespace RhinoMCPPlugin.Forsk
         void Scale(DocThread thread, ForskAction action)
         {
             thread.Add("user", action.Label);
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
             thread.Add("line", ForskText.Get("prompt.scale"));
             Render();
             HandToRhino();
@@ -615,6 +643,7 @@ namespace RhinoMCPPlugin.Forsk
                     Data = new JObject { ["p1"] = pick["p1"], ["p2"] = pick["p2"] }
                 }, doc == null ? null : ReadFacts(doc));
             }
+            thread.EndReply();
             Models.Persist(thread);
             MarkDirty();
             Render();
@@ -626,6 +655,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             thread.Add("user", action.Label);
             thread.Add("line", ForskText.Get("prompt.draw"));
+            thread.EndReply();
             Render();
             ForskCalls.Enter();
             try
@@ -657,10 +687,12 @@ namespace RhinoMCPPlugin.Forsk
         void UseCurves(DocThread thread, ForskAction action, RhinoDoc doc)
         {
             thread.Add("user", action.Label);
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
             var curves = RhinoMCPFunctions.ListSelected(doc).Where(o => o?.Geometry is Curve).ToList();
             if (curves.Count == 0)
             {
                 thread.Add("line", ForskText.Get("file.use_curves.ask"));
+                thread.EndReply();
                 Render();
                 return;
             }
@@ -689,11 +721,12 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>The section line is dragged in the view; its name comes from a dialog parented to this window.</summary>
-        void SectionPick(DocThread thread, string userText)
+        void SectionPick(DocThread thread, string userText, string mark = null)
         {
             if (Refuse(thread)) return;
             var doc = RhinoDoc.ActiveDoc;
             thread.Add("user", userText);
+            thread.BeginReply(mark ?? ForskRoles.MarkForAction("section.add"));
             thread.Add("line", ForskText.Get("prompt.section"));
             Render();
             HandToRhino();
@@ -728,6 +761,7 @@ namespace RhinoMCPPlugin.Forsk
         void AskWallSide(DocThread thread, FileFacts facts)
         {
             thread.Add("user", ForskText.Label("wall.delete"));
+            thread.BeginReply(ForskRoles.MarkForAction("wall.delete"));
             thread.AddCard(new CardSpec
             {
                 Kind = "wall.delete",
@@ -743,6 +777,7 @@ namespace RhinoMCPPlugin.Forsk
                 Note = ForskText.Get("wall.delete.inner"),
                 Depends = "selection"
             }, facts);
+            thread.EndReply();
             Models.Persist(thread);
             Render();
         }
@@ -751,6 +786,7 @@ namespace RhinoMCPPlugin.Forsk
         void Undo(DocThread thread, ForskAction action, RhinoDoc doc)
         {
             thread.Add("user", action.Label);
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
             var record = Tracker.Current?.Record;
             bool undone;
             ForskCalls.Enter();
@@ -764,6 +800,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             Log("undo: " + (record ?? "?") + " · " + undone);
             thread.AddReceipt(undone, action.Label, undone ? record ?? "" : ForskText.Get("edit.undo.none"));
+            thread.EndReply();
             Models.Persist(thread);
             MarkDirty();
             Render();

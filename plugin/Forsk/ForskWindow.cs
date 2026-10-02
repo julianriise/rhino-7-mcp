@@ -146,6 +146,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "card.close":
                         CloseCard(message["card"]?.ToString());
                         return;
+                    case "role":
+                        PickRole(message["role"]?.ToString());
+                        return;
                 }
             }
             catch (Exception e)

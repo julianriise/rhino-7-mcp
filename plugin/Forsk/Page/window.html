@@ -44,7 +44,6 @@ header { padding: 14px 16px 8px; border-bottom: 1px solid var(--line); }
 .bubble { max-width: 85%; padding: 8px 12px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant .bubble { background: var(--bubble); color: var(--ink); }
 .user .bubble { background: var(--ink); color: #FFFFFF; }
-.role { display: block; color: var(--muted); font-size: 11px; margin: 0 0 2px 12px; }
 .line { color: var(--muted); font-size: 12px; margin: 0 0 8px; white-space: pre-wrap; }
 .receipt { color: var(--muted); font-size: 12px; margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .receipt b { color: var(--ink); font-weight: 600; }
@@ -103,6 +102,14 @@ nav.bar { padding: 8px 12px 0; border-top: 1px solid var(--line); }
 .sheet .pills { margin: 0 0 2px; }
 .sheet .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 .dock { position: relative; }
+select.role-pick {
+  flex: none; -webkit-appearance: none; appearance: none; align-self: center;
+  font: 12px/1 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted);
+  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; margin: 0; cursor: pointer;
+}
+select.role-pick.set { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
+select.role-pick:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
+.marked > .role { display: block; color: var(--muted); font-size: 11px; margin: 0 0 2px 12px; }
 .add {
   flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--muted);
   font: 400 20px/28px -apple-system, sans-serif; cursor: pointer; padding: 0; margin-left: -8px;
@@ -152,6 +159,7 @@ textarea::placeholder { color: var(--faint); }
   <form id="composer" class="composer" autocomplete="off">
     <div class="field">
       <button id="add" class="add" type="button" aria-label="Import a plan" title="Import a plan">+</button>
+      <select id="role" class="role-pick"></select>
       <textarea id="q" rows="1" placeholder="Message Forsk" spellcheck="true" aria-label="Message Forsk"></textarea>
       <button id="send" class="send" type="submit" aria-label="Send" disabled>&#8593;</button>
     </div>

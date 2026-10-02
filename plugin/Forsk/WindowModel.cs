@@ -45,7 +45,25 @@ namespace RhinoMCPPlugin.Forsk
         public bool Thinking;
         /// <summary>The sentence a prefill action put in the composer, once (its n grows), or null.</summary>
         public JObject Prefill;
+        /// <summary>The user's role pick for this file. None: the router names each answer's role.</summary>
+        public ForskRole Override;
+        /// <summary>The running turn's role mark, shown on its thinking or step line.</summary>
+        public string TurnMark;
+        string _replyMark;
         long _next;
+
+        /// <summary>A turn starts: its first reply (an answer, a receipt or a card) carries the role mark.</summary>
+        public void BeginReply(string mark)
+        {
+            _replyMark = string.IsNullOrWhiteSpace(mark) ? null : mark;
+            TurnMark = _replyMark;
+        }
+
+        public void EndReply()
+        {
+            _replyMark = null;
+            TurnMark = null;
+        }
 
         public JObject Add(string role, string text)
         {
@@ -196,6 +214,7 @@ namespace RhinoMCPPlugin.Forsk
             };
             if (Thinking) model["busy"] = new JObject { ["kind"] = "thinking", ["text"] = ForskText.Get("line.thinking") };
             else if (!string.IsNullOrEmpty(Busy)) model["busy"] = new JObject { ["kind"] = "step", ["text"] = Busy };
+            if (model["busy"] is JObject busy && TurnMark != null) busy["mark"] = TurnMark;
             if (Prefill != null) model["prefill"] = Prefill.DeepClone();
             return model;
         }
@@ -231,6 +250,12 @@ namespace RhinoMCPPlugin.Forsk
         {
             _next++;
             item["id"] = "m" + _next;
+            var role = item["role"]?.ToString();
+            if (_replyMark != null && (role == "assistant" || role == "receipt" || role == "card"))
+            {
+                item["mark"] = _replyMark;
+                _replyMark = null;
+            }
             Items.Add(item);
             return item;
         }
@@ -252,7 +277,8 @@ namespace RhinoMCPPlugin.Forsk
                 ((JArray)model["thread"]).Add(new JObject { ["role"] = "line", ["id"] = "state", ["text"] = ForskRegistry.StateSentence(facts) });
             model["target"] = target ?? "";
             model["status"] = ForskRegistry.Status(facts);
-            model["bar"] = ForskRegistry.Bar(facts).ToJson();
+            model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
+            model["role"] = ForskRoles.Control(thread.Override);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             return model;
         }

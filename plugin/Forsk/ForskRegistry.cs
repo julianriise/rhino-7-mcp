@@ -212,17 +212,27 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        public static BarView Bar(FileFacts f)
+        /// <param name="role">
+        /// The user's role pick, or None. It is a small boost: slot 2 stays the
+        /// first eligible action, and slot 3 may go to that role's first eligible
+        /// action instead of the next one. Slot 1 never reads it.
+        /// </param>
+        public static BarView Bar(FileFacts f, ForskRole role = ForskRole.None)
         {
             // While a wall or an opening is selected no file-level action fills a slot: the
             // candidates' own conditions already keep them out (RegistryTests checks it).
             var bar = new BarView { Slot1 = Slot1(f) };
+            var eligible = new List<ForskAction>();
             foreach (var action in Candidates(f, bar.Slot1))
             {
-                if (bar.Context.Count == 2) break;
-                if (action == null || action == bar.Slot1 || bar.Context.Contains(action)) continue;
-                if (!action.Shows(f)) continue;
-                bar.Context.Add(action);
+                if (action == null || action == bar.Slot1 || eligible.Contains(action)) continue;
+                if (action.Shows(f)) eligible.Add(action);
+            }
+            if (eligible.Count > 0) bar.Context.Add(eligible[0]);
+            if (eligible.Count > 1)
+            {
+                var boosted = role == ForskRole.None ? null : eligible.Skip(1).FirstOrDefault(a => ForskRoles.OfAction(a.Id) == role);
+                bar.Context.Add(boosted ?? eligible[1]);
             }
             bar.Reason = Reason(f, bar);
             return bar;
