@@ -142,6 +142,41 @@ public class ReportTests
         Assert.Contains("The window adds the report.", ForskSource("ForskChat.cs"));
     }
 
+    [Fact]
+    public void Support_ReadsTheModelWhenNothingIsSelected_ThenEndsOnTheCard()
+    {
+        const string said = "there is an issue with areas, when i click an area in rhino, it selects multiple area";
+        Assert.True(ForskReports.EndsWithReport(ForskRole.Support, said));
+        Assert.True(ForskReports.EndsWithReport(ForskRole.None, said));
+        Assert.Contains("ForskReports.EndsWithReport", ForskSource("ForskWindowActions.cs"));
+
+        var chat = ForskSource("ForskChat.cs");
+        var start = chat.IndexOf("Turn bias: Support.", StringComparison.Ordinal);
+        var end = chat.IndexOf("Turn bias: Build.", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        var bias = chat.Substring(start, end - start);
+        Assert.Contains("Nothing selected is not a refusal.", bias);
+        Assert.Contains("get_document_summary", bias);
+        Assert.Contains("get_objects", bias);
+        Assert.Contains("the layer the report is about", bias);
+        Assert.Contains("Do not say that nothing is selected.", bias);
+        Assert.Contains("The window adds the report.", bias);
+        Assert.DoesNotContain("Empty selection uses the refuse copy.", bias);
+
+        var header = chat.Substring(chat.IndexOf("static string PanelHeader", StringComparison.Ordinal));
+        Assert.Contains("Empty selection uses the refuse copy.", header);
+        Assert.Contains("Nothing selected is not a refusal.", header);
+        Assert.Contains("intent == ForskIntent.Support", header);
+
+        var support = ForskToolPacks.For(ForskIntent.Support);
+        Assert.Contains("get_document_summary", support);
+        Assert.Contains("get_objects", support);
+        Assert.Contains("get_object_info", support);
+        Assert.DoesNotContain("select_objects", support);
+        Assert.True(ForskToolPacks.Allows(ForskIntent.Support, "get_objects"));
+        Assert.False(ForskToolPacks.Allows(ForskIntent.Support, "select_objects"));
+    }
+
     static string ForskSource(string file)
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)

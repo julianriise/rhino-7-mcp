@@ -367,9 +367,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Support)
             {
                 return "Turn bias: Support. Answer in at most two sentences. "
-                    + "The tools only read the document, the selection, and the debug report. "
+                    + "The tools only read the document, the selection, a layer's objects, and the debug report. "
                     + "Do not edit the model. Do not select, capture, or call a tool that is not in the list. "
                     + "Pass on what the tools say. Do not invent a count. "
+                    + "Nothing selected is not a refusal. This overrides the empty-selection rule above, including no document scan. "
+                    + "Call get_document_summary, then get_objects on the layer the report is about, and get_object_info when a name or id is known. "
+                    + "Do not say that nothing is selected. "
                     + "A question: answer it. A bug or a feature request: say what you found in the model. The window adds the report.";
             }
             if (intent == ForskIntent.Build)
@@ -697,10 +700,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var bias = intent == ForskIntent.General
                 ? "No tool bias this turn: every Forsk tool is here. Follow the message."
                 : "This turn is about " + IntentName(intent) + " and carries those tools. Anything else runs when the user asks for it in its own message.";
+            var empty = intent == ForskIntent.Support
+                ? "Nothing selected is not a refusal. Call get_document_summary, then get_objects on the layer the report is about. Do not say that nothing is selected. "
+                : "Empty selection uses the refuse copy. ";
             var text = "You are answering inside the Forsk window. " + bias + " "
                 + "Call the tool the user asked for. "
                 + "Reply in at most two sentences: one past-tense status line, then at most three short facts. "
-                + "Do not print a Target block on success. Empty selection uses the refuse copy. "
+                + "Do not print a Target block on success. " + empty
                 + "Ambiguous selection prints one Target line and asks. "
                 + "Do not restate the user. Do not say you are happy to help. Do not teach unless they asked how or why. "
                 + "Do not narrate tools. The window prints one receipt per tool. "

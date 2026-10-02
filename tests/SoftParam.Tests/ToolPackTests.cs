@@ -65,7 +65,7 @@ public class ToolPackTests
             // Support's list is read-only and adds debug_report, which the modelling union does not carry.
             if (intent == ForskIntent.Support)
             {
-                Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", "debug_report" }, sent);
+                Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", "get_objects", "debug_report" }, sent);
                 Assert.DoesNotContain("select_objects", sent);
                 Assert.DoesNotContain("capture_viewport", sent);
             }
@@ -127,7 +127,7 @@ public class ToolPackTests
 
         // Support reads the model and the selection, then the debug report. It adds nothing to another pack and edits nothing.
         var support = ForskToolPacks.For(ForskIntent.Support).ToList();
-        Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", ForskToolPacks.DebugTool }, support);
+        Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", "get_objects", ForskToolPacks.DebugTool }, support);
         Assert.Equal(support.Count, ForskToolPacks.Schemas(support).Count);
         Assert.DoesNotContain(support, n => n.Contains("move") || n.Contains("delete") || n.Contains("add") || n == "select_objects" || n == "capture_viewport" || n == "clear_generated");
         Assert.False(ForskToolPacks.Allows(ForskIntent.Support, "move_wall"));

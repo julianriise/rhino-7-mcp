@@ -94,14 +94,16 @@ namespace RhinoMCPPlugin.Forsk
         static readonly string[] DxfPack = { ForskDxf.Tool };
 
         /// <summary>
-        /// Read-only model and selection info, then the debug report.
-        /// No select, no capture, no tool that edits the model.
+        /// Read-only model, selection, and layer objects, then the debug report.
+        /// No select, no capture, no tool that edits the model. An empty selection
+        /// still reads the document and the layer the report is about.
         /// </summary>
         static readonly string[] SupportPack =
         {
             "get_document_summary",
             "get_selected_objects_info",
             "get_object_info",
+            "get_objects",
             DebugTool
         };
 
