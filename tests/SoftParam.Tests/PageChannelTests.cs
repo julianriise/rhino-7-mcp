@@ -235,3 +235,57 @@ public class PageSenderTests
         Assert.Equal(new long[] { 1, 2, 4, 5 }, Server(engine).Select(m => m["seq"]!.Value<long>()));
     }
 }
+
+/// <summary>
+/// D0 follow-up: closing the channel. Stop then Close made .NET's managed
+/// HttpListener bind the port again on Close, which threw "Address already
+/// in use" when another process had taken the port (seen with three test
+/// runs side by side). The window disposes the channel in its Closed event.
+/// </summary>
+public class PageChannelCloseTests
+{
+    [Fact]
+    public void Closing_FreesThePort_AndNeverRebindsIt()
+    {
+        var channel = new PageChannel(_ => { });
+        channel.Start();
+        var port = channel.Port;
+        channel.Dispose();
+
+        // Someone else takes the port at once. Closing again must not try to bind it.
+        var other = new System.Net.Sockets.TcpListener(IPAddress.Loopback, port);
+        other.Start();
+        try
+        {
+            channel.Dispose();
+        }
+        finally
+        {
+            other.Stop();
+        }
+    }
+
+    [Fact]
+    public void StopThenClose_IsWhatThrew()
+    {
+        // The .NET behaviour the fix avoids, kept as evidence.
+        var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        var listener = new HttpListener();
+        listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+        listener.Start();
+        listener.Stop();
+        var other = new System.Net.Sockets.TcpListener(IPAddress.Loopback, port);
+        other.Start();
+        try
+        {
+            Assert.Throws<HttpListenerException>(() => listener.Close());
+        }
+        finally
+        {
+            other.Stop();
+        }
+    }
+}

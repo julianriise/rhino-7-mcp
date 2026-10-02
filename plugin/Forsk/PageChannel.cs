@@ -111,6 +111,11 @@ namespace RhinoMCPPlugin.Forsk
             get { lock (_gate) return _delivered; }
         }
 
+        /// <summary>
+        /// Close only. Stop then Close removes the listener twice, and the second
+        /// removal binds the port again: when another process has taken it, that
+        /// throws "Address already in use". Closing never throws.
+        /// </summary>
         public void Dispose()
         {
             var listener = _listener;
@@ -118,12 +123,11 @@ namespace RhinoMCPPlugin.Forsk
             if (listener == null) return;
             try
             {
-                listener.Stop();
                 listener.Close();
             }
-            catch (ObjectDisposedException)
+            catch (Exception e) when (e is HttpListenerException || e is ObjectDisposedException || e is InvalidOperationException)
             {
-                // Already closed.
+                // Already closed, or the port went away first. Nothing is left listening.
             }
         }
 
