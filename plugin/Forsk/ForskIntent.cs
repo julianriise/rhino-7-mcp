@@ -19,18 +19,71 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. A question, a bug report, or a feature
-    /// request is Support, ahead of the others, so "how do I print" is not Print.
-    /// Then PDF or image import, print, daylight, sheets (sections too), DXF, import, edit, build.
-    /// An opening selection is edit when those words are absent.
+    /// What the router decided. Unsure is a miss or a weak clash: the turn is
+    /// General and the tool pack is the full union, never a narrow pack.
+    /// Confidence is 1 when a rule decided, and 0 when it did not.
+    /// </summary>
+    public sealed class ForskRoute
+    {
+        public ForskIntent Intent;
+        public bool Unsure;
+        public double Confidence;
+
+        public static ForskRoute Sure(ForskIntent intent)
+        {
+            return new ForskRoute { Intent = intent, Unsure = false, Confidence = 1 };
+        }
+
+        public static ForskRoute Miss()
+        {
+            return new ForskRoute { Intent = ForskIntent.General, Unsure = true, Confidence = 0 };
+        }
+    }
+
+    /// <summary>
+    /// One-turn tool bias from the message. A clear question, bug report, or
+    /// feature request is Support, ahead of the others, so "how do I print" is
+    /// not Print. Then PDF or image import, print, daylight, sheets (sections
+    /// too), DXF, import, edit, build. An opening selection is edit when those
+    /// words are absent. A miss, or a lone "bug" or "wrong" sitting on another
+    /// intent, is General: the full tool pack, not Support's short list.
     /// </summary>
     public static class ForskIntentRouter
     {
         /// <param name="picked">What the selection is (FileFacts.Picked). An opening picked makes an otherwise plain sentence an edit.</param>
         public static ForskIntent Classify(string text, Picked picked = Picked.None)
         {
+            return Route(text, picked).Intent;
+        }
+
+        /// <summary>The intent, and whether the router is willing to narrow the tool pack.</summary>
+        public static ForskRoute Route(string text, Picked picked = Picked.None)
+        {
             var t = Normalize(text);
-            if (Question(t) || Bug(t) || Feature(t)) return ForskIntent.Support;
+            var support = SupportMatch(t);
+            var task = Task(t, picked);
+            // A clear question or bug stays Support, even when the words also name a task.
+            if (support == SupportKind.Strong) return ForskRoute.Sure(ForskIntent.Support);
+            // "wrong" or "bug" on a sentence that already has a task is not enough to drop the other tools.
+            if (support == SupportKind.Weak && task != null) return ForskRoute.Miss();
+            if (support == SupportKind.Weak) return ForskRoute.Sure(ForskIntent.Support);
+            if (task != null) return ForskRoute.Sure(task.Value);
+            return ForskRoute.Miss();
+        }
+
+        enum SupportKind { None, Weak, Strong }
+
+        /// <summary>Strong is a question, a feature request, or a bug phrase. Weak is only the word bug, wrong, or feil.</summary>
+        static SupportKind SupportMatch(string t)
+        {
+            if (Question(t) || BugStrong(t) || Feature(t)) return SupportKind.Strong;
+            if (BugWeak(t)) return SupportKind.Weak;
+            return SupportKind.None;
+        }
+
+        /// <summary>The first task rule that hits, in the router's order. Null when none do. Opening selection is the last of them.</summary>
+        static ForskIntent? Task(string t, Picked picked)
+        {
             if (IsPlanFile(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
@@ -40,7 +93,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsEdit(t)) return ForskIntent.Edit;
             if (IsBuild(t)) return ForskIntent.Build;
             if (picked == Picked.Opening) return ForskIntent.Edit;
-            return ForskIntent.General;
+            return null;
         }
 
         static string Normalize(string text)
@@ -81,16 +134,24 @@ namespace RhinoMCPPlugin.Forsk
             return t.Contains("what does") && HasWord(t, "do");
         }
 
-        static bool Bug(string t)
+        static bool Bug(string t) => BugStrong(t) || BugWeak(t);
+
+        /// <summary>A bug phrase. These stay Support even when the sentence also names a task.</summary>
+        static bool BugStrong(string t)
         {
-            if (t.Contains("this is broken") || HasWord(t, "broken") || HasWord(t, "feil")) return true;
+            if (t.Contains("this is broken") || HasWord(t, "broken")) return true;
             if (t.Contains("there is an issue") || t.Contains("issue with") || t.Contains("problem with")) return true;
             // Normalize turns an apostrophe into a space: "doesn't" is "doesn t".
             if (t.Contains("doesn t work") || t.Contains("doesnt work") || t.Contains("does not work")) return true;
             if (t.Contains("not working") || t.Contains("isn t working")) return true;
             if (t.Contains("selects multiple")) return true;
-            if (HasWord(t, "bug") || HasWord(t, "wrong")) return true;
             return t.Contains("problem med") || t.Contains("funker ikke") || t.Contains("virker ikke");
+        }
+
+        /// <summary>One word. On its own it is still a bug report. Next to a task it is not sure enough to drop that task's tools.</summary>
+        static bool BugWeak(string t)
+        {
+            return HasWord(t, "bug") || HasWord(t, "wrong") || HasWord(t, "feil");
         }
 
         static bool Feature(string t)
@@ -122,9 +183,15 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (HasWord(t, "daylight") || HasWord(t, "dagslys")) return true;
             if (t.Contains("natural light") || t.Contains("sky visibility") || t.Contains("how much light")) return true;
-            return HasWord(t, "dark") || HasWord(t, "darker") || HasWord(t, "darkest")
-                || HasWord(t, "bright") || HasWord(t, "brighter") || HasWord(t, "brightest")
-                || HasWord(t, "mørk") || HasWord(t, "mørkt") || HasWord(t, "lyst");
+            if (HasWord(t, "darker") || HasWord(t, "darkest") || HasWord(t, "brighter") || HasWord(t, "brightest")
+                || HasWord(t, "mørk") || HasWord(t, "mørkt") || HasWord(t, "lyst"))
+                return true;
+            // "dark" and "bright" on their own are a place or a mood ("dark corner", "feel bright").
+            // They count when the sentence asks whether a room is dark or bright.
+            if (!HasWord(t, "dark") && !HasWord(t, "bright")) return false;
+            var asks = HasWord(t, "is") || HasWord(t, "er");
+            var room = HasWord(t, "room") || HasWord(t, "rooms") || HasWord(t, "rom") || HasWord(t, "rommet");
+            return asks && room;
         }
 
         static bool IsSheets(string t)
@@ -200,6 +267,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsWallEdit(t))
                 return true;
             var verb = HasWord(t, "move") || HasWord(t, "flytt")
+                || HasWord(t, "put") || HasWord(t, "place")
                 || HasWord(t, "add") || HasWord(t, "legg")
                 || HasWord(t, "delete") || HasWord(t, "remove") || HasWord(t, "slett") || HasWord(t, "fjern")
                 || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")

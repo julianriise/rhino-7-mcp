@@ -155,13 +155,13 @@
    "id": "B26",
    "utterance": "put a window in the dark corner of the living room",
    "selection": "empty",
-   "router": "daylight"
+   "router": "edit"
   },
   {
    "id": "B27",
    "utterance": "what makes a living room feel bright?",
    "selection": "empty",
-   "router": "daylight"
+   "router": "general"
   },
   {
    "id": "B28",
