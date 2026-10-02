@@ -108,10 +108,24 @@
     };
   };
 
+  /*
+   * A receipt's object, bold where the text names it, or before the text.
+   * Returns [before, bold, after]; no DOM, so it tests headless.
+   */
+  Forsk.splitSubject = function (text, subject) {
+    text = text || '';
+    if (!subject) return [text, '', ''];
+    var at = text.indexOf(subject);
+    if (at < 0) return ['', subject, text ? ' ' + text : ''];
+    return [text.substring(0, at), subject, text.substring(at + subject.length)];
+  };
+
   // ---------------------------------------------------------------- DOM
 
   var model = null;
   var sender = null;
+  var barHovered = false;
+  var lastPrefill = 0;
 
   function el(tag, cls, text) {
     var node = document.createElement(tag);
@@ -121,6 +135,7 @@
   }
 
   function openCard() {
+    if (model && model.help) return 'help';
     if (!model || !model.thread) return null;
     for (var i = model.thread.length - 1; i >= 0; i--) {
       var item = model.thread[i];
@@ -131,33 +146,63 @@
 
   function receipt(item) {
     var row = el('div', 'receipt');
-    row.appendChild(el('span', item.ok === false ? 'cross' : 'tick', item.ok === false ? '✗' : '✓'));
-    if (item.subject) {
-      row.appendChild(el('b', null, item.subject));
-      row.appendChild(document.createTextNode(' '));
-    }
-    row.appendChild(document.createTextNode(item.text || ''));
+    var mark = item.ok === false ? ['cross', '✗'] : item.ok === true ? ['tick', '✓'] : ['tick', '–'];
+    row.appendChild(el('span', mark[0], mark[1]));
+    var parts = Forsk.splitSubject(item.text, item.subject);
+    if (parts[0]) row.appendChild(document.createTextNode(parts[0]));
+    if (parts[1]) row.appendChild(el('b', null, parts[1]));
+    if (parts[2]) row.appendChild(document.createTextNode(parts[2]));
     return row;
+  }
+
+  function pill(label, primary, onClick) {
+    var button = el('button', 'pill' + (primary ? ' primary' : ''), label);
+    button.type = 'button';
+    button.addEventListener('click', onClick);
+    return button;
   }
 
   function card(item) {
     if (item.state !== 'open') {
       var done = el('div', 'card ' + (item.state === 'stale' ? 'stale' : 'done'));
-      done.textContent = item.state === 'answered' ? (item.question + ' ' + (item.answer || '')) : item.question;
+      done.textContent = item.state === 'answered' ? item.question + ' · ' + (item.answer || '') : item.question;
       return done;
     }
     var box = el('div', 'card');
     box.appendChild(el('div', 'question', item.question));
+    if (item.rows && item.rows.length) {
+      var list = el('ul', 'rows');
+      item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
+      box.appendChild(list);
+    }
+    var input = null;
+    if (item.field) {
+      input = el('input');
+      input.type = 'text';
+      input.inputMode = 'decimal';
+      input.value = item.field.value || '';
+      input.setAttribute('aria-label', item.question);
+      box.appendChild(input);
+      if (item.field.unit) box.appendChild(el('span', 'unit', item.field.unit));
+    }
     var pills = el('div', 'pills');
-    (item.pills || []).forEach(function (pill, index) {
-      var button = el('button', 'pill' + (index === 0 ? ' primary' : ''), pill.label);
-      button.type = 'button';
-      button.addEventListener('click', function () {
-        sender.send({ kind: 'card', card: item.id, pill: pill.id });
-      });
-      pills.appendChild(button);
+    (item.pills || []).forEach(function (p, index) {
+      pills.appendChild(pill(p.label, index === 0, function () {
+        var action = { kind: 'card', card: item.id, pill: p.id };
+        if (input) action.value = input.value;
+        sender.send(action);
+      }));
     });
     box.appendChild(pills);
+    if (item.note) box.appendChild(el('div', 'note', item.note));
+    if (input) {
+      input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        if (item.pills && item.pills.length) sender.send({ kind: 'card', card: item.id, pill: item.pills[0].id, value: input.value });
+      });
+      setTimeout(function () { input.focus(); input.select(); }, 0);
+    }
     return box;
   }
 
@@ -180,6 +225,77 @@
     return el('div', 'line', entry.text);
   }
 
+  function busy(state) {
+    if (state.kind === 'thinking') {
+      var wrap = el('div');
+      if (state.mark) wrap.appendChild(el('span', 'role', state.mark));
+      var dots = el('div', 'dots');
+      dots.setAttribute('aria-label', state.text || '');
+      dots.appendChild(el('span'));
+      dots.appendChild(el('span'));
+      dots.appendChild(el('span'));
+      wrap.appendChild(dots);
+      return wrap;
+    }
+    return el('div', 'step', state.text);
+  }
+
+  function renderBar(bar) {
+    var nav = document.getElementById('bar');
+    while (nav.firstChild) nav.removeChild(nav.firstChild);
+    if (!bar) return;
+    var slots = el('div', 'slots');
+    (bar.slots || []).forEach(function (slot, index) {
+      var button = el('button', 'pill slot' + (index === 0 ? ' primary' : ''), slot.label);
+      button.type = 'button';
+      button.title = slot.label + '  ' + slot.key;
+      button.addEventListener('click', function () { sender.send({ kind: 'action', id: slot.id }); });
+      slots.appendChild(button);
+    });
+    if (bar.help) {
+      var help = el('button', 'help-button' + (model && model.help ? ' open' : ''), bar.help.label);
+      help.type = 'button';
+      help.title = bar.help.title + '  ' + bar.help.key;
+      help.setAttribute('aria-label', bar.help.title);
+      help.addEventListener('click', function () { sender.send({ kind: 'help' }); });
+      slots.appendChild(help);
+    }
+    nav.appendChild(slots);
+    if (bar.reason) {
+      var reason = el('div', 'reason');
+      reason.appendChild(el('b', null, bar.because || ''));
+      reason.appendChild(document.createTextNode(' ' + bar.reason));
+      nav.appendChild(reason);
+    }
+  }
+
+  function renderSheet(help) {
+    var sheet = document.getElementById('sheet');
+    while (sheet.firstChild) sheet.removeChild(sheet.firstChild);
+    sheet.className = help ? 'sheet' : '';
+    if (!help) return;
+    sheet.appendChild(el('h2', null, help.title || ''));
+    (help.groups || []).forEach(function (group) {
+      sheet.appendChild(el('h3', null, group.title));
+      var pills = el('div', 'pills');
+      group.actions.forEach(function (action) {
+        pills.appendChild(pill(action.label, false, function () { sender.send({ kind: 'action', id: action.id, from: 'card' }); }));
+      });
+      sheet.appendChild(pills);
+    });
+    (help.hints || []).forEach(function (hint) { sheet.appendChild(el('div', 'hint', hint)); });
+  }
+
+  function applyPrefill(prefill) {
+    if (!prefill || prefill.n <= lastPrefill) return;
+    lastPrefill = prefill.n;
+    var q = document.getElementById('q');
+    q.value = prefill.text;
+    grow();
+    q.focus();
+    q.setSelectionRange(prefill.start, prefill.end);
+  }
+
   Forsk.render = function (next) {
     model = next || {};
     var thread = document.getElementById('thread');
@@ -189,8 +305,12 @@
     document.getElementById('status').textContent = model.status || '';
     while (thread.firstChild) thread.removeChild(thread.firstChild);
     (model.thread || []).forEach(function (entry) { thread.appendChild(item(entry)); });
-    if (model.busy && model.busy.text) thread.appendChild(el('div', 'step', model.busy.text));
+    if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
     if (atEnd) thread.scrollTop = thread.scrollHeight;
+    // The bar never reorders under the pointer: it waits until the pointer leaves.
+    if (!barHovered) renderBar(model.bar);
+    renderSheet(model.help);
+    applyPrefill(model.prefill);
   };
 
   Forsk.focus = function () {
@@ -225,6 +345,13 @@
       var text = q.value.replace(/^\s+|\s+$/g, '');
       if (text) send({ kind: 'send', text: text });
       q.focus();
+    });
+    document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
+    var nav = document.getElementById('bar');
+    nav.addEventListener('mouseenter', function () { barHovered = true; });
+    nav.addEventListener('mouseleave', function () {
+      barHovered = false;
+      if (model) renderBar(model.bar);
     });
     q.addEventListener('input', grow);
     sender.send({ kind: 'ready' });

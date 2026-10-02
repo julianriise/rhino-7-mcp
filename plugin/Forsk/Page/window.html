@@ -63,6 +63,47 @@ header { padding: 14px 16px 8px; border-bottom: 1px solid var(--line); }
 .pill.primary { background: var(--ink); color: #FFFFFF; }
 .pill:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
 .step { position: relative; overflow: hidden; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.dots { display: inline-flex; gap: 4px; padding: 10px 12px; border-radius: 18px; background: var(--bubble); margin: 0 0 8px; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); opacity: 0.3; animation: blink 1.2s infinite ease-in-out; }
+.dots span:nth-child(2) { animation-delay: 0.2s; }
+.dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+.card input {
+  font: inherit; font-size: 14px; width: 120px; margin: 0 6px 8px 0; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); outline: none;
+  -webkit-user-select: text; user-select: text;
+}
+.card input:focus { border-color: var(--muted); }
+.card .unit { color: var(--muted); font-size: 12px; }
+.card .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 13px; }
+.card .rows li { padding: 2px 0; }
+nav.bar { padding: 8px 12px 0; border-top: 1px solid var(--line); }
+.slots { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow: hidden; }
+.slot { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.slot.primary { flex: none; }
+.help-button {
+  flex: none; margin-left: auto; width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 13px/28px -apple-system, sans-serif; cursor: pointer;
+}
+.help-button.open { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
+.reason { color: var(--muted); font-size: 12px; margin: 5px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reason b { font-weight: 600; color: var(--ink); }
+@media (max-width: 359px) { .slots .slot:nth-child(3) { display: none; } }
+.sheet {
+  position: absolute; left: 12px; right: 12px; bottom: 100%; margin-bottom: 8px; max-height: 60vh; overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px; animation: rise 160ms ease-out;
+  -webkit-user-select: text; user-select: text;
+}
+.sheet h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+.sheet h3 { font-size: 11px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
+.sheet .pills { margin: 0 0 2px; }
+.sheet .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.dock { position: relative; }
+.add {
+  flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--muted);
+  font: 400 20px/28px -apple-system, sans-serif; cursor: pointer; padding: 0; margin-left: -8px;
+}
 .step::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
   background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 100%);
@@ -90,7 +131,8 @@ textarea::placeholder { color: var(--faint); }
 .send:disabled { background: var(--line); color: var(--faint); cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .step::after { animation: none; display: none; }
-  .card { animation: none; }
+  .card, .sheet { animation: none; }
+  .dots span { animation: none; opacity: 0.6; }
 }
 </style>
 </head>
@@ -101,12 +143,17 @@ textarea::placeholder { color: var(--faint); }
   <div id="status" class="status"></div>
 </header>
 <main id="thread" aria-live="polite"></main>
-<form id="composer" class="composer" autocomplete="off">
-  <div class="field">
-    <textarea id="q" rows="1" placeholder="Message Forsk" spellcheck="true" aria-label="Message Forsk"></textarea>
-    <button id="send" class="send" type="submit" aria-label="Send" disabled>&#8593;</button>
-  </div>
-</form>
+<div class="dock">
+  <div id="sheet"></div>
+  <nav id="bar" class="bar" aria-label="Suggestions"></nav>
+  <form id="composer" class="composer" autocomplete="off">
+    <div class="field">
+      <button id="add" class="add" type="button" aria-label="Import a plan" title="Import a plan">+</button>
+      <textarea id="q" rows="1" placeholder="Message Forsk" spellcheck="true" aria-label="Message Forsk"></textarea>
+      <button id="send" class="send" type="submit" aria-label="Send" disabled>&#8593;</button>
+    </div>
+  </form>
+</div>
 <script>
 window.FORSK_TOKEN = "FORSK_TOKEN";
 </script>

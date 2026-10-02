@@ -1002,6 +1002,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         }
     }
 
+    /// <summary>What the window follows during a chat turn. The old panel passes none.</summary>
+    public sealed class TurnHooks
+    {
+        /// <summary>True while the model call is in flight, false once it answered.</summary>
+        public Action<bool> Thinking;
+        /// <summary>Each tool call and its envelope, after it ran: the structured receipt.</summary>
+        public Action<string, JObject> Tool;
+        /// <summary>The intent the router chose for the turn.</summary>
+        public Action<ForskIntent> Routed;
+        /// <summary>Owns the dialogs the turn opens. Null is Rhino's main window.</summary>
+        public Window DialogParent;
+    }
+
     public static class ForskGrok
     {
         const string Endpoint = "https://api.x.ai/v1/chat/completions";
@@ -1024,9 +1037,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
         }
 
-        public static void RunTurn(string userText, string target, List<JObject> history, Action<string, string> show)
+        public static void RunTurn(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks = null)
         {
             history.Add(new JObject { ["role"] = "user", ["content"] = userText });
+            var intent = ForskIntentRouter.Classify(userText, target);
+            hooks?.Routed?.Invoke(intent);
             var key = ForskKeys.Load();
             if (string.IsNullOrEmpty(key))
             {
@@ -1035,11 +1050,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 return;
             }
 
-            var intent = ForskIntentRouter.Classify(userText, target);
             var system = PanelHeader(intent) + "\n\n" + ForskPrompts.Load(intent);
             for (var round = 0; round < MaxRounds; round++)
             {
                 JObject message;
+                hooks?.Thinking?.Invoke(true);
                 try
                 {
                     message = Complete(key, system, history, ForskTools.ToolsFor());
@@ -1050,6 +1065,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     history.Add(new JObject { ["role"] = "assistant", ["content"] = text });
                     show("assistant", text);
                     return;
+                }
+                finally
+                {
+                    hooks?.Thinking?.Invoke(false);
                 }
 
                 var content = message["content"]?.Type == JTokenType.Null
@@ -1092,7 +1111,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     var fn = call?["function"] as JObject;
                     var name = fn?["name"]?.ToString() ?? "";
                     var args = ParseArgs(fn?["arguments"]?.ToString());
-                    var envelope = CallOnUi(name, args);
+                    var envelope = CallOnUi(name, args, hooks?.DialogParent);
+                    hooks?.Tool?.Invoke(name, envelope);
                     if (name == ForskDxf.Tool)
                     {
                         // The tool's whole receipt, as MCP clients get it.
@@ -1162,12 +1182,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return "General";
         }
 
-        static JObject CallOnUi(string name, JObject args)
+        static JObject CallOnUi(string name, JObject args, Window parent)
         {
             var callArgs = args;
             if (name == "export_pdf")
             {
-                var path = ForskPrint.PickPathFromBackground();
+                var path = ForskPrint.PickPathFromBackground(parent);
                 if (string.IsNullOrEmpty(path))
                     return ForskTools.Fail("Print cancelled.");
                 ForskPrint.SettleAfterDialog();
@@ -1177,7 +1197,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             // No DXF path to open as it stands: the user picks the file.
             if (name == ForskDxf.Tool && ForskDxf.NeedsPick(args?["path"]?.ToString()))
             {
-                var path = ForskPlanImport.PickDxfFromBackground();
+                var path = ForskPlanImport.PickDxfFromBackground(parent);
                 if (string.IsNullOrEmpty(path))
                     return ForskTools.Fail("Import DXF cancelled.");
                 ForskPrint.SettleAfterDialog();
@@ -1186,7 +1206,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             // No plan to open as it stands: the user picks a PDF, an image or a DXF. A PDF of several pages asks which.
             if (name == ForskPlanImport.ImportTool && ForskPlanImport.NeedsSource(args) != null)
             {
-                callArgs = ForskPlanImport.SourceFromBackground(args);
+                callArgs = ForskPlanImport.SourceFromBackground(args, parent);
                 if (callArgs == null)
                     return ForskTools.Fail("Import plan cancelled.");
                 ForskPrint.SettleAfterDialog();
@@ -1359,6 +1379,15 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static List<string> Run(bool rebuild)
         {
+            return Run(rebuild, null);
+        }
+
+        /// <summary>step(i, n) before each of the n steps, for the window's static step line.</summary>
+        public static List<string> Run(bool rebuild, Action<int, int> step)
+        {
+            var total = rebuild ? 7 : 6;
+            var at = 0;
+            Action next = () => step?.Invoke(++at, total);
             var lines = new List<string>();
             var settings = LoadSettings();
             string block = null;
@@ -1385,28 +1414,35 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 + ", roof " + FormatMm(settings.RoofThickness)
                 + ". Origin (0,0,0) is the existing-building corner.");
 
+            if (rebuild) next();
             if (rebuild && !Step("clear_generated", new JObject(), lines, true))
                 return Finish(lines);
+            next();
             if (!Step("floor_from_layer", new JObject
             {
                 ["layer"] = "wall",
                 ["thickness"] = settings.FloorThickness
             }, lines, true))
                 return Finish(lines);
+            next();
             if (!Step("walls_from_layer", new JObject
             {
                 ["layer"] = "wall",
                 ["height"] = settings.WallHeight
             }, lines, true))
                 return Finish(lines);
+            next();
             if (!Step("roof_flat_from_walls", new JObject
             {
                 ["thickness"] = settings.RoofThickness
             }, lines, true))
                 return Finish(lines);
 
+            next();
             Opening("door", lines);
+            next();
             Opening("window", lines);
+            next();
             var rooms = Call("rooms_from_layer", new JObject());
             lines.Add(ForskTools.Receipt("rooms_from_layer", rooms));
             // Drawn outlines already became markers when the count is above zero.

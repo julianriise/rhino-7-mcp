@@ -81,7 +81,8 @@ namespace RhinoMCPPlugin.Forsk
             return new JObject
             {
                 ["slots"] = slots,
-                ["reason"] = ForskText.Get("bar.because") + " " + LowerFirst(Reason),
+                ["because"] = ForskText.Get("bar.because"),
+                ["reason"] = LowerFirst(Reason),
                 ["help"] = new JObject
                 {
                     ["id"] = "help.card",
@@ -125,7 +126,12 @@ namespace RhinoMCPPlugin.Forsk
                     actions.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label, ["runs"] = action.Runs.ToString().ToLowerInvariant() });
                 groups.Add(new JObject { ["title"] = group.Title, ["actions"] = actions });
             }
-            return new JObject { ["groups"] = groups, ["hints"] = new JArray(Hints.Select(ForskText.Get)) };
+            return new JObject
+            {
+                ["title"] = ForskText.Label("help.card"),
+                ["groups"] = groups,
+                ["hints"] = new JArray(Hints.Select(ForskText.Get))
+            };
         }
     }
 
@@ -238,6 +244,17 @@ namespace RhinoMCPPlugin.Forsk
             if (f.ReviewStored && !f.HasWalls) yield return Find("file.check");
             if (!f.HasWalls) yield return Find("file.draw");
             if (f.Picked == Picked.Loose) yield return Find("exist.mark");
+        }
+
+        /// <summary>
+        /// Typing a slot's exact English label and pressing Enter fires that
+        /// slot. Case and a closing full stop do not matter; nothing else does.
+        /// </summary>
+        public static ForskAction ByLabel(BarView bar, string text)
+        {
+            var typed = (text ?? "").Trim().TrimEnd('.').Trim();
+            if (typed.Length == 0 || bar == null) return null;
+            return bar.Slots.FirstOrDefault(a => string.Equals(a.Label, typed, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>The one daylight action that is true now, or null.</summary>

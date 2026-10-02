@@ -41,6 +41,10 @@ namespace RhinoMCPPlugin.Forsk
         public readonly List<JObject> History = new List<JObject>();
         /// <summary>A static step line while a long job runs, or null.</summary>
         public string Busy;
+        /// <summary>True only while a model call is in flight: the three dots.</summary>
+        public bool Thinking;
+        /// <summary>The sentence a prefill action put in the composer, once (its n grows), or null.</summary>
+        public JObject Prefill;
         long _next;
 
         public JObject Add(string role, string text)
@@ -55,6 +59,12 @@ namespace RhinoMCPPlugin.Forsk
             var item = new JObject { ["role"] = "receipt", ["ok"] = ok, ["text"] = (text ?? "").Trim() };
             if (!string.IsNullOrWhiteSpace(subject)) item["subject"] = subject.Trim();
             return Push(item);
+        }
+
+        /// <summary>A structured receipt: done, failed or skipped, the object, what happened.</summary>
+        public JObject Add(ForskReceipt receipt)
+        {
+            return receipt == null ? null : Push(receipt.ToJson());
         }
 
         /// <summary>A one-time question. kind tells the window what the pills do.</summary>
@@ -139,7 +149,9 @@ namespace RhinoMCPPlugin.Forsk
                 ["file"] = File ?? "",
                 ["thread"] = new JArray(Items.ConvertAll(i => (JToken)i.DeepClone()))
             };
-            if (!string.IsNullOrEmpty(Busy)) model["busy"] = new JObject { ["text"] = Busy };
+            if (Thinking) model["busy"] = new JObject { ["kind"] = "thinking", ["text"] = ForskText.Get("line.thinking") };
+            else if (!string.IsNullOrEmpty(Busy)) model["busy"] = new JObject { ["kind"] = "step", ["text"] = Busy };
+            if (Prefill != null) model["prefill"] = Prefill.DeepClone();
             return model;
         }
 
@@ -188,7 +200,7 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class WindowView
     {
-        public static JObject Build(DocThread thread, FileFacts facts, string target)
+        public static JObject Build(DocThread thread, FileFacts facts, string target, bool helpOpen = false)
         {
             var model = thread.ToJson();
             if (thread.Items.Count == 0)
@@ -196,6 +208,7 @@ namespace RhinoMCPPlugin.Forsk
             model["target"] = target ?? "";
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts).ToJson();
+            if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             return model;
         }
     }

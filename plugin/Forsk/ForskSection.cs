@@ -23,8 +23,8 @@ namespace RhinoMCPPlugin.Forsk
         public const string CommandName = "ForskSection";
         public const string LayerName = "cross-sections";
 
-        /// <summary>UI thread. ownUndo is false when the MCP dispatcher is already recording.</summary>
-        public static JObject RunOnUi(bool ownUndo)
+        /// <summary>UI thread. ownUndo is false when the MCP dispatcher is already recording. parent owns the name dialog.</summary>
+        public static JObject RunOnUi(bool ownUndo, Window parent = null)
         {
             var doc = RhinoDoc.ActiveDoc;
             if (doc == null) return ForskTools.Fail("No active document.");
@@ -36,7 +36,7 @@ namespace RhinoMCPPlugin.Forsk
                 var defs = Sections.Read(doc.Strings.GetValue(Sections.MetaSection, Sections.MetaKey));
                 if (!Sections.TrySnapAxis(from, raw, out _))
                     return ForskTools.Fail(Sections.TooShortMessage);
-                var drawn = Sections.Decide(true, AskName(Sections.NextSectionName(defs)), defs, from, raw);
+                var drawn = Sections.Decide(true, AskName(Sections.NextSectionName(defs), parent), defs, from, raw);
                 if (drawn == null) return ForskTools.Fail("Cross section cancelled.");
                 if (!string.IsNullOrEmpty(drawn.Error)) return ForskTools.Fail(drawn.Error);
                 return Store(doc, drawn, ownUndo);
@@ -94,7 +94,7 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>Null when the user cancels. A blank name comes back as the suggestion.</summary>
-        static string AskName(string suggestion)
+        static string AskName(string suggestion, Window owner)
         {
             var fallback = string.IsNullOrEmpty(suggestion) ? "A1" : suggestion;
             string chosen = null;
@@ -138,7 +138,7 @@ namespace RhinoMCPPlugin.Forsk
                 box.Focus();
                 box.SelectAll();
             };
-            var parent = RhinoEtoApp.MainWindow;
+            var parent = owner ?? RhinoEtoApp.MainWindow;
             if (parent != null) dialog.ShowModal(parent);
             else dialog.ShowModal();
             return accepted ? chosen : null;

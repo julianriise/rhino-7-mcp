@@ -28,6 +28,8 @@ namespace RhinoMCPPlugin.Forsk
         public const string ScaleCommand = "ForskSetScale";
 
         static JObject _lastScale;
+        static bool _lengthInWindow;
+        static JObject _lastPick;
 
         /// <summary>The Import chip's click, off the UI thread. source is what PickSource chose. line is the receipt row, note what needs review.</summary>
         public static void Chip(ImportAction action, JObject source, out string line, out string note)
@@ -55,12 +57,11 @@ namespace RhinoMCPPlugin.Forsk
         /// (asked for when it has more than one) or an image, or the DXF as dxf.
         /// UI thread. Null when a dialog is cancelled.
         /// </summary>
-        public static JObject PickSource()
+        public static JObject PickSource(Window parent = null)
         {
-            var parent = RhinoEtoApp.MainWindow;
             var first = new Eto.Forms.OpenFileDialog { Title = "Import plan: a PDF, a scan or photo of the plan, or a DXF" };
             first.Filters.Add(new FileFilter("Plan PDF, image or DXF", ForskPlanFile.Extensions));
-            if (first.ShowDialog(parent) != DialogResult.Ok) return null;
+            if (first.ShowDialog(parent ?? RhinoEtoApp.MainWindow) != DialogResult.Ok) return null;
             var argument = ForskPlanFile.Argument(first.FileName);
             if (argument == "pdf_path")
             {
@@ -71,9 +72,9 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>PickSource from a background thread.</summary>
-        public static JObject PickSourceFromBackground()
+        public static JObject PickSourceFromBackground(Window parent = null)
         {
-            return OnUi(PickSource);
+            return OnUi(() => PickSource(parent));
         }
 
         /// <summary>
@@ -117,11 +118,11 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>The plan_import arguments chat should run with, asking the user what it lacks. Background thread. Null when cancelled.</summary>
-        public static JObject SourceFromBackground(JObject args)
+        public static JObject SourceFromBackground(JObject args, Window parent = null)
         {
             var need = NeedsSource(args);
             if (need == null) return args;
-            if (need["ask_page"] == null) return PickSourceFromBackground();
+            if (need["ask_page"] == null) return PickSourceFromBackground(parent);
             var pdf = need["pdf_path"].ToString();
             var page = OnUi(() => AskPage(pdf) is int n ? new JObject { ["page"] = n } : null);
             if (page == null) return null;
@@ -166,7 +167,7 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>The DXF to import, asked for from a background thread. Null when the dialog is cancelled.</summary>
-        public static string PickDxfFromBackground()
+        public static string PickDxfFromBackground(Window parent = null)
         {
             string path = null;
             using (var done = new System.Threading.ManualResetEvent(false))
@@ -177,7 +178,7 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         var dialog = new Eto.Forms.OpenFileDialog { Title = "Import DXF" };
                         dialog.Filters.Add(new FileFilter("DXF", ".dxf"));
-                        if (dialog.ShowDialog(RhinoEtoApp.MainWindow) == DialogResult.Ok) path = dialog.FileName;
+                        if (dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) == DialogResult.Ok) path = dialog.FileName;
                     }
                     finally { done.Set(); }
                 });
@@ -231,6 +232,28 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
+        /// The Forsk window's Set scale: the two points are picked in the view by
+        /// ForskSetScale, and the length is then typed in a Forsk field, not on
+        /// the command line. UI thread. Returns p1, p2 and measured_mm, or null
+        /// when the pick was cancelled; a failed measure is the envelope.
+        /// </summary>
+        public static JObject PickScalePoints()
+        {
+            _lastPick = null;
+            _lastScale = null;
+            _lengthInWindow = true;
+            try
+            {
+                RhinoApp.RunScript("_" + ScaleCommand, false);
+            }
+            finally
+            {
+                _lengthInWindow = false;
+            }
+            return _lastPick ?? (_lastScale != null && !Ok(_lastScale) ? _lastScale : null);
+        }
+
+        /// <summary>
         /// The ForskSetScale command: two points on a length the user knows,
         /// then that length in mm, prefilled with what the plan measures now
         /// (a detected scale makes that the right number already).
@@ -263,6 +286,11 @@ namespace RhinoMCPPlugin.Forsk
                 return Rhino.Commands.Result.Failure;
             }
             var now = Math.Round(measured["result"]?["measured_mm"]?.ToObject<double?>() ?? p1.DistanceTo(p2));
+            if (_lengthInWindow)
+            {
+                _lastPick = new JObject { ["p1"] = args["p1"], ["p2"] = args["p2"], ["measured_mm"] = now };
+                return Rhino.Commands.Result.Success;
+            }
 
             var length = new GetNumber();
             length.SetCommandPrompt("Real length between the points, mm");

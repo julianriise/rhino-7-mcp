@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.UI;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
@@ -19,24 +20,34 @@ namespace RhinoMCPPlugin.Forsk
     /// actions over the page channel (HTTP on 127.0.0.1, see PageChannel) and
     /// C# answers with Forsk.render. One window serves every open file; the
     /// thread is per document, keyed by RuntimeSerialNumber, and kept on disk
-    /// by file path. The place on screen is remembered and clamped to a screen
-    /// that is there on every open. Log: /tmp/forsk-web.log.
+    /// by file path. The bar is the registry's read of the file, recomputed on
+    /// idle after a document event marks it dirty. Log: /tmp/forsk-web.log.
     /// </summary>
-    sealed class ForskWindow : FloatingForm
+    sealed partial class ForskWindow : FloatingForm
     {
         const string LogPath = "/tmp/forsk-web.log";
         /// <summary>Above this, the page could not repaint during a job: the shimmer was frozen.</summary>
         const long FrozenMs = 250;
+        /// <summary>How often the listener and the chat key are looked at again.</summary>
+        static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(2);
 
         static ForskWindow _open;
         static bool _docsHooked;
         static readonly WindowModels Models = new WindowModels(new ThreadStore(ThreadStore.DefaultRoot()));
+        static readonly LastActionTracker Tracker = new LastActionTracker();
+        static bool _dirty = true;
+        /// <summary>Object events inside Forsk's own calls while the current job runs: its record holds a change.</summary>
+        static int _jobChanges;
+        static bool _listenerUp = true;
+        static bool _keyPresent;
+        static DateTime _polled = DateTime.MinValue;
 
         readonly WebView _web;
         readonly PageChannel _channel;
         readonly UITimer _boundsTimer;
         bool _ready;
-        bool _busy;
+        FileFacts _facts;
+        uint _factsDoc;
 
         public static void Open(RhinoDoc doc)
         {
@@ -78,18 +89,13 @@ namespace RhinoMCPPlugin.Forsk
             {
                 _boundsTimer.Stop();
                 SaveBounds();
-                RhinoDoc.SelectObjects -= OnSelection;
-                RhinoDoc.DeselectObjects -= OnSelection;
-                RhinoDoc.DeselectAllObjects -= OnDeselectAll;
                 _channel.Dispose();
                 Log("closed");
             };
-            RhinoDoc.SelectObjects += OnSelection;
-            RhinoDoc.DeselectObjects += OnSelection;
-            RhinoDoc.DeselectAllObjects += OnDeselectAll;
             Log("open · channel " + _channel.Origin + " · window "
                 + (ForskField.PinAqua(ControlObject) ? "pinned to Aqua" : "appearance not pinned"));
             ForskField.PinAqua(_web.ControlObject);
+            Poll(force: true);
             LoadPage();
         }
 
@@ -107,12 +113,10 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        // ------------------------------------------------------------ actions
-
         void OnAction(JObject message)
         {
             var kind = message["kind"]?.ToString() ?? "";
-            Log("action seq=" + message["seq"] + " kind=" + kind);
+            Log("action seq=" + message["seq"] + " kind=" + kind + (message["id"] != null ? " id=" + message["id"] : ""));
             try
             {
                 switch (kind)
@@ -126,15 +130,21 @@ namespace RhinoMCPPlugin.Forsk
                     case "send":
                         Send(message["text"]?.ToString());
                         return;
-                    case "card":
-                        Answer(message["card"]?.ToString(), message["pill"]?.ToString());
-                        return;
-                    case "card.close":
-                        if (Active()?.Close(message["card"]?.ToString()) == true) Render();
+                    case "action":
+                        Fire(message["id"]?.ToString(), message["from"]?.ToString() == "card");
                         return;
                     case "slot":
+                        Slot(message["slot"]?.Type == JTokenType.Integer ? message["slot"].Value<int>() : 0);
+                        return;
                     case "help":
-                        // The bar arrives with the shell. The shortcut already stopped in the page.
+                        _helpOpen = !_helpOpen;
+                        Render();
+                        return;
+                    case "card":
+                        Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["value"]?.ToString());
+                        return;
+                    case "card.close":
+                        CloseCard(message["card"]?.ToString());
                         return;
                 }
             }
@@ -142,95 +152,6 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Log("action " + kind + " · " + e.GetType().Name + ": " + e.Message);
             }
-        }
-
-        void Send(string text)
-        {
-            var thread = Active();
-            if (thread == null || string.IsNullOrWhiteSpace(text)) return;
-            thread.Add("user", text);
-            if (ForskPrint.IsRequest(text)) AskPrint(thread);
-            Models.Persist(thread);
-            Render();
-        }
-
-        static void AskPrint(DocThread thread)
-        {
-            thread.AddCard("print", "Print this file as a PDF?",
-                new CardPill("print", "Print PDF"),
-                new CardPill("later", "Not now"));
-        }
-
-        void Answer(string cardId, string pillId)
-        {
-            var thread = Active();
-            if (thread == null) return;
-            var card = thread.Find(cardId);
-            var pill = thread.Answer(cardId, pillId);
-            if (pill != null && card?["kind"]?.ToString() == "print" && pill.Id == "print")
-                RunPrint(thread);
-            Models.Persist(thread);
-            Render();
-        }
-
-        /// <summary>
-        /// Print on a worker thread, the save dialog parented to this window. A
-        /// static step line stays on screen. layout_pack holds the UI thread, so
-        /// the longest stall is logged: above FrozenMs the shimmer was frozen.
-        /// </summary>
-        void RunPrint(DocThread thread)
-        {
-            if (_busy)
-            {
-                thread.Add("line", "Forsk is still working. Try again when the step line is gone.");
-                return;
-            }
-            _busy = true;
-            thread.Busy = "Printing… step 1 of 2: laying out the sheets";
-            var stall = StallWatch.Start();
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                // layout_pack takes the UI thread. Let the step line paint first.
-                Thread.Sleep(50);
-                string line;
-                try
-                {
-                    line = ForskPrint.Run(status => Application.Instance.AsyncInvoke(() =>
-                    {
-                        thread.Busy = "Printing… step 2 of 2: " + status;
-                        Render();
-                    }), this);
-                }
-                catch (Exception e)
-                {
-                    line = "Print PDF · error · " + ForskTools.Clip(e.Message);
-                }
-                var longest = stall.Stop();
-                Application.Instance.AsyncInvoke(() =>
-                {
-                    Log("print: longest UI stall " + longest + " ms"
-                        + (longest >= FrozenMs ? " · the page could not repaint, the shimmer was frozen" : " · the shimmer kept moving"));
-                    thread.Busy = null;
-                    AddLegacyReceipt(thread, line);
-                    _busy = false;
-                    Models.Persist(thread);
-                    Render();
-                });
-            });
-        }
-
-        /// <summary>A "Label · ok · rest" line as a receipt: the label in bold, then the rest.</summary>
-        static void AddLegacyReceipt(DocThread thread, string line)
-        {
-            var parts = (line ?? "").Split(new[] { " · " }, 3, StringSplitOptions.None);
-            if (parts.Length < 2)
-            {
-                thread.Add("line", line);
-                return;
-            }
-            var ok = !string.Equals(parts[1], "error", StringComparison.OrdinalIgnoreCase);
-            var rest = parts.Length > 2 ? parts[2] : parts[1];
-            thread.AddReceipt(ok, parts[0], rest);
         }
 
         // ------------------------------------------------------------ model
@@ -247,22 +168,40 @@ namespace RhinoMCPPlugin.Forsk
             return string.IsNullOrWhiteSpace(name) ? "Untitled" : name;
         }
 
+        /// <summary>The classifier's read of the document, with the key, the listener and Undo. Fresh every call.</summary>
+        static FileFacts ReadFacts(RhinoDoc doc)
+        {
+            var input = RhinoMCPFunctions.ReadDocInput(doc);
+            input.KeyPresent = _keyPresent;
+            input.ListenerUp = _listenerUp;
+            input.UndoNewest = Tracker.UndoNewest(doc.RuntimeSerialNumber);
+            return FileClassifier.Read(input);
+        }
+
+        /// <summary>The facts the bar was drawn from. Recomputed when a document event marked them dirty, never mid-job.</summary>
+        FileFacts Facts(RhinoDoc doc)
+        {
+            if (_facts == null || _factsDoc != doc.RuntimeSerialNumber || (_dirty && !_busy))
+            {
+                _facts = ReadFacts(doc);
+                _factsDoc = doc.RuntimeSerialNumber;
+                _dirty = false;
+            }
+            return _facts;
+        }
+
         void Render()
         {
             if (!_ready) return;
+            var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
             JObject model;
-            if (thread == null)
-            {
-                model = new JObject { ["file"] = "No file open", ["thread"] = new JArray() };
-            }
+            if (doc == null || thread == null)
+                model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
-            {
-                if (thread.Items.Count == 0) AskPrint(thread);
-                model = thread.ToJson();
-            }
-            model["target"] = ForskTarget.Read();
+                model = WindowView.Build(thread, Facts(doc), ForskTarget.Read(), _helpOpen);
             Script("Forsk.render", model);
+            if (thread != null) thread.Prefill = null;
         }
 
         void Script(string function, JToken argument)
@@ -279,22 +218,49 @@ namespace RhinoMCPPlugin.Forsk
 
         // ------------------------------------------------------------ documents
 
+        static void MarkDirty()
+        {
+            _dirty = true;
+        }
+
+        /// <summary>The listener and the chat key have no events. Look again every couple of seconds on idle.</summary>
+        static void Poll(bool force)
+        {
+            if (!force && DateTime.UtcNow - _polled < PollEvery) return;
+            _polled = DateTime.UtcNow;
+            bool up;
+            try { up = RhinoMCPServerController.IsServerRunning(); }
+            catch (Exception) { up = false; }
+            var key = !string.IsNullOrEmpty(ForskKeys.Load());
+            if (up == _listenerUp && key == _keyPresent) return;
+            _listenerUp = up;
+            _keyPresent = key;
+            MarkDirty();
+        }
+
         static void HookDocs()
         {
             if (_docsHooked) return;
             _docsHooked = true;
-            RhinoDoc.ActiveDocumentChanged += (s, e) => _open?.Render();
+            RhinoDoc.ActiveDocumentChanged += (s, e) =>
+            {
+                Tracker.ActiveDocumentChanged();
+                MarkDirty();
+                _open?.Render();
+            };
             RhinoDoc.EndOpenDocument += (s, e) =>
             {
                 if (e.Merge || e.Reference || e.Document == null) return;
-                Models.For(e.Document.RuntimeSerialNumber, FileName(e.Document), e.Document.Path);
+                Tracker.DocumentOpened();
+                var thread = Models.For(e.Document.RuntimeSerialNumber, FileName(e.Document), e.Document.Path);
+                if (thread.Items.Count > 0) thread.Add("line", ForskText.Get("line.reopened"));
+                MarkDirty();
                 _open?.Render();
             };
             RhinoDoc.EndSaveDocument += (s, e) =>
             {
                 if (e.ExportSelected || e.Document == null) return;
-                var thread = Models.For(e.Document.RuntimeSerialNumber, FileName(e.Document), e.Document.Path);
-                Models.Persist(thread);
+                Models.Persist(Models.For(e.Document.RuntimeSerialNumber, FileName(e.Document), e.Document.Path));
                 _open?.Render();
             };
             RhinoDoc.CloseDocument += (s, e) =>
@@ -305,16 +271,40 @@ namespace RhinoMCPPlugin.Forsk
                 Models.Persist(Models.For(serial, null, e.Document.Path));
                 Models.Forget(serial);
             };
+            RhinoDoc.AddRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.DeleteRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.ReplaceRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.UndeleteRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.ModifyObjectAttributes += (s, e) => ObjectChanged();
+            Rhino.Commands.Command.UndoRedo += (s, e) =>
+            {
+                Tracker.UndoRedo();
+                MarkDirty();
+            };
+            RhinoDoc.SelectObjects += (s, e) => Selected();
+            RhinoDoc.DeselectObjects += (s, e) => Selected();
+            RhinoDoc.DeselectAllObjects += (s, e) => Selected();
+            RhinoApp.Idle += (s, e) =>
+            {
+                Poll(force: false);
+                var open = _open;
+                if (open == null || !_dirty || open._busy) return;
+                open.Render();
+            };
         }
 
-        void OnSelection(object sender, Rhino.DocObjects.RhinoObjectSelectionEventArgs e)
+        /// <summary>An object came, went or changed. Outside a Forsk call it was the user: the last action is gone.</summary>
+        static void ObjectChanged()
         {
-            Render();
+            var inside = ForskCalls.Depth > 0;
+            if (inside) _jobChanges++;
+            Tracker.ObjectChanged(inside);
+            MarkDirty();
         }
 
-        void OnDeselectAll(object sender, Rhino.DocObjects.RhinoDeselectAllObjectsEventArgs e)
+        static void Selected()
         {
-            Render();
+            MarkDirty();
         }
 
         // ------------------------------------------------------------ focus and place
@@ -340,6 +330,19 @@ namespace RhinoMCPPlugin.Forsk
             catch (Exception e)
             {
                 Log("focus " + e.Message);
+            }
+        }
+
+        /// <summary>A viewport pick starts: Rhino becomes the key window, so the clicks and keys go to it.</summary>
+        static void HandToRhino()
+        {
+            try
+            {
+                RhinoEtoApp.MainWindow?.Focus();
+            }
+            catch (Exception e)
+            {
+                Log("rhino focus " + e.Message);
             }
         }
 

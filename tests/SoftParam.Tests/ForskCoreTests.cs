@@ -128,7 +128,8 @@ public class ForskCoreTests
         var slots = (JArray)model["bar"]!["slots"]!;
         Assert.Equal("Print PDF", slots[0]["label"]!.ToString());
         Assert.Equal("⌘1", slots[0]["key"]!.ToString());
-        Assert.Equal("Suggested because a 3D model is in the file.", model["bar"]!["reason"]!.ToString());
+        Assert.Equal("Suggested because", model["bar"]!["because"]!.ToString());
+        Assert.Equal("a 3D model is in the file.", model["bar"]!["reason"]!.ToString());
         Assert.Equal("⌘/", model["bar"]!["help"]!["key"]!.ToString());
     }
 
