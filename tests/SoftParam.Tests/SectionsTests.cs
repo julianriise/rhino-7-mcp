@@ -245,7 +245,7 @@ public class SectionsTests
     [InlineData("print the sections", RhinoMCPPlugin.Forsk.ForskIntent.Print)]
     public void Section_words_classify_as_sheets(string text, RhinoMCPPlugin.Forsk.ForskIntent expected)
     {
-        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text));
     }
 
     [Theory]

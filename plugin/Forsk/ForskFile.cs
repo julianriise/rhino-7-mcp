@@ -118,6 +118,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Ink = "default";
         public Picked Picked;
         public int PickedCount;
+        /// <summary>The things picked, one row each (ForskPick.Things). The pick line reads them.</summary>
+        public List<ChipRow> Selected = new List<ChipRow>();
         /// <summary>door or window when every picked opening is that kind, else null.</summary>
         public string PickedOpeningKind;
         public bool KeyPresent;
@@ -251,13 +253,11 @@ namespace RhinoMCPPlugin.Forsk
         {
             var kinds = new HashSet<Picked>();
             var openingKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var selected = new HashSet<string>(rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? ""), StringComparer.Ordinal);
-            foreach (var row in rows)
+            // A plate or a block picked with its marker is that one room or opening.
+            facts.Selected = ForskPick.Things(rows);
+            facts.PickedCount = facts.Selected.Count;
+            foreach (var row in facts.Selected)
             {
-                if (row == null || !row.Selected) continue;
-                // A plate selected with its marker is the same room.
-                var counted = !(Is(row.Kind, "room_plate") && !string.IsNullOrEmpty(row.Marker) && selected.Contains(row.Marker));
-                if (counted) facts.PickedCount++;
                 var picked = PickOf(row);
                 kinds.Add(picked);
                 if (picked == Picked.Opening) openingKinds.Add(row.OpeningKind ?? "");

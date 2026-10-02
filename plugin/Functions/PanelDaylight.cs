@@ -50,7 +50,7 @@ public partial class RhinoMCPFunctions
             ["import_label"] = chip.ImportLabel
         };
         if (text != null)
-            result["intent"] = ForskIntentRouter.Classify(text, "").ToString().ToLowerInvariant();
+            result["intent"] = ForskIntentRouter.Classify(text).ToString().ToLowerInvariant();
         if (envelope != null)
         {
             result["ok"] = string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);

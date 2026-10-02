@@ -14,8 +14,9 @@ static class Row
 
     /// <param name="path">The wall carries a forsk:path that reads, as every baked wall does. False: one that does not (F2's join graph cannot see it).</param>
     /// <param name="runs">Straight runs in its path: 1 for a wall baked one per run, more for a whole record made before selection S1.</param>
-    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01", bool path = true, int runs = 1) =>
-        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp, PathReads = path, Runs = path ? runs : 0 };
+    /// <param name="run">A selected one-run wall's name in the join graph, as ChipRows names it: the north wall.</param>
+    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01", bool path = true, int runs = 1, string run = null, string toward = null) =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp, PathReads = path, Runs = path ? runs : 0, ForskId = stamp, Thickness = "200", RunName = run, RunToward = toward };
 
     public static ChipRow Floor() =>
         new ChipRow { Id = Id(), Generated = true, Kind = "floor", Layer = "A-FLOR", Visible = true, Solid = true, Closed = true, Stamp = "floor" };
@@ -69,7 +70,7 @@ static class Docs
     /// <summary>Walls, a floor, a roof, rooms, a door and a window: a whole Forsk model.</summary>
     public static ChipRow[] House(bool doorSelected = false, bool wallSelected = false, bool roomSelected = false) => new[]
     {
-        Row.Wall(selected: wallSelected), Row.Floor(), Row.Roof(),
+        Row.Wall(selected: wallSelected, run: wallSelected ? "the north wall" : null, toward: wallSelected ? "north" : null), Row.Floor(), Row.Roof(),
         Row.Room(selected: roomSelected), Row.Room(name: "Kjøkken"),
         Row.Door(selected: doorSelected), Row.DoorFrame(selected: doorSelected), Row.Window()
     };
@@ -108,6 +109,7 @@ static class Docs
         ("house, box selected", () => Of(House().Append(Row.Box(selected: true)).ToArray())),
         ("walls only", () => Of(Row.Wall(), Row.Floor())),
         ("one whole wall record", () => Of(Row.Wall(runs: 7), Row.Floor(), Row.Room(), Row.Window())),
+        ("one whole wall record selected", () => Of(Row.Wall(runs: 7, selected: true), Row.Floor(), Row.Room(), Row.Window())),
         ("rooms, no window", () => Of(Row.Wall(), Row.Floor(), Row.Room(), Row.Door())),
         ("rooms, no window, no key", () => Of(Row.Wall(), Row.Floor(), Row.Room(), Row.Door()).With(d => d.KeyPresent = false)),
         ("map shown", () => Of(House().Append(Row.Map(visible: true)).ToArray())),

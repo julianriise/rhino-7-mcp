@@ -23,7 +23,8 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskIntentRouter
     {
-        public static ForskIntent Classify(string text, string target)
+        /// <param name="picked">What the selection is (FileFacts.Picked). An opening picked makes an otherwise plain sentence an edit.</param>
+        public static ForskIntent Classify(string text, Picked picked = Picked.None)
         {
             var t = Normalize(text);
             if (IsPlanFile(t)) return ForskIntent.Import;
@@ -34,7 +35,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsImport(t)) return ForskIntent.Import;
             if (IsEdit(t)) return ForskIntent.Edit;
             if (IsBuild(t)) return ForskIntent.Build;
-            if (TargetIsOpening(target)) return ForskIntent.Edit;
+            if (picked == Picked.Opening) return ForskIntent.Edit;
             return ForskIntent.General;
         }
 
@@ -234,13 +235,6 @@ namespace RhinoMCPPlugin.Forsk
             return false;
         }
 
-        static bool TargetIsOpening(string target)
-        {
-            if (string.IsNullOrWhiteSpace(target)) return false;
-            var t = target.ToLowerInvariant();
-            return t.Contains("forsk:opening") || t.Contains("a-open");
-        }
-
         static bool HasWord(string text, string word)
         {
             var i = 0;
@@ -415,8 +409,22 @@ namespace RhinoMCPPlugin.Forsk
         public bool PathReads;
         /// <summary>How many straight runs a generated wall's path holds (WallJoins.Runs); 0 when it does not read.</summary>
         public int Runs;
-        /// <summary>forsk:marker on a room plate: the id of the room marker it stands for.</summary>
+        /// <summary>The marker this row stands for: forsk:marker on a room plate, forsk:marker_id on an opening's block.</summary>
         public string Marker;
+        /// <summary>forsk:id: w01, rd-03.</summary>
+        public string ForskId;
+        /// <summary>A wall's forsk:thickness, mm.</summary>
+        public string Thickness;
+        /// <summary>An opening's forsk:mark (D03, V02) from its schedule, its own or its marker's; empty before Print.</summary>
+        public string Mark;
+        /// <summary>An opening's forsk:width, forsk:sill and forsk:head, mm.</summary>
+        public string Width;
+        public string Sill;
+        public string Head;
+        /// <summary>A selected one-run wall's name in the join graph (F2): "the north wall", "the wall at (4000, 2000)". Selected walls only.</summary>
+        public string RunName;
+        /// <summary>The way that run moves first: its compass side, else north for an east–west run and east for a north–south one.</summary>
+        public string RunToward;
     }
 
     /// <summary>

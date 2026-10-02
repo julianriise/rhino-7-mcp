@@ -45,7 +45,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A typed turn's mark: the override when one is set, else the router's role for this sentence.</summary>
         static string TurnMark(DocThread thread, string text)
         {
-            return ForskRoles.Mark(ForskIntentRouter.Classify(text, ForskTarget.Read()), thread.Override);
+            var doc = RhinoDoc.ActiveDoc;
+            return ForskRoles.Mark(ForskIntentRouter.Classify(text, doc == null ? Picked.None : ReadFacts(doc).Picked), thread.Override);
         }
 
         // ------------------------------------------------------------ the bar
@@ -116,18 +117,11 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The sentence goes into the composer with the number selected. Nothing is sent.</summary>
         void Prefill(DocThread thread, ForskAction action, FileFacts facts)
         {
-            var prefill = ForskPrefill.For(action.Id, facts, LastUserText(thread));
+            var prefill = ForskPrefill.For(action.Id, facts, thread.LastUserText());
             if (prefill == null) return;
             thread.Prefill = prefill.ToJson(++_prefillCount);
             Render();
             FocusComposer();
-        }
-
-        static string LastUserText(DocThread thread)
-        {
-            for (var i = thread.Items.Count - 1; i >= 0; i--)
-                if (thread.Items[i]["role"]?.ToString() == "user") return thread.Items[i]["text"]?.ToString();
-            return null;
         }
 
         void Run(DocThread thread, ForskAction action, FileFacts facts, RhinoDoc doc)
@@ -188,7 +182,11 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, action.Id, label, sink => sink.Tool("delete_opening", new JObject()));
                     return;
                 case "wall.delete":
-                    AskWallSide(thread, facts);
+                    // A wall of one run is the run: no question.
+                    if (ForskPick.OneRunWall(facts.Selected) != null)
+                        Job(thread, action.Id, label, sink => sink.Tool("delete_wall", new JObject()));
+                    else
+                        AskWallSide(thread, facts);
                     return;
                 case "wall.split":
                     Job(thread, action.Id, label, sink => sink.Tool("split_walls", new JObject()));
@@ -366,10 +364,10 @@ namespace RhinoMCPPlugin.Forsk
         {
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
-            var target = ForskTarget.Read();
+            var picked = doc == null ? Picked.None : Facts(doc).Picked;
             thread.Add("user", text);
             // The router's role for this sentence, unless an override was set when it was sent.
-            thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify(text, target), thread.Override));
+            thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify(text, picked), thread.Override));
             var undo = ForskUndo.Begin(doc, text);
             _jobChanges = 0;
             var serial = doc?.RuntimeSerialNumber ?? 0;
@@ -394,7 +392,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 try
                 {
-                    ForskGrok.RunTurn(text, target, history, (role, line) =>
+                    ForskGrok.RunTurn(text, picked, history, (role, line) =>
                     {
                         // A tool's row came through hooks.Tool as a structured receipt.
                         if (role == "receipt") return;

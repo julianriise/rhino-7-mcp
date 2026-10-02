@@ -47,6 +47,7 @@
     <Compile Include="..\..\plugin\Forsk\WindowBounds.cs" Link="WindowBounds.cs" />
     <Compile Include="..\..\plugin\Forsk\WindowModel.cs" Link="WindowModel.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskText.cs" Link="ForskText.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskPick.cs" Link="ForskPick.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskFile.cs" Link="ForskFile.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskRegistry.cs" Link="ForskRegistry.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReceipt.cs" Link="ForskReceipt.cs" />

@@ -37,6 +37,14 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The full path, once the file is saved. The store keys on it.</summary>
         public string Path;
         public readonly List<JObject> Items = new List<JObject>();
+
+        /// <summary>The user's last message, or null. Prefills and the pick line follow its language.</summary>
+        public string LastUserText()
+        {
+            for (var i = Items.Count - 1; i >= 0; i--)
+                if (Items[i]["role"]?.ToString() == "user") return Items[i]["text"]?.ToString();
+            return null;
+        }
         /// <summary>The chat model's messages for this file. One history for every role.</summary>
         public readonly List<JObject> History = new List<JObject>();
         /// <summary>A static step line while a long job runs, or null.</summary>
@@ -279,7 +287,7 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// The page's whole model for one document: the file name, Target, the
+    /// The page's whole model for one document: the file name, the pick line, the
     /// status line, the thread, the pinned bar, the settings menu, and the
     /// attention list. C# builds it from the thread and the classifier's facts;
     /// the page draws it. An empty thread shows one local sentence that names
@@ -287,12 +295,13 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class WindowView
     {
-        public static JObject Build(DocThread thread, FileFacts facts, string target, bool helpOpen = false)
+        public static JObject Build(DocThread thread, FileFacts facts, bool helpOpen = false)
         {
             var model = thread.ToJson();
             if (thread.Items.Count == 0)
                 ((JArray)model["thread"]).Add(new JObject { ["role"] = "line", ["id"] = "state", ["text"] = ForskRegistry.StateSentence(facts) });
-            model["target"] = target ?? "";
+            // The pick line: what is selected, in words (selection S4).
+            model["target"] = ForskPick.Line(facts.Selected, ForskPrefill.Language(thread.LastUserText()) == "nb");
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
             model["role"] = ForskRoles.Control(thread.Override);

@@ -11,7 +11,7 @@ namespace SoftParam.Tests;
 public class WindowViewTests
 {
     static JObject View(string fixture, DocThread? thread = null, bool help = false) =>
-        WindowView.Build(thread ?? new DocThread { Serial = 1, File = "holmen.3dm" }, Docs.Facts(fixture), "", help);
+        WindowView.Build(thread ?? new DocThread { Serial = 1, File = "holmen.3dm" }, Docs.Facts(fixture), help);
 
     static string[] Slots(JObject view) => ((JArray)view["bar"]!["slots"]!).Select(s => s["id"]!.ToString()).ToArray();
 
@@ -71,11 +71,11 @@ public class WindowViewTests
         tracker.Record(new LastAction { Kind = "answer", Doc = 1, Record = "Forsk: move the north wall 500 mm north", Undoable = true });
         DocInput Input() => Docs.Of(Docs.House()).With(d => d.UndoNewest = tracker.UndoNewest(1));
 
-        var before = WindowView.Build(new DocThread { Serial = 1 }, FileClassifier.Read(Input()), "");
+        var before = WindowView.Build(new DocThread { Serial = 1 }, FileClassifier.Read(Input()));
         Assert.Equal("edit.undo", Slots(before)[1]);
 
         tracker.ObjectChanged(insideForskCall: false);
-        var after = WindowView.Build(new DocThread { Serial = 1 }, FileClassifier.Read(Input()), "", helpOpen: true);
+        var after = WindowView.Build(new DocThread { Serial = 1 }, FileClassifier.Read(Input()), helpOpen: true);
         Assert.DoesNotContain("edit.undo", Slots(after));
         Assert.DoesNotContain(after["help"]!["groups"]!.SelectMany(g => g["actions"]!), a => a["id"]!.ToString() == "edit.undo");
     }
@@ -113,7 +113,7 @@ public class WindowViewTests
     [Fact]
     public void Attention_MarksAnEmptyProjectName_AndClearsWhenItIsStored()
     {
-        JObject Row(FileFacts facts) => (JObject)WindowView.Build(new DocThread { Serial = 1 }, facts, "")["attention"]![0]!;
+        JObject Row(FileFacts facts) => (JObject)WindowView.Build(new DocThread { Serial = 1 }, facts)["attention"]![0]!;
 
         var empty = Row(Docs.Facts("empty"));
         Assert.Equal("meta.title", empty["id"]!.ToString());

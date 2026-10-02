@@ -24,7 +24,7 @@ public class RoleTests
     [InlineData("dagslys", ForskIntent.Daylight, "Analyser")]
     public void EachIntent_MapsToItsRole(string sentence, ForskIntent intent, string role)
     {
-        Assert.Equal(intent, ForskIntentRouter.Classify(sentence, ""));
+        Assert.Equal(intent, ForskIntentRouter.Classify(sentence));
         Assert.Equal(role, ForskRoles.Mark(intent, ForskRole.None));
         Assert.Equal(role, ForskRoles.Label(ForskRoles.Of(intent)));
     }
@@ -32,7 +32,7 @@ public class RoleTests
     [Fact]
     public void AGeneralTurn_HasNoMark_AndNoIntentIsRenderYet()
     {
-        Assert.Null(ForskRoles.Mark(ForskIntentRouter.Classify("hello", ""), ForskRole.None));
+        Assert.Null(ForskRoles.Mark(ForskIntentRouter.Classify("hello"), ForskRole.None));
         Assert.DoesNotContain(Enum.GetValues(typeof(ForskIntent)).Cast<ForskIntent>(), i => ForskRoles.Of(i) == ForskRole.Render);
         // No intent routes to Render. The picker still offers it, as a label and an avatar.
         Assert.Contains(ForskRole.Render, ForskRoles.Pickable);
@@ -41,7 +41,7 @@ public class RoleTests
     [Fact]
     public void AnOverride_NamesTheAnswer_AndClearingItHandsTheNextAnswerBackToTheRouter()
     {
-        var import = ForskIntentRouter.Classify("import plan.pdf", "");
+        var import = ForskIntentRouter.Classify("import plan.pdf");
         Assert.Equal("Modeller", ForskRoles.Mark(import, ForskRole.Modeller));
         Assert.Equal("Planner", ForskRoles.Mark(import, ForskRoles.Parse("auto")));
     }
@@ -78,7 +78,7 @@ public class RoleTests
         // Cmd+3 and a typed label read the bar with the role boost, as the page draws it.
         var thread = new DocThread { Serial = 1, Override = ForskRole.Plotter };
         var facts = Docs.Facts("forsk undo newest");
-        var drawn = ((JArray)WindowView.Build(thread, facts, "")["bar"]!["slots"]!).Select(s => s["id"]!.ToString());
+        var drawn = ((JArray)WindowView.Build(thread, facts)["bar"]!["slots"]!).Select(s => s["id"]!.ToString());
         Assert.Equal(ForskRegistry.Bar(facts, thread.Override).Slots.Select(a => a.Id), drawn);
         Assert.Equal("section.add", ForskRegistry.ByLabel(ForskRegistry.Bar(facts, thread.Override), "Add a section")!.Id);
         Assert.Null(ForskRegistry.ByLabel(ForskRegistry.Bar(facts, thread.Override), "Daylight"));
@@ -101,7 +101,7 @@ public class RoleTests
 
         thread.Override = ForskRole.Plotter;
         thread.Add("user", "project is Tilbygg Holmen");
-        thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify("project is Tilbygg Holmen", ""), thread.Override));
+        thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify("project is Tilbygg Holmen"), thread.Override));
         history.Add(new JObject { ["role"] = "user", ["content"] = "project is Tilbygg Holmen" });
         history.Add(new JObject { ["role"] = "assistant", ["content"] = "Stored the project name." });
         thread.Add("assistant", "Stored the project name.");
@@ -109,7 +109,7 @@ public class RoleTests
 
         thread.Override = ForskRole.None;
         thread.Add("user", "move the north wall 500 mm north");
-        thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify("move the north wall 500 mm north", ""), thread.Override));
+        thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify("move the north wall 500 mm north"), thread.Override));
         // The window hands the turn a copy of this one list: what Plotter heard, Modeller hears.
         var forTheTurn = new List<JObject>(thread.History);
         Assert.Contains(forTheTurn, m => m["content"]!.ToString() == "project is Tilbygg Holmen");
@@ -148,7 +148,7 @@ public class RoleTests
         Assert.Equal("modeller", ForskRoles.Control(ForskRole.Modeller)["value"]!.ToString());
 
         var thread = new DocThread { Serial = 1, Override = ForskRole.Modeller };
-        var view = WindowView.Build(thread, Docs.Facts("house"), "");
+        var view = WindowView.Build(thread, Docs.Facts("house"));
         Assert.Equal("modeller", view["role"]!["value"]!.ToString());
         Assert.Equal("Print PDF", view["bar"]!["slots"]![0]!["label"]!.ToString());
     }

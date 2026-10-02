@@ -18,7 +18,7 @@ public class PanelDaylightTests
     [InlineData("which room is brightest")]
     public void DaylightWords_ClassifyAsDaylight(string text)
     {
-        Assert.Equal(ForskIntent.Daylight, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Daylight, ForskIntentRouter.Classify(text));
     }
 
     [Theory]
@@ -29,7 +29,7 @@ public class PanelDaylightTests
     [InlineData("hello", ForskIntent.General)]
     public void OtherTurns_KeepTheirIntent(string text, ForskIntent expected)
     {
-        Assert.Equal(expected, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(expected, ForskIntentRouter.Classify(text));
     }
 
     static ChipRow Wall() => new ChipRow { Generated = true, Kind = "wall", Layer = "A-WALL" };
@@ -144,7 +144,7 @@ public class PanelDaylightTests
     [InlineData("detect rooms")]
     public void MakeRoomsWords_ClassifyAsBuild(string text)
     {
-        Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text));
     }
 
     [Fact]

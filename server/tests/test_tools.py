@@ -2970,12 +2970,27 @@ class TestMoveWallTool:
         )
 
     @patch("rhinomcp.tools.move_wall.get_rhino_connection")
+    def test_a_one_run_selection_needs_no_side(self, mock_get_conn):
+        """S4: the selected wall is one run, so the wire carries neither side nor at."""
+        from rhinomcp.tools.move_wall import move_wall
+        from rhinomcp.tools.delete_wall import delete_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"ok": True, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        assert move_wall(ctx=None, toward="north", distance_mm=500)["success"] is True
+        assert mock_conn.send_command.call_args[0] == ("move_wall", {"toward": "north", "distance_mm": 500})
+        with patch("rhinomcp.tools.delete_wall.get_rhino_connection", return_value=mock_conn):
+            assert delete_wall(ctx=None)["success"] is True
+        assert mock_conn.send_command.call_args[0] == ("delete_wall", {})
+
+    @patch("rhinomcp.tools.move_wall.get_rhino_connection")
     def test_rejects_bad_input(self, mock_get_conn):
         from rhinomcp.tools.move_wall import move_wall
 
         assert move_wall(ctx=None, toward="up", distance_mm=500, side="north")["success"] is False
         assert move_wall(ctx=None, toward="north", distance_mm=0, side="north")["success"] is False
-        assert move_wall(ctx=None, toward="north", distance_mm=500)["success"] is False
         assert move_wall(ctx=None, toward="north", distance_mm=500, side="north", at=[0, 0])["success"] is False
         assert move_wall(ctx=None, toward="north", distance_mm=500, side="top")["success"] is False
         assert move_wall(ctx=None, toward="north", distance_mm=500, at=[0, 0, 0])["success"] is False
@@ -3030,7 +3045,6 @@ class TestDeleteWallTool:
     def test_rejects_bad_input(self, mock_get_conn):
         from rhinomcp.tools.delete_wall import delete_wall
 
-        assert delete_wall(ctx=None)["success"] is False
         assert delete_wall(ctx=None, side="north", at=[0, 0])["success"] is False
         assert delete_wall(ctx=None, side="top")["success"] is False
         assert delete_wall(ctx=None, at=[0, 0, 0])["success"] is False

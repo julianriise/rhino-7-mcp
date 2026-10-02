@@ -120,9 +120,11 @@ public class ForskCoreTests
     {
         var thread = new DocThread { Serial = 9, File = "holmen.3dm" };
         thread.Add("user", "skriv ut");
-        var model = WindowView.Build(thread, Docs.Facts("bridge down, grey ink"), "Target: w01 · A-WALL · forsk:wall");
+        var model = WindowView.Build(thread, Docs.Facts("bridge down, grey ink"));
 
         Assert.Equal("holmen.3dm", model["file"]!.ToString());
+        // Nothing is picked, and the last message was Norwegian.
+        Assert.Equal("Klikk noe i modellen.", model["target"]!.ToString());
         Assert.Equal("Bridge off · ink: grey", model["status"]!.ToString());
         Assert.Equal("skriv ut", model["thread"]![0]!["text"]!.ToString());
         var slots = (JArray)model["bar"]!["slots"]!;
@@ -137,7 +139,7 @@ public class ForskCoreTests
     public void AnEmptyThread_ShowsTheLocalSentence_WithoutStoringIt()
     {
         var thread = new DocThread { Serial = 1 };
-        var model = WindowView.Build(thread, Docs.Facts("empty"), "");
+        var model = WindowView.Build(thread, Docs.Facts("empty"));
         Assert.Equal("This file is empty.", model["thread"]![0]!["text"]!.ToString());
         Assert.Empty(thread.Items);
         Assert.Equal(new[] { "Import a plan", "Draw a wall" }, ((JArray)model["bar"]!["slots"]!).Select(s => s["label"]!.ToString()));

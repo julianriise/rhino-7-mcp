@@ -374,7 +374,7 @@ public class WallEditTests
     [InlineData("tegn en vegg")]
     public void WallEdits_RouteToEdit(string text)
     {
-        Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify(text));
     }
 
     [Theory]
@@ -385,7 +385,7 @@ public class WallEditTests
     [InlineData("delete the walls and rebuild")]
     public void WallHeights_StayBuild(string text)
     {
-        Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Build, ForskIntentRouter.Classify(text));
     }
 
     static List<List<Pt>> Garage() => new() { Rect(0, 0, 8000, 4000), Rect(200, 200, 7800, 3800) };

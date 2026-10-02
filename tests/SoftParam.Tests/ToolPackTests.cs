@@ -35,7 +35,9 @@ public class ToolPackTests
     static ForskIntent Route(JObject c)
     {
         var selection = c["selection"]!.ToString();
-        return ForskIntentRouter.Classify(c["utterance"]!.ToString(), selection == "empty" ? "" : "Target: " + selection);
+        // The recorded selections are the old target texts; an opening's says forsk:opening.
+        var picked = selection == "empty" ? Picked.None : selection.Contains("forsk:opening") ? Picked.Opening : Picked.Other;
+        return ForskIntentRouter.Classify(c["utterance"]!.ToString(), picked);
     }
 
     static int Chars(IEnumerable<string> names) => ForskToolPacks.Schemas(names).ToString(Formatting.None).Length;

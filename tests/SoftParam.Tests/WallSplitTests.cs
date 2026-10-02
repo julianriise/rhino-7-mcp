@@ -104,6 +104,30 @@ public class WallSplitTests
         Assert.Equal(2, WallJoins.Outlines(split, Tol).Count);
     }
 
+    [Fact]
+    public void AOneRunRecord_IsItsRun_MoveNeedsNoSide()
+    {
+        // S4: the split garage's north record names the north wall; a move on it equals "side": "north".
+        var split = Split(WallJoinsTests.Garage()).Select(p => new List<List<Pt>> { p.Ring }).ToList();
+        var north = split.FindIndex(r => r[0].All(p => p.Y >= 3800));
+        var graph = WallJoins.Build(split, WallJoins.ClusterOf(split, north, Tol), Tol);
+        var run = WallJoins.RunIn(graph, split[north]);
+        Assert.Equal("the north wall", graph.Names[run]);
+        Assert.Equal("north", WallJoins.Toward(graph, run));
+        Assert.True(WallEdit.TryPickSide(graph.Shape, "north", Tol, out var side, out _));
+        Assert.Equal(graph.Find(side, Tol), run);
+        // The partition of the two rooms is named by its middle and moves east first.
+        var rooms = Split(WallJoinsTests.TwoRooms()).Select(p => new List<List<Pt>> { p.Ring }).ToList();
+        var partition = rooms.FindIndex(r => r[0].All(p => p.X >= 3900 && p.X <= 4100));
+        var g = WallJoins.Build(rooms, WallJoins.ClusterOf(rooms, partition, Tol), Tol);
+        var stem = WallJoins.RunIn(g, rooms[partition]);
+        Assert.Equal("the wall at (4000, 2000)", g.Names[stem]);
+        Assert.Equal("east", WallJoins.Toward(g, stem));
+        // A whole record holds every run: no one run is the pick.
+        var whole = new List<List<List<Pt>>> { WallJoinsTests.Garage() };
+        Assert.Equal(-1, WallJoins.RunIn(WallJoins.Build(whole, new List<int> { 0 }, Tol), whole[0]));
+    }
+
     /// <summary>The record split, with the union checked back against its shape.</summary>
     static List<WallSplit.Piece> Split(List<List<Pt>> rings)
     {

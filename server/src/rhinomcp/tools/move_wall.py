@@ -43,7 +43,7 @@ def move_wall(
     Parameters:
     - toward: north, south, east or west. An east–west wall moves north or south.
     - distance_mm: How far, mm, above 0.
-    - side: north, south, east or west: the outer wall facing that way. Exclusive with at.
+    - side: north, south, east or west: the outer wall facing that way. Exclusive with at. Omit both when the selected wall is one straight run (selection S4).
     - at: [x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side.
     - id: Wall GUID. Omit to use the selected wall, else the only wall.
 
@@ -56,7 +56,7 @@ def move_wall(
             return {"success": False, "message": "toward is north, south, east or west."}
         if isinstance(distance_mm, bool) or not isinstance(distance_mm, (int, float)) or distance_mm <= 0:
             return {"success": False, "message": "distance_mm must be positive."}
-        if (side is None) == (at is None):
+        if side is not None and at is not None:
             return {"success": False, "message": "Give side or at, not both."}
         if side is not None and side not in _COMPASS:
             return {"success": False, "message": "side is north, south, east or west."}

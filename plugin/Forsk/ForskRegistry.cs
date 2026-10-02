@@ -287,7 +287,8 @@ namespace RhinoMCPPlugin.Forsk
             var print = bar.Slot1.Id == "file.print";
             if (print && f.SheetsStale) return ForskText.Get("file.print.stale");
             if (f.Map == MapState.Stale) return ForskText.Get("daylight.again.reason");
-            if (bar.Context.Any(a => a.Id == "wall.move")) return ForskText.Get("wall.move.reason");
+            if (bar.Context.Any(a => a.Id == "wall.move"))
+                return ForskText.Get(ForskPick.OneRunWall(f.Selected) != null ? "wall.move.reason.one" : "wall.move.reason");
             if (print && f.Map == MapState.Shown) return ForskText.Get("file.print.map");
             if (bar.Slot1.Id == "file.import" && f.Kind == FileKind.NoPlan) return ForskText.Get("file.import.noplan");
             return ForskText.Get(bar.Slot1.Id + ".reason");

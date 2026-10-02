@@ -56,7 +56,7 @@ public class CardTests
     public void TheHelpRows_ForAnEmptyFileA2DPlanAndA3DModel_MatchTheRegistry(string fixture)
     {
         var facts = Docs.Facts(fixture);
-        var view = WindowView.Build(new DocThread { Serial = 1 }, facts, "", helpOpen: true);
+        var view = WindowView.Build(new DocThread { Serial = 1 }, facts, helpOpen: true);
         var shown = view["help"]!["groups"]!.SelectMany(g => g["actions"]!).Select(a => a["id"]!.ToString());
         var registry = ForskRegistry.All.Where(a => a.Group != null && a.Shows(facts)).Select(a => a.Id);
         Assert.Equal(registry.OrderBy(i => i), shown.OrderBy(i => i));

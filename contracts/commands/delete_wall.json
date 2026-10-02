@@ -12,7 +12,7 @@
     "side": {
       "type": "string",
       "enum": ["north", "south", "east", "west"],
-      "description": "The outer wall facing this way. Exclusive with at."
+      "description": "The outer wall facing this way. Exclusive with at. Omit both when the selected wall is one run: that run is the wall."
     },
     "at": {
       "type": "array",
@@ -22,9 +22,6 @@
       "description": "[x, y] in mm on or beside the wall: the face nearest it, within 1000 mm. Exclusive with side."
     }
   },
-  "oneOf": [
-    { "required": ["side"] },
-    { "required": ["at"] }
-  ],
+  "not": { "required": ["side", "at"] },
   "additionalProperties": false
 }

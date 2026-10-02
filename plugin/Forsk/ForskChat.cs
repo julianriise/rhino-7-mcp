@@ -539,7 +539,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
         }
 
-        public static void RunTurn(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks = null)
+        public static void RunTurn(string userText, Picked picked, List<JObject> history, Action<string, string> show, TurnHooks hooks = null)
         {
             ForskSpeech.Use(userText);
             try
@@ -555,7 +555,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         static void RunTurnBody(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks)
         {
             history.Add(new JObject { ["role"] = "user", ["content"] = userText });
-            var intent = ForskIntentRouter.Classify(userText, target);
+            var intent = ForskIntentRouter.Classify(userText, picked);
             hooks?.Routed?.Invoke(intent);
             var key = ForskKeys.Load();
             if (string.IsNullOrEmpty(key))
@@ -1433,75 +1433,6 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 i = at + word.Length;
             }
             return false;
-        }
-    }
-
-    public static class ForskTarget
-    {
-        public static string Read()
-        {
-            var doc = RhinoDoc.ActiveDoc;
-            if (doc == null) return "Click something in the model.";
-
-            RhinoObject first = null;
-            var count = 0;
-            foreach (var obj in global::RhinoMCPPlugin.Functions.RhinoMCPFunctions.ListSelected(doc))
-            {
-                if (obj?.Attributes == null) continue;
-                count++;
-                if (first == null) first = obj;
-            }
-            if (count == 0 || first == null) return "Click something in the model.";
-
-            var summary = FormatOne(doc, first);
-            if (count == 1) return "Target: " + summary;
-            return "Target: " + count + " selected · " + summary;
-        }
-
-        static string FormatOne(RhinoDoc doc, RhinoObject obj)
-        {
-            if (obj?.Attributes == null) return obj == null ? "" : obj.Id.ToString();
-            var name = "";
-            try
-            {
-                name = string.IsNullOrWhiteSpace(obj.Name) ? "" : obj.Name;
-            }
-            catch (NullReferenceException)
-            {
-                name = "";
-            }
-            var layer = "";
-            var index = obj.Attributes.LayerIndex;
-            if (index >= 0 && index < doc.Layers.Count)
-            {
-                var layerObj = doc.Layers[index];
-                layer = layerObj.ParentLayerId == Guid.Empty
-                    ? (layerObj.Name ?? "")
-                    : (layerObj.FullPath ?? layerObj.Name ?? "");
-            }
-
-            var attrs = Serializer.RhinoObjectAttributes(obj);
-            var id = attrs?["forsk:id"]?.ToString();
-            var kind = attrs?["forsk:kind"]?.ToString();
-
-            var head = name;
-            if (!string.IsNullOrEmpty(id))
-                head = string.IsNullOrEmpty(head) ? id : head + " " + id;
-
-            var parts = new List<string>();
-            if (!string.IsNullOrEmpty(head)) parts.Add(head);
-            if (!string.IsNullOrEmpty(layer)) parts.Add(layer);
-            if (!string.IsNullOrEmpty(kind)) parts.Add("forsk:" + kind);
-            if (string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase))
-            {
-                var openingKind = attrs?["forsk:opening_kind"]?.ToString();
-                var hostId = attrs?["forsk:host_id"]?.ToString();
-                if (!string.IsNullOrEmpty(openingKind)) parts.Add(openingKind);
-                if (!string.IsNullOrEmpty(hostId)) parts.Add(hostId);
-            }
-            if (parts.Count == 0) return obj.Id.ToString();
-            return string.Join(" · ", parts);
         }
     }
 }

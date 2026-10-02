@@ -32,7 +32,7 @@ public class PanelImportTests
     [InlineData("bring in the scan")]
     public void ImportWords_ClassifyAsImport(string text)
     {
-        Assert.Equal(ForskIntent.Import, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Import, ForskIntentRouter.Classify(text));
     }
 
     [Theory]
@@ -46,7 +46,7 @@ public class PanelImportTests
     [InlineData("hello", ForskIntent.General)]
     public void OtherTurns_KeepTheirIntent(string text, ForskIntent expected)
     {
-        Assert.Equal(expected, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(expected, ForskIntentRouter.Classify(text));
     }
 
     [Theory]
@@ -59,7 +59,7 @@ public class PanelImportTests
     public void DxfWords_RouteToDxfImport(string text)
     {
         // "import plan.dxf" names a plan too; the DXF wins over the plan image import.
-        Assert.Equal(ForskIntent.Dxf, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Dxf, ForskIntentRouter.Classify(text));
         Assert.Equal("dxf_import", ForskDxf.Tool);
         Assert.Contains("Call " + ForskDxf.Tool, ForskDxf.Bias);
         Assert.Contains("no path", ForskDxf.Bias);

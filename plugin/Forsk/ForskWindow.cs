@@ -212,7 +212,7 @@ namespace RhinoMCPPlugin.Forsk
             if (doc == null || thread == null)
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
-                model = WindowView.Build(thread, Facts(doc), ForskTarget.Read(), _helpOpen);
+                model = WindowView.Build(thread, Facts(doc), _helpOpen);
             var count = model["thread"] is JArray items ? items.Count : 0;
             Log("render · " + count + " items");
             Script("Forsk.render", model);

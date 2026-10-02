@@ -498,6 +498,33 @@ public static class WallJoins
         return found;
     }
 
+    /// <summary>
+    /// The one run of the cluster whose middle lies in this record, or -1 when
+    /// it holds none or several. A record of one run is that run, so a click
+    /// on it names the wall (selection S4).
+    /// </summary>
+    public static int RunIn(Graph graph, List<List<Pt>> record)
+    {
+        var found = -1;
+        for (var i = 0; i < graph.Runs.Count; i++)
+        {
+            if (!WallEdit.InRegion(record, Middle(graph.Runs[i]))) continue;
+            if (found >= 0) return -1;
+            found = i;
+        }
+        return found;
+    }
+
+    /// <summary>The way a run moves first: its compass side when it has one, else north for an east–west run and east for a north–south one.</summary>
+    public static string Toward(Graph graph, int run)
+    {
+        var name = graph.Names[run];
+        foreach (var side in Compass)
+            if (name == "the " + side + " wall") return side;
+        var n = graph.Runs[run].Normal;
+        return Math.Abs(n.Y) >= Math.Abs(n.X) ? "north" : "east";
+    }
+
     /// <summary>The middle of the run's band.</summary>
     public static Pt Middle(WallEdit.Run run)
     {

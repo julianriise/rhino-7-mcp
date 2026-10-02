@@ -187,12 +187,48 @@ public class FileClassifierTests
     }
 
     [Fact]
-    public void ASelectedWall_PutsMoveInTheBar_AndTheReasonNamesTheRecord()
+    public void ASelectedWall_PutsMoveInTheBar_AndTheReasonSaysOneWall()
     {
+        // S4: a wall baked one per run is one wall.
         var f = Docs.Facts("house, wall selected");
         var bar = ForskRegistry.Bar(f);
         Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, bar.Slots.Select(a => a.Id));
-        Assert.Equal("The click selects the whole wall record.", bar.Reason);
+        Assert.Equal("The click selects one wall.", bar.Reason);
+    }
+
+    [Fact]
+    public void AWholeRecordSelected_KeepsTheOldReason_AndOffersTheSplit()
+    {
+        var f = Docs.Facts("one whole wall record selected");
+        Assert.Equal("The click selects the whole wall record.", ForskRegistry.Bar(f).Reason);
+        Assert.Contains(ForskRegistry.Card(f).Actions, a => a.Id == "wall.split");
+        Assert.Equal("Wall w01 · 7 runs", ForskPick.Line(f.Selected, false));
+    }
+
+    [Fact]
+    public void AOneRunWall_MovePrefillNamesTheRun_AndNoSplitIsOffered()
+    {
+        var f = Docs.Facts("house, wall selected");
+        Assert.Equal("Move the north wall 500 mm north", ForskPrefill.For("wall.move", f, null).Text);
+        Assert.Equal("Flytt veggen i nord 500 mm mot nord", ForskPrefill.For("wall.move", f, "flytt veggen").Text);
+        Assert.DoesNotContain(ForskRegistry.Card(f).Actions, a => a.Id == "wall.split");
+        Assert.Equal("North wall · 200 mm", ForskPick.Line(f.Selected, false));
+    }
+
+    [Fact]
+    public void APlatePicked_GivesTheRoomBar()
+    {
+        var marker = Row.Room(name: "Stue");
+        var f = FileClassifier.Read(Docs.Of(Row.Wall(), Row.Floor(), Row.Window(), marker, Row.Plate(marker, selected: true)));
+        Assert.Equal(new[] { "Print PDF", "Daylight for this room", "Section through this room" }, Bar(f));
+    }
+
+    [Fact]
+    public void MakeItWider_WithAnOpeningPicked_IsAnEdit()
+    {
+        // The pick line ("Door D03 · 900 × 2100") names no layer, so the router reads the picked kind.
+        Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify("make it wider", Picked.Opening));
+        Assert.NotEqual(ForskIntent.Edit, ForskIntentRouter.Classify("make it wider", Picked.None));
     }
 
     [Fact]

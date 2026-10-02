@@ -430,7 +430,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")
                     }),
                 Fn("move_wall",
-                    "Move one straight wall run across itself, then rebuild that host from its path. Wall records that touch are read as one, so name the run: side for an outer wall, or at for the face nearest a point. Both faces move, the walls joined to it stretch along their own lines in every record that touches, the openings on it move with it. The receipt names the walls that followed. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. A move that would close a room is refused with its depth. Refuses X-EXIST.",
+                    "Move one straight wall run across itself, then rebuild that host from its path. Wall records that touch are read as one, so name the run: side for an outer wall, or at for the face nearest a point; omit both when the selected wall is one run. Both faces move, the walls joined to it stretch along their own lines in every record that touches, the openings on it move with it. The receipt names the walls that followed. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. A move that would close a room is refused with its depth. Refuses X-EXIST.",
                     new JObject
                     {
                         ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
@@ -441,7 +441,7 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "toward", "distance_mm"),
                 Fn("delete_wall",
-                    "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole, and so does a record of its own that the run covers. Refused when a wall record left would stand in two pieces. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
+                    "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point; omit both when the selected wall is one run. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole, and so does a record of its own that the run covers. Refused when a wall record left would stand in two pieces. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
                     new JObject
                     {
                         ["side"] = Compass("The outer wall facing this way. Exclusive with at."),

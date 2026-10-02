@@ -178,6 +178,6 @@ public class PrintProfilesTests
     [InlineData("make the door wider", ForskIntent.Edit)]
     public void Chat_routes_a_profile_request_to_the_sheets_turn(string said, ForskIntent intent)
     {
-        Assert.Equal(intent, ForskIntentRouter.Classify(said, null));
+        Assert.Equal(intent, ForskIntentRouter.Classify(said));
     }
 }

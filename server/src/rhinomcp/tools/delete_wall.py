@@ -39,7 +39,7 @@ def delete_wall(
     daylight map is hidden as out of date. Refuses X-EXIST.
 
     Parameters:
-    - side: north, south, east or west: the outer wall facing that way. Exclusive with at.
+    - side: north, south, east or west: the outer wall facing that way. Exclusive with at. Omit both when the selected wall is one straight run (selection S4).
     - at: [x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side.
     - id: Wall GUID. Omit to use the selected wall, else the only wall.
 
@@ -48,7 +48,7 @@ def delete_wall(
     host_openings, host_voids, ok, message.
     """
     try:
-        if (side is None) == (at is None):
+        if side is not None and at is not None:
             return {"success": False, "message": "Give side or at, not both."}
         if side is not None and side not in _COMPASS:
             return {"success": False, "message": "side is north, south, east or west."}

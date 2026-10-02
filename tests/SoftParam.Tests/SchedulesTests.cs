@@ -401,6 +401,6 @@ public class ScheduleIntentTests
     [InlineData("print the schedules", RhinoMCPPlugin.Forsk.ForskIntent.Print)]
     public void ScheduleWords_ClassifyAsSheets(string text, RhinoMCPPlugin.Forsk.ForskIntent expected)
     {
-        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text));
     }
 }

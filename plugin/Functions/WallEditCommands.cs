@@ -823,7 +823,8 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// The wall record and the run in it. The record is the id, else the one
     /// selected wall, else the wall nearest at, else the only wall. The run is
-    /// side (an outer wall) or the face nearest at.
+    /// side (an outer wall) or the face nearest at; with neither, the record's
+    /// one run when it holds one (selection S4).
     /// </summary>
     private WallPick PickWallRun(RhinoDoc doc, JObject parameters, double tol)
     {
@@ -836,8 +837,6 @@ public partial class RhinoMCPFunctions
             throw new ArgumentException("at is [x, y] in mm.");
         if (hasAt && hasSide)
             throw new ArgumentException("Give side or at, not both.");
-        if (!hasAt && !hasSide)
-            throw new ArgumentException("Say which wall: a side (north, south, east or west) or a point at [x, y] in mm.");
 
         var host = ResolveWallRecord(doc, parameters, hasAt ? at : (RoomDetect.Pt?)null, tol);
         var rings = WallEdit.Rings(host.Attributes?.GetUserString("forsk:path"));
@@ -864,6 +863,14 @@ public partial class RhinoMCPFunctions
 
         WallEdit.Run run;
         string why;
+        if (!hasAt && !hasSide)
+        {
+            // Selection S4: a record of one run is that run.
+            var only = WallJoins.RunIn(graph, rings);
+            if (only < 0)
+                throw new ArgumentException("Say which wall: a side (north, south, east or west) or a point at [x, y] in mm. This record holds more than one wall; Split walls for picking makes each its own.");
+            return new WallPick { Host = host, Rings = rings, Run = graph.Runs[only], Label = graph.Names[only], Walls = walls, Records = records, Graph = graph };
+        }
         var ok = hasAt
             ? WallEdit.TryPick(graph.Shape, at, tol, out run, out why)
             : WallEdit.TryPickSide(graph.Shape, side, tol, out run, out why);

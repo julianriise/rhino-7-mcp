@@ -66,7 +66,7 @@ public class RoomPushPullTests
     [InlineData("dra rommet 300 mm mot sør")]
     public void Sentence_RoutesToEdit(string text)
     {
-        Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(ForskIntent.Edit, ForskIntentRouter.Classify(text));
     }
 
     [Fact]

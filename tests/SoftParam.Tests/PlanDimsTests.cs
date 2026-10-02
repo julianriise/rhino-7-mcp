@@ -403,7 +403,7 @@ public class PlanDimsTests
     [InlineData("print with dimensions", RhinoMCPPlugin.Forsk.ForskIntent.Print)]
     public void DimensionWords_ClassifyAsSheets(string text, RhinoMCPPlugin.Forsk.ForskIntent expected)
     {
-        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
+        Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text));
     }
 
     [Theory]
@@ -411,6 +411,6 @@ public class PlanDimsTests
     [InlineData("endre målsetting på døren")]
     public void AnOpeningsSize_IsNotThePlansDimensions(string text)
     {
-        Assert.NotEqual(RhinoMCPPlugin.Forsk.ForskIntent.Sheets, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text, ""));
+        Assert.NotEqual(RhinoMCPPlugin.Forsk.ForskIntent.Sheets, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text));
     }
 }
