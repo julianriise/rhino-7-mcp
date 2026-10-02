@@ -494,8 +494,8 @@ public partial class RhinoMCPFunctions
         var halfThick = thickness * 0.5;
         var clear = head - sill - (2.0 * OpeningFrameInsetMm);
         if (clear < 80 || outerHalf < 30 || halfThick < 8) return false;
-        var face = Math.Min(OpeningFrameFaceMm, Math.Min(outerHalf * 0.4, clear * 0.22));
-        if (face < 12) face = 12;
+        var window = string.Equals(record.Kind, "window", StringComparison.OrdinalIgnoreCase);
+        var face = OpeningElement.FrameFace(outerHalf, clear, window);
         var innerHalf = outerHalf - face;
         if (innerHalf < 15) return false;
 

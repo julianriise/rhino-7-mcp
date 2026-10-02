@@ -151,15 +151,14 @@ public partial class RhinoMCPFunctions
                     item.Spec.Sill,
                     item.Spec.Head,
                     FacadeConst.MarkerSelectDepth);
-                if (markerBrep == null || !doc.Objects.Replace(item.Marker.Id, markerBrep))
-                {
+                if (markerBrep != null && doc.Objects.Replace(item.Marker.Id, markerBrep))
+                    HideOpeningMarker(doc, item.Marker.Id);
+                else
                     warnings.Add("Opening marker not found.");
-                    continue;
-                }
-                HideOpeningMarker(doc, item.Marker.Id);
 
                 StampOpeningHostId(doc, item.Marker.Id, host.Id);
                 WriteOpeningParams(doc, item.Marker.Id, item.T, item.Offset);
+                var keptId = ReadOpeningBlockId(doc, item.Marker.Id);
                 DeleteOpeningBlocks(doc, item.Marker.Id);
                 var blockId = AddOpeningBlock(
                     doc,
@@ -177,6 +176,7 @@ public partial class RhinoMCPFunctions
                     item.Placement.Segment);
                 if (blockId != Guid.Empty)
                 {
+                    WriteOpeningBlockId(doc, blockId, keptId);
                     StampOpeningHostId(doc, blockId, host.Id);
                     WriteOpeningParams(doc, blockId, item.T, item.Offset);
                     blockIds.Add(blockId.ToString());
@@ -238,22 +238,40 @@ public partial class RhinoMCPFunctions
         var list = new List<RhinoObject>();
         if (doc == null || hostId == Guid.Empty) return list;
         var hostStr = hostId.ToString();
-        foreach (var obj in EnumerateDocObjects(doc))
+        var seen = new HashSet<Guid>();
+        foreach (var obj in OpeningLayerObjects(doc))
         {
-            if (obj.Attributes == null) continue;
-            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
+            if (obj == null || obj.Attributes == null || !seen.Add(obj.Id)) continue;
+            if (string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
+            {
+                var mid = obj.Attributes.GetUserString("forsk:marker_id");
+                if (Guid.TryParse(mid, out var markerGuid))
+                {
+                    var marker = doc.Objects.FindId(markerGuid);
+                    if (marker != null && seen.Add(marker.Id))
+                        ConsiderMarker(list, marker, hostStr, forskId);
+                }
                 continue;
-            var byGuid = string.Equals(
-                obj.Attributes.GetUserString("forsk:host"),
-                hostStr,
-                StringComparison.OrdinalIgnoreCase);
-            var byId = !string.IsNullOrEmpty(forskId) && string.Equals(
-                obj.Attributes.GetUserString("forsk:host_id"),
-                forskId,
-                StringComparison.OrdinalIgnoreCase);
-            if (byGuid || byId) list.Add(obj);
+            }
+            ConsiderMarker(list, obj, hostStr, forskId);
         }
         return list;
+    }
+
+    private static void ConsiderMarker(List<RhinoObject> list, RhinoObject obj, string hostStr, string forskId)
+    {
+        if (obj?.Attributes == null) return;
+        if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
+            return;
+        var byGuid = string.Equals(
+            obj.Attributes.GetUserString("forsk:host"),
+            hostStr,
+            StringComparison.OrdinalIgnoreCase);
+        var byId = !string.IsNullOrEmpty(forskId) && string.Equals(
+            obj.Attributes.GetUserString("forsk:host_id"),
+            forskId,
+            StringComparison.OrdinalIgnoreCase);
+        if (byGuid || byId) list.Add(obj);
     }
 
     private void SyncWallRecord(RhinoDoc doc, Guid id, ForskStamp stamp)

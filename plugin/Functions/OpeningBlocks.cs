@@ -26,12 +26,12 @@ public partial class RhinoMCPFunctions
     private const string ForskWoodName = "Forsk Wood";
     private const string ForskGlassName = "Forsk Glass";
     private const double ForskGlassTransparency = 0.8;
-    private const double OpeningFrameFaceMm = 50.0;
-    private const double OpeningFrameInsetMm = 1.0;
-    private const double OpeningLeafMm = 40.0;
-    private const double OpeningGlazeMm = 8.0;
+    private const double OpeningFrameFaceMm = OpeningElement.FrameFaceMm;
+    private const double OpeningFrameInsetMm = OpeningElement.FrameInsetMm;
+    private const double OpeningLeafMm = OpeningElement.LeafMm;
+    private const double OpeningGlazeMm = OpeningElement.GlazeMm;
     private const double OpeningSillNoseMm = 16.0;
-    private const double OpeningThresholdMm = 15.0;
+    private const double OpeningThresholdMm = OpeningElement.ThresholdMm;
 
     private sealed class OpeningPart
     {
@@ -210,8 +210,10 @@ public partial class RhinoMCPFunctions
         if (doc == null || markerId == Guid.Empty) return;
         var key = markerId.ToString();
         var doomed = new List<RhinoObject>();
-        foreach (var obj in EnumerateDocObjects(doc))
+        var seen = new HashSet<Guid>();
+        foreach (var obj in OpeningLayerObjects(doc))
         {
+            if (obj == null || !seen.Add(obj.Id)) continue;
             if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
             var mid = obj.Attributes?.GetUserString("forsk:marker_id");
@@ -226,6 +228,71 @@ public partial class RhinoMCPFunctions
             doc.Objects.Delete(obj.Id, true);
             if (defIndex >= 0)
                 doc.InstanceDefinitions.Delete(defIndex, true, true);
+        }
+    }
+
+    /// <summary>
+    /// The block's forsk:id, read before it is deleted and written onto the
+    /// replacement so a resize keeps the opening's id.
+    /// </summary>
+    private static string ReadOpeningBlockId(RhinoDoc doc, Guid markerId)
+    {
+        if (doc == null || markerId == Guid.Empty) return null;
+        var key = markerId.ToString();
+        foreach (var obj in OpeningLayerObjects(doc))
+        {
+            if (obj?.Attributes == null) continue;
+            if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.Equals(obj.Attributes.GetUserString("forsk:marker_id"), key, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var id = obj.Attributes.GetUserString("forsk:id");
+            if (!string.IsNullOrEmpty(id)) return id;
+        }
+        return null;
+    }
+
+    private static void WriteOpeningBlockId(RhinoDoc doc, Guid blockId, string forskId)
+    {
+        if (doc == null || blockId == Guid.Empty || string.IsNullOrEmpty(forskId)) return;
+        var block = doc.Objects.FindId(blockId);
+        if (block?.Attributes == null) return;
+        block.Attributes.SetUserString("forsk:id", forskId);
+        block.CommitChanges();
+    }
+
+    /// <summary>
+    /// Markers and blocks, including ones on a layer that is off.
+    /// GetObjectList skips that layer. FindByLayer does not.
+    /// </summary>
+    private static IEnumerable<RhinoObject> OpeningLayerObjects(RhinoDoc doc)
+    {
+        if (doc == null) yield break;
+        foreach (var obj in EnumerateDocObjects(doc))
+            if (obj != null) yield return obj;
+        foreach (var obj in ObjectsOnLayer(doc, "A-OPEN"))
+            yield return obj;
+        foreach (var obj in ObjectsOnLayer(doc, "A-OPEN::Block"))
+            yield return obj;
+    }
+
+    private static IEnumerable<RhinoObject> ObjectsOnLayer(RhinoDoc doc, string name)
+    {
+        if (doc == null || string.IsNullOrEmpty(name)) yield break;
+        for (var i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            var full = layer.FullPath ?? "";
+            if (!layer.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+                && !full.Equals(name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            RhinoObject[] found = null;
+            try { found = doc.Objects.FindByLayer(layer); }
+            catch (Exception) { found = null; }
+            if (found == null) continue;
+            foreach (var obj in found)
+                if (obj != null) yield return obj;
         }
     }
 
@@ -596,20 +663,16 @@ public partial class RhinoMCPFunctions
             return parts;
 
         var window = string.Equals(style.Kind, "window", StringComparison.OrdinalIgnoreCase);
-        var z0 = sill + OpeningFrameInsetMm;
-        var z1 = head - OpeningFrameInsetMm;
-        var outerHalf = width * 0.5 + Math.Max(pad, 0) - OpeningFrameInsetMm;
-        // Depth is the host thickness, 1 mm clear of each face. Leaves stay inside it.
-        var halfThick = thickness * 0.5 - OpeningFrameInsetMm;
-        if (z1 - z0 < 80 || outerHalf < 30 || halfThick < 8)
+        if (!OpeningElement.TryLayout(window, width, sill, head, thickness, pad, out var layout))
             return parts;
-
-        var face = Math.Min(OpeningFrameFaceMm, Math.Min(outerHalf * 0.4, (z1 - z0) * 0.22));
-        if (face < 12) face = 12;
-        var innerHalf = outerHalf - face;
-        var minClear = window ? face * 2 + 30 : face + 30;
-        if (innerHalf < 15 || z1 - z0 < minClear)
-            return parts;
+        // Face and depth come from the layout, so a resize lengthens members
+        // and does not thicken the profile. Depth is the host thickness.
+        var z0 = layout.Z0;
+        var z1 = layout.Z1;
+        var outerHalf = layout.OuterHalf;
+        var halfThick = layout.HalfThick;
+        var face = layout.Face;
+        var innerHalf = layout.InnerHalf;
 
         var boolTol = Math.Max(tol, 0.1);
         // Window jambs start on the sill. The sill itself is a separate part.
@@ -752,14 +815,15 @@ public partial class RhinoMCPFunctions
 
         var gThick = Math.Min(OpeningGlazeMm, Math.Max(4.0, (y1 - y0) * 0.45));
         var mid = (y0 + y1) * 0.5;
+        OpeningElement.GlassSpan(innerHalf, z0, z1, face, out var gx0, out var gx1, out var gz0, out var gz1);
         var glass = FrameBox(
             plane,
-            leftInner + 1,
-            rightInner - 1,
+            gx0,
+            gx1,
             mid - gThick * 0.5,
             mid + gThick * 0.5,
-            sz0 + bottomH,
-            sz1 - sashFace);
+            gz0,
+            gz1);
         if (glass != null)
             parts.Add(new OpeningPart { Geometry = glass, Part = "glass", Glass = true });
     }
@@ -780,9 +844,9 @@ public partial class RhinoMCPFunctions
     {
         var threshold = BuildThreshold(plane, innerHalf, halfThick, z0);
         var leafClear = threshold != null ? OpeningThresholdMm + 0.5 : 0.5;
-        var zLeaf0 = z0 + leafClear;
-        var zLeaf1 = z1 - face + 2;
-        if (zLeaf1 - zLeaf0 < 20) zLeaf1 = z1 - 4;
+        OpeningElement.LeafSpan(
+            innerHalf, z0, z1, face, threshold != null,
+            out var leafX0, out var leafX1, out var zLeaf0, out var zLeaf1);
         var id = style.TypeId ?? "";
 
         if (string.Equals(id, "door.sliding", StringComparison.Ordinal))
@@ -812,9 +876,9 @@ public partial class RhinoMCPFunctions
         {
             var swingY = OpeningTypes.SwingSign(style, yInward);
             var hingeSign = OpeningTypes.HandSign(style, xLeft);
-            var hingeAt = hingeSign > 0 ? innerHalf - 1 : -(innerHalf - 1);
+            var hingeAt = hingeSign > 0 ? leafX1 : leafX0;
             AddFacedLeaf(
-                parts, plane, -(innerHalf - 1), innerHalf - 1, swingY, halfThick, zLeaf0, zLeaf1,
+                parts, plane, leafX0, leafX1, swingY, halfThick, zLeaf0, zLeaf1,
                 hingeSign, hingeAt);
         }
 
@@ -1062,18 +1126,22 @@ public partial class RhinoMCPFunctions
     {
         var thick = window ? OpeningGlazeMm : OpeningLeafMm;
         var half = Math.Min(thick * 0.5, Math.Max(3, halfThick * 0.45));
-        var bite = 2.0;
-        var panelZ0 = window ? z0 + face - bite : z0 + floorClear;
-        var panelZ1 = z1 - face + bite;
+        double x0;
+        double x1;
+        double panelZ0;
+        double panelZ1;
+        if (window)
+            OpeningElement.GlassSpan(innerHalf, z0, z1, face, out x0, out x1, out panelZ0, out panelZ1);
+        else
+        {
+            const double bite = 2.0;
+            x0 = -(innerHalf + bite);
+            x1 = innerHalf + bite;
+            panelZ0 = z0 + floorClear;
+            panelZ1 = z1 - face + bite;
+        }
         if (panelZ1 - panelZ0 < 10) return null;
-        return FrameBox(
-            plane,
-            -(innerHalf + bite),
-            innerHalf + bite,
-            -half,
-            half,
-            panelZ0,
-            panelZ1);
+        return FrameBox(plane, x0, x1, -half, half, panelZ0, panelZ1);
     }
 
     private static Brep BuildSillRail(
