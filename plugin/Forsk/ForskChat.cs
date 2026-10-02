@@ -1569,6 +1569,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static string Run(Action<string> progress)
         {
+            return Run(progress, null);
+        }
+
+        /// <summary>parent owns the save dialog, so it opens where the user is looking. Null is Rhino's main window.</summary>
+        public static string Run(Action<string> progress, Window parent)
+        {
             var units = UnitsProblem();
             if (units != null)
                 return "Print PDF · error · " + units;
@@ -1584,7 +1590,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (!Ok(pack)) return FailLine(pack);
 
             Report(progress, "Layouts ready — choose where to save.");
-            var path = PickPathFromBackground();
+            var path = PickPathFromBackground(parent);
             if (string.IsNullOrEmpty(path))
                 return "Print PDF · cancelled";
 
@@ -1620,12 +1626,17 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static string PickPathFromBackground()
         {
+            return PickPathFromBackground(null);
+        }
+
+        public static string PickPathFromBackground(Window parent)
+        {
             string path = null;
             using (var done = new System.Threading.ManualResetEvent(false))
             {
                 Application.Instance.AsyncInvoke(() =>
                 {
-                    try { path = PickPath(); }
+                    try { path = PickPath(parent); }
                     finally { done.Set(); }
                 });
                 done.WaitOne();
@@ -1650,7 +1661,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }));
         }
 
-        public static string PickPath()
+        public static string PickPath(Window parent)
         {
             var dialog = new Eto.Forms.SaveFileDialog
             {
@@ -1660,8 +1671,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             };
             dialog.Filters.Add(new FileFilter("PDF", ".pdf"));
             TrySetDesktop(dialog);
-            var parent = RhinoEtoApp.MainWindow;
-            if (dialog.ShowDialog(parent) != DialogResult.Ok)
+            if (dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) != DialogResult.Ok)
                 return null;
             return AbsolutePdf(dialog.FileName, dialog.Directory);
         }

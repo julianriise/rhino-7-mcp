@@ -36,7 +36,7 @@ namespace RhinoMCPPlugin.Commands
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            ForskWebForm.Open();
+            ForskWindow.Open(doc);
             return Result.Success;
         }
     }

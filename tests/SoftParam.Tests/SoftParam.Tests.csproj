@@ -14,6 +14,8 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- PlanImport reads forsk.plan_import.v0 with the plugin's JSON library. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- Runs the Forsk window's page script headless: keyboard contract and channel queue. -->
+    <PackageReference Include="Jint" Version="4.16.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,10 +40,15 @@
     <Compile Include="..\..\plugin\Functions\PlanRaster.cs" Link="PlanRaster.cs" />
     <Compile Include="..\..\plugin\Functions\PlanSource.cs" Link="PlanSource.cs" />
     <Compile Include="..\..\plugin\Functions\ForskUv.cs" Link="ForskUv.cs" />
+    <Compile Include="..\..\plugin\Forsk\PageChannel.cs" Link="PageChannel.cs" />
+    <Compile Include="..\..\plugin\Forsk\WindowBounds.cs" Link="WindowBounds.cs" />
+    <Compile Include="..\..\plugin\Forsk\WindowModel.cs" Link="WindowModel.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugin\Forsk\Page\window.js" Link="page\window.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugin\Forsk\Page\window.html" Link="page\window.html" CopyToOutputDirectory="PreserveNewest" />
     <!-- A synthetic forsk.plan_import.v0 file: any source's output reads the same way. -->
     <None Include="..\..\server\tests\fixtures\plan_import_synthetic.json" Link="fixtures\plan_import_synthetic.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

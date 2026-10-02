@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<title>Forsk</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #FFFFFF;
+  --ink: #1C1917;
+  --muted: #78716C;
+  --faint: #A8A29E;
+  --line: #E7E5E4;
+  --bubble: #F2F0ED;
+  --field: #F7F6F4;
+  --ok: #15803D;
+  --bad: #B91C1C;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--paper); }
+body {
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+header { padding: 14px 16px 8px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mark { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.file { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.target { color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.status:empty, .target:empty { display: none; }
+#thread { flex: 1; overflow-y: auto; padding: 12px 16px 8px; -webkit-user-select: text; user-select: text; cursor: auto; }
+.row { display: flex; margin: 0 0 8px; }
+.row.user { justify-content: flex-end; }
+.bubble { max-width: 85%; padding: 8px 12px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant .bubble { background: var(--bubble); color: var(--ink); }
+.user .bubble { background: var(--ink); color: #FFFFFF; }
+.role { display: block; color: var(--muted); font-size: 11px; margin: 0 0 2px 12px; }
+.line { color: var(--muted); font-size: 12px; margin: 0 0 8px; white-space: pre-wrap; }
+.receipt { color: var(--muted); font-size: 12px; margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.receipt b { color: var(--ink); font-weight: 600; }
+.receipt .tick { color: var(--ok); margin-right: 4px; }
+.receipt .cross { color: var(--bad); margin-right: 4px; }
+.card { border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px; margin: 0 0 8px; animation: rise 160ms ease-out; }
+.card .question { margin: 0 0 8px; }
+.card.done, .card.stale { border: 0; padding: 0; animation: none; color: var(--muted); font-size: 12px; }
+.card.stale { color: var(--faint); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  font: inherit; font-size: 13px; line-height: 1;
+  padding: 8px 14px; border-radius: 999px; border: 1px solid var(--ink);
+  background: var(--paper); color: var(--ink); cursor: pointer; white-space: nowrap;
+}
+.pill.primary { background: var(--ink); color: #FFFFFF; }
+.pill:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
+.step { position: relative; overflow: hidden; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.step::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-100%); animation: sheen 1.6s linear infinite;
+}
+@keyframes sheen { to { transform: translateX(100%); } }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+form.composer { margin: 0; padding: 8px 12px 12px; }
+.field {
+  display: flex; align-items: flex-end; gap: 8px;
+  background: var(--field); border: 1px solid var(--line); border-radius: 20px;
+  padding: 6px 6px 6px 14px;
+}
+textarea {
+  flex: 1; min-width: 0; border: 0; outline: none; resize: none; background: transparent;
+  font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); caret-color: var(--ink);
+  padding: 5px 0; max-height: calc(1.4em * 5 + 10px); overflow-y: auto;
+  -webkit-user-select: text; user-select: text;
+}
+textarea::placeholder { color: var(--faint); }
+.send {
+  flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%;
+  background: var(--ink); color: #FFFFFF; font: 600 15px/28px -apple-system, sans-serif; cursor: pointer; padding: 0;
+}
+.send:disabled { background: var(--line); color: var(--faint); cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .step::after { animation: none; display: none; }
+  .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">Forsk</span><span id="file" class="file"></span></div>
+  <div id="target" class="target"></div>
+  <div id="status" class="status"></div>
+</header>
+<main id="thread" aria-live="polite"></main>
+<form id="composer" class="composer" autocomplete="off">
+  <div class="field">
+    <textarea id="q" rows="1" placeholder="Message Forsk" spellcheck="true" aria-label="Message Forsk"></textarea>
+    <button id="send" class="send" type="submit" aria-label="Send" disabled>&#8593;</button>
+  </div>
+</form>
+<script>
+window.FORSK_TOKEN = "FORSK_TOKEN";
+</script>
+<script>
+FORSK_SCRIPT
+</script>
+</body>
+</html>

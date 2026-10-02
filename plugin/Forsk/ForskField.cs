@@ -107,6 +107,31 @@ namespace RhinoMCPPlugin.Forsk
             return null;
         }
 
+        /// <summary>
+        /// The Forsk window stays light under dark appearance: pin a native
+        /// window or view to Aqua. Eto subclasses the native types, so AppKit is
+        /// looked up in the assembly of the first AppKit or WebKit base.
+        /// </summary>
+        public static bool PinAqua(object native)
+        {
+            if (native == null) return false;
+            try
+            {
+                var type = native.GetType();
+                while (type != null && type.Namespace != "AppKit" && type.Namespace != "WebKit")
+                    type = type.BaseType;
+                var aqua = Aqua((type ?? native.GetType()).Assembly);
+                if (aqua == null) return false;
+                Set(native, "Appearance", aqua);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log("aqua " + e.Message);
+                return false;
+            }
+        }
+
         static object NsColor(Type nsColor, int[] rgb)
         {
             foreach (var method in nsColor.GetMethods(BindingFlags.Public | BindingFlags.Static))
