@@ -38,9 +38,32 @@ namespace RhinoMCPPlugin.Forsk
         {
             var thread = Active();
             if (thread == null) return;
-            thread.Override = ForskRoles.Parse(id);
+            var pickedRole = ForskRoles.Parse(id);
+            if (pickedRole != thread.Override)
+                NoteMisroute(ForskMisroutes.Hand(ForskMisroutes.AnsweredSentence(thread.Items), PickedNow(), pickedRole, DateTimeOffset.UtcNow));
+            thread.Override = pickedRole;
             Log("role: " + (thread.Override == ForskRole.None ? "auto (the router names each answer)" : thread.Override + " (override)"));
             Render();
+        }
+
+        static Picked PickedNow()
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            return doc == null ? Picked.None : ReadFacts(doc).Picked;
+        }
+
+        /// <summary>One correction line. A full disk is not a reason to drop the turn.</summary>
+        static void NoteMisroute(JObject entry)
+        {
+            if (entry == null) return;
+            try
+            {
+                ForskMisroutes.Append(entry, ForskMisroutes.DefaultPath);
+            }
+            catch (Exception e)
+            {
+                Log("misroute: " + e.GetType().Name);
+            }
         }
 
         /// <summary>A typed turn's mark: the override when one is set, else the router's role for this sentence.</summary>
@@ -339,6 +362,7 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             if (Refuse(thread)) return;
+            NoteMisroute(ForskMisroutes.Rephrase(ForskMisroutes.AnsweredSentence(thread.Items), PickedNow(), text, DateTimeOffset.UtcNow));
             // Support, picked or routed, answers a bug or a feature request and the card follows.
             if (ForskReports.EndsWithReport(thread.Override, text))
             {

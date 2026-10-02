@@ -60,6 +60,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskToolPacks.cs" Link="ForskToolPacks.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskDebug.cs" Link="ForskDebug.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReports.cs" Link="ForskReports.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />
   </ItemGroup>
 
   <ItemGroup>
