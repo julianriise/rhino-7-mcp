@@ -70,17 +70,62 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A one-time question. kind tells the window what the pills do.</summary>
         public JObject AddCard(string kind, string question, params CardPill[] pills)
         {
-            var list = new JArray();
-            foreach (var pill in pills ?? new CardPill[0])
-                list.Add(new JObject { ["id"] = pill.Id, ["label"] = pill.Label });
-            return Push(new JObject
+            return AddCard(new CardSpec { Kind = kind, Question = question, Pills = new List<CardPill>(pills ?? new CardPill[0]) }, null);
+        }
+
+        /// <summary>
+        /// A one-time question from its spec, stamped with the facts it depends
+        /// on now, so it turns grey once they change.
+        /// </summary>
+        public JObject AddCard(CardSpec spec, FileFacts facts)
+        {
+            var pills = new JArray();
+            foreach (var pill in spec.Pills)
+                pills.Add(new JObject { ["id"] = pill.Id, ["label"] = pill.Label });
+            var item = new JObject
             {
                 ["role"] = "card",
-                ["kind"] = kind,
-                ["question"] = question,
-                ["pills"] = list,
-                ["state"] = "open"
-            });
+                ["kind"] = spec.Kind,
+                ["question"] = spec.Question,
+                ["pills"] = pills,
+                ["state"] = "open",
+                ["depends"] = spec.Depends ?? "none",
+                ["stamp"] = ForskCards.Stamp(spec.Depends, facts)
+            };
+            if (spec.Fields != null)
+            {
+                var fields = new JArray();
+                foreach (var field in spec.Fields)
+                {
+                    var f = new JObject { ["key"] = field.Key, ["label"] = field.Label ?? "", ["value"] = field.Value ?? "" };
+                    if (!string.IsNullOrEmpty(field.Unit)) f["unit"] = field.Unit;
+                    fields.Add(f);
+                }
+                item["fields"] = fields;
+            }
+            if (spec.Rows != null) item["rows"] = new JArray(spec.Rows);
+            if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
+            if (spec.Data != null) item["data"] = spec.Data.DeepClone();
+            return Push(item);
+        }
+
+        /// <summary>
+        /// The state moved: each open card whose selection or model is no longer
+        /// what it was turns grey and stops taking clicks. Returns how many.
+        /// </summary>
+        public int StaleCards(FileFacts facts)
+        {
+            var count = 0;
+            foreach (var item in Items)
+            {
+                if (item["role"]?.ToString() != "card" || item["state"]?.ToString() != "open") continue;
+                var depends = item["depends"]?.ToString() ?? "none";
+                if (depends == "none") continue;
+                if (item["stamp"]?.ToString() == ForskCards.Stamp(depends, facts)) continue;
+                item["state"] = "stale";
+                count++;
+            }
+            return count;
         }
 
         public JObject Find(string id)

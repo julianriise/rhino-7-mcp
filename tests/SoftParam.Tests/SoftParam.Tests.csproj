@@ -48,6 +48,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskRegistry.cs" Link="ForskRegistry.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReceipt.cs" Link="ForskReceipt.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskPrefill.cs" Link="ForskPrefill.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskCards.cs" Link="ForskCards.cs" />
   </ItemGroup>
 
   <ItemGroup>

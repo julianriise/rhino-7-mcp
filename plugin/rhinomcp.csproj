@@ -40,12 +40,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Forsk/Fonts/Geist-Regular.otf">
-      <LogicalName>RhinoMCPPlugin.Fonts.Geist-Regular.otf</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Forsk/Fonts/Geist-Medium.otf">
-      <LogicalName>RhinoMCPPlugin.Fonts.Geist-Medium.otf</LogicalName>
-    </EmbeddedResource>
     <!-- The Forsk window's page: window.js is inlined into window.html at load. -->
     <EmbeddedResource Include="Forsk/Page/window.html">
       <LogicalName>RhinoMCPPlugin.Page.window.html</LogicalName>
@@ -56,10 +50,6 @@
     <EmbeddedResource Include="EmbeddedResources/plugin-utility.ico">
       <LogicalName>rhinomcp.EmbeddedResources.plugin-utility.ico</LogicalName>
     </EmbeddedResource>
-    <!-- OFL notice ships beside the plugin. The faces themselves are embedded. -->
-    <Content Include="Forsk/Fonts/OFL.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
   <PropertyGroup>

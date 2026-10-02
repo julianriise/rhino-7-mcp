@@ -175,34 +175,44 @@
       item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
       box.appendChild(list);
     }
-    var input = null;
-    if (item.field) {
-      input = el('input');
+    var inputs = [];
+    (item.fields || []).forEach(function (field) {
+      var wrap = el('label', 'field-row');
+      if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+      var input = el('input');
       input.type = 'text';
-      input.inputMode = 'decimal';
-      input.value = item.field.value || '';
-      input.setAttribute('aria-label', item.question);
-      box.appendChild(input);
-      if (item.field.unit) box.appendChild(el('span', 'unit', item.field.unit));
+      if (field.unit === 'mm') input.inputMode = 'decimal';
+      input.value = field.value || '';
+      input.setAttribute('aria-label', field.label || item.question);
+      input.dataset.key = field.key;
+      wrap.appendChild(input);
+      if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
+      box.appendChild(wrap);
+      inputs.push(input);
+    });
+    function values() {
+      var v = {};
+      inputs.forEach(function (input) { v[input.dataset.key] = input.value; });
+      return v;
     }
     var pills = el('div', 'pills');
     (item.pills || []).forEach(function (p, index) {
       pills.appendChild(pill(p.label, index === 0, function () {
         var action = { kind: 'card', card: item.id, pill: p.id };
-        if (input) action.value = input.value;
+        if (inputs.length) action.values = values();
         sender.send(action);
       }));
     });
     box.appendChild(pills);
     if (item.note) box.appendChild(el('div', 'note', item.note));
-    if (input) {
+    inputs.forEach(function (input) {
       input.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' || e.isComposing) return;
         e.preventDefault();
-        if (item.pills && item.pills.length) sender.send({ kind: 'card', card: item.id, pill: item.pills[0].id, value: input.value });
+        if (item.pills && item.pills.length) sender.send({ kind: 'card', card: item.id, pill: item.pills[0].id, values: values() });
       });
-      setTimeout(function () { input.focus(); input.select(); }, 0);
-    }
+    });
+    if (inputs.length) setTimeout(function () { inputs[0].focus(); inputs[0].select(); }, 0);
     return box;
   }
 

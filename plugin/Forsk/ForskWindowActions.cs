@@ -71,7 +71,7 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 default:
                     if (Refuse(thread)) return;
-                    Run(thread, action, doc);
+                    Run(thread, action, facts, doc);
                     return;
             }
         }
@@ -101,7 +101,7 @@ namespace RhinoMCPPlugin.Forsk
             return null;
         }
 
-        void Run(DocThread thread, ForskAction action, RhinoDoc doc)
+        void Run(DocThread thread, ForskAction action, FileFacts facts, RhinoDoc doc)
         {
             var label = action.Label;
             switch (action.Id)
@@ -159,7 +159,7 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, action.Id, label, sink => sink.Tool("delete_opening", new JObject()));
                     return;
                 case "wall.delete":
-                    AskWallSide(thread);
+                    AskWallSide(thread, facts);
                     return;
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
@@ -182,7 +182,11 @@ namespace RhinoMCPPlugin.Forsk
                     StartBridge(thread);
                     return;
                 default:
-                    _helpOpen = true;
+                    var spec = ForskCards.For(action.Id, facts);
+                    if (spec == null) return;
+                    thread.Add("user", action.Label);
+                    thread.AddCard(spec, facts);
+                    Models.Persist(thread);
                     Render();
                     return;
             }
@@ -199,39 +203,81 @@ namespace RhinoMCPPlugin.Forsk
             if (Active()?.Close(id) == true) Render();
         }
 
-        /// <summary>A one-time card answered: the pill, and the field's value when the card has one.</summary>
-        void Answer(string cardId, string pillId, string value)
+        /// <summary>
+        /// A one-time card answered once: the pill, and its fields' values when
+        /// it has fields. A stale, answered or closed card does nothing.
+        /// </summary>
+        void Answer(string cardId, string pillId, JObject values)
         {
             var thread = Active();
             var card = thread?.Find(cardId);
             if (card == null) return;
             var kind = card["kind"]?.ToString();
-            if (kind == "scale" && pillId == "set" && ParseMm(value) == null)
+            var length = values?["length"]?.ToString();
+            if (kind == "scale" && pillId == "set" && ParseMm(length) == null && card["state"]?.ToString() == "open")
             {
                 card["note"] = ForskText.Get("line.scale.number");
                 Render();
                 return;
             }
+            if (pillId != "cancel" && pillId != "done" && Refuse(thread)) return;
             var pill = thread.Answer(cardId, pillId);
             if (pill == null)
             {
                 Render();
                 return;
             }
+            if (pill.Id == "cancel" || pill.Id == "done")
+            {
+                Models.Persist(thread);
+                Render();
+                return;
+            }
             switch (kind)
             {
                 case "scale":
-                    if (pill.Id == "set")
-                    {
-                        var mm = ParseMm(value).Value;
-                        card["answer"] = FormatMm(mm) + " mm";
-                        var args = new JObject { ["p1"] = card["data"]?["p1"], ["p2"] = card["data"]?["p2"], ["length_mm"] = mm };
-                        Job(thread, "file.scale", ForskText.Label("file.scale"), sink => sink.Tool(ForskPlanImport.ScaleTool, args), userText: FormatMm(mm) + " mm");
-                    }
+                    var mm = ParseMm(length).Value;
+                    card["answer"] = FormatMm(mm) + " mm";
+                    var scaleArgs = new JObject { ["p1"] = card["data"]?["p1"], ["p2"] = card["data"]?["p2"], ["length_mm"] = mm };
+                    Job(thread, "file.scale", ForskText.Label("file.scale"), sink => sink.Tool(ForskPlanImport.ScaleTool, scaleArgs), userText: FormatMm(mm) + " mm");
                     break;
                 case "wall.delete":
-                    if (pill.Id != "cancel")
-                        Job(thread, "wall.delete", ForskText.Label("wall.delete"), sink => sink.Tool("delete_wall", new JObject { ["side"] = pill.Id }), userText: pill.Label);
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("delete_wall", new JObject { ["side"] = pill.Id }), userText: pill.Label);
+                    break;
+                case "opening.type":
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", new JObject { ["type"] = pill.Id }), userText: pill.Label);
+                    break;
+                case "ink.set":
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);
+                    break;
+                case "meta.title":
+                    var meta = new JObject();
+                    foreach (var field in card["fields"] as JArray ?? new JArray())
+                    {
+                        var key = field["key"]?.ToString();
+                        if (string.IsNullOrEmpty(key)) continue;
+                        var typed = values?[key]?.ToString() ?? "";
+                        field["value"] = typed;
+                        meta[key] = typed.Trim();
+                    }
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta), userText: pill.Label);
+                    break;
+                case "print.one":
+                    Print(thread, pill.Label, pill.Id);
+                    break;
+                case "print.clear":
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
+                    break;
+                case "sheets.clear":
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_drawings", new JObject()), userText: pill.Label);
+                    break;
+                case "section.remove":
+                    var sectionArgs = pill.Id == "all" ? new JObject() : new JObject { ["letter"] = pill.Id };
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("section_clear", sectionArgs), userText: pill.Label);
+                    break;
+                case "pdf.page":
+                    var page = int.Parse(pill.Id, CultureInfo.InvariantCulture);
+                    ImportJob(thread, new JObject { ["pdf_path"] = card["data"]?["pdf_path"], ["page"] = page }, pill.Label);
                     break;
             }
             Models.Persist(thread);
@@ -397,7 +443,7 @@ namespace RhinoMCPPlugin.Forsk
         /// A pill's work, off the UI thread, inside one undo record named after
         /// the pill. The step line stays on screen; the longest UI stall is logged.
         /// </summary>
-        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true)
+        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true, Action after = null)
         {
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
@@ -422,7 +468,14 @@ namespace RhinoMCPPlugin.Forsk
                     sink.Line(label + " · error · " + ForskTools.Clip(e.Message));
                 }
                 var longest = stall.Stop();
-                Post(() => Finish(thread, kind, undo, serial, longest, label));
+                Post(() =>
+                {
+                    Finish(thread, kind, undo, serial, longest, label);
+                    if (after == null) return;
+                    after();
+                    Models.Persist(thread);
+                    Render();
+                });
             });
         }
 
@@ -463,27 +516,67 @@ namespace RhinoMCPPlugin.Forsk
             sink.Say(note);
         }
 
-        void Print(DocThread thread, string userText)
+        /// <summary>Print, or one sheet of it (view). The save dialog is parented to this window.</summary>
+        void Print(DocThread thread, string userText, string view = null)
         {
-            var label = ForskText.Label("file.print");
-            Job(thread, "file.print", label, sink =>
+            var label = ForskText.Label(view == null ? "file.print" : "print.one");
+            Job(thread, view == null ? "file.print" : "print.one", label, sink =>
             {
                 sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
-                var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this);
+                var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, view);
                 sink.Line(line);
             }, userText: userText);
         }
 
-        /// <summary>The import dialog, parented to this window, then plan_import or dxf_import.</summary>
+        /// <summary>
+        /// The import dialog, parented to this window. A PDF with more than one
+        /// page asks which on a card in the thread; then plan_import or dxf_import.
+        /// </summary>
         void Import(DocThread thread, ForskAction action)
         {
-            var source = ForskPlanImport.PickSource(this);
-            if (source == null) return;
-            Job(thread, action.Id, action.Label, sink =>
+            var path = ForskPlanImport.PickFile(this);
+            if (path == null) return;
+            var argument = ForskPlanFile.Argument(path);
+            if (argument == null) return;
+            if (argument == "pdf_path")
             {
-                ForskPlanImport.Chip(ImportAction.ImportPlan, source, out var line, out var note);
-                sink.Line(line);
-                sink.Say(note);
+                var pages = ForskPlanImport.PageCount(path);
+                if (pages > 1)
+                {
+                    thread.Add("user", action.Label);
+                    thread.AddCard(ForskCards.PdfPage(path, pages), null);
+                    Models.Persist(thread);
+                    Render();
+                    return;
+                }
+                ImportJob(thread, new JObject { ["pdf_path"] = path, ["page"] = 1 }, action.Label);
+                return;
+            }
+            ImportJob(thread, new JObject { [argument] = path }, action.Label);
+        }
+
+        /// <summary>
+        /// One import: a short receipt, then the review as a card under it, and
+        /// only when the review was stored on the underlay. A DXF keeps its note.
+        /// </summary>
+        void ImportJob(DocThread thread, JObject source, string userText)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            Job(thread, "file.import", ForskText.Label("file.import"), sink =>
+            {
+                if (source["dxf"] != null)
+                {
+                    var dxf = sink.Tool(ForskDxf.Tool, new JObject { ["path"] = source["dxf"] });
+                    sink.Say(ForskPlanImport.DxfNote(dxf));
+                    return;
+                }
+                sink.Tool(ForskPlanImport.ImportTool, source);
+            }, userText: userText, after: () =>
+            {
+                if (doc == null) return;
+                var facts = ReadFacts(doc);
+                var review = ForskCards.Review(facts);
+                if (review != null) thread.AddCard(review, facts);
             });
         }
 
@@ -511,11 +604,16 @@ namespace RhinoMCPPlugin.Forsk
             else
             {
                 var measured = pick["measured_mm"]?.ToObject<double>() ?? 0;
-                var card = thread.AddCard("scale", ForskText.Get("prompt.scale.length"),
-                    new CardPill("set", ForskText.Get("prompt.scale.set")),
-                    new CardPill("cancel", ForskText.Get("word.cancel")));
-                card["field"] = new JObject { ["value"] = FormatMm(measured), ["unit"] = "mm" };
-                card["data"] = new JObject { ["p1"] = pick["p1"], ["p2"] = pick["p2"] };
+                var doc = RhinoDoc.ActiveDoc;
+                thread.AddCard(new CardSpec
+                {
+                    Kind = "scale",
+                    Question = ForskText.Get("prompt.scale.length"),
+                    Fields = new List<CardField> { new CardField { Key = "length", Value = FormatMm(measured), Unit = "mm" } },
+                    Pills = { new CardPill("set", ForskText.Get("prompt.scale.set")), new CardPill("cancel", ForskText.Get("word.cancel")) },
+                    Depends = "model",
+                    Data = new JObject { ["p1"] = pick["p1"], ["p2"] = pick["p2"] }
+                }, doc == null ? null : ReadFacts(doc));
             }
             Models.Persist(thread);
             MarkDirty();
@@ -627,16 +725,25 @@ namespace RhinoMCPPlugin.Forsk
             return null;
         }
 
-        void AskWallSide(DocThread thread)
+        void AskWallSide(DocThread thread, FileFacts facts)
         {
             thread.Add("user", ForskText.Label("wall.delete"));
-            var card = thread.AddCard("wall.delete", ForskText.Get("wall.delete.ask"),
-                new CardPill("north", ForskText.Get("word.north")),
-                new CardPill("south", ForskText.Get("word.south")),
-                new CardPill("east", ForskText.Get("word.east")),
-                new CardPill("west", ForskText.Get("word.west")),
-                new CardPill("cancel", ForskText.Get("word.cancel")));
-            card["note"] = ForskText.Get("wall.delete.inner");
+            thread.AddCard(new CardSpec
+            {
+                Kind = "wall.delete",
+                Question = ForskText.Get("wall.delete.ask"),
+                Pills =
+                {
+                    new CardPill("north", ForskText.Get("word.north")),
+                    new CardPill("south", ForskText.Get("word.south")),
+                    new CardPill("east", ForskText.Get("word.east")),
+                    new CardPill("west", ForskText.Get("word.west")),
+                    new CardPill("cancel", ForskText.Get("word.cancel"))
+                },
+                Note = ForskText.Get("wall.delete.inner"),
+                Depends = "selection"
+            }, facts);
+            Models.Persist(thread);
             Render();
         }
 

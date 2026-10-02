@@ -71,6 +71,27 @@ namespace RhinoMCPPlugin.Forsk
             return argument == null ? null : new JObject { [argument] = first.FileName };
         }
 
+        /// <summary>The import's file dialog alone, parented to the window. UI thread. Null when cancelled.</summary>
+        public static string PickFile(Window parent)
+        {
+            var dialog = new Eto.Forms.OpenFileDialog { Title = "Import plan: a PDF, a scan or photo of the plan, or a DXF" };
+            dialog.Filters.Add(new FileFilter("Plan PDF, image or DXF", ForskPlanFile.Extensions));
+            return dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) == DialogResult.Ok ? dialog.FileName : null;
+        }
+
+        /// <summary>A PDF's page count. One when the extractor cannot count it: plan_import then says what went wrong.</summary>
+        public static int PageCount(string pdf)
+        {
+            try
+            {
+                return Math.Max(1, PlanPdf.Pages(pdf));
+            }
+            catch (Exception)
+            {
+                return 1;
+            }
+        }
+
         /// <summary>PickSource from a background thread.</summary>
         public static JObject PickSourceFromBackground(Window parent = null)
         {

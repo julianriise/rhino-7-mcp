@@ -51,7 +51,9 @@ public partial class RhinoMCPFunctions
                 Solid = solid,
                 Stale = obj.Attributes.GetUserString(DaylightStaleKey) == "1",
                 Review = obj.Attributes.GetUserString(ImportReviewRowsKey),
-                Stamp = generated ? EditStamp(obj) : null
+                Stamp = generated ? EditStamp(obj) : null,
+                Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,
+                Area = obj.Attributes.GetUserString("forsk:area")
             });
         }
         return rows;
@@ -64,7 +66,13 @@ public partial class RhinoMCPFunctions
         if (doc == null) return input;
         input.StoredFingerprint = doc.Strings.GetValue(LayoutMetaSection, SheetFingerprintKey);
         input.Layouts = MatchingForskPages(doc, null).Count;
-        input.Sections = ReadSectionDefs(doc).Count;
+        foreach (var def in ReadSectionDefs(doc))
+            if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);
+        foreach (var key in new[] { "project", "client", "address", "date", "scale_label" })
+        {
+            var value = doc.Strings.GetValue(LayoutMetaSection, key);
+            if (!string.IsNullOrWhiteSpace(value)) input.Meta[key] = value.Trim();
+        }
         input.Ink = ReadPrintProfile(doc).Name;
         var units = doc.ModelUnitSystem;
         input.Millimetres = units == UnitSystem.Millimeters;

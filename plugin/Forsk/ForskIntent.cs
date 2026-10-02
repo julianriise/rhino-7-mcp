@@ -398,6 +398,10 @@ namespace RhinoMCPPlugin.Forsk
         public string Review;
         /// <summary>The edit stamp of a generated object: its geometry and its forsk strings, hashed.</summary>
         public string Stamp;
+        /// <summary>A room's name (forsk:room_name, else the object's name).</summary>
+        public string Name;
+        /// <summary>A room's area, forsk:area, in mm².</summary>
+        public string Area;
     }
 
     /// <summary>

@@ -66,8 +66,10 @@ namespace RhinoMCPPlugin.Forsk
         public string StoredFingerprint;
         /// <summary>Forsk layout pages in the document.</summary>
         public int Layouts;
-        /// <summary>Sections stored with section_add.</summary>
-        public int Sections;
+        /// <summary>The letters of the sections stored with section_add.</summary>
+        public List<string> SectionLetters = new List<string>();
+        /// <summary>The title block as stored: project, client, address, date, scale_label.</summary>
+        public Dictionary<string, string> Meta = new Dictionary<string, string>();
         public string Ink = "default";
         public bool Millimetres = true;
         public bool KeyPresent;
@@ -95,8 +97,20 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> Review;
         public bool ReviewStored => Review != null;
         public int Layouts;
-        public int Sections;
+        public List<string> SectionLetters = new List<string>();
+        public int Sections => SectionLetters.Count;
+        public Dictionary<string, string> Meta = new Dictionary<string, string>();
+        /// <summary>Room names with their area, as "Stue · 24.5 m²".</summary>
+        public List<string> Rooms = new List<string>();
         public bool SheetsStale;
+        /// <summary>The selected objects' ids. A card about the selection is stale once it changes.</summary>
+        public string SelectionKey = "";
+        /// <summary>Every object's id and edit stamp. A card about the model is stale once it changes.</summary>
+        public string ModelKey = "";
+        /// <summary>The status line's Render job, when Render exists. Empty for now.</summary>
+        public string RenderJob;
+        /// <summary>The status line's v4 grade, when v4 exists. Empty for now.</summary>
+        public string Grade;
         public string Ink = "default";
         public Picked Picked;
         public int PickedCount;
@@ -125,7 +139,8 @@ namespace RhinoMCPPlugin.Forsk
             var facts = new FileFacts
             {
                 Layouts = input.Layouts,
-                Sections = input.Sections,
+                SectionLetters = new List<string>(input.SectionLetters ?? new List<string>()),
+                Meta = new Dictionary<string, string>(input.Meta ?? new Dictionary<string, string>()),
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
                 KeyPresent = input.KeyPresent,
                 ListenerUp = input.ListenerUp,
@@ -155,7 +170,11 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     facts.HasGenerated = true;
                     if (Is(row.Kind, "wall")) facts.HasWalls = true;
-                    else if (Is(row.Kind, "room")) facts.HasRooms = true;
+                    else if (Is(row.Kind, "room"))
+                    {
+                        facts.HasRooms = true;
+                        facts.Rooms.Add(RoomLine(row));
+                    }
                     else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "window")) facts.HasWindows = true;
                     else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "door")) facts.HasDoors = true;
                     else if (Is(row.Kind, "analysis"))
@@ -180,7 +199,31 @@ namespace RhinoMCPPlugin.Forsk
                 && !string.IsNullOrEmpty(input.StoredFingerprint)
                 && input.StoredFingerprint != SheetFingerprint.Of(rows);
             ReadSelection(rows, facts);
+            facts.SelectionKey = string.Join(",", rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
+            facts.ModelKey = ModelKey(rows);
             return facts;
+        }
+
+        /// <summary>"Stue · 24.5 m²", or the name alone when no area is stored.</summary>
+        static string RoomLine(ChipRow row)
+        {
+            var name = string.IsNullOrWhiteSpace(row.Name) ? "Room" : row.Name.Trim();
+            if (!double.TryParse(row.Area, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mm2) || mm2 <= 0)
+                return name;
+            return name + " · " + (mm2 / 1e6).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " m²";
+        }
+
+        /// <summary>Every row's id, layer and edit stamp, sorted and hashed: it changes when the model does.</summary>
+        static string ModelKey(IList<ChipRow> rows)
+        {
+            var parts = rows.Where(r => r != null)
+                .Select(r => (r.Id ?? "") + ":" + (r.Layer ?? "") + ":" + (r.Stamp ?? "") + ":" + (r.Visible ? "1" : "0"))
+                .OrderBy(p => p, StringComparer.Ordinal);
+            using (var sha = SHA1.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", parts)));
+                return string.Concat(hash.Select(b => b.ToString("x2")));
+            }
         }
 
         static FileKind Kind(FileFacts f, int rowCount)

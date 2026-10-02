@@ -1146,13 +1146,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var bias = intent == ForskIntent.General
                 ? "No tool bias this turn. Follow the message."
                 : "This turn is biased toward " + IntentName(intent) + ". The bias is a hint.";
-            var text = "You are answering inside the Forsk panel. " + bias + " "
+            var text = "You are answering inside the Forsk window. " + bias + " "
                 + "Every panel tool stays available. Call the tool the user asked for. "
                 + "Reply in at most two sentences: one past-tense status line, then at most three short facts. "
                 + "Do not print a Target block on success. Empty selection uses the refuse copy. "
                 + "Ambiguous selection prints one Target line and asks. "
                 + "Do not restate the user. Do not say you are happy to help. Do not teach unless they asked how or why. "
-                + "Do not narrate tools. The panel prints one dim row per tool, such as walls_from_layer · ok. "
+                + "Do not narrate tools. The window prints one receipt per tool. "
                 + "A multi-step bake is one line: Floor, walls, roof, openings, rooms baked. Say defaults once. "
                 + "Do not call capture_viewport unless the user asks to see the view.";
             if (intent == ForskIntent.Print || intent == ForskIntent.Sheets)
@@ -1164,8 +1164,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
             if (intent == ForskIntent.Build)
             {
-                text += " Rebuild, bake again, or clear and regenerate is clear_generated, then the bake order. "
-                    + "There is no Rebuild button.";
+                text += " Rebuild, bake again, or clear and regenerate is clear_generated, then the bake order.";
             }
             return text;
         }
@@ -1601,6 +1600,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         /// <summary>parent owns the save dialog, so it opens where the user is looking. Null is Rhino's main window.</summary>
         public static string Run(Action<string> progress, Window parent)
         {
+            return Run(progress, parent, null);
+        }
+
+        /// <summary>view: one sheet (plan, north, …, schedules, section_a), or null for the whole set.</summary>
+        public static string Run(Action<string> progress, Window parent, string view)
+        {
             var units = UnitsProblem();
             if (units != null)
                 return "Print PDF · error · " + units;
@@ -1612,7 +1617,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 if (!Ok(stored)) return FailLine(stored);
             }
 
-            var pack = Call("layout_pack", new JObject());
+            var pack = Call("layout_pack", view == null ? new JObject() : new JObject { ["views"] = new JArray(view) });
             if (!Ok(pack)) return FailLine(pack);
 
             Report(progress, "Layouts ready — choose where to save.");
@@ -1622,7 +1627,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
             // The layout capture runs after this returns, with Rhino focused.
             SettleAfterDialog();
-            var exported = Call("export_pdf", new JObject { ["path"] = path });
+            var exportArgs = new JObject { ["path"] = path };
+            if (view != null) exportArgs["layout"] = view;
+            var exported = Call("export_pdf", exportArgs);
             if (!Ok(exported)) return FailLine(exported);
 
             var result = exported["result"] as JObject;

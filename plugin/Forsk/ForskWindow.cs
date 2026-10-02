@@ -93,8 +93,8 @@ namespace RhinoMCPPlugin.Forsk
                 Log("closed");
             };
             Log("open · channel " + _channel.Origin + " · window "
-                + (ForskField.PinAqua(ControlObject) ? "pinned to Aqua" : "appearance not pinned"));
-            ForskField.PinAqua(_web.ControlObject);
+                + (ForskAqua.Pin(ControlObject) ? "pinned to Aqua" : "appearance not pinned"));
+            ForskAqua.Pin(_web.ControlObject);
             Poll(force: true);
             LoadPage();
         }
@@ -141,7 +141,7 @@ namespace RhinoMCPPlugin.Forsk
                         Render();
                         return;
                     case "card":
-                        Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["value"]?.ToString());
+                        Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["values"] as JObject);
                         return;
                     case "card.close":
                         CloseCard(message["card"]?.ToString());
@@ -186,6 +186,9 @@ namespace RhinoMCPPlugin.Forsk
                 _facts = ReadFacts(doc);
                 _factsDoc = doc.RuntimeSerialNumber;
                 _dirty = false;
+                // An unanswered card turns grey once what it asked about has changed.
+                var stale = Active()?.StaleCards(_facts) ?? 0;
+                if (stale > 0) Log("cards: " + stale + " went stale");
             }
             return _facts;
         }

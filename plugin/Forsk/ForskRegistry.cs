@@ -319,6 +319,9 @@ namespace RhinoMCPPlugin.Forsk
             if (!f.ListenerUp) parts.Add(ForskText.Get("status.bridge"));
             if (!string.Equals(f.Ink, "default", StringComparison.OrdinalIgnoreCase))
                 parts.Add(ForskText.Format("status.ink", "ink", f.Ink));
+            // Hooks for later jobs: a Render job and the v4 grade. Both are empty until those exist.
+            if (!string.IsNullOrWhiteSpace(f.RenderJob)) parts.Add(f.RenderJob);
+            if (!string.IsNullOrWhiteSpace(f.Grade)) parts.Add(f.Grade);
             return string.Join(" · ", parts);
         }
     }

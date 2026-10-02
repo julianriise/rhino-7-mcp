@@ -31,7 +31,7 @@ static class Row
         new ChipRow { Id = Id(), Generated = true, Kind = "opening_marker", OpeningKind = "window", Layer = "A-OPEN", Visible = false, Selected = selected, Stamp = "V01" };
 
     public static ChipRow Room(bool selected = false, string name = "Stue") =>
-        new ChipRow { Id = Id(), Generated = true, Kind = "room", Layer = "A-ROOM", Visible = true, Selected = selected, Curve = true, Closed = true, Stamp = name };
+        new ChipRow { Id = Id(), Generated = true, Kind = "room", Layer = "A-ROOM", Visible = true, Selected = selected, Curve = true, Closed = true, Stamp = name, Name = name };
 
     public static ChipRow Map(bool visible = true, bool stale = false) =>
         new ChipRow { Id = Id(), Generated = true, Kind = "analysis", Layer = "A-ANALYSE", Visible = visible, Stale = stale };
@@ -106,7 +106,7 @@ static class Docs
         ("map hidden", () => Of(House().Append(Row.Map(visible: false)).ToArray())),
         ("map stale", () => Of(House().Append(Row.Map(visible: false, stale: true)).ToArray())),
         ("printed, then edited", () => Of(House()).With(d => { d.Layouts = 6; d.StoredFingerprint = "an older model"; })),
-        ("sheet cache, sections", () => Of(House().Append(Row.Drawing("S-PLAN")).ToArray()).With(d => d.Sections = 2)),
+        ("sheet cache, sections", () => Of(House().Append(Row.Drawing("S-PLAN")).ToArray()).With(d => d.SectionLetters = new List<string> { "A", "B" })),
         ("bridge down, grey ink", () => Of(House()).With(d => { d.ListenerUp = false; d.Ink = "grey"; })),
         ("forsk undo newest", () => Of(House()).With(d => d.UndoNewest = true)),
         ("inches", () => Of(Row.PlanCurve("wall")).With(d => d.Millimetres = false)),

@@ -1,38 +1,26 @@
 using System;
 using Rhino;
 using Rhino.Commands;
-using Rhino.UI;
 using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Commands
 {
+    /// <summary>Opens the Forsk window, or brings it forward with the caret in the composer.</summary>
     public class ForskCommand : Command
     {
         public override string EnglishName => "Forsk";
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            Panels.OpenPanel(typeof(ForskPanel));
-            ForskPanel.FocusAfterCommand(doc);
+            ForskWindow.Open(doc);
             return Result.Success;
         }
     }
 
+    /// <summary>The same window under its older name.</summary>
     public class ForskChatCommand : Command
     {
         public override string EnglishName => "ForskChat";
-
-        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
-        {
-            Panels.OpenPanel(typeof(ForskPanel));
-            ForskPanel.FocusAfterCommand(doc);
-            return Result.Success;
-        }
-    }
-
-    public class ForskWebCommand : Command
-    {
-        public override string EnglishName => "ForskWeb";
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
