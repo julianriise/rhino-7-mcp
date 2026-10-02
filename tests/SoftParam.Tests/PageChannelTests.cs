@@ -143,6 +143,58 @@ public class PageChannelTests
         Assert.StartsWith("http://127.0.0.1:", channel.Origin);
         Assert.Matches("^[0-9a-f]{32}$", channel.Token);
     }
+
+    /// <summary>
+    /// The live window's port was gone a minute after open, and curl got nothing.
+    /// Start roots the accept thread and the socket; a collection after Start
+    /// returns must still answer.
+    /// </summary>
+    [Fact]
+    public async Task TheListenerAnswersAfterStartReturnsAndACollection()
+    {
+        using var channel = new PageChannel(_ => { });
+        channel.Start();
+        var origin = channel.Origin;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var answer = await Http.GetAsync(origin);
+        Assert.Equal(HttpStatusCode.NotFound, answer.StatusCode);
+        Assert.Equal(origin, channel.Origin);
+    }
+
+    /// <summary>
+    /// Replacing the word FORSK_TOKEN rewrote window.FORSK_TOKEN, so the page
+    /// posted with no token. The channel answered 403 and the window never
+    /// logged ready or send. The composed page keeps the property name, carries
+    /// this channel's origin, and that post is accepted.
+    /// </summary>
+    [Fact]
+    public async Task ThePagePostsToTheBoundOriginWithItsToken()
+    {
+        var calls = new List<JObject>();
+        using var channel = new PageChannel(m => calls.Add(m));
+        channel.Start();
+        var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.html"));
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        var page = PageChannel.ComposePage(html, script, channel.Token, channel.Origin);
+        channel.Page = page;
+
+        var served = await Http.GetStringAsync(channel.Origin);
+
+        Assert.Contains("window.FORSK_TOKEN = \"" + channel.Token + "\"", served);
+        Assert.Contains("window.FORSK_ORIGIN = \"" + channel.Origin + "\"", served);
+        Assert.Contains("makeSender(root.FORSK_TOKEN", served);
+        Assert.Contains("root.FORSK_ORIGIN + 'action'", served);
+        Assert.DoesNotContain("fetch('action'", served);
+        Assert.DoesNotContain("%%FORSK_", served);
+
+        var answer = await Post(channel, new JObject { ["seq"] = 1, ["t"] = channel.Token, ["kind"] = "ready" });
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.Equal("ready", calls[0]["kind"]!.ToString());
+    }
 }
 
 /// <summary>

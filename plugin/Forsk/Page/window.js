@@ -361,7 +361,8 @@
 
   function boot() {
     sender = Forsk.makeSender(root.FORSK_TOKEN, function (body) {
-      return root.fetch('action', { method: 'POST', body: body }).then(function (r) { return r.status; });
+      // Absolute: loadHTMLString does not make the document's URL the base URL, so a relative "action" never hits the channel.
+      return root.fetch(root.FORSK_ORIGIN + 'action', { method: 'POST', body: body }).then(function (r) { return r.status; });
     });
     var q = document.getElementById('q');
     function send(action) {

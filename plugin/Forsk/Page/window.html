@@ -103,16 +103,18 @@ nav.bar { padding: 8px 12px 0; border-top: 1px solid var(--line); }
 .sheet .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 .dock { position: relative; }
 select.role-pick {
-  flex: none; -webkit-appearance: none; appearance: none; align-self: center;
-  font: 12px/1 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted);
-  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; margin: 0; cursor: pointer;
+  flex: none; align-self: center; -webkit-appearance: none; appearance: none;
+  height: 28px; box-sizing: border-box;
+  font: 12px/26px -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted);
+  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; margin: 0; cursor: pointer;
 }
+select.role-pick:empty { display: none; }
 select.role-pick.set { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
 select.role-pick:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
 .marked > .role { display: block; color: var(--muted); font-size: 11px; margin: 0 0 2px 12px; }
 .add {
-  flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--muted);
-  font: 400 20px/28px -apple-system, sans-serif; cursor: pointer; padding: 0; margin-left: -8px;
+  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--muted);
+  font: 400 22px/32px -apple-system, sans-serif; cursor: pointer; padding: 0; margin: 0;
 }
 .step::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
@@ -123,20 +125,20 @@ select.role-pick:focus-visible { outline: 2px solid var(--muted); outline-offset
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 form.composer { margin: 0; padding: 8px 12px 12px; }
 .field {
-  display: flex; align-items: flex-end; gap: 8px;
-  background: var(--field); border: 1px solid var(--line); border-radius: 20px;
-  padding: 6px 6px 6px 14px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--field); border: 1px solid var(--line); border-radius: 22px;
+  padding: 4px; min-height: 40px;
 }
 textarea {
-  flex: 1; min-width: 0; border: 0; outline: none; resize: none; background: transparent;
-  font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); caret-color: var(--ink);
-  padding: 5px 0; max-height: calc(1.4em * 5 + 10px); overflow-y: auto;
+  flex: 1; align-self: center; min-width: 0; height: 32px; border: 0; outline: none; resize: none; background: transparent;
+  font: inherit; font-size: 14px; line-height: 32px; color: var(--ink); caret-color: var(--ink);
+  padding: 0; margin: 0; max-height: calc(32px * 5); overflow-y: auto;
   -webkit-user-select: text; user-select: text;
 }
 textarea::placeholder { color: var(--faint); }
 .send {
-  flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%;
-  background: var(--ink); color: #FFFFFF; font: 600 15px/28px -apple-system, sans-serif; cursor: pointer; padding: 0;
+  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%;
+  background: var(--ink); color: #FFFFFF; font: 600 16px/32px -apple-system, sans-serif; cursor: pointer; padding: 0; margin: 0;
 }
 .send:disabled { background: var(--line); color: var(--faint); cursor: default; }
 @media (prefers-reduced-motion: reduce) {
@@ -166,7 +168,8 @@ textarea::placeholder { color: var(--faint); }
   </form>
 </div>
 <script>
-window.FORSK_TOKEN = "FORSK_TOKEN";
+window.FORSK_TOKEN = "%%FORSK_TOKEN%%";
+window.FORSK_ORIGIN = "%%FORSK_ORIGIN%%";
 </script>
 <script>
 FORSK_SCRIPT

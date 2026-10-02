@@ -62,6 +62,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             _open.Place();
             _open.Show();
+            Log("shown · " + _open.NativeClass());
             _open.BringToFront();
             _open.FocusComposer();
         }
@@ -76,7 +77,9 @@ namespace RhinoMCPPlugin.Forsk
             _web = new WebView();
             Content = _web;
             _channel = new PageChannel(message => Application.Instance.AsyncInvoke(() => OnAction(message)));
+            _channel.Note = Log;
             _channel.Start();
+            _web.DocumentLoaded += (s, e) => Log("page document loaded · " + (_web.Url == null ? "no url" : _web.Url.ToString()));
             _boundsTimer = new UITimer { Interval = 0.5 };
             _boundsTimer.Elapsed += (s, e) =>
             {
@@ -103,13 +106,16 @@ namespace RhinoMCPPlugin.Forsk
         {
             _ready = false;
             _channel.Reset();
+            var html = ForskPage.Html(_channel.Token, _channel.Origin);
+            _channel.Page = html;
             try
             {
-                _web.LoadHtml(ForskPage.Html(_channel.Token), new Uri(_channel.Origin));
+                _web.LoadHtml(html, new Uri(_channel.Origin));
+                Log("page load · " + _channel.Origin);
             }
             catch (Exception e)
             {
-                Log("load " + e.Message);
+                Log("load " + e.GetType().Name + ": " + e.Message);
             }
         }
 
@@ -128,6 +134,7 @@ namespace RhinoMCPPlugin.Forsk
                         if (HasFocus) FocusComposer();
                         return;
                     case "send":
+                        Log("send received");
                         Send(message["text"]?.ToString());
                         return;
                     case "action":
@@ -206,6 +213,8 @@ namespace RhinoMCPPlugin.Forsk
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
                 model = WindowView.Build(thread, Facts(doc), ForskTarget.Read(), _helpOpen);
+            var count = model["thread"] is JArray items ? items.Count : 0;
+            Log("render · " + count + " items");
             Script("Forsk.render", model);
             if (thread != null) thread.Prefill = null;
         }
@@ -516,11 +525,11 @@ namespace RhinoMCPPlugin.Forsk
         static string _html;
         static string _script;
 
-        public static string Html(string token)
+        public static string Html(string token, string origin)
         {
             if (_html == null) _html = Resource("window.html");
             if (_script == null) _script = Resource("window.js");
-            return _html.Replace("FORSK_TOKEN", token).Replace("FORSK_SCRIPT", _script);
+            return PageChannel.ComposePage(_html, _script, token, origin);
         }
 
         /// <summary>A call into the page. Non-ASCII is escaped, so æ ø å and line separators reach the page intact.</summary>
