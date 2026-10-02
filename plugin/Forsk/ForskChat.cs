@@ -544,7 +544,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             ForskSpeech.Use(userText);
             try
             {
-                RunTurnBody(userText, target, history, show, hooks);
+                RunTurnBody(userText, picked, history, show, hooks);
             }
             finally
             {
@@ -552,7 +552,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
         }
 
-        static void RunTurnBody(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks)
+        static void RunTurnBody(string userText, Picked picked, List<JObject> history, Action<string, string> show, TurnHooks hooks)
         {
             history.Add(new JObject { ["role"] = "user", ["content"] = userText });
             var intent = ForskIntentRouter.Classify(userText, picked);
