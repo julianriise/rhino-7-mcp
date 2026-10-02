@@ -49,6 +49,21 @@ public class OpeningBlockSourceTests
         Assert.Contains("HideOpeningMarker", openings, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AFrameResolvesToItsMarkerWithFindId()
+    {
+        // Objects.Find misses a marker on hidden A-OPEN, so a selected frame
+        // came back as itself and move said "Not an opening marker."
+        var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
+        var start = blocks.IndexOf("RhinoObject ResolveOpeningHandle", StringComparison.Ordinal);
+        var end = blocks.IndexOf("int OpeningBlockDefIndex", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "resolve method is present");
+        var body = blocks.Substring(start, end - start);
+        Assert.Contains("OpeningResolve.MarkerOf", body, StringComparison.Ordinal);
+        Assert.Contains("Objects.FindId", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Objects.Find(", body, StringComparison.Ordinal);
+    }
+
     static string FunctionsDir()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)

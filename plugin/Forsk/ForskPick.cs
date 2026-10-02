@@ -40,13 +40,57 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The selected rows as things: a plate or a block whose marker is also picked is that marker.</summary>
+        /// <summary>
+        /// The selected rows as things. A plate whose marker is also picked is
+        /// that room. A frame, leaf, glass, block, or group is its opening marker.
+        /// </summary>
         public static List<ChipRow> Things(IEnumerable<ChipRow> rows)
         {
-            var picked = (rows ?? Enumerable.Empty<ChipRow>()).Where(r => r != null && r.Selected).ToList();
-            var ids = new HashSet<string>(picked.Select(r => r.Id ?? ""), StringComparer.Ordinal);
-            return picked.Where(r => string.IsNullOrEmpty(r.Marker) || !ids.Contains(r.Marker)).ToList();
+            var all = (rows ?? Enumerable.Empty<ChipRow>()).Where(r => r != null).ToList();
+            var picked = all.Where(r => r.Selected).ToList();
+            var parts = all.ConvertAll(ToPart);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var things = new List<ChipRow>();
+            foreach (var row in picked)
+            {
+                if (IsPlate(row) && PickedId(picked, row.Marker)) continue;
+                var markerId = OpeningResolve.MarkerOf(parts, ToPart(row));
+                if (string.IsNullOrEmpty(markerId) && !string.IsNullOrEmpty(row.Marker) && PickedId(picked, row.Marker))
+                    continue;
+                var key = string.IsNullOrEmpty(markerId) ? "id:" + (row.Id ?? "") : "opening:" + markerId;
+                if (!seen.Add(key)) continue;
+                if (!string.IsNullOrEmpty(markerId))
+                {
+                    var marker = all.Find(r => SameId(r.Id, markerId));
+                    if (marker != null)
+                    {
+                        things.Add(marker.Selected ? marker : marker.SelectedCopy());
+                        continue;
+                    }
+                }
+                things.Add(row);
+            }
+            return things;
         }
+
+        static OpeningResolve.Part ToPart(ChipRow row) => new OpeningResolve.Part
+        {
+            Id = row.Id,
+            Kind = row.Kind,
+            Member = row.Part,
+            Marker = row.Marker,
+            ForskId = row.ForskId,
+            Group = row.Group
+        };
+
+        static bool IsPlate(ChipRow row) =>
+            string.Equals(row?.Kind, "room_plate", StringComparison.OrdinalIgnoreCase);
+
+        static bool PickedId(List<ChipRow> picked, string id) =>
+            !string.IsNullOrEmpty(id) && picked.Exists(r => SameId(r.Id, id));
+
+        static bool SameId(string a, string b) =>
+            !string.IsNullOrEmpty(a) && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// The one picked wall that is a single run, or null: a whole record

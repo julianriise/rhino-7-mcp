@@ -425,6 +425,18 @@ namespace RhinoMCPPlugin.Forsk
         public string RunName;
         /// <summary>The way that run moves first: its compass side, else north for an east–west run and east for a north–south one.</summary>
         public string RunToward;
+        /// <summary>forsk:part on an opening: frame, leaf, glass, sash, sill, threshold, track.</summary>
+        public string Part;
+        /// <summary>Rhino group indexes, sorted and comma-separated. Empty when the object is in none.</summary>
+        public string Group;
+
+        /// <summary>This row as a selected thing. The source row's Selected flag stays as read.</summary>
+        public ChipRow SelectedCopy()
+        {
+            var copy = (ChipRow)MemberwiseClone();
+            copy.Selected = true;
+            return copy;
+        }
     }
 
     /// <summary>

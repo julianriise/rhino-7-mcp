@@ -611,7 +611,7 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException(
                     expectMarker ? "Opening marker not found." : "Opening host wall is missing.");
             }
-            var found = doc.Objects.Find(guid);
+            var found = expectMarker ? doc.Objects.FindId(guid) : doc.Objects.Find(guid);
             if (found == null)
             {
                 throw new InvalidOperationException(
@@ -628,13 +628,15 @@ public partial class RhinoMCPFunctions
                     ? "Click one opening marker or frame, then say it again."
                     : "Click one wall, then say it again.");
         }
-        if (selected.Count != 1)
+        if (expectMarker)
         {
-            throw new InvalidOperationException(
-                expectMarker
-                    ? "Select exactly one opening marker or frame."
-                    : "Select exactly one wall.");
+            var markers = MarkersOfSelection(doc, selected);
+            if (markers.Count == 1) return markers[0];
+            if (markers.Count == 0 && selected.Count == 1) return selected[0];
+            throw new InvalidOperationException("Select exactly one opening marker or frame.");
         }
+        if (selected.Count != 1)
+            throw new InvalidOperationException("Select exactly one wall.");
         return selected[0];
     }
 
@@ -644,20 +646,16 @@ public partial class RhinoMCPFunctions
         if (!string.IsNullOrWhiteSpace(idToken))
             return new List<RhinoObject> { ResolveFacadeTarget(parameters, "id", expectMarker: true) };
 
-        var selected = ListSelected(RhinoDoc.ActiveDoc);
+        var doc = RhinoDoc.ActiveDoc;
+        var selected = ListSelected(doc);
         if (selected.Count == 0)
             throw new InvalidOperationException(
                 "Click one opening marker or frame, then say it again.");
 
-        var openings = new List<RhinoObject>();
-        foreach (var obj in selected)
-        {
-            var handle = ResolveOpeningHandle(obj);
-            if (!string.Equals(GetForskKind(handle), "opening_marker", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Not an opening marker.");
-            openings.Add(obj);
-        }
-        return openings;
+        var markers = MarkersOfSelection(doc, selected);
+        if (markers.Count == 0)
+            throw new InvalidOperationException("Not an opening marker.");
+        return markers;
     }
 
     private static OpeningSpec ParseOpeningSpec(JObject parameters)

@@ -8,6 +8,7 @@ using Rhino.DocObjects;
 using Rhino.Geometry;
 using Rhino.Geometry.Intersect;
 using Rhino.Render;
+using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -261,15 +262,91 @@ public partial class RhinoMCPFunctions
     private static RhinoObject ResolveOpeningHandle(RhinoObject obj)
     {
         if (obj == null) return null;
-        if (string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
+        var doc = obj.Document ?? RhinoDoc.ActiveDoc;
+        var id = OpeningResolve.MarkerOf(OpeningParts(doc, obj), ToOpeningPart(obj));
+        if (string.IsNullOrEmpty(id) || !Guid.TryParse(id, out var guid) || guid == obj.Id)
             return obj;
-        if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
-            return obj;
-        var raw = obj.Attributes?.GetUserString("forsk:marker_id");
-        if (string.IsNullOrWhiteSpace(raw) || !Guid.TryParse(raw, out var markerId))
-            return obj;
-        var marker = RhinoDoc.ActiveDoc?.Objects.Find(markerId);
+        // Find skips an object whose layer is off. Markers live on A-OPEN.
+        var marker = doc?.Objects.FindId(guid);
         return marker ?? obj;
+    }
+
+    /// <summary>Markers for this selection, one per opening. Does not call ResolveOpeningHandle.</summary>
+    private static List<RhinoObject> MarkersOfSelection(RhinoDoc doc, IList<RhinoObject> selected)
+    {
+        var markers = new List<RhinoObject>();
+        if (doc == null || selected == null || selected.Count == 0) return markers;
+        var picked = new List<OpeningResolve.Part>();
+        foreach (var obj in selected)
+            if (obj != null) picked.Add(ToOpeningPart(obj));
+        foreach (var id in OpeningResolve.Selected(OpeningParts(doc, null), picked))
+        {
+            if (!Guid.TryParse(id, out var guid)) continue;
+            var marker = doc.Objects.FindId(guid);
+            if (marker != null) markers.Add(marker);
+        }
+        return markers;
+    }
+
+    private static List<OpeningResolve.Part> OpeningParts(RhinoDoc doc, RhinoObject extra)
+    {
+        var parts = new List<OpeningResolve.Part>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (doc != null)
+        {
+            foreach (var obj in EnumerateDocObjects(doc))
+            {
+                var part = ToOpeningPart(obj);
+                if (part == null || string.IsNullOrEmpty(part.Id) || !seen.Add(part.Id)) continue;
+                parts.Add(part);
+            }
+        }
+        var extraPart = ToOpeningPart(extra);
+        if (extraPart != null && !string.IsNullOrEmpty(extraPart.Id) && seen.Add(extraPart.Id))
+            parts.Add(extraPart);
+        return parts;
+    }
+
+    private static OpeningResolve.Part ToOpeningPart(RhinoObject obj)
+    {
+        if (obj == null) return null;
+        var part = new OpeningResolve.Part
+        {
+            Id = obj.Id.ToString(),
+            Kind = GetForskKind(obj),
+            Member = obj.Attributes?.GetUserString("forsk:part"),
+            Marker = obj.Attributes?.GetUserString("forsk:marker_id")
+                ?? obj.Attributes?.GetUserString("forsk:marker"),
+            ForskId = obj.Attributes?.GetUserString("forsk:id"),
+            Group = GroupKey(obj)
+        };
+        FillMarkerFromDefinition(obj, part);
+        return part;
+    }
+
+    /// <summary>
+    /// A block instance can carry no user strings of its own. The definition
+    /// members still have forsk:marker_id.
+    /// </summary>
+    private static void FillMarkerFromDefinition(RhinoObject obj, OpeningResolve.Part part)
+    {
+        if (part == null || !string.IsNullOrEmpty(part.Marker)) return;
+        var inst = obj as InstanceObject;
+        if (inst?.InstanceDefinition == null) return;
+        RhinoObject[] members;
+        try { members = inst.InstanceDefinition.GetObjects(); }
+        catch (Exception) { return; }
+        if (members == null) return;
+        foreach (var member in members)
+        {
+            var marker = member?.Attributes?.GetUserString("forsk:marker_id");
+            if (string.IsNullOrWhiteSpace(marker)) continue;
+            part.Marker = marker;
+            if (string.IsNullOrEmpty(part.Kind)) part.Kind = "opening";
+            if (string.IsNullOrEmpty(part.Member))
+                part.Member = member.Attributes.GetUserString("forsk:part");
+            break;
+        }
     }
 
     private static int OpeningBlockDefIndex(RhinoObject obj)

@@ -66,7 +66,9 @@ public partial class RhinoMCPFunctions
                 Mark = obj.Attributes.GetUserString(Schedules.MarkKey),
                 Width = obj.Attributes.GetUserString("forsk:width"),
                 Sill = obj.Attributes.GetUserString("forsk:sill"),
-                Head = obj.Attributes.GetUserString("forsk:head")
+                Head = obj.Attributes.GetUserString("forsk:head"),
+                Part = obj.Attributes.GetUserString("forsk:part"),
+                Group = GroupKey(obj)
             };
             rows.Add(row);
             if (wallRings != null && !row.Existing) walls.Add((row, wallRings));
@@ -80,6 +82,18 @@ public partial class RhinoMCPFunctions
         }
         NameSelectedRuns(walls, Math.Max(doc.ModelAbsoluteTolerance, 1.0));
         return rows;
+    }
+
+    /// <summary>Sorted Rhino group indexes, comma-separated. Null when the object is in none.</summary>
+    private static string GroupKey(RhinoObject obj)
+    {
+        var groups = obj?.GetGroupList();
+        if (groups == null || groups.Length == 0) return null;
+        Array.Sort(groups);
+        var text = new string[groups.Length];
+        for (var i = 0; i < groups.Length; i++)
+            text[i] = groups[i].ToString();
+        return string.Join(",", text);
     }
 
     /// <summary>
