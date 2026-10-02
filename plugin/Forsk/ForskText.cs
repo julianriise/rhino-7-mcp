@@ -206,11 +206,9 @@ namespace RhinoMCPPlugin.Forsk
             ["support.saved"] = "Saved. Julian will see it.",
             ["support.type"] = "Type",
             ["support.bug"] = "Bug",
-            ["support.feature"] = "Feature",
-            ["support.happened"] = "What happened",
-            ["support.expected"] = "Expected",
-            ["support.steps"] = "Steps",
-            ["support.file"] = "File",
+            ["support.question"] = "Question",
+            ["support.feature"] = "Feature request",
+            ["support.description"] = "Description",
             ["support.attach"] = "Attach debug report",
 
             // The bar.

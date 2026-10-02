@@ -351,18 +351,35 @@ public static class DxfText
     }
 
     // What Rhino leaves of \U+XXXX: the four hex digits of a letter, right
-    // next to a letter (B00F8ttekott).
-    static readonly Regex Remnant = new Regex(@"(?<=\p{L})0[0-9A-F]{3}|0[0-9A-F]{3}(?=\p{L})");
+    // next to a letter (B00F8ttekott). A still-written \U+XXXX is DecodeText's.
+    static readonly Regex Remnant = new Regex(@"(?<!U\+)(?:(?<=\p{L})0[0-9A-F]{3}|0[0-9A-F]{3}(?=\p{L}))");
 
     /// <summary>
     /// True when a text looks like Rhino's import mangled a \U+XXXX escape in
-    /// it. Only reported, never decoded: the original is not in the model.
+    /// it: the four hex digits of a letter left beside a letter.
     /// </summary>
     public static bool LooksMangled(string text)
     {
         foreach (Match m in Remnant.Matches(text ?? ""))
-            if (char.IsLetter((char)int.Parse(m.Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture)))
-                return true;
+            if (LetterRemnant(m.Value)) return true;
         return false;
+    }
+
+    /// <summary>
+    /// Put the letter back. Rhino's import reads \U+00F8 as RTF and leaves
+    /// B00F8ttekott. A remnant that is not a letter stays as written.
+    /// </summary>
+    public static string RepairRemnant(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text ?? "";
+        return Remnant.Replace(text, m => LetterRemnant(m.Value)
+            ? ((char)int.Parse(m.Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture)).ToString()
+            : m.Value);
+    }
+
+    static bool LetterRemnant(string hex)
+    {
+        var code = int.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return code >= 0 && code <= 0xFFFF && char.IsLetter((char)code);
     }
 }

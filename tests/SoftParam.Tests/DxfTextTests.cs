@@ -141,4 +141,16 @@ public class DxfTextTests
     {
         Assert.Equal(expected, DxfText.LooksMangled(text));
     }
+
+    [Theory]
+    [InlineData("B00F8ttekott", "Bøttekott")]
+    [InlineData("M00F8terom", "Møterom")]
+    [InlineData("Bøttekott", "Bøttekott")]
+    [InlineData("Rom 0101", "Rom 0101")]
+    [InlineData("Kontor", "Kontor")]
+    [InlineData(@"B\U+00F8ttekott", @"B\U+00F8ttekott")]
+    public void RepairRemnant_PutsTheLetterBack(string text, string expected)
+    {
+        Assert.Equal(expected, DxfText.RepairRemnant(text));
+    }
 }

@@ -16,6 +16,10 @@ namespace RhinoMCPPlugin.Forsk
         public string Unit;
         /// <summary>A checkbox. Value "1" is ticked. The page posts "1" or "0".</summary>
         public bool Check;
+        /// <summary>A dropdown. The page posts the chosen text.</summary>
+        public List<string> Options;
+        /// <summary>A multi-line field.</summary>
+        public bool Long;
     }
 
     /// <summary>

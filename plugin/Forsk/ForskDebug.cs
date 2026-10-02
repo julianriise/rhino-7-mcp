@@ -113,7 +113,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>"Kitchen · 24.5 m² · closed". Area is mm² as stored. No area leaves the name and the closed flag.</summary>
         public static string RoomLine(string name, string areaMm2, bool closed)
         {
-            var who = string.IsNullOrWhiteSpace(name) ? "Room" : name.Trim();
+            var who = string.IsNullOrWhiteSpace(name) ? "Room" : DxfText.RepairRemnant(name).Trim();
             var state = closed ? "closed" : "open";
             if (!double.TryParse(areaMm2, NumberStyles.Float, CultureInfo.InvariantCulture, out var mm2) || mm2 <= 0)
                 return who + " · " + state;
@@ -265,7 +265,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 text.Append("daylight:\n");
                 foreach (var room in snap.Rooms)
-                    text.Append(Blank(room?.Name, "Room")).Append(": ").Append(room?.Cells ?? 0).Append(" cells\n");
+                    text.Append(Blank(DxfText.RepairRemnant(room?.Name), "Room")).Append(": ").Append(room?.Cells ?? 0).Append(" cells\n");
                 if (snap.UnassignedCells > 0)
                     text.Append("unassigned: ").Append(snap.UnassignedCells).Append(" cells");
             }

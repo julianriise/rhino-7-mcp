@@ -61,6 +61,7 @@ public partial class RhinoMCPFunctions
             {
                 var name = obj.Attributes.GetUserString("forsk:room_name");
                 if (string.IsNullOrWhiteSpace(name)) name = obj.Name;
+                name = DxfText.RepairRemnant(name);
                 var closed = obj.Geometry is Curve curve ? curve.IsClosed : obj.Geometry is Brep brep && brep.IsSolid;
                 snap.Rooms.Add(new DebugRoom
                 {

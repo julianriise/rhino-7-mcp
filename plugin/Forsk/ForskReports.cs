@@ -86,65 +86,50 @@ namespace RhinoMCPPlugin.Forsk
             return role == ForskRole.Support;
         }
 
-        /// <summary>What the turn read, after the user's line: assistant text and receipts.</summary>
-        public static string Findings(IList<JObject> items)
-        {
-            if (items == null || items.Count == 0) return "";
-            var start = 0;
-            for (var i = items.Count - 1; i >= 0; i--)
-            {
-                if (items[i]?["role"]?.ToString() == "user")
-                {
-                    start = i + 1;
-                    break;
-                }
-            }
-            var parts = new List<string>();
-            for (var i = start; i < items.Count; i++)
-            {
-                var role = items[i]?["role"]?.ToString();
-                if (role != "assistant" && role != "receipt") continue;
-                var line = (items[i]["text"]?.ToString() ?? "").Trim();
-                if (line.Length > 0) parts.Add(line);
-            }
-            return string.Join("\n", parts);
-        }
-
-        /// <summary>The editable report. Null for a question or any other sentence. Findings prefill a bug's happened, or a feature's expected.</summary>
-        public static CardSpec Card(string text, string file, string findings = null)
+        /// <summary>
+        /// The editable report. Null for a question or any other sentence.
+        /// The file name is not a field: the save adds it. The description is
+        /// the user's own sentence, or empty. Receipts are not copied in.
+        /// </summary>
+        public static CardSpec Card(string text, string file)
         {
             var kind = Of(text);
             if (kind == ReportKind.None) return null;
-            var bug = kind == ReportKind.Bug;
-            var body = WithFindings((text ?? "").Trim(), findings);
+            var said = (text ?? "").Trim();
             return new CardSpec
             {
                 Kind = "support.report",
                 Question = ForskText.Get("support.ask"),
                 Fields = new List<CardField>
                 {
-                    new CardField { Key = "type", Label = ForskText.Get("support.type"), Value = ForskText.Get(bug ? "support.bug" : "support.feature") },
-                    new CardField { Key = "happened", Label = ForskText.Get("support.happened"), Value = bug ? body : "" },
-                    new CardField { Key = "expected", Label = ForskText.Get("support.expected"), Value = bug ? "" : body },
-                    new CardField { Key = "steps", Label = ForskText.Get("support.steps"), Value = "" },
-                    new CardField { Key = "file", Label = ForskText.Get("support.file"), Value = file ?? "" },
+                    new CardField
+                    {
+                        Key = "type",
+                        Label = ForskText.Get("support.type"),
+                        Value = ForskText.Get(kind == ReportKind.Bug ? "support.bug" : "support.feature"),
+                        Options = new List<string>
+                        {
+                            ForskText.Get("support.bug"),
+                            ForskText.Get("support.question"),
+                            ForskText.Get("support.feature")
+                        }
+                    },
+                    new CardField
+                    {
+                        Key = "description",
+                        Label = ForskText.Get("support.description"),
+                        Value = said,
+                        Long = true
+                    },
                     new CardField { Key = "attach", Label = ForskText.Get("support.attach"), Value = "1", Check = true }
                 },
+                Data = new JObject { ["file"] = file ?? "" },
                 Pills =
                 {
                     new CardPill("send", ForskText.Get("support.send")),
                     new CardPill("cancel", ForskText.Get("word.cancel"))
                 }
             };
-        }
-
-        /// <summary>The sentence, then a blank line, then what was found. Findings that already include the sentence stand alone.</summary>
-        static string WithFindings(string said, string findings)
-        {
-            findings = (findings ?? "").Trim();
-            if (findings.Length == 0) return said;
-            if (said.Length == 0 || findings.IndexOf(said, StringComparison.Ordinal) >= 0) return findings;
-            return said + "\n\n" + findings;
         }
 
         /// <summary>The checkbox defaults to ticked. "0" and "false" leave the debug report off.</summary>
@@ -154,21 +139,45 @@ namespace RhinoMCPPlugin.Forsk
             return value != "0" && !value.Equals("false", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>One stored report. debug is omitted when the box was unticked.</summary>
+        /// <summary>One stored report. The body is one description. debug is omitted when the box was unticked.</summary>
         public static JObject Record(JObject fields, string debug, DateTimeOffset at)
         {
             string Value(string key) => fields?[key]?.ToString() ?? "";
             var record = new JObject
             {
                 ["type"] = Value("type"),
-                ["happened"] = Value("happened"),
-                ["expected"] = Value("expected"),
-                ["steps"] = Value("steps"),
+                ["description"] = Description(fields),
                 ["file"] = Value("file"),
                 ["at"] = at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
             };
             if (debug != null) record["debug"] = debug;
             return record;
+        }
+
+        /// <summary>
+        /// A stored line as one description. A new line already has it. An old
+        /// line still has happened, expected and steps, joined in that order.
+        /// </summary>
+        public static JObject Read(JObject line)
+        {
+            var copy = line == null ? new JObject() : (JObject)line.DeepClone();
+            if (string.IsNullOrEmpty(copy["description"]?.ToString()))
+                copy["description"] = Description(copy);
+            return copy;
+        }
+
+        /// <summary>description, or the old three fields joined. Empty parts are skipped.</summary>
+        public static string Description(JObject fields)
+        {
+            var description = fields?["description"]?.ToString() ?? "";
+            if (description.Length > 0) return description;
+            var parts = new List<string>();
+            foreach (var key in new[] { "happened", "expected", "steps" })
+            {
+                var part = (fields?[key]?.ToString() ?? "").Trim();
+                if (part.Length > 0) parts.Add(part);
+            }
+            return string.Join("\n\n", parts);
         }
     }
 }

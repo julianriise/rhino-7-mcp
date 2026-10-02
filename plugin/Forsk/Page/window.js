@@ -166,6 +166,14 @@
     return field.value !== '0' && field.value !== 'false';
   };
 
+  /* check, select, long, or a one-line text field. No DOM, so it tests headless. */
+  Forsk.fieldKind = function (field) {
+    if (field && field.check) return 'check';
+    if (field && field.options && field.options.length) return 'select';
+    if (field && field.long) return 'long';
+    return 'text';
+  };
+
   /* A bullet's lead, up to the colon or the period, else its first four words. */
   Forsk.leadWords = function (line) {
     var match = /^([ \t]*[-*\u2013\u2022]\s+)(\S.*)$/.exec(line || '');
@@ -242,20 +250,31 @@
     }
     var inputs = [];
     (item.fields || []).forEach(function (field) {
-      var check = !!field.check;
-      var wrap = el('label', 'field-row' + (check ? ' check' : ''));
-      var input = el('input');
+      var kind = Forsk.fieldKind(field);
+      var wrap = el('label', 'field-row' + (kind === 'check' ? ' check' : kind === 'long' ? ' long' : ''));
+      var input = el(kind === 'select' ? 'select' : kind === 'long' ? 'textarea' : 'input');
       input.dataset.key = field.key;
       input.setAttribute('aria-label', field.label || item.question);
-      if (check) {
+      if (kind === 'check') {
         input.type = 'checkbox';
         input.checked = Forsk.fieldChecked(field);
         wrap.appendChild(input);
         if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+      } else if (kind === 'select') {
+        if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+        (field.options || []).forEach(function (option) {
+          var choice = el('option', null, option);
+          choice.value = option;
+          if (option === field.value) choice.selected = true;
+          input.appendChild(choice);
+        });
+        wrap.appendChild(input);
       } else {
         if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
-        input.type = 'text';
-        if (field.unit === 'mm') input.inputMode = 'decimal';
+        if (kind === 'text') {
+          input.type = 'text';
+          if (field.unit === 'mm') input.inputMode = 'decimal';
+        } else input.rows = 4;
         input.value = field.value || '';
         wrap.appendChild(input);
         if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
@@ -291,7 +310,7 @@
       var focus = inputs[0];
       for (var i = 0; i < inputs.length; i++) if (inputs[i].type !== 'checkbox') { focus = inputs[i]; break; }
       focus.focus();
-      if (focus.type !== 'checkbox' && focus.select) focus.select();
+      if (focus.tagName !== 'SELECT' && focus.type !== 'checkbox' && focus.select) focus.select();
     }, 0);
     return box;
   }

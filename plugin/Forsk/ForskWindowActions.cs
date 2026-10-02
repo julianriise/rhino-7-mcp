@@ -468,7 +468,7 @@ namespace RhinoMCPPlugin.Forsk
                     thread.History.AddRange(history);
                     if (ForskReports.EndsWithReport(thread.Override, text))
                     {
-                        var report = ForskReports.Card(text, FileName(RhinoDoc.ActiveDoc), ForskReports.Findings(thread.Items));
+                        var report = ForskReports.Card(text, FileName(RhinoDoc.ActiveDoc));
                         if (report != null) thread.AddCard(report, null);
                     }
                     Finish(thread, kind, undo, serial, null, text);
@@ -489,6 +489,9 @@ namespace RhinoMCPPlugin.Forsk
                 if (key == "attach") continue;
                 fields[key] = typed;
             }
+            // The card does not show the file. The report still names it.
+            if (card["data"]?["file"] != null) fields["file"] = card["data"]["file"].ToString();
+            else fields["file"] = FileName(doc);
             string debug = null;
             var attach = values != null && values["attach"] != null ? values["attach"].ToString() : "1";
             if (ForskReports.WantsDebug(attach))

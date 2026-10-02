@@ -132,6 +132,10 @@ public class PageChromeTests
         Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Analyser'}]})"));
         Assert.Equal("support", Eval("Forsk.shownRole({role:{value:'support'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("support", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Analyser'},{mark:'Support'}]})"));
+        Assert.Equal("select", Eval("Forsk.fieldKind({options:['Bug','Question','Feature request'], value:'Bug'})"));
+        Assert.Equal("long", Eval("Forsk.fieldKind({long:true, value:'id like to report a bug'})"));
+        Assert.Equal("check", Eval("Forsk.fieldKind({check:true, value:'1'})"));
+        Assert.Equal("text", Eval("Forsk.fieldKind({value:'1200', unit:'mm'})"));
         Assert.Equal("true", Eval("String(Forsk.fieldChecked({check:true, value:'1'}))"));
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({check:true, value:'0'}))"));
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({value:'1'}))"));
@@ -155,10 +159,13 @@ public class PageChromeTests
     public void TheComposer_LineHeight_IsTheFont_AndTheGrowUsesIt()
     {
         var html = Html();
-        var at = html.IndexOf("textarea {", StringComparison.Ordinal);
+        var fieldAt = html.IndexOf(".field {", StringComparison.Ordinal);
+        var at = html.IndexOf("textarea {", fieldAt, StringComparison.Ordinal);
         var end = html.IndexOf('}', at);
         var rule = html.Substring(at, end - at);
-        var fieldAt = html.IndexOf(".field {", StringComparison.Ordinal);
+        var cardAt = html.IndexOf(".card textarea { height: auto", StringComparison.Ordinal);
+        var cardRule = html.Substring(cardAt, html.IndexOf('}', cardAt) - cardAt);
+        Assert.Contains("min-height: calc(15px * 1.4 * 4)", cardRule);
         var field = html.Substring(fieldAt, html.IndexOf('}', fieldAt) - fieldAt);
 
         Assert.Contains("font-size: 14px", rule);

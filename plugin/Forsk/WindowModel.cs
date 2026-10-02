@@ -143,6 +143,9 @@ namespace RhinoMCPPlugin.Forsk
                     var f = new JObject { ["key"] = field.Key, ["label"] = field.Label ?? "", ["value"] = field.Value ?? "" };
                     if (!string.IsNullOrEmpty(field.Unit)) f["unit"] = field.Unit;
                     if (field.Check) f["check"] = true;
+                    if (field.Long) f["long"] = true;
+                    if (field.Options != null && field.Options.Count > 0)
+                        f["options"] = new JArray(field.Options);
                     fields.Add(f);
                 }
                 item["fields"] = fields;

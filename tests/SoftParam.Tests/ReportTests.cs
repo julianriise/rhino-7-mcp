@@ -62,12 +62,14 @@ public class ReportTests
         var bug = ForskReports.Card("this is broken", "office.3dm");
         Assert.Equal("support.report", bug.Kind);
         Assert.Equal("Send this report?", bug.Question);
-        Assert.Equal(new[] { "type", "happened", "expected", "steps", "file", "attach" }, bug.Fields.Select(f => f.Key));
-        Assert.Equal("Bug", Field(bug, "type"));
-        Assert.Equal("this is broken", Field(bug, "happened"));
-        Assert.Equal("", Field(bug, "expected"));
-        Assert.Equal("", Field(bug, "steps"));
-        Assert.Equal("office.3dm", Field(bug, "file"));
+        Assert.Equal(new[] { "type", "description", "attach" }, bug.Fields.Select(f => f.Key));
+        Assert.DoesNotContain(bug.Fields, f => f.Key == "file" || f.Key == "happened" || f.Key == "expected" || f.Key == "steps");
+        var type = bug.Fields.Single(f => f.Key == "type");
+        Assert.Equal("Bug", type.Value);
+        Assert.Equal(new[] { "Bug", "Question", "Feature request" }, type.Options);
+        Assert.Equal("this is broken", Field(bug, "description"));
+        Assert.True(bug.Fields.Single(f => f.Key == "description").Long);
+        Assert.Equal("office.3dm", bug.Data["file"]!.ToString());
         var attach = bug.Fields.Single(f => f.Key == "attach");
         Assert.Equal("Attach debug report", attach.Label);
         Assert.True(attach.Check);
@@ -78,10 +80,9 @@ public class ReportTests
         Assert.Equal(new[] { "send", "cancel" }, bug.Pills.Select(p => p.Id));
 
         var feature = ForskReports.Card("can you add a stair tool", "a.3dm");
-        Assert.Equal("Feature", Field(feature, "type"));
-        Assert.Equal("", Field(feature, "happened"));
-        Assert.Equal("can you add a stair tool", Field(feature, "expected"));
-        Assert.Equal("a.3dm", Field(feature, "file"));
+        Assert.Equal("Feature request", Field(feature, "type"));
+        Assert.Equal("can you add a stair tool", Field(feature, "description"));
+        Assert.Equal("a.3dm", feature.Data["file"]!.ToString());
 
         var thread = new DocThread { Serial = 1 };
         thread.BeginReply(ForskRoles.Mark(ForskIntent.Support, ForskRole.None));
@@ -91,6 +92,9 @@ public class ReportTests
         var posted = item["fields"]!.Last;
         Assert.True(posted["check"]!.Value<bool>());
         Assert.Equal("1", posted["value"]!.ToString());
+        Assert.Equal(new[] { "Bug", "Question", "Feature request" }, item["fields"]![0]!["options"]!.Select(o => o.ToString()));
+        Assert.True(item["fields"]![1]!["long"]!.Value<bool>());
+        Assert.Equal("office.3dm", item["data"]!["file"]!.ToString());
     }
 
     [Fact]
@@ -109,13 +113,16 @@ public class ReportTests
         thread.BeginReply(ForskRoles.Mark(ForskIntent.Support, thread.Override));
         var answer = thread.Add("assistant", "A-ROOM has two outlines on each room.");
         thread.AddReceipt(true, "Document", "16 rooms");
-        var found = ForskReports.Findings(thread.Items);
-        Assert.Equal("A-ROOM has two outlines on each room.\n16 rooms", found);
+        thread.Add("assistant", "done");
+        thread.AddReceipt(true, "Debug report", "Checked `office_2D.3dm` and the debug report.");
 
-        var card = ForskReports.Card(said, "office.3dm", found);
-        Assert.Contains(said, Field(card, "happened"));
-        Assert.Contains("A-ROOM has two outlines on each room.", Field(card, "happened"));
-        Assert.Contains("16 rooms", Field(card, "happened"));
+        var card = ForskReports.Card(said, "office.3dm");
+        Assert.Equal(said, Field(card, "description"));
+        Assert.DoesNotContain("done", Field(card, "description"));
+        Assert.DoesNotContain("Debug report", Field(card, "description"));
+        Assert.DoesNotContain("A-ROOM", Field(card, "description"));
+        var glued = ForskReports.Card("id like to report a bug", "office_2D.3dm");
+        Assert.Equal("id like to report a bug", Field(glued, "description"));
         var attach = card.Fields.Single(f => f.Key == "attach");
         Assert.True(attach.Check);
         Assert.Equal("1", attach.Value);
@@ -128,17 +135,17 @@ public class ReportTests
         Assert.Equal("1", item["fields"]!.Last["value"]!.ToString());
         Assert.True(item["fields"]!.Last["check"]!.Value<bool>());
 
-        var feature = ForskReports.Card("can you add a stair tool", "a.3dm", "No stair tool.");
-        Assert.Equal("", Field(feature, "happened"));
-        Assert.Equal("can you add a stair tool\n\nNo stair tool.", Field(feature, "expected"));
+        var feature = ForskReports.Card("can you add a stair tool", "a.3dm");
+        Assert.Equal("can you add a stair tool", Field(feature, "description"));
+        Assert.DoesNotContain("No stair tool", Field(feature, "description"));
         Assert.True(feature.Fields.Single(f => f.Key == "attach").Check);
 
-        var repeated = ForskReports.Card("this is broken", "a.3dm", "The user said this is broken.");
-        Assert.Equal("The user said this is broken.", Field(repeated, "happened"));
+        var empty = ForskReports.Card("this is broken", "a.3dm");
+        Assert.Equal("this is broken", Field(empty, "description"));
 
         var window = ForskSource("ForskWindowActions.cs");
         Assert.Contains("ForskReports.EndsWithReport", window);
-        Assert.Contains("ForskReports.Findings", window);
+        Assert.DoesNotContain("ForskReports.Findings", window);
         Assert.Contains("The window adds the report.", ForskSource("ForskChat.cs"));
     }
 
@@ -198,17 +205,13 @@ public class ReportTests
             var bug = ForskReports.Record(new JObject
             {
                 ["type"] = "Bug",
-                ["happened"] = "this is broken",
-                ["expected"] = "a pdf",
-                ["steps"] = "print",
+                ["description"] = "this is broken",
                 ["file"] = "office.3dm"
             }, "plugin line", at);
             var feature = ForskReports.Record(new JObject
             {
-                ["type"] = "Feature",
-                ["happened"] = "",
-                ["expected"] = "curved walls",
-                ["steps"] = "",
+                ["type"] = "Feature request",
+                ["description"] = "curved walls",
                 ["file"] = "office.3dm"
             }, null, at);
 
@@ -221,14 +224,25 @@ public class ReportTests
             Assert.Contains("\"at\":\"2026-10-02T12:00:00Z\"", lines[0]);
             var first = JObject.Parse(lines[0]);
             Assert.Equal("Bug", first["type"]!.ToString());
-            Assert.Equal("this is broken", first["happened"]!.ToString());
-            Assert.Equal("a pdf", first["expected"]!.ToString());
-            Assert.Equal("print", first["steps"]!.ToString());
+            Assert.Equal("this is broken", first["description"]!.ToString());
+            Assert.Null(first["happened"]);
             Assert.Equal("office.3dm", first["file"]!.ToString());
             Assert.Equal("plugin line", first["debug"]!.ToString());
             var second = JObject.Parse(lines[1]);
-            Assert.Equal("Feature", second["type"]!.ToString());
+            Assert.Equal("Feature request", second["type"]!.ToString());
             Assert.Null(second["debug"]);
+
+            var old = ForskReports.Read(new JObject
+            {
+                ["type"] = "Bug",
+                ["happened"] = "id like to report a bug",
+                ["expected"] = "Something i expected",
+                ["steps"] = "I did a, b, c",
+                ["file"] = "office_2D.3dm"
+            });
+            Assert.Equal("id like to report a bug\n\nSomething i expected\n\nI did a, b, c", old["description"]!.ToString());
+            Assert.Equal("office_2D.3dm", old["file"]!.ToString());
+            Assert.Equal("curved walls", ForskReports.Read(second)["description"]!.ToString());
             Assert.EndsWith(Path.Combine("Library", "Application Support", "Forsk", "reports.jsonl"), ForskReports.DefaultPath);
         }
         finally

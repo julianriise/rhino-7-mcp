@@ -336,10 +336,10 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// The texts on the label layer that name rooms, at their insertion points,
-    /// as stored: dxf_import has already decoded what it imported. A label it
-    /// did not import that looks like a mangled \U+ escape goes in
-    /// <paramref name="suspect"/> as is; it is reported, not guessed at.
+    /// The texts on the label layer that name rooms, at their insertion points.
+    /// dxf_import has already decoded what it imported. A label Rhino imported
+    /// on its own can still say B00F8ttekott; the letter is put back here, and
+    /// that raw text is the suspect row.
     /// </summary>
     private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc, List<RoomDetect.Label> suspect = null)
     {
@@ -350,11 +350,12 @@ public partial class RhinoMCPFunctions
             var index = obj.Attributes.LayerIndex;
             if (index < 0 || index >= doc.Layers.Count) continue;
             if (!doc.Layers[index].Name.Equals(RoomLabelLayerName, StringComparison.OrdinalIgnoreCase)) continue;
-            var label = new RoomDetect.Label(text.PlainText, text.TextHeight,
+            var raw = text.PlainText;
+            var label = new RoomDetect.Label(DxfText.RepairRemnant(raw), text.TextHeight,
                 new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y));
             labels.Add(label);
-            if (suspect != null && obj.Attributes.GetUserString(LabelSourceKey) != "dxf" && DxfText.LooksMangled(label.Text))
-                suspect.Add(label);
+            if (suspect != null && obj.Attributes.GetUserString(LabelSourceKey) != "dxf" && DxfText.LooksMangled(raw))
+                suspect.Add(new RoomDetect.Label(raw, label.Height, label.At));
         }
         return labels;
     }

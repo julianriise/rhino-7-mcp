@@ -142,6 +142,8 @@ public class ForskDebugTests
         Assert.Equal("unknown", ForskDebug.CommitOf(null));
         Assert.Equal("c\nd", ForskDebug.Tail("a\nb\nc\nd", 2));
         var empty = ForskDebug.Format(new DebugSnapshot());
+        Assert.Equal("Bøttekott · 2.1 m² · closed", ForskDebug.RoomLine("B00F8ttekott", "2100000", true));
+        Assert.Equal("Bøttekott · 2.1 m² · closed", ForskDebug.RoomLine("Bøttekott", "2100000", true));
         Assert.Contains("rooms: 0", empty);
         Assert.Contains("daylight: none", empty);
         Assert.Contains("Turns\nnone", empty);

@@ -143,6 +143,16 @@ header.top {
 .card .field-label { flex: none; width: 118px; color: var(--meta); font-size: 12px; }
 .card .field-row.check .field-label { width: auto; }
 .card .field-row.check input { flex: none; width: 16px; height: 16px; padding: 0; box-shadow: none; background: transparent; }
+.card select, .card textarea {
+  font: inherit; font-size: 15px; margin: 0; flex: 1; min-width: 0; width: auto; padding: 6px 10px;
+  border: 0; border-radius: 10px; background: var(--page); color: var(--ink); outline: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  -webkit-user-select: text; user-select: text;
+}
+.card select:focus, .card textarea:focus { box-shadow: inset 0 0 0 1px var(--meta); }
+.card textarea { height: auto; min-height: calc(15px * 1.4 * 4); max-height: calc(15px * 1.4 * 8); resize: vertical; line-height: 1.4; }
+.card .field-row.long { align-items: flex-start; }
+.card .field-row.long .field-label { padding-top: 8px; }
 .card .note { color: var(--meta); font-size: 12px; margin: 6px 0 0; }
 .card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 14px; }
 .card .rows li { padding: 2px 0; }
