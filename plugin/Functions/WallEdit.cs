@@ -386,7 +386,7 @@ public static class WallEdit
     }
 
     /// <summary>Loops from Union or Difference as records: each outline with the holes it closes.</summary>
-    static List<List<List<Pt>>> Group(List<List<Pt>> loops)
+    internal static List<List<List<Pt>>> Group(List<List<Pt>> loops)
     {
         var outlines = new List<List<Pt>>();
         var holes = new List<List<Pt>>();
@@ -440,7 +440,7 @@ public static class WallEdit
         return x >= 0 ? "east" : "west";
     }
 
-    static bool TryRunFrom(List<List<Pt>> rings, (int Loop, int Edge) pick, double tol, out Run run, out string why)
+    internal static bool TryRunFrom(List<List<Pt>> rings, (int Loop, int Edge) pick, double tol, out Run run, out string why)
     {
         run = null;
         why = null;
@@ -516,7 +516,7 @@ public static class WallEdit
         return true;
     }
 
-    static List<(int Loop, int Edge)> Edges(List<List<Pt>> rings, double tol)
+    internal static List<(int Loop, int Edge)> Edges(List<List<Pt>> rings, double tol)
     {
         var list = new List<(int, int)>();
         for (var k = 0; k < rings.Count; k++)
