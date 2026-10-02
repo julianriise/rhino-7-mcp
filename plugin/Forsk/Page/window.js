@@ -600,10 +600,23 @@
     if (q) q.focus();
   };
 
+  /** The composer's height: whole lines of its own line height, at least one. */
+  Forsk.composerHeight = function (scroll, line) {
+    line = +line;
+    if (!(line > 0)) line = 14 * 1.4;
+    var lines = Math.max(1, Math.round((+scroll) / line));
+    return lines * line;
+  };
+
   function grow() {
     var q = document.getElementById('q');
-    q.style.height = 'auto';
-    q.style.height = q.scrollHeight + 'px';
+    var line = 14 * 1.4;
+    if (root.getComputedStyle) {
+      var read = parseFloat(root.getComputedStyle(q).lineHeight);
+      if (read > 0) line = read;
+    }
+    q.style.height = line + 'px';
+    q.style.height = Forsk.composerHeight(q.scrollHeight, line) + 'px';
     document.getElementById('send').disabled = !q.value.replace(/\s+/g, '');
   }
 

@@ -192,9 +192,10 @@ form.composer { margin: 0; padding: 8px 16px 16px; }
   padding: 6px 6px 6px 4px; min-height: 48px;
 }
 textarea {
-  flex: 1; align-self: center; min-width: 0; height: 32px; border: 0; outline: none; resize: none; background: transparent;
-  font: inherit; font-size: 15px; line-height: 32px; color: var(--ink); caret-color: var(--ink);
-  padding: 0; margin: 0; max-height: calc(32px * 5); overflow-y: auto;
+  flex: 1; align-self: center; min-width: 0; border: 0; outline: none; resize: none; background: transparent;
+  font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); caret-color: var(--ink);
+  /* One line is 1.4 at 14px. The field's padding and the 32px buttons stay; a wrapped line uses this height, not the row. */
+  height: calc(14px * 1.4); padding: 0; margin: 0; max-height: calc(14px * 1.4 * 5); overflow-y: auto;
   -webkit-user-select: text; user-select: text;
 }
 textarea::placeholder { color: var(--faint); }

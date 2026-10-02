@@ -146,6 +146,40 @@ public class PageChromeTests
             Eval("JSON.stringify(Forsk.roleMenu([{id:'auto',label:'Auto'},{id:'planner',label:'Planner'},{id:'modeller',label:'Modeller'},{id:'plotter',label:'Plotter'},{id:'analyser',label:'Analyser'},{id:'support',label:'Support'},{id:'render',label:'Render'}]).map(function(o){return o.id;}))"));
     }
 
+    /// <summary>
+    /// A wrapped line was 32px, so the caret filled the row. The line is 1.4
+    /// at 14px. The field's padding stays, and the auto-grow uses that same
+    /// line height rather than the 32px row.
+    /// </summary>
+    [Fact]
+    public void TheComposer_LineHeight_IsTheFont_AndTheGrowUsesIt()
+    {
+        var html = Html();
+        var at = html.IndexOf("textarea {", StringComparison.Ordinal);
+        var end = html.IndexOf('}', at);
+        var rule = html.Substring(at, end - at);
+        var fieldAt = html.IndexOf(".field {", StringComparison.Ordinal);
+        var field = html.Substring(fieldAt, html.IndexOf('}', fieldAt) - fieldAt);
+
+        Assert.Contains("font-size: 14px", rule);
+        Assert.Contains("line-height: 1.4", rule);
+        Assert.Contains("height: calc(14px * 1.4)", rule);
+        Assert.Contains("max-height: calc(14px * 1.4 * 5)", rule);
+        Assert.Contains("padding: 0", rule);
+        Assert.DoesNotContain("line-height: 32px", rule);
+        Assert.DoesNotContain("32px * 5", rule);
+        Assert.Contains("padding: 6px 6px 6px 4px", field);
+        Assert.Contains("min-height: 48px", field);
+
+        var engine = PageScript.Load();
+        Assert.Equal("20", engine.Evaluate("String(Forsk.composerHeight(20, 20))").ToString());
+        Assert.Equal("40", engine.Evaluate("String(Forsk.composerHeight(40, 20))").ToString());
+        Assert.Equal("20", engine.Evaluate("String(Forsk.composerHeight(0, 20))").ToString());
+        Assert.Equal("39.2", engine.Evaluate("String(Forsk.composerHeight(39.2, 19.6))").ToString());
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("Forsk.composerHeight(q.scrollHeight, line)", script);
+    }
+
     [Fact]
     public void ABulletLine_BoldsItsLeadWords()
     {
