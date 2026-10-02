@@ -275,9 +275,70 @@
     return box;
   }
 
-  function avatarSrc(id) {
-    var node = document.getElementById('avatars');
-    return node && id ? (node.getAttribute('data-' + id) || '') : '';
+  /*
+   * A face is inline SVG, painted at device pixels. The same drawing in an
+   * img is a CSS-pixel bitmap, soft on Retina. Every copy renames its mask
+   * and gradient: four faces share one document, and a repeated face would
+   * collide. faceStamp touches no DOM, so it tests headless.
+   */
+  var avatarStamp = 0;
+
+  Forsk.faceStamp = function (id, n) {
+    return { mask: id + '-' + n + '-mask', fill: id + '-' + n + '-fill' };
+  };
+
+  /* HTML getElementsByTagName lowercases, so it misses radialGradient. */
+  function first(node, name) {
+    var list = node.getElementsByTagName('*');
+    var want = name.toLowerCase();
+    for (var i = 0; i < list.length; i++) {
+      var tag = list[i].localName || list[i].tagName || '';
+      if (String(tag).toLowerCase() === want) return list[i];
+    }
+    return null;
+  }
+
+  function avatarNode(id, cls) {
+    var holder = document.getElementById('avatar-' + id);
+    if (!holder) return null;
+    var src = first(holder, 'svg');
+    if (!src) return null;
+    avatarStamp += 1;
+    var stamp = Forsk.faceStamp(id, avatarStamp);
+    var node = src.cloneNode(true);
+    node.removeAttribute('id');
+    /* Fill the CSS box. With no size, an SVG falls back to 300 by 150. */
+    node.setAttribute('width', '100%');
+    node.setAttribute('height', '100%');
+    if (cls) node.setAttribute('class', cls);
+    node.setAttribute('aria-hidden', 'true');
+    var mask = first(node, 'mask');
+    var fill = first(node, 'radialGradient');
+    var maskId = mask ? mask.getAttribute('id') : '';
+    var fillId = fill ? fill.getAttribute('id') : '';
+    if (mask) mask.setAttribute('id', stamp.mask);
+    if (fill) fill.setAttribute('id', stamp.fill);
+    var groups = node.getElementsByTagName('g');
+    for (var i = 0; i < groups.length; i++) {
+      if (groups[i].getAttribute('mask') === 'url(#' + maskId + ')')
+        groups[i].setAttribute('mask', 'url(#' + stamp.mask + ')');
+    }
+    var rects = node.getElementsByTagName('rect');
+    for (var j = 0; j < rects.length; j++) {
+      if (rects[j].getAttribute('fill') === 'url(#' + fillId + ')')
+        rects[j].setAttribute('fill', 'url(#' + stamp.fill + ')');
+    }
+    return node;
+  }
+
+  function setFace(id) {
+    var slot = document.getElementById('avatar');
+    if (!slot || !id || slot.getAttribute('data-face') === id) return;
+    var node = avatarNode(id);
+    if (!node) return;
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    slot.setAttribute('data-face', id);
+    slot.appendChild(node);
   }
 
   function textBlock(text, cls) {
@@ -309,13 +370,8 @@
     var wrap = el('div', 'marked');
     var meta = el('div', 'meta');
     var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Render: 'render' }[mark];
-    var src = avatarSrc(id);
-    if (src) {
-      var img = el('img', 'mini');
-      img.alt = '';
-      img.src = src;
-      meta.appendChild(img);
-    }
+    var face = avatarNode(id, 'mini');
+    if (face) meta.appendChild(face);
     meta.appendChild(el('span', 'role', mark));
     wrap.appendChild(meta);
     wrap.appendChild(node);
@@ -361,9 +417,7 @@
     var shown = Forsk.shownRole(model);
     name.textContent = optionLabel(role, shown);
     document.getElementById('file').textContent = Forsk.roleSubtitle(model);
-    var face = document.getElementById('avatar');
-    var src = avatarSrc(shown);
-    if (src) face.src = src;
+    setFace(shown);
     pill.className = 'role-pill' + (role && role.value && role.value !== 'auto' ? ' set' : '');
     pill.title = (role && role.title) || '';
     var spoken = (role && role.label ? role.label + ', ' : '') + name.textContent;
@@ -378,12 +432,9 @@
       button.type = 'button';
       button.setAttribute('role', 'menuitemradio');
       button.setAttribute('aria-checked', role && option.id === role.value ? 'true' : 'false');
-      var icon = option.id !== 'auto' ? avatarSrc(option.id) : '';
-      if (icon) {
-        var img = el('img', 'mini');
-        img.alt = '';
-        img.src = icon;
-        button.appendChild(img);
+      if (option.id !== 'auto') {
+        var icon = avatarNode(option.id, 'mini');
+        if (icon) button.appendChild(icon);
       }
       button.appendChild(document.createTextNode(option.label));
       button.addEventListener('click', function () {
@@ -553,6 +604,7 @@
   }
 
   function boot() {
+    setFace('planner');
     sender = Forsk.makeSender(root.FORSK_TOKEN, function (body) {
       // Absolute: loadHTMLString does not make the document's URL the base URL, so a relative "action" never hits the channel.
       return root.fetch(root.FORSK_ORIGIN + 'action', { method: 'POST', body: body }).then(function (r) { return r.status; });

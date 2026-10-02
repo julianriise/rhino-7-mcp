@@ -533,17 +533,15 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// The four faces ship as page resources. A data URI keeps each SVG's
-        /// mask id in its own image, and LoadHtml has no base URL for a file.
+        /// The four faces ship as page resources and are inlined. An img of the
+        /// SVG is painted at CSS pixels, so on Retina the face is soft while the
+        /// type stays sharp. LoadHtml has no base URL for a separate file. The
+        /// page renames each copy's mask and gradient; the sources' ids already differ.
         /// </summary>
         static string WithAvatars(string html)
         {
             foreach (var name in new[] { "planner", "modeller", "plotter", "render" })
-            {
-                var svg = Resource("avatar-" + name + ".svg");
-                var uri = "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
-                html = html.Replace("%%AVATAR_" + name.ToUpperInvariant() + "%%", uri);
-            }
+                html = html.Replace("%%AVATAR_" + name.ToUpperInvariant() + "%%", Resource("avatar-" + name + ".svg"));
             return html;
         }
 

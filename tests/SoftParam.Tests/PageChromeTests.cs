@@ -33,12 +33,57 @@ public class PageChromeTests
         Assert.Contains("Ask Forsk", composer);
         Assert.Contains("id=\"add\"", composer);
         Assert.Contains("id=\"send\"", composer);
-        Assert.Contains("%%AVATAR_PLANNER%%", html);
-        Assert.Contains("%%AVATAR_MODELLER%%", html);
-        Assert.Contains("%%AVATAR_PLOTTER%%", html);
-        Assert.Contains("%%AVATAR_RENDER%%", html);
-        foreach (var name in new[] { "avatar-planner.svg", "avatar-modeller.svg", "avatar-plotter.svg", "avatar-render.svg" })
-            Assert.True(new FileInfo(Path.Combine(AppContext.BaseDirectory, "page", name)).Length > 1000, name);
+    }
+
+    /// <summary>
+    /// An img of the SVG is painted at CSS pixels, so the face was soft on
+    /// Retina. The page inlines each face and every copy gets its own mask
+    /// and gradient ids. The white is #ffffff: older WebKit drops lab().
+    /// </summary>
+    [Fact]
+    public void TheFaces_AreInlineVectors_WithTheirOwnMaskIds()
+    {
+        var html = Html();
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+
+        Assert.Contains("id=\"avatar\"", html);
+        Assert.Contains("class=\"avatar\"", html);
+        Assert.Contains("width: 44px; height: 44px", html);
+        Assert.Contains(".mini { width: 20px; height: 20px;", html);
+        Assert.Contains(".meta .mini { width: 16px; height: 16px;", html);
+        Assert.DoesNotContain("<img", html);
+        Assert.DoesNotContain("data:image", html);
+        Assert.DoesNotContain("image-rendering", html);
+        Assert.DoesNotContain("will-change", html);
+        Assert.Contains("cloneNode", script);
+        Assert.Contains("Forsk.faceStamp", script);
+        Assert.DoesNotContain("el('img'", script);
+        Assert.DoesNotContain(".src", script);
+
+        var engine = PageScript.Load();
+        Assert.Equal("planner-1-mask", engine.Evaluate("Forsk.faceStamp('planner', 1).mask").ToString());
+        Assert.Equal("planner-1-fill", engine.Evaluate("Forsk.faceStamp('planner', 1).fill").ToString());
+        Assert.Equal("render-2-fill", engine.Evaluate("Forsk.faceStamp('render', 2).fill").ToString());
+        Assert.NotEqual(
+            engine.Evaluate("Forsk.faceStamp('planner', 1).mask").ToString(),
+            engine.Evaluate("Forsk.faceStamp('modeller', 1).mask").ToString());
+
+        foreach (var name in new[] { "planner", "modeller", "plotter", "render" })
+        {
+            Assert.Contains("id=\"avatar-" + name + "\"", html);
+            Assert.Contains("%%AVATAR_" + name.ToUpperInvariant() + "%%", html);
+            var svg = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "avatar-" + name + ".svg"));
+            Assert.True(svg.Length > 1000, name);
+            Assert.DoesNotContain("lab(", svg);
+            Assert.Contains("fill=\"#ffffff\"", svg);
+            Assert.DoesNotContain("width=\"512\"", svg);
+            Assert.DoesNotContain("height=\"512\"", svg);
+            Assert.DoesNotContain("_r_4_", svg);
+            Assert.Contains("id=\"" + name + "-mask\"", svg);
+            Assert.Contains("url(#" + name + "-mask)", svg);
+            Assert.Contains("id=\"" + name + "-fill\"", svg);
+            Assert.Contains("url(#" + name + "-fill)", svg);
+        }
     }
 
     [Fact]

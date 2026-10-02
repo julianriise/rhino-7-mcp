@@ -50,7 +50,8 @@ header.top {
 }
 #more { justify-self: end; }
 .identity { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-.avatar { width: 44px; height: 44px; border-radius: 50%; display: block; }
+.avatar { width: 44px; height: 44px; display: block; }
+.avatar svg { width: 100%; height: 100%; display: block; }
 .role-pill {
   display: flex; flex-direction: column; align-items: center; max-width: 100%;
   border: 0; background: var(--card); color: var(--ink); border-radius: 16px;
@@ -79,7 +80,7 @@ header.top {
 .menu button.split { margin-top: 6px; }
 .menu button:hover, .menu button:focus { background: var(--page); }
 .menu button[aria-checked="true"] { font-weight: 600; }
-.mini { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+.mini { width: 20px; height: 20px; flex: none; display: block; }
 #thread {
   flex: 1; overflow-y: auto; padding: 8px 20px 12px;
   -webkit-user-select: text; user-select: text; cursor: auto;
@@ -209,7 +210,7 @@ textarea::placeholder { color: var(--faint); }
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.2 4.2v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8.2V12l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <div class="identity">
-    <img id="avatar" class="avatar" alt="" src="%%AVATAR_PLANNER%%">
+    <div id="avatar" class="avatar" aria-hidden="true"></div>
     <button id="role-pill" class="role-pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu">
       <span class="role-line"><span id="role-name">Planner</span><svg class="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       <span id="file" class="role-sub"></span>
@@ -222,7 +223,12 @@ textarea::placeholder { color: var(--faint); }
   <div id="more-menu" class="menu" role="menu" hidden><div id="settings"></div></div>
   <div id="status" class="status"></div>
   <div id="target" hidden></div>
-  <div id="avatars" hidden data-planner="%%AVATAR_PLANNER%%" data-modeller="%%AVATAR_MODELLER%%" data-plotter="%%AVATAR_PLOTTER%%" data-render="%%AVATAR_RENDER%%"></div>
+  <div id="avatars" hidden>
+    <div id="avatar-planner">%%AVATAR_PLANNER%%</div>
+    <div id="avatar-modeller">%%AVATAR_MODELLER%%</div>
+    <div id="avatar-plotter">%%AVATAR_PLOTTER%%</div>
+    <div id="avatar-render">%%AVATAR_RENDER%%</div>
+  </div>
 </header>
 <main id="thread" aria-live="polite"></main>
 <div class="dock">
