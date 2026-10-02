@@ -393,8 +393,11 @@ namespace RhinoMCPPlugin.Forsk
             _busy = true;
             var picked = doc == null ? Picked.None : Facts(doc).Picked;
             thread.Add("user", text);
-            // The router's role for this sentence, unless an override was set when it was sent.
-            thread.BeginReply(ForskRoles.Mark(ForskIntentRouter.Classify(text, picked), thread.Override));
+            // The router's role for this sentence. Support's pick applies only to a
+            // question, a bug, or a feature request, so an edit stays with Modeller.
+            var intent = ForskIntentRouter.Classify(text, picked);
+            var role = ForskRoles.Turn(thread.Override, intent);
+            thread.BeginReply(ForskRoles.Mark(intent, role));
             var undo = ForskUndo.Begin(doc, text);
             _jobChanges = 0;
             var serial = doc?.RuntimeSerialNumber ?? 0;
@@ -412,7 +415,7 @@ namespace RhinoMCPPlugin.Forsk
                     Render();
                 }),
                 DialogParent = this,
-                Role = thread.Override
+                Role = role
             };
             Render();
             ThreadPool.QueueUserWorkItem(_ =>

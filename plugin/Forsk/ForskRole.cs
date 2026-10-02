@@ -109,9 +109,21 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
+        /// <summary>
+        /// The role a typed turn uses. Support's pick applies only to a question,
+        /// a bug, or a feature request. An edit stays with Modeller.
+        /// </summary>
+        public static ForskRole Turn(ForskRole overrideRole, ForskIntent intent)
+        {
+            if (overrideRole == ForskRole.Support && intent != ForskIntent.Support)
+                return ForskRole.None;
+            return overrideRole;
+        }
+
         /// <summary>The mark on a typed turn's answer and on its thinking line.</summary>
         public static string Mark(ForskIntent intent, ForskRole overrideRole)
         {
+            overrideRole = Turn(overrideRole, intent);
             if (overrideRole != ForskRole.None) return Label(overrideRole);
             var role = Of(intent);
             return role == ForskRole.None ? null : Label(role);

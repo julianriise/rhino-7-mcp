@@ -37,6 +37,41 @@ public class RoleTests
         Assert.Equal(role, ForskRoles.Label(ForskRoles.Of(intent)));
     }
 
+    [Theory]
+    [InlineData("Make this window 2000 mm tall")]
+    [InlineData("resize this window")]
+    [InlineData("swap this door")]
+    [InlineData("delete the opening")]
+    [InlineData("add a window")]
+    [InlineData("move the door")]
+    [InlineData("lag dette vinduet 2000 mm høyt")]
+    [InlineData("flytt vinduet")]
+    [InlineData("bytt døren")]
+    [InlineData("slett vinduet")]
+    [InlineData("legg til et vindu")]
+    [InlineData("gjør vinduet høyere")]
+    public void AnEditSentence_GoesToModeller(string said)
+    {
+        var intent = ForskIntentRouter.Classify(said);
+        Assert.Equal(ForskIntent.Edit, intent);
+        Assert.False(ForskIntentRouter.IsBug(said));
+        Assert.Equal("Modeller", ForskRoles.Mark(intent, ForskRole.None));
+        Assert.Equal("Modeller", ForskRoles.Mark(intent, ForskRole.Support));
+        Assert.Equal(ForskRole.None, ForskRoles.Turn(ForskRole.Support, intent));
+        Assert.False(ForskReports.EndsWithReport(ForskRole.Support, said));
+    }
+
+    [Fact]
+    public void Support_KeepsAQuestionABugAndAFeatureRequest()
+    {
+        Assert.Equal(ForskIntent.Support, ForskIntentRouter.Classify("how do I print"));
+        Assert.Equal(ForskIntent.Support, ForskIntentRouter.Classify("this is broken"));
+        Assert.Equal(ForskIntent.Support, ForskIntentRouter.Classify("can you add a stair tool"));
+        Assert.Equal("Support", ForskRoles.Mark(ForskIntent.Support, ForskRole.Support));
+        Assert.Equal(ForskRole.Support, ForskRoles.Turn(ForskRole.Support, ForskIntent.Support));
+        Assert.Equal("Modeller", ForskRoles.Mark(ForskIntent.Import, ForskRole.Modeller));
+    }
+
     [Fact]
     public void AGeneralTurn_HasNoMark_AndNoIntentIsRenderYet()
     {

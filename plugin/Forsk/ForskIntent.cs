@@ -199,12 +199,19 @@ namespace RhinoMCPPlugin.Forsk
                 return true;
             if (IsWallEdit(t))
                 return true;
-            var verb = HasWord(t, "move") || HasWord(t, "add") || HasWord(t, "delete") || HasWord(t, "remove")
+            var verb = HasWord(t, "move") || HasWord(t, "flytt")
+                || HasWord(t, "add") || HasWord(t, "legg")
+                || HasWord(t, "delete") || HasWord(t, "remove") || HasWord(t, "slett") || HasWord(t, "fjern")
                 || HasWord(t, "resize") || HasWord(t, "widen") || HasWord(t, "wider")
-                || HasWord(t, "narrow") || HasWord(t, "narrower");
+                || HasWord(t, "narrow") || HasWord(t, "narrower")
+                || HasWord(t, "make") || HasWord(t, "lag") || HasWord(t, "gjør")
+                || HasWord(t, "swap") || HasWord(t, "bytt");
             var noun = HasWord(t, "window") || HasWord(t, "windows")
                 || HasWord(t, "door") || HasWord(t, "doors")
-                || HasWord(t, "opening") || HasWord(t, "openings");
+                || HasWord(t, "opening") || HasWord(t, "openings")
+                || HasWord(t, "vindu") || HasWord(t, "vinduet") || HasWord(t, "vinduer")
+                || HasWord(t, "dør") || HasWord(t, "døra") || HasWord(t, "døren") || HasWord(t, "dører")
+                || HasWord(t, "åpning") || HasWord(t, "åpningen");
             return verb && noun;
         }
 
