@@ -32,7 +32,7 @@ namespace RhinoMCPPlugin.Forsk
 
         // ------------------------------------------------------------ the role
 
-        /// <summary>The composer's role control: a pick is an override until Auto clears it. Slot 1 does not read it.</summary>
+        /// <summary>The header's role control: a pick is an override until Auto clears it. Slot 1 does not read it.</summary>
         void PickRole(string id)
         {
             var thread = Active();

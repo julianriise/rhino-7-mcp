@@ -36,7 +36,8 @@ public class RoleTests
     {
         Assert.Null(ForskRoles.Mark(ForskIntentRouter.Classify("hello", ""), ForskRole.None));
         Assert.DoesNotContain(Enum.GetValues(typeof(ForskIntent)).Cast<ForskIntent>(), i => ForskRoles.Of(i) == ForskRole.Render);
-        Assert.DoesNotContain(ForskRole.Render, ForskRoles.Pickable);
+        // No intent routes to Render. The picker still offers it, as a label and an avatar.
+        Assert.Contains(ForskRole.Render, ForskRoles.Pickable);
     }
 
     [Fact]
@@ -143,7 +144,7 @@ public class RoleTests
     {
         var auto = ForskRoles.Control(ForskRole.None);
         Assert.Equal("auto", auto["value"]!.ToString());
-        Assert.Equal(new[] { "Auto", "Planner", "Modeller", "Plotter" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
+        Assert.Equal(new[] { "Auto", "Planner", "Modeller", "Plotter", "Render" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
         Assert.Equal("modeller", ForskRoles.Control(ForskRole.Modeller)["value"]!.ToString());
 
         var thread = new DocThread { Serial = 1, Override = ForskRole.Modeller };

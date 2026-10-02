@@ -120,7 +120,7 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The tools a role knows, by the role table: Planner imports, Modeller builds and edits, Plotter prints.</summary>
+        /// <summary>The tools a role knows. Planner imports, Modeller builds and edits, Plotter prints. Render has no pack, so that override does not reorder.</summary>
         static IEnumerable<string> RoleTools(ForskRole role)
         {
             switch (role)

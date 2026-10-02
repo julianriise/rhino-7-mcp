@@ -47,6 +47,18 @@
     <EmbeddedResource Include="Forsk/Page/window.js">
       <LogicalName>RhinoMCPPlugin.Page.window.js</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Forsk/Page/avatar-planner.svg">
+      <LogicalName>RhinoMCPPlugin.Page.avatar-planner.svg</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forsk/Page/avatar-modeller.svg">
+      <LogicalName>RhinoMCPPlugin.Page.avatar-modeller.svg</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forsk/Page/avatar-plotter.svg">
+      <LogicalName>RhinoMCPPlugin.Page.avatar-plotter.svg</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forsk/Page/avatar-render.svg">
+      <LogicalName>RhinoMCPPlugin.Page.avatar-render.svg</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="EmbeddedResources/plugin-utility.ico">
       <LogicalName>rhinomcp.EmbeddedResources.plugin-utility.ico</LogicalName>
     </EmbeddedResource>

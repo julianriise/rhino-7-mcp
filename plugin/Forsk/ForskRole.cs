@@ -23,8 +23,8 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskRoles
     {
-        /// <summary>The roles a user can pick today. Render gets no control until its gates pass.</summary>
-        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter };
+        /// <summary>The roles a user can pick. Render names the turn. It has no tool pack, so the tool order stays the router's.</summary>
+        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter, ForskRole.Render };
 
         /// <summary>The router's role: import is Planner, build and edit are Modeller, print and sheets are Plotter.</summary>
         public static ForskRole Of(ForskIntent intent)

@@ -7,24 +7,25 @@
 <style>
 :root {
   color-scheme: light;
-  --paper: #FFFFFF;
-  --ink: #1C1917;
-  --muted: #78716C;
-  --faint: #A8A29E;
-  --line: #E7E5E4;
-  --bubble: #F2F0ED;
-  --field: #F7F6F4;
+  --page: #F5F6F8;
+  --card: #FFFFFF;
+  --ink: #1A1A1A;
+  --meta: #8A8F98;
+  --faint: #B0B4BC;
+  --line: rgba(26, 26, 26, 0.08);
   --ok: #15803D;
   --bad: #B91C1C;
   --brand: #2948f5;
+  --shadow: 0 1px 2px rgba(26, 26, 26, 0.05), 0 8px 24px rgba(26, 26, 26, 0.06);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--paper); }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--page); }
 body {
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
@@ -32,123 +33,162 @@ body {
   user-select: none;
   cursor: default;
 }
-header { padding: 14px 16px 8px; border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.logo { flex: none; display: block; width: 15px; height: 19px; color: var(--brand); }
-.mark { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
-.file { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.target { color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.status:empty, .target:empty { display: none; }
-#thread { flex: 1; overflow-y: auto; padding: 12px 16px 8px; -webkit-user-select: text; user-select: text; cursor: auto; }
-.row { display: flex; margin: 0 0 8px; }
+a { color: var(--brand); }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+header.top {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: start;
+  column-gap: 8px;
+  padding: 16px 14px 8px;
+}
+.round {
+  width: 34px; height: 34px; margin-top: 5px; border: 0; border-radius: 50%;
+  background: var(--card); color: var(--ink); box-shadow: var(--shadow);
+  display: grid; place-items: center; padding: 0; cursor: pointer;
+}
+#more { justify-self: end; }
+.identity { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; display: block; }
+.role-pill {
+  display: flex; flex-direction: column; align-items: center; max-width: 100%;
+  border: 0; background: var(--card); color: var(--ink); border-radius: 16px;
+  padding: 6px 14px 7px; box-shadow: var(--shadow); cursor: pointer; font: inherit;
+}
+.role-pill.set { box-shadow: 0 0 0 1px rgba(41, 72, 245, 0.35), 0 1px 2px rgba(26, 26, 26, 0.05); }
+.role-line { display: flex; align-items: center; gap: 3px; font-weight: 600; font-size: 14px; letter-spacing: -0.01em; line-height: 1.2; }
+.chev { color: var(--meta); display: block; }
+.role-sub {
+  color: var(--meta); font-size: 12px; font-weight: 400; line-height: 1.25;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.status { grid-column: 1 / -1; text-align: center; color: var(--meta); font-size: 12px; margin: 6px 0 0; }
+.status:empty { display: none; }
+.menu {
+  position: absolute; z-index: 5; min-width: 196px; margin-top: 6px; padding: 6px;
+  background: var(--card); border-radius: 14px; box-shadow: 0 8px 28px rgba(26, 26, 26, 0.12), 0 0 0 1px rgba(26, 26, 26, 0.05);
+}
+#role-menu { top: 100%; left: 50%; transform: translateX(-50%); }
+#more-menu { top: 46px; right: 14px; }
+.menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px;
+  line-height: 1.2; border-radius: 10px; padding: 8px 10px; cursor: pointer;
+}
+.menu button.split { margin-top: 6px; }
+.menu button:hover, .menu button:focus { background: var(--page); }
+.menu button[aria-checked="true"] { font-weight: 600; }
+.mini { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+#thread {
+  flex: 1; overflow-y: auto; padding: 8px 20px 12px;
+  -webkit-user-select: text; user-select: text; cursor: auto;
+}
+.row { display: flex; margin: 14px 0; }
 .row.user { justify-content: flex-end; }
-.bubble { max-width: 85%; padding: 8px 12px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.assistant .bubble { background: var(--bubble); color: var(--ink); }
-/* 14% brand over the white page. One variable; the wash is the tint. */
+.bubble { max-width: 82%; padding: 10px 14px; border-radius: 15px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.45; }
+/* 14% brand over the page. One variable; the wash is the tint. */
 .user .bubble {
   color: var(--ink);
   background-color: var(--brand);
   background-image: linear-gradient(rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.86));
 }
-.line { color: var(--muted); font-size: 12px; margin: 0 0 8px; white-space: pre-wrap; }
-.receipt { color: var(--muted); font-size: 12px; margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer { font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer b { font-weight: 600; }
+.marked { margin: 16px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.meta { display: flex; align-items: center; gap: 6px; color: var(--meta); font-size: 12px; margin: 0 0 8px; }
+.meta .mini { width: 16px; height: 16px; }
+.line { color: var(--meta); font-size: 13px; margin: 0 0 10px; white-space: pre-wrap; }
+.receipt { color: var(--meta); font-size: 13px; margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .receipt b { color: var(--ink); font-weight: 600; }
 .receipt .tick { color: var(--ok); margin-right: 4px; }
 .receipt .cross { color: var(--bad); margin-right: 4px; }
-.card { border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px; margin: 0 0 8px; animation: rise 160ms ease-out; }
+.card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; margin: 0 0 10px; animation: rise 160ms ease-out; }
 .card .question { margin: 0 0 8px; }
-.card.done, .card.stale { border: 0; padding: 0; animation: none; color: var(--muted); font-size: 12px; }
+.card.done, .card.stale { background: transparent; box-shadow: none; padding: 0; animation: none; color: var(--meta); font-size: 13px; }
 .card.stale { color: var(--faint); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill {
-  font: inherit; font-size: 13px; line-height: 1;
-  padding: 8px 14px; border-radius: 999px; border: 1px solid var(--ink);
-  background: var(--paper); color: var(--ink); cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: 13px; font-weight: 500; line-height: 1;
+  padding: 8px 14px; border-radius: 999px; border: 0;
+  background: var(--card); color: var(--ink); box-shadow: var(--shadow); cursor: pointer; white-space: nowrap;
 }
-.pill.primary { background: var(--ink); color: #FFFFFF; }
-.pill:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
-.step { position: relative; overflow: hidden; color: var(--muted); font-size: 12px; margin: 0 0 8px; }
-.dots { display: inline-flex; gap: 4px; padding: 10px 12px; border-radius: 18px; background: var(--bubble); margin: 0 0 8px; }
-.dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); opacity: 0.3; animation: blink 1.2s infinite ease-in-out; }
+.pill.primary { background: var(--brand); color: #FFFFFF; box-shadow: none; font-weight: 600; }
+.step { position: relative; overflow: hidden; color: var(--meta); font-size: 13px; margin: 0 0 8px; }
+.dots { display: inline-flex; gap: 4px; padding: 4px 0 8px; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--meta); opacity: 0.35; animation: blink 1.2s infinite ease-in-out; }
 .dots span:nth-child(2) { animation-delay: 0.2s; }
 .dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.35; } 40% { opacity: 1; } }
 .card input {
-  font: inherit; font-size: 14px; width: 120px; margin: 0 6px 8px 0; padding: 6px 10px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); outline: none;
+  font: inherit; font-size: 15px; width: 120px; margin: 0 6px 8px 0; padding: 6px 10px;
+  border: 0; border-radius: 10px; background: var(--page); color: var(--ink); outline: none;
+  box-shadow: inset 0 0 0 1px var(--line);
   -webkit-user-select: text; user-select: text;
 }
-.card input:focus { border-color: var(--muted); }
-.card .unit { color: var(--muted); font-size: 12px; }
+.card input:focus { box-shadow: inset 0 0 0 1px var(--meta); }
+.card .unit { color: var(--meta); font-size: 12px; }
 .card .field-row { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
 .card .field-row input { margin: 0; flex: 1; min-width: 0; width: auto; }
-.card .field-label { flex: none; width: 84px; color: var(--muted); font-size: 12px; }
-.card .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
-.card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 13px; }
+.card .field-label { flex: none; width: 84px; color: var(--meta); font-size: 12px; }
+.card .note { color: var(--meta); font-size: 12px; margin: 6px 0 0; }
+.card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 14px; }
 .card .rows li { padding: 2px 0; }
-nav.bar { padding: 8px 12px 0; border-top: 1px solid var(--line); }
+nav.bar { padding: 4px 16px 0; }
 .slots { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow: hidden; }
 .slot { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .slot.primary { flex: none; }
 .help-button {
   flex: none; margin-left: auto; width: 30px; height: 30px; padding: 0; border-radius: 50%;
-  border: 1px solid var(--line); background: var(--paper); color: var(--ink); font: 600 13px/28px -apple-system, sans-serif; cursor: pointer;
+  border: 0; background: var(--card); color: var(--ink); box-shadow: var(--shadow);
+  font: 600 13px/30px -apple-system, system-ui, sans-serif; cursor: pointer;
 }
-.help-button.open { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
-.reason { color: var(--muted); font-size: 12px; margin: 5px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.help-button.open { background: var(--brand); color: #FFFFFF; box-shadow: none; }
+.reason { color: var(--meta); font-size: 12px; margin: 6px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reason b { font-weight: 600; color: var(--ink); }
 @media (max-width: 359px) { .slots .slot:nth-child(3) { display: none; } }
 .sheet {
   position: absolute; left: 12px; right: 12px; bottom: 100%; margin-bottom: 8px; max-height: 60vh; overflow-y: auto;
-  background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px; animation: rise 160ms ease-out;
+  background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; animation: rise 160ms ease-out;
   -webkit-user-select: text; user-select: text;
 }
-.sheet h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
-.sheet h3 { font-size: 11px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
+.sheet h2 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.sheet h3 { font-size: 11px; font-weight: 600; color: var(--meta); margin: 10px 0 4px; }
 .sheet .pills { margin: 0 0 2px; }
-.sheet .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.sheet .hint { color: var(--meta); font-size: 12px; margin: 8px 0 0; }
 .dock { position: relative; }
-select.role-pick {
-  flex: none; align-self: center; -webkit-appearance: none; appearance: none;
-  height: 28px; box-sizing: border-box;
-  font: 12px/26px -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted);
-  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; margin: 0; cursor: pointer;
-}
-select.role-pick:empty { display: none; }
-select.role-pick.set { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
-select.role-pick:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
-.marked > .role { display: block; color: var(--muted); font-size: 11px; margin: 0 0 2px 12px; }
 .add {
-  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--muted);
-  font: 400 22px/32px -apple-system, sans-serif; cursor: pointer; padding: 0; margin: 0;
+  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--meta);
+  font: 400 22px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
   /* The system "+" ink sits 2px below the em centre, so the control reads low. */
   transform: translateY(-2px);
 }
+.key-hint { flex: none; align-self: center; color: var(--meta); font-size: 12px; line-height: 1; padding: 0 2px 0 0; }
 .step::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
-  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 100%);
+  background: linear-gradient(90deg, rgba(245,246,248,0) 0%, rgba(245,246,248,0.9) 50%, rgba(245,246,248,0) 100%);
   transform: translateX(-100%); animation: sheen 1.6s linear infinite;
 }
 @keyframes sheen { to { transform: translateX(100%); } }
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-form.composer { margin: 0; padding: 8px 12px 12px; }
+form.composer { margin: 0; padding: 8px 16px 16px; }
 .field {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--field); border: 1px solid var(--line); border-radius: 22px;
-  padding: 4px; min-height: 40px;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--card); border: 0; border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 6px 6px 6px 4px; min-height: 48px;
 }
 textarea {
   flex: 1; align-self: center; min-width: 0; height: 32px; border: 0; outline: none; resize: none; background: transparent;
-  font: inherit; font-size: 14px; line-height: 32px; color: var(--ink); caret-color: var(--ink);
+  font: inherit; font-size: 15px; line-height: 32px; color: var(--ink); caret-color: var(--ink);
   padding: 0; margin: 0; max-height: calc(32px * 5); overflow-y: auto;
   -webkit-user-select: text; user-select: text;
 }
 textarea::placeholder { color: var(--faint); }
 .send {
   flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%;
-  background: var(--brand); color: #FFFFFF; font: 600 16px/32px -apple-system, sans-serif; cursor: pointer; padding: 0; margin: 0;
+  background: var(--brand); color: #FFFFFF; font: 600 16px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
 }
 .send:disabled {
@@ -164,10 +204,25 @@ textarea::placeholder { color: var(--faint); }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand"><svg class="logo" viewBox="212 152 488 608" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M420.75 160.535C418.068 161.088 415.477 162.067 413.1 163.426C395.589 173.432 400.497 191.655 401.108 208.25C401.358 215.05 401.268 221.857 400.875 228.65C400.531 234.6 399.904 240.534 399.93 246.5C399.963 254.16 400.91 261.794 401.149 269.45C401.441 278.83 400.923 288.147 400.267 297.5C399.506 308.347 402.057 321.485 395.25 330.785C388.187 340.435 377.063 339.961 366.35 339.928C362.656 339.917 358.982 340.157 355.3 340.426C346.239 341.088 337.185 341.443 328.1 341.103C321.012 340.837 313.944 339.984 306.85 339.931C300.908 339.887 295 340.498 289.074 340.85C283.106 341.205 277.127 341.334 271.15 341.195C266.61 341.09 262.079 340.817 257.55 340.488C247.982 339.792 238.444 339.136 230.35 345.237C224.722 349.479 221.013 355.953 220.179 362.95C219.609 367.735 220.128 372.616 220.476 377.4C220.848 382.495 221.145 387.592 221.226 392.7C221.324 398.939 221.12 405.175 220.703 411.4C219.857 424.006 218.228 436.026 228.65 445.364C236.882 452.74 246.335 452.331 256.7 451.574C261.512 451.223 266.326 450.916 271.15 450.804C277.387 450.66 283.624 450.81 289.85 451.197C294.948 451.514 300.039 452.03 305.15 452.068C314.227 452.136 323.273 450.939 332.35 450.78C342.029 450.611 351.598 451.498 361.25 451.963C373.381 452.547 386.965 449.895 395.25 461.215C400.99 469.057 399.788 478.764 399.945 487.9C400.072 495.276 400.954 502.624 401.165 510C401.433 519.383 400.869 528.695 400.229 538.05C399.316 551.378 401.37 564.66 401.242 578C401.158 586.805 400.071 595.555 399.941 604.35C399.794 614.276 401.153 624.17 401.243 634.1C401.336 644.336 400.054 654.484 399.936 664.7C399.838 673.213 400.935 681.694 401.171 690.2C401.383 697.86 401.125 705.509 400.581 713.15C399.782 724.383 398.697 734.862 407.001 743.75C416.278 753.679 427.967 752.155 440.3 751.318C447.941 750.799 455.595 750.61 463.25 750.874C471.8 751.168 483.146 753.152 491.3 751.455C493.982 750.896 496.574 749.91 498.95 748.546C516.394 738.526 511.507 720.365 510.894 703.8C510.642 697 510.73 690.193 511.122 683.4C511.465 677.45 512.094 671.515 512.07 665.55C512.04 657.863 511.089 650.204 510.85 642.522C510.559 633.167 511.075 623.877 511.73 614.55C512.495 603.666 509.928 590.458 516.8 581.147C523.893 571.538 534.994 572.044 545.7 572.072C549.392 572.081 553.069 571.839 556.75 571.57C565.811 570.909 574.866 570.557 583.95 570.899C591.038 571.166 598.106 572.02 605.2 572.069C610.883 572.109 616.534 571.546 622.2 571.194C628.426 570.808 634.663 570.66 640.9 570.806C645.44 570.912 649.971 571.186 654.5 571.516C664.073 572.213 673.614 572.85 681.7 566.725C687.286 562.493 690.973 556.056 691.815 549.1C692.394 544.316 691.875 539.433 691.527 534.65C691.155 529.555 690.857 524.458 690.775 519.35C690.675 513.111 690.877 506.875 691.294 500.65C692.137 488.057 693.788 476.037 683.4 466.681C675.181 459.278 665.724 459.664 655.35 460.422C650.538 460.773 645.724 461.082 640.9 461.195C634.663 461.341 628.426 461.192 622.2 460.806C617.102 460.49 612.011 459.973 606.9 459.932C597.823 459.86 588.777 461.058 579.7 461.219C570.02 461.391 560.452 460.509 550.8 460.04C538.686 459.451 525.112 462.114 516.8 450.853C511.018 443.02 512.209 433.298 512.056 424.15C511.933 416.774 511.049 409.426 510.836 402.05C510.565 392.666 511.126 383.356 511.768 374C512.702 360.391 510.584 346.824 510.767 333.2C510.881 324.681 511.928 316.211 512.058 307.7C512.21 297.773 510.85 287.88 510.758 277.95C510.662 267.713 511.941 257.567 512.063 247.35C512.163 239.06 511.107 230.803 510.85 222.522C510.614 214.924 510.831 207.332 511.356 199.75C512.15 188.282 513.536 177.436 505.045 168.3C495.786 158.337 484.094 159.839 471.75 160.679C464.109 161.199 456.456 161.39 448.8 161.128C440.235 160.835 428.919 158.851 420.75 160.535Z"/></svg><span class="mark">Forsk</span><span id="file" class="file"></span></div>
-  <div id="target" class="target"></div>
+<header class="top">
+  <button id="history" class="round" type="button" aria-label="History" title="History">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.2 4.2v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8.2V12l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="identity">
+    <img id="avatar" class="avatar" alt="" src="%%AVATAR_PLANNER%%">
+    <button id="role-pill" class="role-pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu">
+      <span class="role-line"><span id="role-name">Planner</span><svg class="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span id="file" class="role-sub"></span>
+    </button>
+    <div id="role-menu" class="menu" role="menu" hidden></div>
+  </div>
+  <button id="more" class="round" type="button" aria-label="More" title="More" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="6" cy="12" r="1.35" fill="currentColor"/><circle cx="12" cy="12" r="1.35" fill="currentColor"/><circle cx="18" cy="12" r="1.35" fill="currentColor"/></svg>
+  </button>
+  <div id="more-menu" class="menu" role="menu" hidden><div id="settings"></div></div>
   <div id="status" class="status"></div>
+  <div id="target" hidden></div>
+  <div id="avatars" hidden data-planner="%%AVATAR_PLANNER%%" data-modeller="%%AVATAR_MODELLER%%" data-plotter="%%AVATAR_PLOTTER%%" data-render="%%AVATAR_RENDER%%"></div>
 </header>
 <main id="thread" aria-live="polite"></main>
 <div class="dock">
@@ -176,8 +231,8 @@ textarea::placeholder { color: var(--faint); }
   <form id="composer" class="composer" autocomplete="off">
     <div class="field">
       <button id="add" class="add" type="button" aria-label="Import a plan" title="Import a plan">+</button>
-      <select id="role" class="role-pick"></select>
-      <textarea id="q" rows="1" placeholder="Message Forsk" spellcheck="true" aria-label="Message Forsk"></textarea>
+      <textarea id="q" rows="1" placeholder="Ask Forsk…" spellcheck="true" aria-label="Ask Forsk"></textarea>
+      <span class="key-hint" aria-hidden="true" title="Return to send">&#x23CE;</span>
       <button id="send" class="send" type="submit" aria-label="Send" disabled>&#8593;</button>
     </div>
   </form>

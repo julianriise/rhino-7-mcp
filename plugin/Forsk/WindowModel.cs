@@ -280,7 +280,7 @@ namespace RhinoMCPPlugin.Forsk
 
     /// <summary>
     /// The page's whole model for one document: the file name, Target, the
-    /// status line, the thread, and the pinned bar. C# builds it from the
+    /// status line, the thread, the pinned bar, and the settings menu. C# builds it from the
     /// thread and the classifier's facts; the page draws it. An empty thread
     /// shows one local sentence that names the file state; it is not stored,
     /// so it never goes out of date.
@@ -296,8 +296,22 @@ namespace RhinoMCPPlugin.Forsk
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
             model["role"] = ForskRoles.Control(thread.Override);
+            model["settings"] = Settings(facts);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             return model;
+        }
+
+        /// <summary>Ink, the title block, and the bridge: the same Shows rules as the help card, in menu order.</summary>
+        static JArray Settings(FileFacts facts)
+        {
+            var menu = new JArray();
+            foreach (var id in new[] { "ink.set", "meta.title", "bridge.start" })
+            {
+                var action = ForskRegistry.Find(id);
+                if (action != null && action.Shows(facts))
+                    menu.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label });
+            }
+            return menu;
         }
     }
 

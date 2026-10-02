@@ -120,6 +120,65 @@
     return [text.substring(0, at), subject, text.substring(at + subject.length)];
   };
 
+  /*
+   * The face in the header. An override wins. Otherwise the latest answer
+   * whose mark is a role, and Planner when the thread has none. Daylight
+   * is not a face.
+   */
+  Forsk.shownRole = function (model) {
+    model = model || {};
+    var faces = { planner: 1, modeller: 1, plotter: 1, render: 1 };
+    var value = model.role && model.role.value;
+    if (value && faces[value]) return value;
+    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Render: 'render' };
+    var thread = model.thread || [];
+    for (var i = thread.length - 1; i >= 0; i--) {
+      var id = marks[thread[i].mark];
+      if (id) return id;
+    }
+    return 'planner';
+  };
+
+  /* The pill's second line: the file, or "auto · file" while the router picks. */
+  Forsk.roleSubtitle = function (model) {
+    model = model || {};
+    var file = model.file || '';
+    if (!model.role) return file;
+    if (!model.role.value || model.role.value === 'auto') return file ? 'auto \u00b7 ' + file : 'auto';
+    return file;
+  };
+
+  /* Auto is the clear action, so it sits last. The other options keep their order. */
+  Forsk.roleMenu = function (options) {
+    var rest = [];
+    var auto = null;
+    (options || []).forEach(function (option) {
+      if (option.id === 'auto') auto = option;
+      else rest.push(option);
+    });
+    if (auto) rest.push(auto);
+    return rest;
+  };
+
+  /* A bullet's lead, up to the colon or the period, else its first four words. */
+  Forsk.leadWords = function (line) {
+    var match = /^([ \t]*[-*\u2013\u2022]\s+)(\S.*)$/.exec(line || '');
+    if (!match) return null;
+    var rest = match[2];
+    var cut = rest.search(/[.:\u2014]/);
+    var lead;
+    var tail;
+    if (cut > 0 && cut <= 48) {
+      lead = rest.substring(0, cut);
+      tail = rest.substring(cut);
+    } else {
+      var words = rest.split(/\s+/);
+      lead = words.slice(0, Math.min(4, words.length)).join(' ');
+      tail = rest.substring(lead.length);
+    }
+    return [match[1], lead, tail];
+  };
+
   // ---------------------------------------------------------------- DOM
 
   var model = null;
@@ -216,21 +275,60 @@
     return box;
   }
 
+  function avatarSrc(id) {
+    var node = document.getElementById('avatars');
+    return node && id ? (node.getAttribute('data-' + id) || '') : '';
+  }
+
+  function textBlock(text, cls) {
+    var node = el('div', cls);
+    var lines = String(text || '').split('\n');
+    var any = false;
+    for (var i = 0; i < lines.length; i++) if (Forsk.leadWords(lines[i])) any = true;
+    if (!any) {
+      node.textContent = text || '';
+      return node;
+    }
+    lines.forEach(function (line, index) {
+      if (index) node.appendChild(document.createElement('br'));
+      var lead = Forsk.leadWords(line);
+      if (!lead) {
+        node.appendChild(document.createTextNode(line));
+        return;
+      }
+      node.appendChild(document.createTextNode(lead[0]));
+      if (lead[1]) node.appendChild(el('b', null, lead[1]));
+      if (lead[2]) node.appendChild(document.createTextNode(lead[2]));
+    });
+    return node;
+  }
+
   /* The role that answered, once, above the first reply of a turn. */
   function marked(node, mark) {
     if (!mark) return node;
     var wrap = el('div', 'marked');
-    wrap.appendChild(el('span', 'role', mark));
+    var meta = el('div', 'meta');
+    var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Render: 'render' }[mark];
+    var src = avatarSrc(id);
+    if (src) {
+      var img = el('img', 'mini');
+      img.alt = '';
+      img.src = src;
+      meta.appendChild(img);
+    }
+    meta.appendChild(el('span', 'role', mark));
+    wrap.appendChild(meta);
     wrap.appendChild(node);
     return wrap;
   }
 
   function item(entry) {
-    if (entry.role === 'user' || entry.role === 'assistant') {
-      var row = el('div', 'row ' + entry.role);
+    if (entry.role === 'user') {
+      var row = el('div', 'row user');
       row.appendChild(el('div', 'bubble', entry.text));
-      return marked(row, entry.mark);
+      return row;
     }
+    if (entry.role === 'assistant') return marked(textBlock(entry.text, 'answer'), entry.mark);
     if (entry.role === 'receipt') return marked(receipt(entry), entry.mark);
     if (entry.role === 'card') return marked(card(entry), entry.mark);
     return el('div', 'line', entry.text);
@@ -248,29 +346,80 @@
     return marked(el('div', 'step', state.text), state.mark);
   }
 
-  /* The role control: Auto, or a pick that stays until Auto clears it. Left alone while it has focus. */
-  function renderRole(role) {
-    var select = document.getElementById('role');
-    if (!role) {
-      select.style.display = 'none';
-      return;
-    }
-    select.style.display = '';
-    if (document.activeElement === select) return;
-    var ids = (role.options || []).map(function (o) { return o.id + ':' + o.label; }).join('|');
-    if (select.dataset.ids !== ids) {
-      while (select.firstChild) select.removeChild(select.firstChild);
-      (role.options || []).forEach(function (o) {
-        var option = el('option', null, o.label);
-        option.value = o.id;
-        select.appendChild(option);
+  function optionLabel(role, id) {
+    var options = (role && role.options) || [];
+    for (var i = 0; i < options.length; i++) if (options[i].id === id) return options[i].label;
+    return id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Planner';
+  }
+
+  /* The header picker. The menu is left alone while it is open, as the old select was while it had focus. */
+  function renderRole(model) {
+    var role = model && model.role;
+    var pill = document.getElementById('role-pill');
+    var menu = document.getElementById('role-menu');
+    var name = document.getElementById('role-name');
+    var shown = Forsk.shownRole(model);
+    name.textContent = optionLabel(role, shown);
+    document.getElementById('file').textContent = Forsk.roleSubtitle(model);
+    var face = document.getElementById('avatar');
+    var src = avatarSrc(shown);
+    if (src) face.src = src;
+    pill.className = 'role-pill' + (role && role.value && role.value !== 'auto' ? ' set' : '');
+    pill.title = (role && role.title) || '';
+    var spoken = (role && role.label ? role.label + ', ' : '') + name.textContent;
+    var sub = document.getElementById('file').textContent;
+    if (sub) spoken += ', ' + sub;
+    pill.setAttribute('aria-label', spoken);
+    if (role && role.label) menu.setAttribute('aria-label', role.label);
+    if (!menu.hidden) return;
+    while (menu.firstChild) menu.removeChild(menu.firstChild);
+    Forsk.roleMenu(role && role.options).forEach(function (option) {
+      var button = el('button');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitemradio');
+      button.setAttribute('aria-checked', role && option.id === role.value ? 'true' : 'false');
+      var icon = option.id !== 'auto' ? avatarSrc(option.id) : '';
+      if (icon) {
+        var img = el('img', 'mini');
+        img.alt = '';
+        img.src = icon;
+        button.appendChild(img);
+      }
+      button.appendChild(document.createTextNode(option.label));
+      button.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'role', role: option.id });
       });
-      select.dataset.ids = ids;
-    }
-    select.value = role.value;
-    select.className = 'role-pick' + (role.value !== 'auto' ? ' set' : '');
-    select.setAttribute('aria-label', role.label || '');
-    select.title = role.title || '';
+      menu.appendChild(button);
+    });
+  }
+
+  function renderSettings(model) {
+    var menu = document.getElementById('more-menu');
+    if (!menu.hidden) return;
+    var box = document.getElementById('settings');
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var items = (model && model.settings) || [];
+    items.forEach(function (item) {
+      var button = el('button', null, item.label);
+      button.type = 'button';
+      button.setAttribute('role', 'menuitem');
+      button.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'action', id: item.id });
+      });
+      box.appendChild(button);
+    });
+    var help = model && model.bar && model.bar.help;
+    if (!help) return;
+    var h = el('button', items.length ? 'split' : null, help.title || help.label);
+    h.type = 'button';
+    h.setAttribute('role', 'menuitem');
+    h.addEventListener('click', function () {
+      closeMenus(false);
+      sender.send({ kind: 'help' });
+    });
+    box.appendChild(h);
   }
 
   function renderBar(bar) {
@@ -333,7 +482,6 @@
     model = next || {};
     var thread = document.getElementById('thread');
     var atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
-    document.getElementById('file').textContent = model.file || '';
     document.getElementById('target').textContent = model.target || '';
     document.getElementById('status').textContent = model.status || '';
     while (thread.firstChild) thread.removeChild(thread.firstChild);
@@ -342,7 +490,8 @@
     if (atEnd) thread.scrollTop = thread.scrollHeight;
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
-    renderRole(model.role);
+    renderRole(model);
+    renderSettings(model);
     renderSheet(model.help);
     applyPrefill(model.prefill);
   };
@@ -359,6 +508,50 @@
     document.getElementById('send').disabled = !q.value.replace(/\s+/g, '');
   }
 
+  var menuOwner = null;
+
+  function menuButtons(menu) {
+    var list = [];
+    var nodes = menu.getElementsByTagName('button');
+    for (var i = 0; i < nodes.length; i++) list.push(nodes[i]);
+    return list;
+  }
+
+  function openMenuEl() {
+    var roleMenu = document.getElementById('role-menu');
+    if (roleMenu && !roleMenu.hidden) return roleMenu;
+    var moreMenu = document.getElementById('more-menu');
+    if (moreMenu && !moreMenu.hidden) return moreMenu;
+    return null;
+  }
+
+  function holds(id, node) {
+    var box = document.getElementById(id);
+    return !!(box && node && (box === node || box.contains(node)));
+  }
+
+  function closeMenus(back) {
+    document.getElementById('role-menu').hidden = true;
+    document.getElementById('more-menu').hidden = true;
+    document.getElementById('role-pill').setAttribute('aria-expanded', 'false');
+    document.getElementById('more').setAttribute('aria-expanded', 'false');
+    var owner = menuOwner;
+    menuOwner = null;
+    if (back && owner) owner.focus();
+  }
+
+  function openMenu(id, owner) {
+    closeMenus(false);
+    var menu = document.getElementById(id);
+    menu.hidden = false;
+    menuOwner = owner;
+    owner.setAttribute('aria-expanded', 'true');
+    var items = menuButtons(menu);
+    var current = null;
+    for (var i = 0; i < items.length; i++) if (items[i].getAttribute('aria-checked') === 'true') current = items[i];
+    (current || items[0] || owner).focus();
+  }
+
   function boot() {
     sender = Forsk.makeSender(root.FORSK_TOKEN, function (body) {
       // Absolute: loadHTMLString does not make the document's URL the base URL, so a relative "action" never hits the channel.
@@ -373,6 +566,30 @@
       sender.send(action);
     }
     document.addEventListener('keydown', function (e) {
+      var menu = openMenuEl();
+      if (menu && e.key === 'Escape') {
+        e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        closeMenus(true);
+        return;
+      }
+      if (menu && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End')) {
+        var items = menuButtons(menu);
+        if (items.length) {
+          e.preventDefault();
+          var index = -1;
+          for (var i = 0; i < items.length; i++) if (items[i] === document.activeElement) index = i;
+          var next = index;
+          if (e.key === 'ArrowDown') next = index + 1;
+          if (e.key === 'ArrowUp') next = index - 1;
+          if (e.key === 'Home' || (index < 0 && e.key === 'ArrowDown')) next = 0;
+          if (e.key === 'End' || (index < 0 && e.key === 'ArrowUp')) next = items.length - 1;
+          if (next < 0) next = items.length - 1;
+          if (next >= items.length) next = 0;
+          items[next].focus();
+        }
+        return;
+      }
       Forsk.handleKey(e, { composer: e.target === q, card: openCard(), text: q.value }, send);
     }, true);
     document.getElementById('composer').addEventListener('submit', function (e) {
@@ -382,10 +599,30 @@
       q.focus();
     });
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
-    var role = document.getElementById('role');
-    role.addEventListener('change', function () {
-      role.className = 'role-pick' + (role.value !== 'auto' ? ' set' : '');
-      sender.send({ kind: 'role', role: role.value });
+    // One thread per file. There is no separate history list, so this scrolls that thread.
+    document.getElementById('history').addEventListener('click', function () {
+      var thread = document.getElementById('thread');
+      thread.scrollTop = 0;
+    });
+    var pill = document.getElementById('role-pill');
+    var more = document.getElementById('more');
+    pill.addEventListener('click', function () {
+      if (document.getElementById('role-menu').hidden) openMenu('role-menu', pill);
+      else closeMenus(true);
+    });
+    more.addEventListener('click', function () {
+      if (document.getElementById('more-menu').hidden) openMenu('more-menu', more);
+      else closeMenus(true);
+    });
+    pill.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      openMenu('role-menu', pill);
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (!openMenuEl()) return;
+      if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target)) return;
+      closeMenus(false);
     });
     var nav = document.getElementById('bar');
     nav.addEventListener('mouseenter', function () { barHovered = true; });

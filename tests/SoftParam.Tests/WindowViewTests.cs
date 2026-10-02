@@ -92,6 +92,17 @@ public class WindowViewTests
     }
 
     [Fact]
+    public void TheMoreMenu_ListsSettingsThatAreTrueNow()
+    {
+        string[] Ids(string fixture) => ((JArray)View(fixture)["settings"]!).Select(s => s["id"]!.ToString()).ToArray();
+
+        Assert.Equal(new[] { "meta.title" }, Ids("empty"));
+        Assert.Equal(new[] { "Ink", "Title block" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "ink.set", "meta.title", "bridge.start" }, Ids("bridge down, grey ink"));
+        Assert.DoesNotContain("file.print", Ids("house"));
+    }
+
+    [Fact]
     public void TheHelpCard_IsOnlyInTheModelWhileOpen()
     {
         Assert.Null(View("house")["help"]);

@@ -527,9 +527,24 @@ namespace RhinoMCPPlugin.Forsk
 
         public static string Html(string token, string origin)
         {
-            if (_html == null) _html = Resource("window.html");
+            if (_html == null) _html = WithAvatars(Resource("window.html"));
             if (_script == null) _script = Resource("window.js");
             return PageChannel.ComposePage(_html, _script, token, origin);
+        }
+
+        /// <summary>
+        /// The four faces ship as page resources. A data URI keeps each SVG's
+        /// mask id in its own image, and LoadHtml has no base URL for a file.
+        /// </summary>
+        static string WithAvatars(string html)
+        {
+            foreach (var name in new[] { "planner", "modeller", "plotter", "render" })
+            {
+                var svg = Resource("avatar-" + name + ".svg");
+                var uri = "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
+                html = html.Replace("%%AVATAR_" + name.ToUpperInvariant() + "%%", uri);
+            }
+            return html;
         }
 
         /// <summary>A call into the page. Non-ASCII is escaped, so æ ø å and line separators reach the page intact.</summary>
