@@ -67,6 +67,11 @@ namespace RhinoMCPPlugin.Forsk
 
         void Fire(string id, bool fromCard)
         {
+            if (id == ForskDebug.MenuId)
+            {
+                CopyDebugReport(RhinoDoc.ActiveDoc);
+                return;
+            }
             var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
             var action = ForskRegistry.Find(id);

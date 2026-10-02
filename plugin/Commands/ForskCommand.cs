@@ -40,6 +40,17 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>Copy the debug report to the clipboard and ~/Desktop/forsk-debug.txt.</summary>
+    public class ForskDebugCommand : Command
+    {
+        public override string EnglishName => "ForskDebug";
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            return ForskWindow.CopyDebugReport(doc) ? Result.Success : Result.Failure;
+        }
+    }
+
     /// <summary>Drag a cross-section line in Top, name it, store it with section_add.</summary>
     public class ForskSectionCommand : Command
     {

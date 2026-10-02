@@ -96,10 +96,13 @@ public class WindowViewTests
     {
         string[] Ids(string fixture) => ((JArray)View(fixture)["settings"]!).Select(s => s["id"]!.ToString()).ToArray();
 
-        Assert.Equal(new[] { "meta.title" }, Ids("empty"));
-        Assert.Equal(new[] { "Ink", "Title block" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
-        Assert.Equal(new[] { "ink.set", "meta.title", "bridge.start" }, Ids("bridge down, grey ink"));
+        Assert.Equal(new[] { "meta.title", "debug.copy" }, Ids("empty"));
+        Assert.Equal(new[] { "Ink", "Title block", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "ink.set", "meta.title", "bridge.start", "debug.copy" }, Ids("bridge down, grey ink"));
         Assert.DoesNotContain("file.print", Ids("house"));
+        Assert.Equal(new[] { "meta.title" }, ((JArray)View("empty")["attention"]!).Select(a => a["id"]!.ToString()));
+        var help = View("house", help: true)["help"]!["groups"]!.SelectMany(g => g["actions"]!).Select(a => a["id"]!.ToString());
+        Assert.DoesNotContain("debug.copy", help);
     }
 
     /// <summary>

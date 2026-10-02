@@ -14,6 +14,7 @@
   <PropertyGroup>
     <!-- Specifies information for Assembly and Yak -->
     <Version>0.3.1-r7</Version>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
     <Title>rhinomcp</Title>
     <Company>Jingcheng Chen</Company>
     <Description>Rhino integration through the Model Context Protocol (Rhino 7 build)</Description>

@@ -302,7 +302,7 @@ namespace RhinoMCPPlugin.Forsk
             return model;
         }
 
-        /// <summary>Ink, the title block, and the bridge: the same Shows rules as the help card, in menu order.</summary>
+        /// <summary>Ink, the title block, and the bridge, then Copy debug report. The debug row is always there and is not a help-card action.</summary>
         static JArray Settings(FileFacts facts)
         {
             var menu = new JArray();
@@ -312,6 +312,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (action != null && action.Shows(facts))
                     menu.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label });
             }
+            menu.Add(new JObject { ["id"] = ForskDebug.MenuId, ["label"] = ForskDebug.MenuLabel });
             return menu;
         }
 
