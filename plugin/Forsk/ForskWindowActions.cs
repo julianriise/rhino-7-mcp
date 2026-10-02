@@ -50,12 +50,18 @@ namespace RhinoMCPPlugin.Forsk
 
         // ------------------------------------------------------------ the bar
 
+        /// <summary>The bar as the page draws it: the same facts and the same role boost.</summary>
+        BarView Drawn(RhinoDoc doc)
+        {
+            return ForskRegistry.Bar(Facts(doc), Active()?.Override ?? ForskRole.None);
+        }
+
         /// <summary>Cmd+1..3: that slot of the bar as it is drawn now.</summary>
         void Slot(int n)
         {
             var doc = RhinoDoc.ActiveDoc;
             if (doc == null || n < 1) return;
-            var slot = ForskRegistry.Bar(Facts(doc)).Slots.Skip(n - 1).FirstOrDefault();
+            var slot = Drawn(doc).Slots.Skip(n - 1).FirstOrDefault();
             if (slot != null) Fire(slot.Id, false);
         }
 
@@ -232,6 +238,9 @@ namespace RhinoMCPPlugin.Forsk
             var thread = Active();
             var card = thread?.Find(cardId);
             if (card == null) return;
+            // A click checks again: a card whose selection or model moved since it opened is grey now, even before idle.
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc != null && thread.StaleCards(ReadFacts(doc)) > 0) Log("cards: went stale at the click");
             var kind = card["kind"]?.ToString();
             var length = values?["length"]?.ToString();
             if (kind == "scale" && pillId == "set" && ParseMm(length) == null && card["state"]?.ToString() == "open")
@@ -313,7 +322,7 @@ namespace RhinoMCPPlugin.Forsk
             if (thread == null || doc == null || string.IsNullOrWhiteSpace(text)) return;
             text = text.Trim();
             // A slot's exact English label fires that slot.
-            var hit = ForskRegistry.ByLabel(ForskRegistry.Bar(Facts(doc)), text);
+            var hit = ForskRegistry.ByLabel(Drawn(doc), text);
             if (hit != null)
             {
                 Fire(hit.Id, false);

@@ -72,6 +72,18 @@ public class RoleTests
     }
 
     [Fact]
+    public void TheDrawnBar_IsTheBarTheShortcutsFire()
+    {
+        // Cmd+3 and a typed label read the bar with the role boost, as the page draws it.
+        var thread = new DocThread { Serial = 1, Override = ForskRole.Plotter };
+        var facts = Docs.Facts("forsk undo newest");
+        var drawn = ((JArray)WindowView.Build(thread, facts, "")["bar"]!["slots"]!).Select(s => s["id"]!.ToString());
+        Assert.Equal(ForskRegistry.Bar(facts, thread.Override).Slots.Select(a => a.Id), drawn);
+        Assert.Equal("section.add", ForskRegistry.ByLabel(ForskRegistry.Bar(facts, thread.Override), "Add a section")!.Id);
+        Assert.Null(ForskRegistry.ByLabel(ForskRegistry.Bar(facts, thread.Override), "Daylight"));
+    }
+
+    [Fact]
     public void StaleSheets_SetPrintsReason_WhateverTheRole()
     {
         var facts = Docs.Facts("printed, then edited");
