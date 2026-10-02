@@ -339,7 +339,13 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             if (Refuse(thread)) return;
-            // A question, a bug, or a feature request is Support, before print and the other shortcuts.
+            // Support, picked or routed, answers a bug or a feature request and the card follows.
+            if (ForskReports.EndsWithReport(thread.Override, text))
+            {
+                Chat(thread, text, "answer");
+                return;
+            }
+            // A question is an answer. From any other role, a bug or a feature request is the card alone.
             if (ForskIntentRouter.Classify(text) == ForskIntent.Support)
             {
                 var report = ForskReports.Card(text, FileName(doc));
@@ -433,6 +439,11 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     thread.History.Clear();
                     thread.History.AddRange(history);
+                    if (ForskReports.EndsWithReport(thread.Override, text))
+                    {
+                        var report = ForskReports.Card(text, FileName(RhinoDoc.ActiveDoc), ForskReports.Findings(thread.Items));
+                        if (report != null) thread.AddCard(report, null);
+                    }
                     Finish(thread, kind, undo, serial, null, text);
                 });
             });

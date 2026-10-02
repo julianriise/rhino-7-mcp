@@ -366,10 +366,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
             if (intent == ForskIntent.Support)
             {
-                return "Turn bias: Support. Answer the question about Forsk or Rhino in at most two sentences. "
+                return "Turn bias: Support. Answer in at most two sentences. "
                     + "The tools only read the document, the selection, and the debug report. "
                     + "Do not edit the model. Do not select, capture, or call a tool that is not in the list. "
-                    + "Pass on what the tools say. Do not invent a count.";
+                    + "Pass on what the tools say. Do not invent a count. "
+                    + "A question: answer it. A bug or a feature request: say what you found in the model. The window adds the report.";
             }
             if (intent == ForskIntent.Build)
             {
@@ -718,7 +719,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
             if (intent == ForskIntent.Support)
             {
-                text += " Answer the question. Do not edit the model, the selection, or the file.";
+                text += " Answer in at most two sentences from what the tools read. Do not edit the model, the selection, or the file. A bug or a feature request ends in the window's report card; do not ask the user to file one.";
             }
             return text;
         }

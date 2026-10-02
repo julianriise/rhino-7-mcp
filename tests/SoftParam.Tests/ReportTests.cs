@@ -94,6 +94,65 @@ public class ReportTests
     }
 
     [Fact]
+    public void Support_EndsABugOnTheReportCard_PrefilledWithWhatItFound()
+    {
+        const string said = "there is an issue with areas, when i click an area in rhino, it selects multiple area";
+        Assert.True(ForskReports.EndsWithReport(ForskRole.Support, said));
+        Assert.True(ForskReports.EndsWithReport(ForskRole.None, said));
+        Assert.False(ForskReports.EndsWithReport(ForskRole.Modeller, said));
+        Assert.False(ForskReports.EndsWithReport(ForskRole.Support, "how do I print"));
+        Assert.False(ForskReports.EndsWithReport(ForskRole.Support, "hello"));
+        Assert.True(ForskReports.EndsWithReport(ForskRole.Support, "can you add a stair tool"));
+
+        var thread = new DocThread { Serial = 1, Override = ForskRole.Support };
+        thread.Add("user", said);
+        thread.BeginReply(ForskRoles.Mark(ForskIntent.Support, thread.Override));
+        var answer = thread.Add("assistant", "A-ROOM has two outlines on each room.");
+        thread.AddReceipt(true, "Document", "16 rooms");
+        var found = ForskReports.Findings(thread.Items);
+        Assert.Equal("A-ROOM has two outlines on each room.\n16 rooms", found);
+
+        var card = ForskReports.Card(said, "office.3dm", found);
+        Assert.Contains(said, Field(card, "happened"));
+        Assert.Contains("A-ROOM has two outlines on each room.", Field(card, "happened"));
+        Assert.Contains("16 rooms", Field(card, "happened"));
+        var attach = card.Fields.Single(f => f.Key == "attach");
+        Assert.True(attach.Check);
+        Assert.Equal("1", attach.Value);
+
+        var item = thread.AddCard(card, null);
+        thread.EndReply();
+        Assert.Equal("Support", answer["mark"]!.ToString());
+        Assert.Equal("support.report", item["kind"]!.ToString());
+        Assert.Equal(thread.Items[thread.Items.Count - 1], item);
+        Assert.Equal("1", item["fields"]!.Last["value"]!.ToString());
+        Assert.True(item["fields"]!.Last["check"]!.Value<bool>());
+
+        var feature = ForskReports.Card("can you add a stair tool", "a.3dm", "No stair tool.");
+        Assert.Equal("", Field(feature, "happened"));
+        Assert.Equal("can you add a stair tool\n\nNo stair tool.", Field(feature, "expected"));
+        Assert.True(feature.Fields.Single(f => f.Key == "attach").Check);
+
+        var repeated = ForskReports.Card("this is broken", "a.3dm", "The user said this is broken.");
+        Assert.Equal("The user said this is broken.", Field(repeated, "happened"));
+
+        var window = ForskSource("ForskWindowActions.cs");
+        Assert.Contains("ForskReports.EndsWithReport", window);
+        Assert.Contains("ForskReports.Findings", window);
+        Assert.Contains("The window adds the report.", ForskSource("ForskChat.cs"));
+    }
+
+    static string ForskSource(string file)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", "Forsk", file);
+            if (File.Exists(path)) return File.ReadAllText(path);
+        }
+        throw new DirectoryNotFoundException("plugin/Forsk/" + file + " above " + AppContext.BaseDirectory);
+    }
+
+    [Fact]
     public void Send_AppendsOneJsonLine_AndLeavesTheDebugReportOffWhenUnticked()
     {
         var dir = Path.Combine(Path.GetTempPath(), "forsk-reports-" + Guid.NewGuid().ToString("n"));

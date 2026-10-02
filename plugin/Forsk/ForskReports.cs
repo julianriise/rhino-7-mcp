@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using Newtonsoft.Json;
@@ -36,6 +37,7 @@ namespace RhinoMCPPlugin.Forsk
     /// <summary>
     /// A bug report or a feature request as a card the user can edit, and the
     /// line that delivery stores. Questions are Support too, and they are not a card.
+    /// When the turn's role is Support, the answer comes first and the card follows.
     /// No RhinoCommon.
     /// </summary>
     public static class ForskReports
@@ -71,22 +73,59 @@ namespace RhinoMCPPlugin.Forsk
             return ReportKind.None;
         }
 
-        /// <summary>The editable report. Null for a question or any other sentence.</summary>
-        public static CardSpec Card(string text, string file)
+        /// <summary>
+        /// Support, picked or routed, ends a bug or a feature request on the card.
+        /// A question does not. Another role keeps the card without an answer.
+        /// </summary>
+        public static bool EndsWithReport(ForskRole overrideRole, string text)
+        {
+            if (Of(text) == ReportKind.None) return false;
+            var role = overrideRole != ForskRole.None
+                ? overrideRole
+                : ForskRoles.Of(ForskIntentRouter.Classify(text));
+            return role == ForskRole.Support;
+        }
+
+        /// <summary>What the turn read, after the user's line: assistant text and receipts.</summary>
+        public static string Findings(IList<JObject> items)
+        {
+            if (items == null || items.Count == 0) return "";
+            var start = 0;
+            for (var i = items.Count - 1; i >= 0; i--)
+            {
+                if (items[i]?["role"]?.ToString() == "user")
+                {
+                    start = i + 1;
+                    break;
+                }
+            }
+            var parts = new List<string>();
+            for (var i = start; i < items.Count; i++)
+            {
+                var role = items[i]?["role"]?.ToString();
+                if (role != "assistant" && role != "receipt") continue;
+                var line = (items[i]["text"]?.ToString() ?? "").Trim();
+                if (line.Length > 0) parts.Add(line);
+            }
+            return string.Join("\n", parts);
+        }
+
+        /// <summary>The editable report. Null for a question or any other sentence. Findings prefill a bug's happened, or a feature's expected.</summary>
+        public static CardSpec Card(string text, string file, string findings = null)
         {
             var kind = Of(text);
             if (kind == ReportKind.None) return null;
             var bug = kind == ReportKind.Bug;
-            var said = (text ?? "").Trim();
+            var body = WithFindings((text ?? "").Trim(), findings);
             return new CardSpec
             {
                 Kind = "support.report",
                 Question = ForskText.Get("support.ask"),
-                Fields = new System.Collections.Generic.List<CardField>
+                Fields = new List<CardField>
                 {
                     new CardField { Key = "type", Label = ForskText.Get("support.type"), Value = ForskText.Get(bug ? "support.bug" : "support.feature") },
-                    new CardField { Key = "happened", Label = ForskText.Get("support.happened"), Value = bug ? said : "" },
-                    new CardField { Key = "expected", Label = ForskText.Get("support.expected"), Value = bug ? "" : said },
+                    new CardField { Key = "happened", Label = ForskText.Get("support.happened"), Value = bug ? body : "" },
+                    new CardField { Key = "expected", Label = ForskText.Get("support.expected"), Value = bug ? "" : body },
                     new CardField { Key = "steps", Label = ForskText.Get("support.steps"), Value = "" },
                     new CardField { Key = "file", Label = ForskText.Get("support.file"), Value = file ?? "" },
                     new CardField { Key = "attach", Label = ForskText.Get("support.attach"), Value = "1", Check = true }
@@ -97,6 +136,15 @@ namespace RhinoMCPPlugin.Forsk
                     new CardPill("cancel", ForskText.Get("word.cancel"))
                 }
             };
+        }
+
+        /// <summary>The sentence, then a blank line, then what was found. Findings that already include the sentence stand alone.</summary>
+        static string WithFindings(string said, string findings)
+        {
+            findings = (findings ?? "").Trim();
+            if (findings.Length == 0) return said;
+            if (said.Length == 0 || findings.IndexOf(said, StringComparison.Ordinal) >= 0) return findings;
+            return said + "\n\n" + findings;
         }
 
         /// <summary>The checkbox defaults to ticked. "0" and "false" leave the debug report off.</summary>
