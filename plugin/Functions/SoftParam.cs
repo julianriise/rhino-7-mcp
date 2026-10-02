@@ -182,7 +182,7 @@ public partial class RhinoMCPFunctions
                 }
                 else
                 {
-                    warnings.Add("Could not rebuild opening frame.");
+                    warnings.Add((string.IsNullOrEmpty(item.Marker.Name) ? "An opening" : item.Marker.Name) + ": Rhino did not take its block, so nothing was added for it.");
                 }
 
                 markerIds.Add(item.Marker.Id.ToString());

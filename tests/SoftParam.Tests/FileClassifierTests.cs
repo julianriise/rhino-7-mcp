@@ -86,6 +86,16 @@ public class FileClassifierTests
     }
 
     [Fact]
+    public void TheBlockInstanceAlone_PicksAsOneOpening_WithItsKind()
+    {
+        // S2: a click on any part of a door picks its one instance on A-OPEN::Block.
+        var f = FileClassifier.Read(Docs.Of(Row.Wall(), Row.Door(), Row.DoorFrame(selected: true)));
+        Assert.Equal(Picked.Opening, f.Picked);
+        Assert.Equal(1, f.PickedCount);
+        Assert.Equal("door", f.PickedOpeningKind);
+    }
+
+    [Fact]
     public void AGeneratedWallWithADoorSelected_Slot1IsStillPrint()
     {
         var f = Docs.Facts("house, door selected");

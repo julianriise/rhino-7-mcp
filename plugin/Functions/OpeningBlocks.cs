@@ -243,14 +243,14 @@ public partial class RhinoMCPFunctions
             index = doc.InstanceDefinitions.Add(
                 name + "-" + suffix, OpeningBlockDefDescription, Point3d.Origin, geom, attrs);
         }
-        if (index < 0)
-            return AddLooseOpeningParts(doc, geom, attrs);
+        // No block, no parts: loose parts would pick one at a time (selection S2).
+        if (index < 0) return Guid.Empty;
 
         BindOpeningPartAttributes(doc, index, attrs);
         var id = doc.Objects.AddInstanceObject(index, Transform.Identity, attr);
         if (id != Guid.Empty) return id;
         doc.InstanceDefinitions.Delete(index, true, true);
-        return AddLooseOpeningParts(doc, geom, attrs);
+        return Guid.Empty;
     }
 
     private static void BindOpeningPartAttributes(
@@ -266,19 +266,6 @@ public partial class RhinoMCPFunctions
             try { doc.Objects.ModifyAttributes(members[i], attrs[i], true); }
             catch (Exception) { }
         }
-    }
-
-    private static Guid AddLooseOpeningParts(
-        RhinoDoc doc, IList<GeometryBase> geom, IList<ObjectAttributes> attrs)
-    {
-        Guid first = Guid.Empty;
-        for (var i = 0; i < geom.Count && i < attrs.Count; i++)
-        {
-            if (!(geom[i] is Brep brep) || attrs[i] == null) continue;
-            var id = doc.Objects.AddBrep(brep, attrs[i]);
-            if (first == Guid.Empty) first = id;
-        }
-        return first;
     }
 
     private void ApplyOpeningPartMaterial(RhinoDoc doc, ObjectAttributes attr, bool glass)
