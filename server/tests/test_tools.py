@@ -4157,8 +4157,9 @@ class TestPrintProfileTool:
         for name in PROFILES:
             if name != "default":
                 assert f'Name = "{name}"' in profiles_cs
-        chat = (root / "plugin" / "Forsk" / "ForskChat.cs").read_text()
-        assert '"print_profile"' in chat
-        assert 'new JArray("default", "grey", "hatch")' in chat
+        # The chat's tool catalog lives in ForskToolPacks.cs since v3 D4.
+        catalog = (root / "plugin" / "Forsk" / "ForskToolPacks.cs").read_text()
+        assert '"print_profile"' in catalog
+        assert 'new JArray("default", "grey", "hatch")' in catalog
         commands = (root / "plugin" / "Functions" / "PrintProfileCommands.cs").read_text()
         assert '[McpCommand("print_profile")]' in commands

@@ -1,0 +1,185 @@
+{
+ "source": "Copied from forsk docs/metrics/jev_intent_fixtures.json, suite B (Forsk panel), on 2026-10-02: the panel prompts recorded for the intent spike, with the keyword router's answer. Selections follow ForskTarget.FormatOne.",
+ "cases": [
+  {
+   "id": "B01",
+   "utterance": "run daylight",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B02",
+   "utterance": "clear daylight",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B03",
+   "utterance": "which room is darkest?",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B04",
+   "utterance": "fjern dagslys",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B05",
+   "utterance": "make rooms",
+   "selection": "empty",
+   "router": "build"
+  },
+  {
+   "id": "B06",
+   "utterance": "generate the 3D model",
+   "selection": "empty",
+   "router": "build"
+  },
+  {
+   "id": "B07",
+   "utterance": "set wall height to 2700",
+   "selection": "empty",
+   "router": "build"
+  },
+  {
+   "id": "B08",
+   "utterance": "lag et tilbygg på 3 x 4 meter mot sør",
+   "selection": "empty",
+   "router": "build"
+  },
+  {
+   "id": "B09",
+   "utterance": "print PDF",
+   "selection": "empty",
+   "router": "print"
+  },
+  {
+   "id": "B10",
+   "utterance": "skriv ut tegningene",
+   "selection": "empty",
+   "router": "print"
+  },
+  {
+   "id": "B11",
+   "utterance": "print the schedules",
+   "selection": "empty",
+   "router": "print"
+  },
+  {
+   "id": "B12",
+   "utterance": "add a door schedule",
+   "selection": "empty",
+   "router": "sheets"
+  },
+  {
+   "id": "B13",
+   "utterance": "lag dørliste og vindusliste",
+   "selection": "empty",
+   "router": "sheets"
+  },
+  {
+   "id": "B14",
+   "utterance": "dimension the plan",
+   "selection": "empty",
+   "router": "sheets"
+  },
+  {
+   "id": "B15",
+   "utterance": "import plan.dxf",
+   "selection": "empty",
+   "router": "import_dxf"
+  },
+  {
+   "id": "B16",
+   "utterance": "open the DXF of the plan",
+   "selection": "empty",
+   "router": "import_dxf"
+  },
+  {
+   "id": "B17",
+   "utterance": "bring in this plan image as an underlay",
+   "selection": "empty",
+   "router": "import_plan"
+  },
+  {
+   "id": "B18",
+   "utterance": "set scale: these two points are 4000 mm apart",
+   "selection": "empty",
+   "router": "import_plan"
+  },
+  {
+   "id": "B19",
+   "utterance": "move the window 200 along the wall",
+   "selection": "empty",
+   "router": "edit"
+  },
+  {
+   "id": "B20",
+   "utterance": "make this window wider",
+   "selection": "o3 · A-OPEN · forsk:opening · window · w01",
+   "router": "edit"
+  },
+  {
+   "id": "B21",
+   "utterance": "make this a sliding door",
+   "selection": "o1 · A-OPEN · forsk:opening · door · w02",
+   "router": "edit"
+  },
+  {
+   "id": "B22",
+   "utterance": "flip the swing",
+   "selection": "o1 · A-OPEN · forsk:opening · door · w02",
+   "router": "edit"
+  },
+  {
+   "id": "B23",
+   "utterance": "delete these windows",
+   "selection": "2 selected · o3 · A-OPEN · forsk:opening · window · w01",
+   "router": "edit"
+  },
+  {
+   "id": "B24",
+   "utterance": "should the bedroom face north or south?",
+   "selection": "empty",
+   "router": "general"
+  },
+  {
+   "id": "B25",
+   "utterance": "why did my dxf labels come in wrong",
+   "selection": "empty",
+   "router": "general"
+  },
+  {
+   "id": "B26",
+   "utterance": "put a window in the dark corner of the living room",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B27",
+   "utterance": "what makes a living room feel bright?",
+   "selection": "empty",
+   "router": "daylight"
+  },
+  {
+   "id": "B28",
+   "utterance": "what's the weather in Oslo tomorrow?",
+   "selection": "empty",
+   "router": "general"
+  },
+  {
+   "id": "B29",
+   "utterance": "hva koster det å bygge en garasje?",
+   "selection": "empty",
+   "router": "general"
+  },
+  {
+   "id": "B30",
+   "utterance": "write a short description of this house for the client",
+   "selection": "empty",
+   "router": "general"
+  }
+ ]
+}

@@ -369,7 +369,8 @@ namespace RhinoMCPPlugin.Forsk
                     thread.Add(ForskReceipt.From(name, envelope));
                     Render();
                 }),
-                DialogParent = this
+                DialogParent = this,
+                Role = thread.Override
             };
             Render();
             ThreadPool.QueueUserWorkItem(_ =>

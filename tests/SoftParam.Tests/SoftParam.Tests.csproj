@@ -50,10 +50,12 @@
     <Compile Include="..\..\plugin\Forsk\ForskPrefill.cs" Link="ForskPrefill.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskCards.cs" Link="ForskCards.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskRole.cs" Link="ForskRole.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskToolPacks.cs" Link="ForskToolPacks.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fixtures\recorded_prompts.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.js" Link="page\window.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.html" Link="page\window.html" CopyToOutputDirectory="PreserveNewest" />
     <!-- A synthetic forsk.plan_import.v0 file: any source's output reads the same way. -->

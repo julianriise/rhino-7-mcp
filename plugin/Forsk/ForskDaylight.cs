@@ -17,7 +17,7 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskDaylight
     {
-        public const string ToolName = "daylight_from_model";
+        public const string ToolName = ForskToolPacks.DaylightTool;
         const int TimeoutMs = 120000;
 
         /// <summary>call runs one bridge command and returns its envelope.</summary>

@@ -23,8 +23,8 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskPlanImport
     {
-        public const string ImportTool = "plan_import";
-        public const string ScaleTool = "plan_scale";
+        public const string ImportTool = ForskToolPacks.ImportTool;
+        public const string ScaleTool = ForskToolPacks.ScaleTool;
         public const string ScaleCommand = "ForskSetScale";
 
         static JObject _lastScale;
