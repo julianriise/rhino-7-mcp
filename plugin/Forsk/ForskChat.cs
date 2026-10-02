@@ -541,6 +541,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static void RunTurn(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks = null)
         {
+            ForskSpeech.Use(userText);
+            try
+            {
+                RunTurnBody(userText, target, history, show, hooks);
+            }
+            finally
+            {
+                ForskSpeech.Clear();
+            }
+        }
+
+        static void RunTurnBody(string userText, string target, List<JObject> history, Action<string, string> show, TurnHooks hooks)
+        {
             history.Add(new JObject { ["role"] = "user", ["content"] = userText });
             var intent = ForskIntentRouter.Classify(userText, target);
             hooks?.Routed?.Invoke(intent);

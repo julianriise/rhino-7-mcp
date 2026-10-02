@@ -4,6 +4,7 @@ using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -55,7 +56,7 @@ public partial class RhinoMCPFunctions
             var rooms = RoomsDetect(new JObject());
             var count = rooms?["count"]?.ToObject<int>() ?? 0;
             // The dispatcher hides the map and marks it stale (Map = MapEdit.Wall).
-            return WallFollowPlan.Sentence(floorDone, roofDone, count, daylight);
+            return WallFollowPlan.Sentence(floorDone, roofDone, count, daylight, ForskSpeech.Norwegian);
         }
         catch (Exception ex)
         {

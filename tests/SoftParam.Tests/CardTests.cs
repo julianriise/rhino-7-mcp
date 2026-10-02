@@ -180,7 +180,7 @@ public class CardTests
     {
         var thread = new DocThread();
         var item = thread.AddCard(ForskCards.TitleBlock(Docs.Facts("house"))!, Docs.Facts("house"));
-        Assert.Equal(5, ((JArray)item["fields"]!).Count);
+        Assert.Equal(new[] { "Project", "Client", "Address" }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
         Assert.Equal("Project", item["fields"]![0]!["label"]!.ToString());
         Assert.Equal("none", item["depends"]!.ToString());
         var review = thread.AddCard(ForskCards.Review(Docs.Facts("scaled, reviewed"))!, null);
@@ -224,9 +224,39 @@ public class CardTests
         var card = ForskCards.WallReview(MoveResult(EastAndWest(), "w01", "w03", "w04"))!;
         Assert.Equal("wall.review", card.Kind);
         Assert.Equal("What followed the wall", card.Question);
-        Assert.Equal(new[] { "The east wall (w04) · 500 mm longer", "The west wall (w03) · 250 mm shorter", "Floor, roof and 1 room updated." }, card.Rows);
+        Assert.Equal(new[] { "The east wall · 500 mm longer", "The west wall · 250 mm shorter", "Floor, roof and 1 room updated." }, card.Rows);
         Assert.Equal("model", card.Depends);
         Assert.Equal(new[] { "done" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("Done", card.Pills[0].Label);
+        Assert.DoesNotContain("w04", string.Join("\n", card.Rows));
+    }
+
+    [Fact]
+    public void WallReview_NamesInnerWallsByRoom_AndNeverPrintsCoordinates()
+    {
+        var followed = new JArray
+        {
+            new JObject { ["forsk_id"] = "w02", ["wall"] = "the wall at (4000, 2000)", ["label"] = "wall between Kitchen and Bedroom", ["change_mm"] = 0 },
+            new JObject { ["forsk_id"] = "w05", ["wall"] = "the wall at (11375, 21735)", ["change_mm"] = 100 }
+        };
+        var card = ForskCards.WallReview(MoveResult(followed, "w01", "w02"))!;
+        Assert.Equal(new[]
+        {
+            "Wall between Kitchen and Bedroom",
+            "Inner wall 2 · 100 mm longer",
+            "Floor, roof and 1 room updated."
+        }, card.Rows);
+        Assert.DoesNotContain("11375", string.Join("\n", card.Rows));
+        Assert.DoesNotContain("(w0", string.Join("\n", card.Rows));
+    }
+
+    [Fact]
+    public void WallReview_Norwegian_NamesSides_AndKeepsDone()
+    {
+        var card = ForskCards.WallReview(MoveResult(EastAndWest(), "w01", "w03", "w04"), true)!;
+        Assert.Equal("Hva som fulgte veggen", card.Question);
+        Assert.Equal("Done", card.Pills[0].Label);
+        Assert.Equal(new[] { "Østveggen · 500 mm lengre", "Vestveggen · 250 mm kortere", "Floor, roof and 1 room updated." }, card.Rows);
     }
 
     [Fact]

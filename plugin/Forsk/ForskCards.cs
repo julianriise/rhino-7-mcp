@@ -157,10 +157,11 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// After a wall edit that changed more than the wall: one row per wall
-        /// that followed, then what was rebuilt. Null when only the wall
-        /// changed, or the edit failed. Read from the tool's result.
+        /// that followed, then what was rebuilt. Outer walls by side, inner
+        /// walls by the rooms they bound. Null when only the wall changed, or
+        /// the edit failed. Read from the tool's result.
         /// </summary>
-        public static CardSpec WallReview(JObject envelope)
+        public static CardSpec WallReview(JObject envelope, bool nb = false)
         {
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
             var result = envelope["result"] as JObject;
@@ -170,18 +171,25 @@ namespace RhinoMCPPlugin.Forsk
             var card = new CardSpec
             {
                 Kind = "wall.review",
-                Question = ForskText.Get("wall.review.ask"),
+                Question = ForskText.Get(nb ? "wall.review.ask.nb" : "wall.review.ask"),
                 Rows = new List<string>(),
                 Depends = "model",
                 Pills = { new CardPill("done", ForskText.Get("word.done")) }
             };
+            var inner = 0;
             foreach (var item in followed ?? new JArray())
             {
-                var wall = item["wall"]?.ToString() ?? "";
+                var graph = item["wall"]?.ToString() ?? "";
+                var sideNamed = WallFollowPlan.IsSide(graph, out var side);
+                if (!sideNamed) inner++;
+                var wall = item["label"]?.ToString();
+                if (string.IsNullOrWhiteSpace(wall) || wall.StartsWith("the wall at (", StringComparison.Ordinal))
+                    wall = sideNamed ? WallFollowPlan.Side(side, nb) : WallFollowPlan.InnerName(null, inner, nb);
                 if (wall.Length > 0) wall = char.ToUpperInvariant(wall[0]) + wall.Substring(1);
                 var change = item["change_mm"]?.ToObject<double>() ?? 0;
-                var key = change > 0 ? "wall.review.longer" : change < 0 ? "wall.review.shorter" : "wall.review.row";
-                card.Rows.Add(ForskText.Format(key, "wall", wall, "id", item["forsk_id"]?.ToString() ?? "",
+                var key = (change > 0 ? "wall.review.longer" : change < 0 ? "wall.review.shorter" : "wall.review.row")
+                    + (nb ? ".nb" : "");
+                card.Rows.Add(ForskText.Format(key, "wall", wall,
                     "mm", Math.Abs(change).ToString("0", CultureInfo.InvariantCulture)));
             }
             var rebuilt = result?["rebuilt"]?.ToString();

@@ -415,9 +415,20 @@ namespace RhinoMCPPlugin.Forsk
         void AddReceipt(DocThread thread, string tool, JObject envelope)
         {
             thread.Add(ForskReceipt.From(tool, envelope));
-            var review = ForskCards.WallReview(envelope);
+            var review = ForskCards.WallReview(envelope, LastUserIsNorwegian(thread));
             var doc = RhinoDoc.ActiveDoc;
             if (review != null) thread.AddCard(review, doc == null ? null : ReadFacts(doc));
+        }
+
+        /// <summary>The review card follows the last thing the user wrote. The tool's own phrase was already chosen.</summary>
+        static bool LastUserIsNorwegian(DocThread thread)
+        {
+            for (var i = thread.Items.Count - 1; i >= 0; i--)
+            {
+                if (thread.Items[i]["role"]?.ToString() != "user") continue;
+                return ForskPrefill.Language(thread.Items[i]["text"]?.ToString()) == "nb";
+            }
+            return false;
         }
 
         // ------------------------------------------------------------ jobs
@@ -502,6 +513,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 // The first tool takes the UI thread. Let the step line paint first.
                 Thread.Sleep(50);
+                ForskSpeech.Use(userText ?? label);
                 try
                 {
                     work(sink);
@@ -509,6 +521,10 @@ namespace RhinoMCPPlugin.Forsk
                 catch (Exception e)
                 {
                     sink.Line(label + " · error · " + ForskTools.Clip(e.Message));
+                }
+                finally
+                {
+                    ForskSpeech.Clear();
                 }
                 var longest = stall.Stop();
                 Post(() =>

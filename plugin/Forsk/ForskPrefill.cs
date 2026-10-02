@@ -72,4 +72,26 @@ namespace RhinoMCPPlugin.Forsk
             return new Prefill { Text = text.Replace("{n}", number), Start = at, Length = number.Length };
         }
     }
+
+    /// <summary>
+    /// The language of the chat turn or job that is running a tool. The window
+    /// sets it for that turn and clears it after. An external MCP call leaves
+    /// it English. Not thread-static: the tool runs on the UI thread.
+    /// </summary>
+    public static class ForskSpeech
+    {
+        static bool _nb;
+
+        public static bool Norwegian => _nb;
+
+        public static void Use(string text)
+        {
+            _nb = ForskPrefill.Language(text) == "nb";
+        }
+
+        public static void Clear()
+        {
+            _nb = false;
+        }
+    }
 }

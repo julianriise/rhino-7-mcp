@@ -28,7 +28,7 @@ public partial class RhinoMCPFunctions
         public List<List<RoomDetect.Pt>> Rings;
         /// <summary>The run, picked on the cluster's shape.</summary>
         public WallEdit.Run Run;
-        /// <summary>The run as the receipt names it: the north wall, or the wall at (x, y).</summary>
+        /// <summary>The run as the receipt names it: the north wall, or the rooms an inner wall bounds.</summary>
         public string Label;
         /// <summary>Every wall record whose path reads, and its rings, by the same index.</summary>
         public List<RhinoObject> Walls;
@@ -115,10 +115,13 @@ public partial class RhinoMCPFunctions
 
         var hostId = rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
         var heading = WallEdit.Heading(pick.Run, by);
-        var with = carried.Count == 0 ? "" : carried.Count == 1 ? ", 1 opening with it" : ", " + carried.Count + " openings with it";
+        var nb = ForskSpeech.Norwegian;
+        var with = OpeningsWith(carried.Count, nb);
         var also = new List<string>();
         foreach (var f in moved.Followed) also.Add(f.Wall);
-        if (also.Count > 0) with += "; " + WallFollowPlan.Walls(also) + " followed";
+        var clause = WallFollowPlan.FollowedClause(also, nb);
+        if (clause.Length > 0) with += "; " + clause;
+        var idWord = string.IsNullOrEmpty(forskId) ? (nb ? "veggen" : "the wall") : forskId;
         var moveResult = new JObject
         {
             ["host_id"] = hostId.ToString(),
@@ -133,14 +136,17 @@ public partial class RhinoMCPFunctions
             ["thickness"] = rebuilt?["thickness"],
             ["path_points"] = rebuilt?["path_points"],
             ["openings_moved"] = carried,
-            ["followed"] = FollowedJson(pick, moved.Followed),
+            ["followed"] = FollowedJson(doc, pick, moved.Followed),
             ["records"] = RecordIds(pick, moved.Records.Keys),
             ["rebuilt"] = followed,
             ["warnings"] = rebuilt?["warnings"] ?? new JArray(),
             ["ok"] = true,
-            ["message"] = "Moved " + pick.Label + " of " + (string.IsNullOrEmpty(forskId) ? "the wall" : forskId) + " "
-                + FormatMm(Math.Round(distance.Value)) + " mm " + heading + with
-                + ". " + followed
+            ["message"] = (nb
+                    ? "Flyttet " + pick.Label + " av " + idWord + " "
+                        + FormatMm(Math.Round(distance.Value)) + " mm mot " + Compass(heading, true)
+                    : "Moved " + pick.Label + " of " + idWord + " "
+                        + FormatMm(Math.Round(distance.Value)) + " mm " + heading)
+                + with + ". " + followed
         };
         var report = HostOpeningReport(doc, hostId, Guid.Empty, Point3d.Unset);
         if (report != null) moveResult.Merge(report);
@@ -218,7 +224,8 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException("Wall not deleted. " + ex.Message, ex);
         }
 
-        var label = string.IsNullOrEmpty(forskId) ? "the wall" : forskId;
+        var nb = ForskSpeech.Norwegian;
+        var label = string.IsNullOrEmpty(forskId) ? (nb ? "veggen" : "the wall") : forskId;
         var openingMarkers = new List<RhinoObject>();
         var deleted = new JArray();
         foreach (var item in orphans)
@@ -226,12 +233,34 @@ public partial class RhinoMCPFunctions
             openingMarkers.Add(item.Marker);
             deleted.Add(item.Marker.Id.ToString());
         }
-        var openings = OpeningsLine(openingMarkers);
+        var openings = OpeningsLine(openingMarkers, nb);
         var joined = new List<string>();
         foreach (var f in cut.Followed) joined.Add(f.Wall);
+        var joinedPhrase = WallFollowPlan.Walls(joined, nb);
         var hostId = namedGone ? Guid.Empty : rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
         var left = namedGone ? null : namedLeft ?? pick.Records[namedIndex];
         var wholeRecord = namedGone && pick.Graph.Records.Count == 1;
+        string deletedHead;
+        if (nb)
+        {
+            deletedHead = wholeRecord
+                ? "Slettet " + label + ", en vegg som står for seg selv"
+                : namedGone
+                    ? "Slettet " + pick.Label + ", " + label
+                    : "Slettet " + pick.Label + " av " + label;
+            if (openings.Length > 0) deletedHead += ", og dens " + openings;
+            if (joinedPhrase.Length > 0) deletedHead += "; den hang sammen med " + joinedPhrase;
+        }
+        else
+        {
+            deletedHead = wholeRecord
+                ? "Deleted " + label + ", a wall standing on its own"
+                : namedGone
+                    ? "Deleted " + pick.Label + ", " + label
+                    : "Deleted " + pick.Label + " of " + label;
+            if (openings.Length > 0) deletedHead += ", and its " + openings;
+            if (joinedPhrase.Length > 0) deletedHead += "; it was joined to " + joinedPhrase;
+        }
         var deleteResult = new JObject
         {
             ["host_id"] = hostId == Guid.Empty ? "" : hostId.ToString(),
@@ -243,19 +272,12 @@ public partial class RhinoMCPFunctions
             ["thickness"] = pick.Run.Thickness,
             ["path_points"] = rebuilt?["path_points"] ?? 0,
             ["holes"] = left == null ? 0 : left.Count - 1,
-            ["followed"] = FollowedJson(pick, cut.Followed),
+            ["followed"] = FollowedJson(doc, pick, cut.Followed),
             ["records"] = RecordIds(pick, cut.Records.Keys),
             ["rebuilt"] = followed,
             ["warnings"] = rebuilt?["warnings"] ?? new JArray(),
             ["ok"] = true,
-            ["message"] = (wholeRecord
-                    ? "Deleted " + label + ", a wall standing on its own"
-                    : namedGone
-                        ? "Deleted " + pick.Label + ", " + label
-                        : "Deleted " + pick.Label + " of " + label)
-                + (openings.Length == 0 ? "" : ", and its " + openings)
-                + (joined.Count == 0 ? "" : "; it was joined to " + WallFollowPlan.Walls(joined))
-                + ". " + followed
+            ["message"] = deletedHead + ". " + followed
         };
         if (hostId != Guid.Empty)
         {
@@ -430,17 +452,23 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException(ex.Message.Replace("Not moved:", "Not " + (way == "out" ? "pushed" : "pulled") + ":"), ex);
         }
 
+        var nb = ForskSpeech.Norwegian;
         var count = (moved["openings_moved"] as JArray)?.Count ?? 0;
-        var with = count == 0 ? "" : count == 1 ? ", 1 opening with it" : ", " + count + " openings with it";
+        var with = OpeningsWith(count, nb);
         var names = new List<string>();
         foreach (var f in moved["followed"] as JArray ?? new JArray()) names.Add(f["wall"]?.ToString());
-        if (names.Count > 0) with += "; " + WallFollowPlan.Walls(names) + " followed";
+        var clause = WallFollowPlan.FollowedClause(names, nb);
+        if (clause.Length > 0) with += "; " + clause;
         moved["room"] = name;
         moved["room_id"] = room.Id.ToString();
         moved["side"] = side;
         moved["way"] = way;
-        moved["message"] = (way == "out" ? "Pushed " : "Pulled ") + name + (name.EndsWith("s", StringComparison.Ordinal) ? "' " : "'s ")
-            + side + " side " + FormatMm(Math.Round(distance.Value)) + " mm " + way + with + ". " + moved["rebuilt"];
+        var mm = FormatMm(Math.Round(distance.Value));
+        moved["message"] = nb
+            ? (way == "out" ? "Skjøv " : "Dro ") + Compass(side, true) + "siden av " + name + " " + mm + " mm "
+                + (way == "out" ? "ut" : "inn") + with + ". " + moved["rebuilt"]
+            : (way == "out" ? "Pushed " : "Pulled ") + name + (name.EndsWith("s", StringComparison.Ordinal) ? "' " : "'s ")
+                + side + " side " + mm + " mm " + way + with + ". " + moved["rebuilt"];
         return moved;
     }
 
@@ -474,14 +502,26 @@ public partial class RhinoMCPFunctions
         return rooms[0];
     }
 
-    /// <summary>The walls that followed, for the result and the review card: the record, the name, the change in length.</summary>
-    private static JArray FollowedJson(WallPick pick, IEnumerable<WallJoins.Followed> followed)
+    /// <summary>
+    /// The walls that followed. <c>wall</c> stays the graph name so a later
+    /// phrase can still tell a side from an inner wall. <c>label</c> is what
+    /// the review card prints: the side, or the rooms it bounds.
+    /// </summary>
+    private JArray FollowedJson(RhinoDoc doc, WallPick pick, IEnumerable<WallJoins.Followed> followed)
     {
+        var nb = ForskSpeech.Norwegian;
+        var rooms = RoomRings(doc);
         var list = new JArray();
         foreach (var f in followed)
         {
             var record = f.Records.Count > 0 ? pick.Walls[f.Records[0]].Attributes?.GetUserString("forsk:id") : null;
-            list.Add(new JObject { ["forsk_id"] = record ?? "", ["wall"] = f.Wall, ["change_mm"] = f.ChangeMm });
+            list.Add(new JObject
+            {
+                ["forsk_id"] = record ?? "",
+                ["wall"] = f.Wall,
+                ["label"] = RunLabel(pick.Graph, NameIndex(pick.Graph, f.Wall), rooms, nb),
+                ["change_mm"] = f.ChangeMm
+            });
         }
         return list;
     }
@@ -557,7 +597,7 @@ public partial class RhinoMCPFunctions
         string.IsNullOrEmpty(marker?.Name) ? "an opening" : marker.Name;
 
     /// <summary>The openings a delete took: 1 door, 2 windows, 1 door and 1 window.</summary>
-    private static string OpeningsLine(List<RhinoObject> markers)
+    private static string OpeningsLine(List<RhinoObject> markers, bool nb)
     {
         var doors = 0;
         var windows = 0;
@@ -569,9 +609,36 @@ public partial class RhinoMCPFunctions
                 doors++;
         }
         var parts = new List<string>();
+        if (nb)
+        {
+            if (doors > 0) parts.Add(doors + (doors == 1 ? " dør" : " dører"));
+            if (windows > 0) parts.Add(windows + (windows == 1 ? " vindu" : " vinduer"));
+            return string.Join(" og ", parts);
+        }
         if (doors > 0) parts.Add(doors + (doors == 1 ? " door" : " doors"));
         if (windows > 0) parts.Add(windows + (windows == 1 ? " window" : " windows"));
         return string.Join(" and ", parts);
+    }
+
+    /// <summary>", 1 opening with it", or nothing.</summary>
+    private static string OpeningsWith(int count, bool nb)
+    {
+        if (count <= 0) return "";
+        if (nb) return count == 1 ? ", én åpning med" : ", " + count.ToString(CultureInfo.InvariantCulture) + " åpninger med";
+        return count == 1 ? ", 1 opening with it" : ", " + count.ToString(CultureInfo.InvariantCulture) + " openings with it";
+    }
+
+    static string Compass(string side, bool nb)
+    {
+        if (!nb || string.IsNullOrEmpty(side)) return side ?? "";
+        switch (side)
+        {
+            case "north": return "nord";
+            case "south": return "sør";
+            case "east": return "øst";
+            case "west": return "vest";
+            default: return side;
+        }
     }
 
     /// <summary>
@@ -622,10 +689,46 @@ public partial class RhinoMCPFunctions
             ? WallEdit.TryPick(graph.Shape, at, tol, out run, out why)
             : WallEdit.TryPickSide(graph.Shape, side, tol, out run, out why);
         if (!ok) throw new InvalidOperationException(why);
-        var label = hasSide
-            ? "the " + side.Trim().ToLowerInvariant() + " wall"
-            : "the wall at (" + FormatMm(Math.Round(at.X)) + ", " + FormatMm(Math.Round(at.Y)) + ")";
+        var label = RunLabel(graph, graph.Find(run, tol), RoomRings(doc), ForskSpeech.Norwegian);
         return new WallPick { Host = host, Rings = rings, Run = run, Label = label, Walls = walls, Records = records, Graph = graph };
+    }
+
+    /// <summary>Room markers as rings the receipt can name an inner wall by.</summary>
+    List<WallFollowPlan.NamedRoom> RoomRings(RhinoDoc doc)
+    {
+        var rooms = new List<WallFollowPlan.NamedRoom>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsRoomMarker(obj)) continue;
+            var outline = RoomMarkerOutline(obj);
+            var ring = outline == null ? null : PathPoints(outline);
+            if (ring == null || ring.Count < 3) continue;
+            var name = obj.Attributes?.GetUserString("forsk:room_name");
+            if (string.IsNullOrWhiteSpace(name)) name = obj.Name;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            rooms.Add(new WallFollowPlan.NamedRoom { Name = name.Trim(), Ring = ring });
+        }
+        return rooms;
+    }
+
+    /// <summary>A run for the receipt: its side, else the rooms on its faces, else "inner wall 3".</summary>
+    static string RunLabel(WallJoins.Graph graph, int index, IList<WallFollowPlan.NamedRoom> rooms, bool nb)
+    {
+        if (graph != null && index >= 0 && index < graph.Names.Count && WallFollowPlan.IsSide(graph.Names[index], out var side))
+            return WallFollowPlan.Side(side, nb);
+        IList<string> beside = null;
+        if (graph != null && index >= 0 && index < graph.Runs.Count)
+            beside = WallFollowPlan.Beside(graph.Runs[index], rooms);
+        var ordinal = graph == null ? 1 : WallFollowPlan.InnerOrdinal(graph.Names, index);
+        return WallFollowPlan.InnerName(beside, ordinal, nb);
+    }
+
+    static int NameIndex(WallJoins.Graph graph, string wall)
+    {
+        if (graph?.Names == null || string.IsNullOrEmpty(wall)) return -1;
+        for (var i = 0; i < graph.Names.Count; i++)
+            if (graph.Names[i] == wall) return i;
+        return -1;
     }
 
     private WallSolid ResolveWallRecord(RhinoDoc doc, JObject parameters, RoomDetect.Pt? at, double tol)

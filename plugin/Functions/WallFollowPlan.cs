@@ -19,61 +19,214 @@ public static class WallFollowPlan
     /// </summary>
     public static string Sentence(bool floor, bool roof, int rooms, bool daylight)
     {
+        return Sentence(floor, roof, rooms, daylight, false);
+    }
+
+    /// <summary>The same sentence in Norwegian when <paramref name="nb"/> is set.</summary>
+    public static string Sentence(bool floor, bool roof, int rooms, bool daylight, bool nb)
+    {
         var parts = new List<string>();
-        if (floor) parts.Add("floor");
-        if (roof) parts.Add("roof");
-        if (rooms == 1) parts.Add("1 room");
-        else if (rooms > 1) parts.Add(rooms.ToString(CultureInfo.InvariantCulture) + " rooms");
+        if (floor) parts.Add(nb ? "gulv" : "floor");
+        if (roof) parts.Add(nb ? "tak" : "roof");
+        if (rooms == 1) parts.Add(nb ? "1 rom" : "1 room");
+        else if (rooms > 1) parts.Add(rooms.ToString(CultureInfo.InvariantCulture) + (nb ? " rom" : " rooms"));
 
         string text;
         if (parts.Count == 0)
-            text = "Floor, roof and rooms are unchanged.";
+            text = nb ? "Gulv, tak og rom er uendret." : "Floor, roof and rooms are unchanged.";
         else if (parts.Count == 1)
-            text = Capital(parts[0]) + " updated.";
+            text = Capital(parts[0]) + (nb ? " oppdatert." : " updated.");
         else if (parts.Count == 2)
-            text = Capital(parts[0]) + " and " + parts[1] + " updated.";
+            text = Capital(parts[0]) + (nb ? " og " : " and ") + parts[1] + (nb ? " oppdatert." : " updated.");
         else
-            text = Capital(parts[0]) + ", " + parts[1] + " and " + parts[2] + " updated.";
+            text = Capital(parts[0]) + ", " + parts[1] + (nb ? " og " : " and ") + parts[2] + (nb ? " oppdatert." : " updated.");
         if (daylight)
-            text += " Daylight is out of date, run it again.";
+            text += nb ? " Dagslyset er utdatert. Kjør det igjen." : " Daylight is out of date, run it again.";
         return text;
     }
 
+    /// <summary>A room outline the receipt can name a wall by.</summary>
+    public sealed class NamedRoom
+    {
+        public string Name;
+        public List<RoomDetect.Pt> Ring;
+    }
+
     /// <summary>
-    /// The walls that followed an edit, as one phrase: "the east and west
-    /// walls", "the north wall and the wall at (4000, 2000)". Side walls go
-    /// first, then the others in the order given. Empty when there are none.
+    /// The walls that followed, as one phrase. Outer walls are named by side.
+    /// Everything else is a count: "the west and east walls and ten inner walls".
+    /// A coordinate name is never printed. Empty when there are none.
     /// </summary>
     public static string Walls(IList<string> names)
     {
+        return Walls(names, false);
+    }
+
+    /// <summary>The same phrase in Norwegian when <paramref name="nb"/> is set.</summary>
+    public static string Walls(IList<string> names, bool nb)
+    {
         var sides = new List<string>();
-        var others = new List<string>();
+        var inner = 0;
         foreach (var name in names ?? new List<string>())
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
-            var side = SideOf(name);
-            if (side != null) { if (!sides.Contains(side)) sides.Add(side); }
-            else if (!others.Contains(name)) others.Add(name);
+            if (IsSide(name, out var side)) { if (!sides.Contains(side)) sides.Add(side); }
+            else inner++;
         }
         var parts = new List<string>();
-        if (sides.Count == 1) parts.Add("the " + sides[0] + " wall");
-        else if (sides.Count > 1) parts.Add("the " + And(sides) + " walls");
-        parts.AddRange(others);
-        return And(parts);
+        if (sides.Count == 1) parts.Add(Side(sides[0], nb));
+        else if (sides.Count > 1) parts.Add(SideList(sides, nb));
+        if (inner > 0) parts.Add(InnerCount(inner, nb));
+        return And(parts, nb);
     }
 
-    static string SideOf(string name)
+    /// <summary>"the east and west walls followed", or the Norwegian sentence.</summary>
+    public static string FollowedClause(IList<string> names, bool nb)
     {
-        foreach (var side in new[] { "north", "south", "east", "west" })
-            if (name == "the " + side + " wall") return side;
-        return null;
+        var walls = Walls(names, nb);
+        if (walls.Length == 0) return "";
+        return walls + (nb ? " fulgte" : " followed");
     }
 
-    static string And(IList<string> items)
+    /// <summary>True when the graph named this run for a compass side.</summary>
+    public static bool IsSide(string name, out string side)
     {
+        side = null;
+        foreach (var candidate in new[] { "north", "south", "east", "west" })
+        {
+            if (name != "the " + candidate + " wall") continue;
+            side = candidate;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>"the north wall", or "nordveggen".</summary>
+    public static string Side(string side, bool nb)
+    {
+        if (!nb) return "the " + side + " wall";
+        switch (side)
+        {
+            case "north": return "nordveggen";
+            case "south": return "sørveggen";
+            case "east": return "østveggen";
+            case "west": return "vestveggen";
+            default: return side ?? "";
+        }
+    }
+
+    /// <summary>
+    /// An inner wall for the review card: the rooms it bounds, else "inner wall 3".
+    /// Two or more rooms read "wall between Kitchen and Bedroom".
+    /// </summary>
+    public static string InnerName(IList<string> rooms, int index, bool nb)
+    {
+        var named = new List<string>();
+        foreach (var room in rooms ?? new List<string>())
+            if (!string.IsNullOrWhiteSpace(room) && !named.Contains(room.Trim())) named.Add(room.Trim());
+        if (named.Count >= 2)
+            return (nb ? "vegg mellom " : "wall between ") + And(named, nb);
+        if (named.Count == 1)
+            return nb ? "vegg mot " + named[0] : "wall of " + named[0];
+        var n = index > 0 ? index : 1;
+        return (nb ? "innervegg " : "inner wall ") + n.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>1-based place of this run among the inner runs, in graph order.</summary>
+    public static int InnerOrdinal(IList<string> names, int index)
+    {
+        var n = 0;
+        for (var i = 0; i < (names?.Count ?? 0); i++)
+        {
+            if (IsSide(names[i], out _)) continue;
+            n++;
+            if (i == index) return n;
+        }
+        return 1;
+    }
+
+    /// <summary>
+    /// The rooms just outside the two faces, western (then southern) first,
+    /// so a partition reads "Kitchen and Bedroom" from left to right.
+    /// </summary>
+    public static List<string> Beside(WallEdit.Run run, IList<NamedRoom> rooms)
+    {
+        var found = new List<NamedHit>();
+        if (run == null || rooms == null) return new List<string>();
+        var mid = WallJoins.Middle(run);
+        var gap = run.Thickness / 2.0 + 30.0;
+        var probes = new[]
+        {
+            new RoomDetect.Pt(mid.X + run.Normal.X * gap, mid.Y + run.Normal.Y * gap),
+            new RoomDetect.Pt(mid.X - run.Normal.X * gap, mid.Y - run.Normal.Y * gap)
+        };
+        foreach (var probe in probes)
+        {
+            foreach (var room in rooms)
+            {
+                if (room?.Ring == null || room.Ring.Count < 3 || string.IsNullOrWhiteSpace(room.Name)) continue;
+                if (!RoomDetect.Contains(room.Ring, probe)) continue;
+                var name = room.Name.Trim();
+                if (found.Exists(hit => hit.Name == name)) break;
+                found.Add(new NamedHit { Name = name, X = probe.X, Y = probe.Y });
+                break;
+            }
+        }
+        found.Sort((a, b) =>
+        {
+            var byX = a.X.CompareTo(b.X);
+            return byX != 0 ? byX : a.Y.CompareTo(b.Y);
+        });
+        var names = new List<string>();
+        foreach (var hit in found) names.Add(hit.Name);
+        return names;
+    }
+
+    sealed class NamedHit
+    {
+        public string Name;
+        public double X, Y;
+    }
+
+    static string SideList(IList<string> sides, bool nb)
+    {
+        if (!nb) return "the " + And(sides, false) + " walls";
+        if (sides.Count == 1) return Side(sides[0], true);
+        var stems = new List<string>();
+        foreach (var side in sides) stems.Add(Stem(side));
+        var last = stems[stems.Count - 1] + "veggen";
+        if (stems.Count == 2) return stems[0] + "- og " + last;
+        return string.Join("-, ", stems.Take(stems.Count - 1)) + "- og " + last;
+    }
+
+    static string Stem(string side)
+    {
+        switch (side)
+        {
+            case "north": return "nord";
+            case "south": return "sør";
+            case "east": return "øst";
+            case "west": return "vest";
+            default: return side ?? "";
+        }
+    }
+
+    static string InnerCount(int n, bool nb)
+    {
+        var word = n >= 1 && n <= 10 ? (nb ? NbNumber : EnNumber)[n] : n.ToString(CultureInfo.InvariantCulture);
+        if (nb) return word + (n == 1 ? " innervegg" : " innervegger");
+        return word + (n == 1 ? " inner wall" : " inner walls");
+    }
+
+    static readonly string[] EnNumber = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten" };
+    static readonly string[] NbNumber = { "null", "én", "to", "tre", "fire", "fem", "seks", "sju", "åtte", "ni", "ti" };
+
+    static string And(IList<string> items, bool nb)
+    {
+        var and = nb ? " og " : " and ";
         if (items.Count == 0) return "";
         if (items.Count == 1) return items[0];
-        return string.Join(", ", items.Take(items.Count - 1)) + " and " + items[items.Count - 1];
+        return string.Join(", ", items.Take(items.Count - 1)) + and + items[items.Count - 1];
     }
 
     /// <summary>The same closed outline, vertices on each other's edges.</summary>

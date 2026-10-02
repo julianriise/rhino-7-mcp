@@ -49,10 +49,57 @@ public class WallFollowPlanTests
     [InlineData("", new string[0])]
     [InlineData("the north wall", new[] { "the north wall" })]
     [InlineData("the east and west walls", new[] { "the east wall", "the west wall" })]
-    [InlineData("the east and west walls and the wall at (4000, 2000)", new[] { "the east wall", "the wall at (4000, 2000)", "the west wall" })]
+    [InlineData("the east and west walls and one inner wall", new[] { "the east wall", "the wall at (4000, 2000)", "the west wall" })]
     [InlineData("the north, east and west walls", new[] { "the north wall", "the east wall", "the west wall", "the east wall" })]
     public void Walls_NamesWhatFollowed_InOnePhrase(string phrase, string[] names)
     {
         Assert.Equal(phrase, WallFollowPlan.Walls(names));
+        Assert.DoesNotContain("(", phrase);
+    }
+
+    [Fact]
+    public void Walls_CountsInnerWalls_AndNeverPrintsCoordinates()
+    {
+        var names = new List<string> { "the west wall", "the east wall" };
+        for (var i = 0; i < 10; i++) names.Add("the wall at (" + (1000 + i) + ", 2000)");
+        Assert.Equal("the west and east walls and ten inner walls", WallFollowPlan.Walls(names));
+        Assert.Equal("vest- og østveggen og ti innervegger", WallFollowPlan.Walls(names, true));
+        Assert.Equal("vest- og østveggen og ti innervegger fulgte", WallFollowPlan.FollowedClause(names, true));
+        Assert.Equal("one inner wall", WallFollowPlan.Walls(new[] { "the wall at (1, 2)" }));
+        Assert.Equal("én innervegg", WallFollowPlan.Walls(new[] { "wall between Kitchen and Bedroom" }, true));
+        Assert.DoesNotContain("11375", WallFollowPlan.Walls(new[] { "the wall at (11375, 21735)" }));
+    }
+
+    [Fact]
+    public void InnerName_UsesTheRooms_ThenANumber()
+    {
+        Assert.Equal("wall between Kitchen and Bedroom", WallFollowPlan.InnerName(new[] { "Kitchen", "Bedroom" }, 3, false));
+        Assert.Equal("vegg mellom Kitchen og Bedroom", WallFollowPlan.InnerName(new[] { "Kitchen", "Bedroom" }, 3, true));
+        Assert.Equal("wall of Kitchen", WallFollowPlan.InnerName(new[] { "Kitchen" }, 3, false));
+        Assert.Equal("inner wall 3", WallFollowPlan.InnerName(new string[0], 3, false));
+        Assert.Equal("innervegg 3", WallFollowPlan.InnerName(null, 3, true));
+    }
+
+    [Fact]
+    public void Beside_NamesTheRoomsOnEachFace_WestFirst()
+    {
+        var records = new List<List<List<Pt>>> { WallJoinsTests.TwoRooms() };
+        var graph = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, 1), 1);
+        var partition = graph.Names.IndexOf("the wall at (4000, 2000)");
+        Assert.True(partition >= 0);
+        var rooms = new List<WallFollowPlan.NamedRoom>
+        {
+            new WallFollowPlan.NamedRoom { Name = "Kitchen", Ring = WallJoinsTests.Rect(200, 200, 3900, 3800) },
+            new WallFollowPlan.NamedRoom { Name = "Bedroom", Ring = WallJoinsTests.Rect(4100, 200, 7800, 3800) }
+        };
+        Assert.Equal(new[] { "Kitchen", "Bedroom" }, WallFollowPlan.Beside(graph.Runs[partition], rooms));
+        Assert.Equal(1, WallFollowPlan.InnerOrdinal(graph.Names, partition));
+    }
+
+    [Fact]
+    public void Sentence_Norwegian_NamesTheSamePieces()
+    {
+        Assert.Equal("Gulv, tak og 2 rom oppdatert.", WallFollowPlan.Sentence(true, true, 2, false, true));
+        Assert.Equal("Gulv, tak og rom er uendret. Dagslyset er utdatert. Kjør det igjen.", WallFollowPlan.Sentence(false, false, 0, true, true));
     }
 }
