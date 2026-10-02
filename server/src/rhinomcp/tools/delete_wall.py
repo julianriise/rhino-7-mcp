@@ -32,7 +32,7 @@ def delete_wall(
     point. Taking a partition out joins the two rooms; taking an outer wall
     out opens the ring. A wall standing on its own is deleted whole.
 
-    Refused, with nothing changed: a delete that would leave the record in
+    Refused, with nothing changed: a delete that would leave a record in
     two separate pieces (not in this version), and one that would leave
     another opening past the end of its wall. The floor slab and flat roof
     from that record are rebuilt, and rooms are detected again. A shown

@@ -19,6 +19,7 @@
     "host_voids": { "type": "integer" },
     "max_frame_mm": { "type": "number" },
     "markers": { "type": "array" },
+    "joins": { "type": "array", "items": { "type": "string" }, "description": "A wall standing as its own record: the forsk ids of the records it shares ends with (F2)." },
     "ok": { "type": "boolean" },
     "message": { "type": "string" }
   },

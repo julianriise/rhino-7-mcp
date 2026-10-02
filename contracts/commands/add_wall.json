@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "add_wall.json",
   "title": "AddWall Command",
-  "description": "Add one straight wall on a centreline: from and to, or a straight line the user drew (line_id). Each end that stops short of a wall face by at most 300 mm runs on to it. The wall joins the one wall record it touches and that host is rebuilt from its path (a partition across a room splits it); a wall that touches none stands as a record of its own (the next forsk:id, w02). Refused, with nothing changed: a wall that would join two separate wall records (not in this version), and one that would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
+  "description": "Add one straight wall on a centreline: from and to, or a straight line the user drew (line_id). Each end that stops short of a wall face by at most 300 mm runs on to it. The wall joins the one wall record it touches and that host is rebuilt from its path (a partition across a room splits it); a wall that touches none, or two or more separate records, stands as a record of its own (the next forsk:id, w02), sharing its ends with the records it touches. Refused, with nothing changed: one that would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
   "type": "object",
   "properties": {
     "from": {

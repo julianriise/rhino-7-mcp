@@ -33,10 +33,10 @@ def add_wall(
     this line a wall") on its centreline. Each end that stops short of a wall
     face by at most 300 mm runs on to it. The wall joins the one wall record
     it touches and that host is rebuilt (a partition across a room splits
-    it); a wall that touches none stands as a record of its own (w02).
+    it); a wall that touches none, or two or more separate records, stands
+    as a record of its own (w02), sharing its ends with those it touches.
 
-    Refused, with nothing changed: a wall that would join two separate wall
-    records (not in this version), and one that would run across an opening.
+    Refused, with nothing changed: one that would run across an opening.
     The floor slab and flat roof from that record are rebuilt, and rooms are
     detected again. A shown daylight map is hidden as out of date.
 

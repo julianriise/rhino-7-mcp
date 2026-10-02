@@ -3,8 +3,10 @@ fake Rhinos. F3.1 serves the garage ring and one door on its south wall: a
 right move out and back, with the move onto the door refused, passes; a door
 left behind, a path that does not come back, and a refusal that goes through
 fail. F3.2/F3.3 (--walls) serves the ring and the five south openings: the
-partition, the south wall's delete, the split and join refusals and the free
-wall pass; a split that goes through and a free wall that joins fail."""
+partition, the south wall's delete, the split refusal, the free wall, and
+the wall joining it to the ring as a record of its own (F2) pass; a split
+that goes through, a free wall that joins, and a joining wall that is
+refused fail."""
 
 import json
 import sys
@@ -105,10 +107,10 @@ JOIN = "Not added: the wall would join 2 separate walls into one, and this versi
 
 
 class FakeWalls:
-    def __init__(self, split=True, free_joins=False):
+    def __init__(self, split=True, free_joins=False, link_refused=False):
         self.paths = {HOST: RING}
         self.markers = [(f"m{i}", x, w) for i, (x, w) in enumerate([(1200, 900), (2300, 900), (3400, 1200), (4800, 900), (7280, 900)])]
-        self.split, self.free_joins = split, free_joins
+        self.split, self.free_joins, self.link_refused = split, free_joins, link_refused
 
     def ok(self, result):
         return {"status": "success", "result": result}
@@ -132,8 +134,15 @@ class FakeWalls:
         if cmd == "add_wall" and params["from"] == [2000, 6000]:
             self.paths["free"] = {"outer": [[2000, 5900], [6000, 5900], [6000, 6100], [2000, 6100]]}
             return self.ok({"joined": self.free_joins, "host_id": "free", "forsk_id": "w02", "message": "Added w02."})
+        if cmd == "add_wall" and not self.link_refused:
+            self.paths["link"] = {"outer": [[3900, 4000], [4100, 4000], [4100, 5900], [3900, 5900]]}
+            return self.ok({"joined": False, "joins": ["w01", "w02"], "host_id": "link", "forsk_id": "w03",
+                            "message": "Added w03, a 200 mm wall joined to w01 and w02."})
         if cmd == "add_wall":
             return {"status": "error", "message": JOIN}
+        if cmd == "delete_wall" and params["id"] == "link":
+            del self.paths["link"]
+            return self.ok({"record_deleted": True, "openings_deleted": [], "holes": 0, "message": "Deleted the wall at (4000, 4950), w03."})
         if cmd == "delete_wall" and "at" in params and params["id"] == HOST:
             self.paths[HOST] = RING
             return self.ok({"record_deleted": False, "openings_deleted": [], "holes": 1, "message": "Deleted the wall."})
@@ -168,7 +177,7 @@ def test_walls_add_delete_and_refusals_pass(monkeypatch, capsys):
     assert "partition at x 6000:" in out
     assert (
         "    walls summary partition holes 2->1, south deleted 5 openings 0/0 holes 0, "
-        "split refused, w02 free added and deleted, join refused\n"
+        "split refused, w02 free added and deleted, w03 joined both and deleted\n"
     ) in out
 
 
@@ -181,3 +190,8 @@ def test_a_split_that_goes_through_fails(monkeypatch, capsys):
 def test_a_free_wall_that_joins_fails(monkeypatch, capsys):
     failures, _ = run_walls(monkeypatch, capsys, FakeWalls(free_joins=True))
     assert "walls free add joined=True id w02, expected a new w02" in failures
+
+
+def test_a_joining_wall_that_is_refused_fails(monkeypatch, capsys):
+    failures, _ = run_walls(monkeypatch, capsys, FakeWalls(link_refused=True))
+    assert f"walls join add: {JOIN}" in failures

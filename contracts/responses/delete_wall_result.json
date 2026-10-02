@@ -18,6 +18,21 @@
     "host_voids": { "type": "integer" },
     "max_frame_mm": { "type": "number" },
     "markers": { "type": "array" },
+    "followed": {
+      "type": "array",
+      "description": "The walls joined to the run, as they stand after it (F2).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": { "type": "string" },
+          "wall": { "type": "string" },
+          "change_mm": { "type": "number" }
+        },
+        "required": ["forsk_id", "wall", "change_mm"]
+      }
+    },
+    "records": { "type": "array", "items": { "type": "string" }, "description": "The forsk ids of the wall records written or deleted." },
+    "rebuilt": { "type": "string", "description": "What followed besides the walls: floor, roof, rooms." },
     "warnings": { "type": "array" },
     "ok": { "type": "boolean" },
     "message": { "type": "string" }

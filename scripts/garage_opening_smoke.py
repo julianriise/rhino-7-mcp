@@ -373,7 +373,8 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     """F3.2/F3.3 on the garage ring and its openings: a partition across the
     room, added and deleted again; the wall with the openings deleted with
     them; a delete that would split the walls refused; a wall standing on its
-    own added and deleted whole; a wall that would join the two refused."""
+    own added; a wall from it to the ring added as a record of its own, joined
+    to both (F2), and deleted whole; then the free wall deleted whole."""
 
     def call(cmd: str, params: dict) -> tuple[dict | None, str]:
         reply = send_raw(sock, cmd, params)
@@ -495,13 +496,25 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     if free.get("joined") is not False or free.get("forsk_id") != "w02" or len(kind_rows("A-WALL", "wall")) != 2:
         failures.append(f"walls free add joined={free.get('joined')} id {free.get('forsk_id')}, expected a new w02")
 
-    _, err = call("add_wall", {"from": join_from, "to": join_to})
-    joined = "join 2 separate walls" in err
-    print(f"    join refused: {err or 'went through'}")
-    if not joined:
-        failures.append(f"walls join {err or 'went through'}")
-    if "updated" in err:
-        failures.append(f"walls join said updated: {err}")
+    # F2: a wall that touches two records stands as a record of its own, joined to both.
+    link, err = call("add_wall", {"from": join_from, "to": join_to})
+    if link is None:
+        failures.append(f"walls join add: {err}")
+        return
+    joins = [str(j) for j in (link.get("joins") or [])]
+    print(f"    join add: {link.get('message')} id {link.get('forsk_id')} joins {','.join(joins)}")
+    joined = link.get("joined") is False and len(joins) == 2 and free.get("forsk_id") in joins
+    if not joined or len(kind_rows("A-WALL", "wall")) != 3:
+        failures.append(f"walls join joined={link.get('joined')} joins {joins}, expected a new record joined to both")
+    # It goes whole again, and the two walls stand apart.
+    mid = [(join_from[0] + join_to[0]) / 2, (join_from[1] + join_to[1]) / 2]
+    unlinked, err = call("delete_wall", {"id": link.get("host_id"), "at": mid})
+    if unlinked is None:
+        failures.append(f"walls join delete: {err}")
+        return
+    print(f"    join delete: {unlinked.get('message')} record_deleted {unlinked.get('record_deleted')}")
+    if unlinked.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 2:
+        failures.append(f"walls join delete record_deleted={unlinked.get('record_deleted')}")
 
     whole, err = call("delete_wall", {"id": free.get("host_id"), "at": [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]})
     if whole is None:
@@ -515,7 +528,7 @@ def walls_step(sock: socket.socket, failures: list) -> None:
         f"    walls summary partition holes {added.get('holes')}->{gone.get('holes')}, "
         f"{side} deleted {deleted} openings {taken.get('host_openings')}/{taken.get('host_voids')} holes {taken.get('holes')}, "
         f"split {'refused' if split else 'not refused'}, {free.get('forsk_id')} free added and deleted, "
-        f"join {'refused' if joined else 'not refused'}"
+        f"{link.get('forsk_id')} {'joined both' if joined else 'did not join both'} and deleted"
     )
 
 

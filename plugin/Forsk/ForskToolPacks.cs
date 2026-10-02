@@ -428,7 +428,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")
                     }),
                 Fn("move_wall",
-                    "Move one straight wall run across itself, then rebuild that host from its path. The whole plan is one wall record, so name the run: side for an outer wall, or at for the face nearest a point. Both faces move, the walls that meet it stretch, the openings on it move with it. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. A move that would close a room is refused with its depth. Refuses X-EXIST.",
+                    "Move one straight wall run across itself, then rebuild that host from its path. Wall records that touch are read as one, so name the run: side for an outer wall, or at for the face nearest a point. Both faces move, the walls joined to it stretch along their own lines in every record that touches, the openings on it move with it. The receipt names the walls that followed. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. A move that would close a room is refused with its depth. Refuses X-EXIST.",
                     new JObject
                     {
                         ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
@@ -439,7 +439,7 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "toward", "distance_mm"),
                 Fn("delete_wall",
-                    "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole. Refused when the walls left would stand in two pieces. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
+                    "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole, and so does a record of its own that the run covers. Refused when a wall record left would stand in two pieces. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
                     new JObject
                     {
                         ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
@@ -447,7 +447,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
                     }),
                 Fn("add_wall",
-                    "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it) or stands on its own as a new wall. Refused when it would join two separate walls or run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
+                    "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
                     new JObject
                     {
                         ["from"] = Pair("Centreline start [x, y] in mm."),

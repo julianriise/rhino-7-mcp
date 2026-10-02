@@ -155,25 +155,95 @@ public static class WallJoins
             }
         }
 
-        var self = graph.Find(run, tol);
-        if (self >= 0)
-        {
-            var later = Runs(shape, tol);
-            foreach (var n in graph.Neighbours(self))
-            {
-                var before = graph.Runs[n];
-                var j = Find(later, before, tol);
-                if (j < 0) continue;
-                var change = Math.Round(later[j].Length - before.Length);
-                if (Math.Abs(change) < 1) continue;
-                var followed = new Followed { Wall = graph.Names[n], ChangeMm = change };
-                foreach (var i in graph.Records)
-                    if (WallEdit.InRegion(records[i], Middle(before))) followed.Records.Add(i);
-                result.Followed.Add(followed);
-            }
-        }
+        result.Followed = Follow(records, graph, run, shape, tol, keepUnchanged: false);
         moved = result;
         return true;
+    }
+
+    public sealed class Cut
+    {
+        /// <summary>The cluster's shape after the cut, or null when nothing is left.</summary>
+        public List<List<Pt>> Shape;
+        /// <summary>Each record the cut changed and its rings after; null for a record that went whole.</summary>
+        public Dictionary<int, List<List<Pt>>> Records = new Dictionary<int, List<List<Pt>>>();
+        /// <summary>The walls that were joined to the run, as they stand after it.</summary>
+        public List<Followed> Followed = new List<Followed>();
+    }
+
+    /// <summary>
+    /// The run's band cut out of every record in the cluster. A record the
+    /// band covers goes whole; one it does not reach stays as it is. A record
+    /// left in two pieces is refused, as WallEdit refuses it. Records left
+    /// standing apart are fine: they are two clusters now, and the shape after
+    /// is the largest of them. A cluster of one is its record, cut exactly as
+    /// WallEdit cuts it.
+    /// </summary>
+    public static bool TryDelete(IList<List<List<Pt>>> records, Graph graph, WallEdit.Run run, double tol, out Cut cut, out string why)
+    {
+        cut = null;
+        var result = new Cut();
+        if (graph.Records.Count == 1)
+        {
+            if (!WallEdit.TryDelete(graph.Shape, run, tol, out var left, out why)) return false;
+            result.Records[graph.Records[0]] = left;
+            result.Shape = left;
+        }
+        else
+        {
+            why = null;
+            var band = WallEdit.Band(run);
+            var after = new List<List<List<Pt>>>(records);
+            var kept = new List<int>();
+            foreach (var i in graph.Records)
+            {
+                var pieces = WallEdit.Group(RoomDetect.Difference(new[] { records[i] }, new[] { band }, tol));
+                if (pieces.Count > 1)
+                {
+                    why = "Not deleted: the walls left would stand in " + pieces.Count + " separate pieces, and this version keeps one wall record.";
+                    return false;
+                }
+                if (pieces.Count == 0)
+                {
+                    result.Records[i] = null;
+                    continue;
+                }
+                kept.Add(i);
+                if (Math.Abs(Area(pieces[0]) - Area(records[i])) <= tol * tol) continue;
+                result.Records[i] = pieces[0];
+                after[i] = pieces[0];
+            }
+            foreach (var piece in Pieces(after, kept, tol))
+                if (result.Shape == null || Area(piece) > Area(result.Shape)) result.Shape = piece;
+        }
+        if (result.Shape != null) result.Followed = Follow(records, graph, run, result.Shape, tol, keepUnchanged: true);
+        cut = result;
+        return true;
+    }
+
+    /// <summary>
+    /// The run's neighbours (WallJoins.Graph.Neighbours) as they stand in the
+    /// shape after an edit: name, change in length, the records they stand in.
+    /// A move lists only those whose length changed; a delete lists them all.
+    /// </summary>
+    static List<Followed> Follow(IList<List<List<Pt>>> records, Graph graph, WallEdit.Run run, List<List<Pt>> after, double tol, bool keepUnchanged)
+    {
+        var list = new List<Followed>();
+        var self = graph.Find(run, tol);
+        if (self < 0) return list;
+        var later = Runs(after, tol);
+        foreach (var n in graph.Neighbours(self))
+        {
+            var before = graph.Runs[n];
+            var j = Find(later, before, tol);
+            if (j < 0) continue;
+            var change = Math.Round(later[j].Length - before.Length);
+            if (!keepUnchanged && Math.Abs(change) < 1) continue;
+            var followed = new Followed { Wall = graph.Names[n], ChangeMm = change };
+            foreach (var i in graph.Records)
+                if (WallEdit.InRegion(records[i], Middle(before))) followed.Records.Add(i);
+            list.Add(followed);
+        }
+        return list;
     }
 
     const string NotCleanly = "Not moved: the walls joined to it would not follow cleanly.";
@@ -254,12 +324,20 @@ public static class WallJoins
     public static List<List<Pt>> Shape(IList<List<List<Pt>>> records, IList<int> cluster, double tol)
     {
         if (cluster.Count == 1) return records[cluster[0]];
+        var pieces = Pieces(records, cluster, tol);
+        return pieces.Count == 1 ? pieces[0] : null;
+    }
+
+    /// <summary>The records' union as separate regions, each an outer loop with its holes.</summary>
+    static List<List<List<Pt>>> Pieces(IList<List<List<Pt>>> records, IList<int> cluster, double tol)
+    {
+        if (cluster.Count == 0) return new List<List<List<Pt>>>();
+        if (cluster.Count == 1) return new List<List<List<Pt>>> { records[cluster[0]] };
         var regions = new List<List<List<Pt>>>();
         foreach (var i in cluster) regions.Add(records[i]);
         var loops = new List<List<Pt>>();
         foreach (var loop in RoomDetect.Union(regions, tol)) loops.Add(RoomDetect.Simplify(loop, tol));
-        var grouped = WallEdit.Group(loops);
-        return grouped.Count == 1 ? grouped[0] : null;
+        return WallEdit.Group(loops);
     }
 
     /// <summary>The join graph of one cluster. Null when its shape does not read as one piece.</summary>

@@ -162,6 +162,55 @@ public class WallJoinsTests
         Assert.Equal("Not moved: the walls joined to it would not follow cleanly.", why);
     }
 
+    [Fact]
+    public void FourButtingRecords_DeleteNorth_ThatRecordGoes_TheOthersStay()
+    {
+        var records = FourRects();
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out _));
+        Assert.True(WallJoins.TryDelete(records, g, run, Tol, out var cut, out var why), why);
+
+        Assert.Equal(new[] { 0 }, cut.Records.Keys);
+        Assert.Null(cut.Records[0]);
+        // The ring is open now: one outline, no room.
+        Assert.Single(cut.Shape);
+        // The corners went with the north wall's band, so east and west stand 200 mm shorter.
+        Assert.Equal(new[] { "the east wall -200 [3]", "the west wall -200 [2]" },
+            cut.Followed.Select(f => f.Wall + " " + f.ChangeMm + " [" + string.Join(",", f.Records) + "]").OrderBy(x => x));
+    }
+
+    [Fact]
+    public void DeleteThatWouldSplitARecord_IsRefused()
+    {
+        // A U-shaped record (west, north and east walls) with a stub record on its west face.
+        var u = new List<Pt> { new(0, 0), new(200, 0), new(200, 3800), new(7800, 3800), new(7800, 0), new(8000, 0), new(8000, 4000), new(0, 4000) };
+        var records = new List<List<List<Pt>>> { new() { u }, new() { Rect(-1000, 2000, 0, 2200) } };
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.Equal(2, g.Records.Count);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out _));
+        Assert.False(WallJoins.TryDelete(records, g, run, Tol, out var cut, out var why));
+        Assert.Null(cut);
+        Assert.Equal("Not deleted: the walls left would stand in 2 separate pieces, and this version keeps one wall record.", why);
+    }
+
+    [Fact]
+    public void TheWallJoiningTwoRecords_DeletesWhole_AndLeavesThemApart()
+    {
+        var records = new List<List<List<Pt>>>
+        {
+            new() { Rect(0, 0, 200, 4000) },
+            new() { Rect(7800, 0, 8000, 4000) },
+            new() { Rect(200, 1900, 7800, 2100) }
+        };
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 2, Tol), Tol);
+        Assert.Equal(3, g.Records.Count);
+        Assert.True(WallEdit.TryPick(g.Shape, new Pt(4000, 2000), Tol, out var run, out var why), why);
+        Assert.True(WallJoins.TryDelete(records, g, run, Tol, out var cut, out why), why);
+        Assert.Equal(new[] { 2 }, cut.Records.Keys);
+        Assert.Null(cut.Records[2]);
+        Assert.NotNull(cut.Shape);
+    }
+
     static string[] Lines(WallJoins.Moved moved) => moved.Followed
         .Select(f => f.Wall + " " + (f.ChangeMm > 0 ? "+" : "") + f.ChangeMm + " [" + string.Join(",", f.Records) + "]")
         .OrderBy(x => x).ToArray();

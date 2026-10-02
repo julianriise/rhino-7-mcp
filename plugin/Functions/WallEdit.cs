@@ -339,6 +339,8 @@ public static class WallEdit
     {
         /// <summary>The record the new wall joins (its index in the records given), or -1 for a record of its own.</summary>
         public int Joined = -1;
+        /// <summary>The records the new wall touches. Two or more: it stands as a record of its own, joined at both ends (F2).</summary>
+        public List<int> Touches = new List<int>();
         /// <summary>The joined record's loops with the wall in, or the new wall's own loop.</summary>
         public List<List<Pt>> Rings;
         public List<Pt> Band;
@@ -349,9 +351,9 @@ public static class WallEdit
     /// <summary>
     /// A straight wall of the thickness on the centreline from to to. Each end
     /// that stops short of a wall face by at most RoomDetect.ReachMm runs on to
-    /// it. The wall joins the one record it touches, or stands as a record of
-    /// its own. One that would join two records is refused: this version keeps
-    /// each record as it is.
+    /// it. The wall joins the one record it touches. One that touches none,
+    /// or two or more, stands as a record of its own; with two or more it
+    /// shares its ends with them, and the join graph reads them together.
     /// </summary>
     public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why)
     {
@@ -375,13 +377,8 @@ public static class WallEdit
         for (var i = 0; i < records.Count; i++)
             if (Group(RoomDetect.Union(new[] { records[i], new List<List<Pt>> { band } }, tol)).Count == 1)
                 joined.Add(i);
-        if (joined.Count > 1)
-        {
-            why = "Not added: the wall would join " + joined.Count + " separate walls into one, and this version keeps each wall record as it is.";
-            return false;
-        }
-        added = new Added { Band = band, From = from, To = to };
-        if (joined.Count == 0)
+        added = new Added { Band = band, From = from, To = to, Touches = joined };
+        if (joined.Count != 1)
         {
             added.Rings = new List<List<Pt>> { band };
             return true;

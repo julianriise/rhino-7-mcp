@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using RhinoMCPPlugin.Forsk;
@@ -153,82 +154,116 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         var pick = PickWallRun(doc, parameters, tol);
-        if (!WallEdit.TryDelete(pick.Rings, pick.Run, tol, out var left, out var why))
+        if (!WallJoins.TryDelete(pick.Records, pick.Graph, pick.Run, tol, out var cut, out var why))
             throw new InvalidOperationException(why);
 
-        var host = pick.Host;
-        var forskId = host.Attributes?.GetUserString("forsk:id");
-        // The openings in the run go with it. Every other one must still sit in the walls left.
-        var orphans = new List<RhinoObject>();
-        foreach (var marker in MarkersOnHost(doc, host.Id, forskId))
+        // The openings in the run go with it, and those of a record that goes whole.
+        // Every other one on a record the cut changed must still sit in that record.
+        var orphans = new List<(int Wall, RhinoObject Marker)>();
+        foreach (var record in cut.Records)
         {
-            var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
-            if (!box.IsValid) continue;
-            if (left == null || WallEdit.InBand(pick.Run, new RoomDetect.Pt(box.Center.X, box.Center.Y), tol))
-                orphans.Add(marker);
-            else if (!WallEdit.Holds(left, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)))
-                throw new InvalidOperationException("Not deleted: " + MarkerLabel(marker) + " would hang past the end of its wall.");
+            var wall = pick.Walls[record.Key];
+            foreach (var marker in MarkersOnHost(doc, wall.Id, wall.Attributes?.GetUserString("forsk:id")))
+            {
+                var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+                if (!box.IsValid) continue;
+                if (record.Value == null || WallEdit.InBand(pick.Run, new RoomDetect.Pt(box.Center.X, box.Center.Y), tol))
+                    orphans.Add((record.Key, marker));
+                else if (!WallEdit.Holds(record.Value, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)))
+                    throw new InvalidOperationException("Not deleted: " + MarkerLabel(marker) + " would hang past the end of its wall.");
+            }
         }
 
-        var undo = SnapshotWholeHost(doc, host.Id);
-        var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
+        // The record the run stood in names it; else the wall picked.
+        var owner = pick.Graph.Records.FindIndex(i => WallEdit.InRegion(pick.Records[i], WallJoins.Middle(pick.Run)));
+        var namedIndex = owner >= 0 ? pick.Graph.Records[owner] : pick.Walls.FindIndex(w => w.Id == pick.Host.Id);
+        var named = pick.Walls[namedIndex].Id;
+        var forskId = pick.Walls[namedIndex].Attributes?.GetUserString("forsk:id");
+        var namedGone = cut.Records.TryGetValue(namedIndex, out var namedLeft) && namedLeft == null;
+
+        var sourceLayer = pick.Host.Attributes?.GetUserString("forsk:source_layer");
+        var undos = new Dictionary<int, HostUndo>();
         JObject rebuilt = null;
+        var rebuiltIds = new Dictionary<Guid, Guid>();
         string followed;
         try
         {
-            foreach (var marker in orphans)
-                RemoveOpeningPieces(doc, marker.Id, undo.Removed);
-            if (left == null)
+            foreach (var record in cut.Records) undos[record.Key] = SnapshotWholeHost(doc, pick.Walls[record.Key].Id);
+            foreach (var item in orphans)
+                RemoveOpeningPieces(doc, item.Marker.Id, undos[item.Wall].Removed);
+            foreach (var record in cut.Records)
             {
-                var wall = doc.Objects.FindId(host.Id);
-                if (wall == null || !TrackDelete(doc, wall, undo.Removed))
-                    throw new InvalidOperationException("Could not delete the wall.");
+                var undo = undos[record.Key];
+                if (record.Value == null)
+                {
+                    var wall = doc.Objects.FindId(undo.HostBefore);
+                    if (wall == null || !TrackDelete(doc, wall, undo.Removed))
+                        throw new InvalidOperationException("Could not delete the wall.");
+                    continue;
+                }
+                WriteWallPath(doc, undo.HostBefore, WallEdit.Path(record.Value));
+                var result = RebuildHostWall(new JObject { ["id"] = undo.HostBefore.ToString() });
+                undo.Committed = true;
+                undo.HostAfter = Guid.TryParse(result?["host_id"]?.ToString(), out var after) ? after : undo.HostBefore;
+                undo.NewBlocks = GuidList(result?["block_ids"] as JArray);
+                rebuiltIds[undo.HostBefore] = undo.HostAfter;
+                if (undo.HostBefore == named) rebuilt = result;
             }
-            else
-            {
-                WriteWallPath(doc, host.Id, WallEdit.Path(left));
-                rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
-            }
-            followed = FollowNeighbours(doc, sourceLayer, pick.Rings, left);
+            followed = FollowNeighbours(doc, sourceLayer, pick.Graph.Shape, cut.Shape);
         }
         catch (Exception ex)
         {
-            RollbackCommittedHost(doc, undo);
+            var list = new List<HostUndo>(undos.Values);
+            for (var i = list.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, list[i]);
             throw new InvalidOperationException("Wall not deleted. " + ex.Message, ex);
         }
 
         var label = string.IsNullOrEmpty(forskId) ? "the wall" : forskId;
-        var openings = OpeningsLine(orphans);
+        var openingMarkers = new List<RhinoObject>();
         var deleted = new JArray();
-        foreach (var marker in orphans) deleted.Add(marker.Id.ToString());
-        var hostId = left == null
-            ? Guid.Empty
-            : Guid.TryParse(rebuilt?["host_id"]?.ToString(), out var parsed) ? parsed : host.Id;
-        var result = new JObject
+        foreach (var item in orphans)
+        {
+            openingMarkers.Add(item.Marker);
+            deleted.Add(item.Marker.Id.ToString());
+        }
+        var openings = OpeningsLine(openingMarkers);
+        var joined = new List<string>();
+        foreach (var f in cut.Followed) joined.Add(f.Wall);
+        var hostId = namedGone ? Guid.Empty : rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
+        var left = namedGone ? null : namedLeft ?? pick.Records[namedIndex];
+        var wholeRecord = namedGone && pick.Graph.Records.Count == 1;
+        var deleteResult = new JObject
         {
             ["host_id"] = hostId == Guid.Empty ? "" : hostId.ToString(),
             ["forsk_id"] = forskId ?? "",
             ["wall"] = pick.Label,
-            ["record_deleted"] = left == null,
+            ["record_deleted"] = namedGone,
             ["openings_deleted"] = deleted,
             ["length_mm"] = pick.Run.Length,
             ["thickness"] = pick.Run.Thickness,
             ["path_points"] = rebuilt?["path_points"] ?? 0,
             ["holes"] = left == null ? 0 : left.Count - 1,
+            ["followed"] = FollowedJson(pick, cut.Followed),
+            ["records"] = RecordIds(pick, cut.Records.Keys),
+            ["rebuilt"] = followed,
             ["warnings"] = rebuilt?["warnings"] ?? new JArray(),
             ["ok"] = true,
-            ["message"] = (left == null
+            ["message"] = (wholeRecord
                     ? "Deleted " + label + ", a wall standing on its own"
-                    : "Deleted " + pick.Label + " of " + label)
-                + (openings.Length == 0 ? "" : ", and its " + openings) + ". " + followed
+                    : namedGone
+                        ? "Deleted " + pick.Label + ", " + label
+                        : "Deleted " + pick.Label + " of " + label)
+                + (openings.Length == 0 ? "" : ", and its " + openings)
+                + (joined.Count == 0 ? "" : "; it was joined to " + WallFollowPlan.Walls(joined))
+                + ". " + followed
         };
         if (hostId != Guid.Empty)
         {
             var report = HostOpeningReport(doc, hostId, Guid.Empty, Point3d.Unset);
-            if (report != null) result.Merge(report);
+            if (report != null) deleteResult.Merge(report);
         }
         doc.Views.Redraw();
-        return result;
+        return deleteResult;
     }
 
     [McpCommand("add_wall", ModelView = true, Map = MapEdit.Wall)]
@@ -344,7 +379,13 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException("Wall not added. " + ex.Message, ex);
             }
             result = AddedWall(added, id, forskId, thickness, height, false, WallEdit.Rings(path)[0].Count);
-            result["message"] = "Added " + forskId + ", a " + FormatMm(Math.Round(thickness)) + " mm wall standing on its own, "
+            var joins = new JArray();
+            foreach (var i in added.Touches) joins.Add(walls[i].Attributes.GetUserString("forsk:id") ?? "");
+            result["joins"] = joins;
+            var where = joins.Count > 1
+                ? " joined to " + string.Join(" and ", joins.Select(j => j.ToString())) + ", "
+                : " standing on its own, ";
+            result["message"] = "Added " + forskId + ", a " + FormatMm(Math.Round(thickness)) + " mm wall" + where
                 + FormatMm(Math.Round(Length(added))) + " mm long and " + FormatMm(Math.Round(height)) + " mm high. "
                 + followed;
         }

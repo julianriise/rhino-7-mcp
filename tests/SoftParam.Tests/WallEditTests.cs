@@ -309,15 +309,21 @@ public class WallEditTests
     }
 
     [Fact]
-    public void Add_JoiningTwoRecords_IsRefused()
+    public void Add_TouchingTwoRecords_StandsOnItsOwn_AndJoinsThemInOneCluster()
     {
         var records = new List<List<List<Pt>>>
         {
             Garage(),
             new List<List<Pt>> { Rect(2000, 5900, 6000, 6100) }
         };
-        Assert.False(WallEdit.TryAdd(records, new Pt(4000, 4000), new Pt(4000, 5900), 200, Tol, out _, out var why));
-        Assert.Equal("Not added: the wall would join 2 separate walls into one, and this version keeps each wall record as it is.", why);
+        Assert.True(WallEdit.TryAdd(records, new Pt(4000, 4000), new Pt(4000, 5900), 200, Tol, out var added, out var why), why);
+        Assert.Equal(-1, added.Joined);
+        Assert.Equal(new[] { 0, 1 }, added.Touches);
+        Assert.Equal(Box(3900, 4000, 4100, 5900), Sorted(Assert.Single(added.Rings)));
+        // F2: the three records share ends, so the join graph reads them as one.
+        Assert.Equal(2, WallJoins.Clusters(records, Tol).Count);
+        records.Add(added.Rings);
+        Assert.Single(WallJoins.Clusters(records, Tol));
     }
 
     [Fact]

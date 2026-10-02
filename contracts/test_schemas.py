@@ -1055,6 +1055,17 @@ def test_responses():
         all_passed = False
     if not validate("responses/delete_wall_result.json", {**delete_wall, "host_id": "", "record_deleted": True, "path_points": 0, "holes": 0}):
         all_passed = False
+    joined_delete = {
+        **delete_wall,
+        "wall": "the north wall",
+        "record_deleted": True,
+        "followed": [{"forsk_id": "w03", "wall": "the east wall", "change_mm": -200}],
+        "records": ["w01"],
+        "rebuilt": "Floor and 1 room updated.",
+        "message": "Deleted the north wall, w01; it was joined to the east and west walls. Floor and 1 room updated.",
+    }
+    if not validate("responses/delete_wall_result.json", joined_delete):
+        all_passed = False
 
     print("  add_wall_result:")
     add_wall = {
@@ -1074,6 +1085,10 @@ def test_responses():
         "message": "Added a 100 mm wall to w01, 3600 mm long. Roof and 2 rooms updated.",
     }
     if not validate("responses/add_wall_result.json", add_wall):
+        all_passed = False
+    linking = {**add_wall, "forsk_id": "w03", "joined": False, "joins": ["w01", "w02"], "holes": 0,
+               "message": "Added w03, a 200 mm wall joined to w01 and w02, 1900 mm long and 3000 mm high. 1 room updated."}
+    if not validate("responses/add_wall_result.json", linking):
         all_passed = False
 
     return all_passed
@@ -1223,6 +1238,18 @@ def test_invalid_examples():
             {"host_id": "x", "toward": "north", "distance_mm": 500, "faces_before": [0, 1], "faces_after": [0, 1],
              "openings_moved": [], "ok": True, "message": "m", "followed": [{"forsk_id": "w03", "change_mm": 500}]},
             "move_wall followed needs the wall's name",
+        ),
+        (
+            "responses/delete_wall_result.json",
+            {"host_id": "", "record_deleted": True, "openings_deleted": [], "holes": 0, "ok": True, "message": "m",
+             "followed": [{"forsk_id": "w03", "wall": "the east wall", "change_mm": "short"}]},
+            "delete_wall followed change is a number",
+        ),
+        (
+            "responses/add_wall_result.json",
+            {"host_id": "x", "forsk_id": "w03", "joined": False, "from": [0, 0], "to": [0, 1], "thickness": 200,
+             "holes": 0, "ok": True, "message": "m", "joins": "w01"},
+            "add_wall joins is a list",
         ),
         ("commands/move_wall.json", {"side": "north", "at": [0, 0], "toward": "north", "distance_mm": 500}, "move_wall side and at"),
         ("commands/move_wall.json", {"side": "north", "toward": "up", "distance_mm": 500}, "move_wall unknown toward"),
