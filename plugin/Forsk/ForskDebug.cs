@@ -162,7 +162,7 @@ namespace RhinoMCPPlugin.Forsk
                     current = new DebugTurn
                     {
                         User = text.Trim(),
-                        Intent = ForskIntentRouter.Classify(text, "").ToString(),
+                        Intent = ForskIntentRouter.Classify(text, Picked.None).ToString(),
                         Role = "auto"
                     };
                     continue;
