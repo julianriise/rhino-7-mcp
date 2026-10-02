@@ -12,7 +12,8 @@ namespace RhinoMCPPlugin.Functions;
 /// room's boundary curve with its tag data, no surface. A planar surface on
 /// the plan Z is the floor slab's top face and z-fights in Rendered mode.
 /// Source curves stay. clear_generated removes the markers. Then the floor
-/// plates are rebuilt from the markers (RoomPlates).
+/// plates are rebuilt from the markers (RoomPlates), and a plated curve locks
+/// so the plate is the click. rooms_detect later keeps one curve per room.
 /// </summary>
 public partial class RhinoMCPFunctions
 {

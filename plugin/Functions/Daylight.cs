@@ -36,6 +36,26 @@ public partial class RhinoMCPFunctions
 
         foreach (var obj in EnumerateDocObjects(doc))
         {
+            // The room record is one curve, generated or drawn. A plate is not a record.
+            if (IsRoomRecord(obj) && !IsExistingUnderlay(doc, obj))
+            {
+                var loop = RoomMarkerOutline(obj);
+                var pts = loop == null ? null : LoopPoints(loop, tol);
+                if (pts == null || pts.Count < 3)
+                {
+                    warnings.Add($"Room {obj.Attributes.Name} has no outline.");
+                    continue;
+                }
+                roomRings.Add(new KeyValuePair<string, List<RoomDetect.Pt>>(obj.Id.ToString(), PlanPoints(pts)));
+                rooms.Add(new JObject
+                {
+                    ["id"] = obj.Id.ToString(),
+                    ["name"] = obj.Attributes.Name ?? "",
+                    ["ring"] = XyRing(pts),
+                    ["z"] = loop.GetBoundingBox(true).Min.Z
+                });
+                continue;
+            }
             if (!IsForskGenerated(obj) || IsExistingUnderlay(doc, obj)) continue;
             var kind = GetForskKind(obj) ?? "";
             if (kind.Equals("wall", StringComparison.OrdinalIgnoreCase))
@@ -75,24 +95,6 @@ public partial class RhinoMCPFunctions
             {
                 markers.Add(obj);
             }
-            else if (kind.Equals("room", StringComparison.OrdinalIgnoreCase))
-            {
-                var loop = RoomMarkerOutline(obj);
-                var pts = loop == null ? null : LoopPoints(loop, tol);
-                if (pts == null || pts.Count < 3)
-                {
-                    warnings.Add($"Room {obj.Attributes.Name} has no outline.");
-                    continue;
-                }
-                roomRings.Add(new KeyValuePair<string, List<RoomDetect.Pt>>(obj.Id.ToString(), PlanPoints(pts)));
-                rooms.Add(new JObject
-                {
-                    ["id"] = obj.Id.ToString(),
-                    ["name"] = obj.Attributes.Name ?? "",
-                    ["ring"] = XyRing(pts),
-                    ["z"] = loop.GetBoundingBox(true).Min.Z
-                });
-            }
         }
 
         foreach (var marker in markers)
@@ -122,7 +124,7 @@ public partial class RhinoMCPFunctions
         {
             // A floor plate stands for its room's marker.
             var obj = ResolveRoomHandle(doc, picked);
-            if (IsRoomMarker(obj))
+            if (IsRoomRecord(obj))
             {
                 if (!selected.Any(t => t.ToString() == obj.Id.ToString())) selected.Add(obj.Id.ToString());
                 continue;

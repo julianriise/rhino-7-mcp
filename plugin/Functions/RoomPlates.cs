@@ -81,7 +81,72 @@ public partial class RhinoMCPFunctions
         result["no_plate"] = plates["no_plate"];
         var note = plates["note"]?.ToString();
         if (!string.IsNullOrEmpty(note)) result["message"] = (result["message"]?.ToString() ?? "") + " " + note;
+        LockPlatedRoomCurves(doc);
         doc.Views.Redraw();
+    }
+
+    /// <summary>
+    /// The plate is the click. Its room curve, and any coincident copy still on
+    /// A-ROOM, lock so one click cannot select two outlines. A room with no plate
+    /// stays selectable. Locked curves still print.
+    /// </summary>
+    private void LockPlatedRoomCurves(RhinoDoc doc)
+    {
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
+        var rings = new HashSet<string>(StringComparer.Ordinal);
+        var markerIds = new List<Guid>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), RoomPlate.Kind, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!Guid.TryParse(obj.Attributes.GetUserString("forsk:marker"), out var markerId)) continue;
+            var marker = doc.Objects.FindId(markerId);
+            if (marker == null) continue;
+            markerIds.Add(marker.Id);
+            var outline = RoomMarkerOutline(marker);
+            var points = outline == null ? null : LoopPoints(outline, tol);
+            if (points == null || points.Count < 3) continue;
+            var key = RoomCurves.RingKey(PlanPoints(points));
+            if (key.Length > 0) rings.Add(key);
+        }
+
+        var roomLayer = ResolveRoomSourceLayer(doc, "A-ROOM");
+        var lockIds = new HashSet<Guid>(markerIds);
+        var unlockIds = new List<Guid>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (obj?.Attributes == null) continue;
+            if (string.Equals(GetForskKind(obj), RoomPlate.Kind, StringComparison.OrdinalIgnoreCase)) continue;
+            var sameRing = false;
+            if (roomLayer != null && rings.Count > 0 && ObjectOnLayer(doc, obj, roomLayer) && obj.Geometry is Curve curve && curve.IsClosed)
+            {
+                var pts = LoopPoints(curve, tol);
+                if (pts != null && pts.Count >= 3)
+                    sameRing = rings.Contains(RoomCurves.RingKey(PlanPoints(pts)));
+            }
+            if (lockIds.Contains(obj.Id) || sameRing) lockIds.Add(obj.Id);
+            else if (IsRoomRecord(obj)) unlockIds.Add(obj.Id);
+        }
+        foreach (var id in markerIds)
+        {
+            var marker = doc.Objects.FindId(id);
+            if (marker == null || marker.IsLocked) continue;
+            doc.Objects.Show(marker.Id, false);
+            doc.Objects.Lock(marker.Id, false);
+        }
+        foreach (var id in lockIds)
+        {
+            if (markerIds.Contains(id)) continue;
+            var obj = doc.Objects.FindId(id);
+            if (obj == null || obj.IsLocked) continue;
+            doc.Objects.Show(obj.Id, false);
+            doc.Objects.Lock(obj.Id, false);
+        }
+        foreach (var id in unlockIds)
+        {
+            if (lockIds.Contains(id)) continue;
+            var obj = doc.Objects.FindId(id);
+            if (obj != null && obj.IsLocked) doc.Objects.Unlock(id, false);
+        }
     }
 
     private static JObject PlatesResult(JArray plates, JArray none)

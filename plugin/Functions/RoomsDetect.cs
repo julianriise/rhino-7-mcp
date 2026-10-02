@@ -12,10 +12,10 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Rooms from the model (F2.5): the regions between the Forsk walls, closed at
-/// doors and split by space_divider curves, drawn as closed curves on A-ROOM.
-/// Outlines already on A-ROOM win; detection fills the rest. Detected outlines
-/// carry forsk:room_id and keep it across runs. Then the room markers are
-/// rebuilt from every closed curve on A-ROOM, as rooms_from_layer does.
+/// doors and split by space_divider curves, drawn as one closed curve on A-ROOM.
+/// A room keeps that curve: the next run replaces it by forsk:id and deletes the
+/// copies. Outlines already on A-ROOM win; detection fills the rest. The floor
+/// plate is the click target. The curve stays, locked once a plate exists, for print.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -37,25 +37,35 @@ public partial class RhinoMCPFunctions
         var scene = RoomScene(doc, tol, warnings, out var z);
 
         var roomLayer = ResolveRoomSourceLayer(doc, "A-ROOM");
-        var earlier = new List<RhinoObject>();
+        var inventory = new List<RoomCurves.Curve>();
         var earlierRings = new List<KeyValuePair<string, List<RoomDetect.Pt>>>();
         if (roomLayer != null)
         {
             foreach (var obj in EnumerateDocObjects(doc))
             {
-                if (!ObjectOnLayer(doc, obj, roomLayer) || IsRoomMarker(obj) || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
+                if (!ObjectOnLayer(doc, obj, roomLayer) || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
                 var pts = LoopPoints(FlattenToWorldXY(curve, tol), tol);
                 if (pts == null || pts.Count < 3) continue;
-                if (string.Equals(obj.Attributes.GetUserString(RoomSourceKey), DetectedRoomSource, StringComparison.Ordinal))
+                var plan = PlanPoints(pts);
+                var forskId = obj.Attributes.GetUserString("forsk:id");
+                if (string.IsNullOrEmpty(forskId)) forskId = obj.Attributes.GetUserString(RoomIdKey) ?? "";
+                var detected = string.Equals(obj.Attributes.GetUserString(RoomSourceKey), DetectedRoomSource, StringComparison.Ordinal)
+                    || forskId.StartsWith(DetectedRoomPrefix, StringComparison.Ordinal);
+                var marker = IsRoomMarker(obj);
+                inventory.Add(new RoomCurves.Curve
                 {
-                    earlier.Add(obj);
-                    earlierRings.Add(new KeyValuePair<string, List<RoomDetect.Pt>>(
-                        obj.Attributes.GetUserString(RoomIdKey), PlanPoints(pts)));
-                }
-                else
-                {
-                    scene.Keep.Add(PlanPoints(pts));
-                }
+                    Id = obj.Id.ToString(),
+                    ForskId = forskId,
+                    Ring = RoomCurves.RingKey(plan),
+                    Detected = detected,
+                    Marker = marker
+                });
+                // A detected curve, including one already stamped as the room record, keeps its id.
+                // A curve the user drew wins the region. A marker copy is neither: the next pass deletes it.
+                if (detected)
+                    earlierRings.Add(new KeyValuePair<string, List<RoomDetect.Pt>>(forskId, plan));
+                else if (!marker)
+                    scene.Keep.Add(plan);
             }
         }
 
@@ -82,53 +92,62 @@ public partial class RhinoMCPFunctions
         var labels = RoomLabels(doc, suspect);
         var names = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToArray();
 
-        var reused = new HashSet<string>(StringComparer.Ordinal);
+        var roomRings = new List<string>(found.Rooms.Count);
+        foreach (var room in found.Rooms) roomRings.Add(RoomCurves.RingKey(room.Ring));
+        var plans = RoomCurves.Plan(inventory, roomIds, roomRings);
+        var drop = new HashSet<string>(RoomCurves.Leftovers(inventory, plans), StringComparer.Ordinal);
+        foreach (var plan in plans)
+            foreach (var id in plan.Delete) drop.Add(id);
+        var removed = 0;
+        foreach (var id in drop)
+            if (DeleteRoomCurve(doc, id)) removed++;
+
+        var ids = new JArray();
+        var tags = new List<RoomDetect.Tag>();
+        var area = 0.0;
+        var stamped = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < found.Rooms.Count; i++)
         {
             var room = found.Rooms[i];
             var outline = RoomOutline(room.Ring, z);
-            var old = earlier.Find(o => string.Equals(o.Attributes.GetUserString(RoomIdKey), roomIds[i], StringComparison.Ordinal));
-            if (old != null && doc.Objects.Replace(old.Id, outline))
+            var kept = FindRoomCurve(doc, plans[i].Keep);
+            if (kept != null)
             {
-                reused.Add(roomIds[i]);
-                var kept = old.Attributes.Duplicate();
-                kept.SetUserString("forsk:area", FormatMm(room.Area));
-                doc.Objects.ModifyAttributes(old.Id, kept, true);
-                continue;
+                if (kept.IsLocked) doc.Objects.Unlock(kept.Id, false);
+                if (!doc.Objects.Replace(kept.Id, outline))
+                {
+                    if (DeleteRoomCurve(doc, kept.Id.ToString())) removed++;
+                    kept = null;
+                }
             }
-            var attr = new ObjectAttributes { Name = roomIds[i], LayerIndex = layer.Index };
-            attr.SetUserString(RoomSourceKey, DetectedRoomSource);
-            attr.SetUserString(RoomIdKey, roomIds[i]);
-            attr.SetUserString("forsk:area", FormatMm(room.Area));
-            if (doc.Objects.AddCurve(outline, attr) == Guid.Empty)
-                warnings.Add($"Room outline {roomIds[i]} was not added.");
+            if (kept == null)
+            {
+                var attr = new ObjectAttributes { Name = roomIds[i], LayerIndex = layer.Index };
+                attr.SetUserString(RoomSourceKey, DetectedRoomSource);
+                attr.SetUserString(RoomIdKey, roomIds[i]);
+                attr.SetUserString("forsk:id", roomIds[i]);
+                attr.SetUserString("forsk:area", FormatMm(room.Area));
+                var added = doc.Objects.AddCurve(outline, attr);
+                if (added == Guid.Empty)
+                {
+                    warnings.Add($"Room outline {roomIds[i]} was not added.");
+                    continue;
+                }
+                kept = doc.Objects.FindId(added);
+            }
+            if (kept == null) continue;
+            NoteRoom(doc, kept, found.Rooms, roomIds, names, labels, UserDrawn(inventory, kept.Id.ToString()), ids, tags, ref area);
+            stamped.Add(kept.Id.ToString());
         }
-        var removed = 0;
-        foreach (var old in earlier)
+        // A curve the user drew that the walls did not take stays, named, and its marker copy is already gone.
+        foreach (var curve in inventory)
         {
-            if (!reused.Contains(old.Attributes.GetUserString(RoomIdKey) ?? "") && doc.Objects.Delete(old.Id, true))
-                removed++;
+            if (curve.Marker || curve.Detected || drop.Contains(curve.Id) || stamped.Contains(curve.Id)) continue;
+            var drawn = FindRoomCurve(doc, curve.Id);
+            if (drawn == null) continue;
+            if (drawn.IsLocked) doc.Objects.Unlock(drawn.Id, false);
+            NoteRoom(doc, drawn, found.Rooms, roomIds, names, labels, true, ids, tags, ref area);
         }
-
-        // Markers follow the outlines: one per closed A-ROOM curve. Each is
-        // stamped with its room's record, and the same records are the result,
-        // so the plan tags show what is reported here.
-        foreach (var marker in RoomMarkers(doc))
-            doc.Objects.Delete(marker.Id, true);
-        var markers = BakeRoomMarkers(new JObject { ["layer"] = layer.Name });
-        var ids = markers["ids"] as JArray ?? new JArray();
-        var tags = new List<RoomDetect.Tag>();
-        var area = 0.0;
-        foreach (var token in ids)
-        {
-            var marker = doc.Objects.FindId(Guid.Parse(token.ToString()));
-            if (marker == null) continue;
-            var tag = StampRoomMarker(doc, marker, found.Rooms, roomIds, names, labels);
-            if (tag != null) tags.Add(tag);
-            area += tag?.Area ?? ParseMm(marker.Attributes.GetUserString("forsk:area")) ?? 0;
-        }
-        foreach (var warning in markers["warnings"] as JArray ?? new JArray())
-            warnings.Add(warning);
 
         // Detected rooms first, in the order they were found, then the outlines drawn by hand.
         var rooms = new JArray();
@@ -249,7 +268,7 @@ public partial class RhinoMCPFunctions
         var list = new List<RhinoObject>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (IsRoomMarker(obj)) list.Add(obj);
+            if (IsRoomRecord(obj)) list.Add(obj);
         }
         return list;
     }
@@ -261,6 +280,47 @@ public partial class RhinoMCPFunctions
     private static bool IsRoomMarker(RhinoObject obj)
     {
         return IsForskGenerated(obj) && string.Equals(GetForskKind(obj), "room", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The one curve that is the room: a generated room marker, or a curve the
+    /// user drew once it carries a name and a tag point. Plates and plan tags read these.
+    /// </summary>
+    private static bool IsRoomRecord(RhinoObject obj)
+    {
+        if (IsRoomMarker(obj)) return true;
+        if (obj?.Attributes == null) return false;
+        return !string.IsNullOrWhiteSpace(obj.Attributes.GetUserString(RoomNameKey))
+            && !string.IsNullOrWhiteSpace(obj.Attributes.GetUserString(RoomAtKey));
+    }
+
+    static bool UserDrawn(List<RoomCurves.Curve> inventory, string id)
+    {
+        foreach (var curve in inventory)
+            if (curve.Id == id) return !curve.Marker && !curve.Detected;
+        return false;
+    }
+
+    static RhinoObject FindRoomCurve(RhinoDoc doc, string id)
+    {
+        return Guid.TryParse(id, out var guid) ? doc.Objects.FindId(guid) : null;
+    }
+
+    static bool DeleteRoomCurve(RhinoDoc doc, string id)
+    {
+        var obj = FindRoomCurve(doc, id);
+        if (obj == null) return false;
+        if (obj.IsLocked) doc.Objects.Unlock(obj.Id, false);
+        return doc.Objects.Delete(obj.Id, true);
+    }
+
+    static void NoteRoom(RhinoDoc doc, RhinoObject curve, List<RoomDetect.Room> rooms, string[] roomIds, string[] names,
+        List<RoomDetect.Label> labels, bool userDrawn, JArray ids, List<RoomDetect.Tag> tags, ref double area)
+    {
+        var tag = StampRoomMarker(doc, curve, rooms, roomIds, names, labels, userDrawn);
+        if (tag != null) tags.Add(tag);
+        area += tag?.Area ?? ParseMm(curve.Attributes.GetUserString("forsk:area")) ?? 0;
+        ids.Add(curve.Id.ToString());
     }
 
     /// <summary>
@@ -307,7 +367,7 @@ public partial class RhinoMCPFunctions
     /// with no outline to read.
     /// </summary>
     private static RoomDetect.Tag StampRoomMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms,
-        string[] roomIds, string[] names, List<RoomDetect.Label> labels)
+        string[] roomIds, string[] names, List<RoomDetect.Label> labels, bool userDrawn)
     {
         if (!TryRoomPolygon(marker, out var polygon)) return null;
         var outline = PlanPoints(polygon);
@@ -317,12 +377,13 @@ public partial class RhinoMCPFunctions
         var attr = marker.Attributes.Duplicate();
         attr.SetUserString(RoomNameKey, tag.Name);
         attr.SetUserString(RoomAtKey, RoomDetect.StampAt(outline, tag.At));
-        if (tag.Detected)
+        // The user's curve keeps its name and tag point. It does not become generated, so clear_generated leaves it.
+        if (tag.Detected && !userDrawn)
         {
+            StampForskTags(attr, new ForskStamp { Kind = "room", Level = "0", Id = tag.Id, Area = tag.Area });
             attr.Name = tag.Id;
-            attr.SetUserString("forsk:id", tag.Id);
+            attr.SetUserString(RoomSourceKey, DetectedRoomSource);
             attr.SetUserString(RoomIdKey, tag.Id);
-            attr.SetUserString("forsk:area", FormatMm(tag.Area));
         }
         doc.Objects.ModifyAttributes(marker.Id, attr, true);
         return tag;

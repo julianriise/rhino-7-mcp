@@ -667,7 +667,7 @@ public partial class RhinoMCPFunctions
         if (!string.IsNullOrWhiteSpace(idToken))
         {
             var obj = ResolveRoomHandle(doc, Guid.TryParse(idToken, out var guid) ? doc.Objects.FindId(guid) : null);
-            if (obj == null || !IsRoomMarker(obj))
+            if (obj == null || !IsRoomRecord(obj))
                 throw new InvalidOperationException("Not a Forsk room.");
             return obj;
         }
@@ -675,7 +675,7 @@ public partial class RhinoMCPFunctions
         foreach (var picked in ListSelected(doc))
         {
             var obj = ResolveRoomHandle(doc, picked);
-            if (IsRoomMarker(obj) && !rooms.Exists(r => r.Id == obj.Id)) rooms.Add(obj);
+            if (IsRoomRecord(obj) && !rooms.Exists(r => r.Id == obj.Id)) rooms.Add(obj);
         }
         if (rooms.Count != 1)
             throw new InvalidOperationException("Select one room, then say it again.");
@@ -886,7 +886,7 @@ public partial class RhinoMCPFunctions
         var rooms = new List<WallFollowPlan.NamedRoom>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (!IsRoomMarker(obj)) continue;
+            if (!IsRoomRecord(obj)) continue;
             var outline = RoomMarkerOutline(obj);
             var ring = outline == null ? null : PathPoints(outline);
             if (ring == null || ring.Count < 3) continue;
