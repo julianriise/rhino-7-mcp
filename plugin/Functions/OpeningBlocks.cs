@@ -41,9 +41,18 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Visible child of hidden A-OPEN. Parent off does not hide a child in Rhino 7,
-    /// so frames show in the clay while markers stay off.
+    /// so frames show in the clay. Showing that child also draws the parent's
+    /// objects in shaded view: the marker is a solid in A-OPEN's blue, in front
+    /// of the frame. Markers are hidden objects on A-OPEN, which stays off.
     /// </summary>
     private Layer EnsureOpeningBlockLayer(RhinoDoc doc)
+    {
+        var layer = EnsureOpeningBlockLayerCore(doc);
+        HideOpeningMarkers(doc);
+        return layer;
+    }
+
+    private Layer EnsureOpeningBlockLayerCore(RhinoDoc doc)
     {
         var parent = EnsureLayer(doc, "A-OPEN", Color.FromArgb(120, 160, 200));
         var existing = FindLayerCaseInsensitive(doc, OpeningBlockLayerPath);
@@ -82,6 +91,67 @@ public partial class RhinoMCPFunctions
                 doc.Layers.Modify(layer, layer.Index, true);
         }
         return layer ?? parent;
+    }
+
+    /// <summary>
+    /// A-OPEN off, and every opening marker object-hidden. A visible child does
+    /// not keep its parent hidden in shaded view, so the layer alone is not enough.
+    /// Outside an open undo record this writes no undo of its own.
+    /// </summary>
+    internal static void HideOpeningMarkers(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        var parent = OpeningMarkerLayer(doc);
+        var layerOn = parent != null && parent.IsVisible;
+        var shown = new List<Guid>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!obj.IsHidden) shown.Add(obj.Id);
+        }
+        if (!layerOn && shown.Count == 0) return;
+
+        var record = doc.UndoRecordingEnabled;
+        var active = doc.UndoRecordingIsActive;
+        if (!active) doc.UndoRecordingEnabled = false;
+        try
+        {
+            if (layerOn)
+            {
+                parent.IsVisible = false;
+                doc.Layers.Modify(parent, parent.Index, true);
+            }
+            foreach (var id in shown)
+                doc.Objects.Hide(id, true);
+        }
+        finally
+        {
+            if (!active) doc.UndoRecordingEnabled = record;
+        }
+    }
+
+    private static void HideOpeningMarker(RhinoDoc doc, Guid id)
+    {
+        if (doc == null || id == Guid.Empty) return;
+        var obj = doc.Objects.FindId(id);
+        if (obj == null || obj.IsHidden) return;
+        if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) return;
+        doc.Objects.Hide(id, true);
+    }
+
+    /// <summary>The A-OPEN parent, not A-OPEN::Block. Markers live here.</summary>
+    private static Layer OpeningMarkerLayer(RhinoDoc doc)
+    {
+        if (doc == null) return null;
+        for (var i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            if (layer.ParentLayerId != Guid.Empty) continue;
+            if (!layer.Name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase)) continue;
+            return layer;
+        }
+        return null;
     }
 
     private Guid AddOpeningBlock(

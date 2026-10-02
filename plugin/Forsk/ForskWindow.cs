@@ -280,6 +280,8 @@ namespace RhinoMCPPlugin.Forsk
             {
                 if (e.Merge || e.Reference || e.Document == null) return;
                 Tracker.DocumentOpened();
+                try { RhinoMCPFunctions.HideOpeningMarkers(e.Document); }
+                catch (Exception ex) { Log("markers: " + ex.Message); }
                 var thread = Models.For(e.Document.RuntimeSerialNumber, FileName(e.Document), e.Document.Path);
                 if (thread.Items.Count > 0) thread.Add("line", ForskText.Get("line.reopened"));
                 MarkDirty();

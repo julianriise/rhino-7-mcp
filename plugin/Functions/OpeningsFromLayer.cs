@@ -405,7 +405,9 @@ public partial class RhinoMCPFunctions
             ? "window"
             : "door";
         StampOpeningStyle(attr, OpeningTypes.DefaultRecord(kindTag));
-        return doc.Objects.AddBrep(markerBrep, attr);
+        var id = doc.Objects.AddBrep(markerBrep, attr);
+        HideOpeningMarker(doc, id);
+        return id;
     }
 
     /// <summary>

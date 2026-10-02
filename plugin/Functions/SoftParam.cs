@@ -156,6 +156,7 @@ public partial class RhinoMCPFunctions
                     warnings.Add("Opening marker not found.");
                     continue;
                 }
+                HideOpeningMarker(doc, item.Marker.Id);
 
                 StampOpeningHostId(doc, item.Marker.Id, host.Id);
                 WriteOpeningParams(doc, item.Marker.Id, item.T, item.Offset);

@@ -94,6 +94,7 @@ public partial class RhinoMCPFunctions
                 var brep = GetBrepFromObject(item.Marker)?.DuplicateBrep();
                 if (brep == null || !brep.Translate(shift) || !doc.Objects.Replace(item.Marker.Id, brep))
                     throw new InvalidOperationException("Opening marker not found.");
+                HideOpeningMarker(doc, item.Marker.Id);
                 carried.Add(item.Marker.Id.ToString());
             }
             foreach (var undo in undos)

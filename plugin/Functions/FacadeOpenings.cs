@@ -1253,6 +1253,7 @@ public partial class RhinoMCPFunctions
         {
             if (newMarker != null && !doc.Objects.Replace(rec.MarkerId, newMarker))
                 throw new InvalidOperationException("Opening marker not found.");
+            HideOpeningMarker(doc, rec.MarkerId);
             WriteOpeningSize(doc, rec.MarkerId, width, sill, head);
             var rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
             var hostId = host.Id;
