@@ -68,7 +68,7 @@ namespace RhinoMCPPlugin.Forsk
         public int Layouts;
         /// <summary>The letters of the sections stored with section_add.</summary>
         public List<string> SectionLetters = new List<string>();
-        /// <summary>The title block as stored: project, client, address, date, scale_label.</summary>
+        /// <summary>The title block as stored: project, client, address. A stored date or scale label is not shown.</summary>
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
         public string Ink = "default";
         public bool Millimetres = true;

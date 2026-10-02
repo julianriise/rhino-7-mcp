@@ -2679,7 +2679,8 @@ public partial class RhinoMCPFunctions
                 ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture)
                 : ""),
             new KeyValuePair<string, string>("Sheet", "A3"),
-            new KeyValuePair<string, string>("Date", meta["date"]?.ToString()),
+            // The day the sheet is printed. A date stored on the file is not used.
+            new KeyValuePair<string, string>("Date", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
             new KeyValuePair<string, string>("Project", meta["project"]?.ToString()),
             new KeyValuePair<string, string>("Client", meta["client"]?.ToString()),
             new KeyValuePair<string, string>("Address", meta["address"]?.ToString())

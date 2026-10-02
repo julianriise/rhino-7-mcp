@@ -71,13 +71,20 @@ public class CardTests
     }
 
     [Fact]
-    public void TheTitleBlock_HasFiveFields_FilledFromTheDocument()
+    public void TheTitleBlock_HasProjectClientAndAddress_AndIgnoresStoredDateAndScale()
     {
-        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string> { ["project"] = "Tilbygg Holmen", ["client"] = "Holmen" }));
+        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
+        {
+            ["project"] = "Tilbygg Holmen",
+            ["client"] = "Holmen",
+            ["date"] = "2020-01-01",
+            ["scale_label"] = "1:50"
+        }));
         var card = ForskCards.For("meta.title", facts)!;
-        Assert.Equal(new[] { "project", "client", "address", "date", "scale_label" }, card.Fields!.Select(f => f.Key));
+        Assert.Equal(new[] { "project", "client", "address" }, card.Fields!.Select(f => f.Key));
         Assert.Equal("Tilbygg Holmen", card.Fields![0].Value);
         Assert.Equal("", card.Fields![2].Value);
+        Assert.Null(card.Note);
         Assert.Equal("save", card.Pills[0].Id);
     }
 

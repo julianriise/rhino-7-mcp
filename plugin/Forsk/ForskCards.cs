@@ -38,7 +38,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         public const int MaxPages = 24;
         static readonly string[] SheetViews = { "plan", "north", "east", "south", "west", "schedules" };
-        static readonly string[] MetaKeys = { "project", "client", "address", "date", "scale_label" };
+        static readonly string[] MetaKeys = { "project", "client", "address" };
 
         /// <summary>The card a registry card action opens, or null for help, the bridge, and an action that is not a card.</summary>
         public static CardSpec For(string actionId, FileFacts f)
@@ -108,7 +108,6 @@ namespace RhinoMCPPlugin.Forsk
                 Kind = "meta.title",
                 Question = ForskText.Get("meta.title.ask"),
                 Fields = new List<CardField>(),
-                Note = ForskText.Get("meta.title.note"),
                 Pills = { new CardPill("save", ForskText.Get("word.save")), new CardPill("cancel", ForskText.Get("word.cancel")) }
             };
             foreach (var key in MetaKeys)

@@ -492,14 +492,12 @@ namespace RhinoMCPPlugin.Forsk
                         }
                     }),
                 Fn("set_project_meta",
-                    "Store project, client, address, date, and scale label for the Layout title block. Omitted keys stay. An empty string clears that key. Call when the user states project, client, or address.",
+                    "Store project, client, and address for the Layout title block. Omitted keys stay. An empty string clears that key. Call when the user states project, client, or address. The sheet prints today's date, and its scale is the detail's own scale.",
                     new JObject
                     {
                         ["project"] = Str("Project name."),
                         ["client"] = Str("Client name."),
-                        ["address"] = Str("Site address."),
-                        ["date"] = Str("Date yyyy-MM-dd. Unset reads as today."),
-                        ["scale_label"] = Str("Title scale text. Unset reads as 1:100.")
+                        ["address"] = Str("Site address.")
                     }),
                 Fn("layout_pack",
                     "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default pages are plan, north, east, south, west, and schedules. The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",

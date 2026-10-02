@@ -1068,7 +1068,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         static readonly string[] MetaKeys =
         {
-            "project", "client", "address", "date", "scale_label"
+            "project", "client", "address"
         };
 
         public static bool IsRequest(string text)
