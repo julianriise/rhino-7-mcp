@@ -2135,8 +2135,10 @@ class TestRoomsFromLayerTool:
             "joined": 2,
             "closed": 2,
             "skipped": 0,
+            "plate_ids": [],
+            "no_plate": [{"room": "Bod", "why": "its walls do not close"}],
             "warnings": [],
-            "message": "Created 1 room marker(s) on A-ROOM from layer 'A-ROOM'.",
+            "message": "Created 1 room marker(s) on A-ROOM from layer 'A-ROOM'. No floor plate for Bod (its walls do not close).",
         }
         mock_get_conn.return_value = mock_conn
 
@@ -2154,6 +2156,9 @@ class TestRoomsFromLayerTool:
         assert result["count"] == 1
         assert result["ids"] == ["room-guid"]
         assert result["forsk_ids"] == ["r01"]
+        # S3: the floor plates come back with the rooms that got none.
+        assert result["plate_ids"] == []
+        assert result["no_plate"] == [{"room": "Bod", "why": "its walls do not close"}]
 
     @patch("rhinomcp.tools.rooms_from_layer.get_rhino_connection")
     def test_empty_layer_is_success(self, mock_get_conn):

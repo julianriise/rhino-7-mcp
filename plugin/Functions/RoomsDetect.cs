@@ -33,38 +33,8 @@ public partial class RhinoMCPFunctions
     {
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
-        var scene = new RoomDetect.Scene { Tol = Math.Max(tol, 1.0) };
         var warnings = new JArray();
-        var z = double.MaxValue;
-
-        foreach (var obj in EnumerateDocObjects(doc))
-        {
-            if (!IsForskGenerated(obj) || IsExistingUnderlay(doc, obj)) continue;
-            var kind = GetForskKind(obj) ?? "";
-            if (kind.Equals("wall", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!TryDecodeWallPath(obj.Attributes.GetUserString("forsk:path"), out var outer, out var holes))
-                {
-                    warnings.Add($"Wall {obj.Attributes.GetUserString("forsk:id") ?? obj.Id.ToString()} has no param path. Bake the wall again.");
-                    continue;
-                }
-                var rings = new List<List<RoomDetect.Pt>>();
-                foreach (var loop in new[] { outer }.Concat(holes))
-                {
-                    var pts = LoopPoints(loop, tol);
-                    if (pts == null || pts.Count < 3) continue;
-                    foreach (var p in pts) z = Math.Min(z, p.Z);
-                    rings.Add(PlanPoints(pts));
-                }
-                if (rings.Count > 0) scene.Walls.Add(rings);
-            }
-            else if (kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(obj.Attributes.GetUserString("forsk:opening_kind"), "window", StringComparison.OrdinalIgnoreCase))
-            {
-                var box = obj.Geometry.GetBoundingBox(true);
-                if (box.IsValid) scene.Doors.Add(new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y));
-            }
-        }
+        var scene = RoomScene(doc, tol, warnings, out var z);
 
         var roomLayer = ResolveRoomSourceLayer(doc, "A-ROOM");
         var earlier = new List<RhinoObject>();
@@ -89,17 +59,6 @@ public partial class RhinoMCPFunctions
             }
         }
 
-        var dividerLayer = FindLayerCaseInsensitive(doc, DividerLayerName);
-        if (dividerLayer != null)
-        {
-            foreach (var obj in EnumerateDocObjects(doc))
-            {
-                if (!ObjectOnLayer(doc, obj, dividerLayer) || !(obj.Geometry is Curve curve)) continue;
-                var pts = PathPoints(curve);
-                if (pts.Count >= 2) scene.Dividers.Add(pts);
-            }
-        }
-
         if (scene.Walls.Count == 0 && scene.Keep.Count == 0)
         {
             return new JObject
@@ -118,8 +77,6 @@ public partial class RhinoMCPFunctions
         var found = RoomDetect.Detect(scene);
         var roomIds = RoomDetect.Match(found.Rooms, earlierRings, DetectedRoomPrefix);
         var layer = EnsureLayer(doc, roomLayer?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
-        if (z == double.MaxValue) z = 0;
-
         // Each detected room is named once; the marker carries the name to the plan tag.
         var suspect = new List<RoomDetect.Label>();
         var labels = RoomLabels(doc, suspect);
@@ -158,7 +115,7 @@ public partial class RhinoMCPFunctions
         // so the plan tags show what is reported here.
         foreach (var marker in RoomMarkers(doc))
             doc.Objects.Delete(marker.Id, true);
-        var markers = RoomsFromLayer(new JObject { ["layer"] = layer.Name });
+        var markers = BakeRoomMarkers(new JObject { ["layer"] = layer.Name });
         var ids = markers["ids"] as JArray ?? new JArray();
         var tags = new List<RoomDetect.Tag>();
         var area = 0.0;
@@ -187,9 +144,16 @@ public partial class RhinoMCPFunctions
                 ["source"] = tag.Detected ? DetectedRoomSource : "drawn"
             });
         }
+        // A region the walls do not close has no room: no marker, no plate, no daylight cells.
         var open = new JArray();
         foreach (var region in found.Open)
-            open.Add(new JObject { ["reason"] = region.Reason, ["x"] = region.At.X, ["y"] = region.At.Y });
+            open.Add(new JObject
+            {
+                ["name"] = region.Ring == null ? "" : RoomDetect.Name(labels, region.Ring),
+                ["reason"] = region.Reason,
+                ["x"] = region.At.X,
+                ["y"] = region.At.Y
+            });
 
         // Labels not imported by dxf_import that look mangled: which room each names.
         var suspects = new JArray();
@@ -204,12 +168,12 @@ public partial class RhinoMCPFunctions
 
         doc.Views.Redraw();
         var squareMetres = Math.Round(area / 1000000.0, 1, MidpointRounding.AwayFromZero);
-        var message = RoomsMessage(ids.Count, squareMetres, found.Open);
+        var message = RoomDetect.Message(ids.Count, squareMetres, found.Open, labels);
         if (suspect.Count > 0)
             message += " Labels suspect " + suspect.Count
                 + (suspectRooms.Count > 0 ? " (" + string.Join(" ", suspectRooms) + ")" : "")
                 + ": a DXF escape lost on import. Import the DXF with dxf_import.";
-        return new JObject
+        var result = new JObject
         {
             ["ids"] = ids,
             ["rooms"] = rooms,
@@ -225,17 +189,59 @@ public partial class RhinoMCPFunctions
             ["warnings"] = warnings,
             ["message"] = message
         };
+        AddRoomPlates(doc, result);
+        return result;
     }
 
-    private static string RoomsMessage(int count, double squareMetres, List<RoomDetect.Open> open)
+    /// <summary>
+    /// What rooms are found in: the Forsk walls' footprints, the doors that
+    /// close a gap, and the space dividers. Z is the lowest wall loop, or 0.
+    /// </summary>
+    private RoomDetect.Scene RoomScene(RhinoDoc doc, double tol, JArray warnings, out double z)
     {
-        var text = count + " room" + (count == 1 ? "" : "s") + ", "
-            + squareMetres.ToString("0.0", CultureInfo.InvariantCulture) + " m²";
-        if (open.Count == 0) return text + ".";
-        var reasons = new List<string>();
-        foreach (var region in open)
-            if (!reasons.Contains(region.Reason)) reasons.Add(region.Reason);
-        return text + ". " + open.Count + " open: " + string.Join("; ", reasons) + ".";
+        var scene = new RoomDetect.Scene { Tol = Math.Max(tol, 1.0) };
+        z = double.MaxValue;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj) || IsExistingUnderlay(doc, obj)) continue;
+            var kind = GetForskKind(obj) ?? "";
+            if (kind.Equals("wall", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryDecodeWallPath(obj.Attributes.GetUserString("forsk:path"), out var outer, out var holes))
+                {
+                    warnings.Add($"Wall {obj.Attributes.GetUserString("forsk:id") ?? obj.Id.ToString()} has no param path. Bake the wall again.");
+                    continue;
+                }
+                var rings = new List<List<RoomDetect.Pt>>();
+                foreach (var loop in new[] { outer }.Concat(holes))
+                {
+                    var pts = LoopPoints(loop, tol);
+                    if (pts == null || pts.Count < 3) continue;
+                    foreach (var p in pts) z = Math.Min(z, p.Z);
+                    rings.Add(PlanPoints(pts));
+                }
+                if (rings.Count > 0) scene.Walls.Add(rings);
+            }
+            else if (kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(obj.Attributes.GetUserString("forsk:opening_kind"), "window", StringComparison.OrdinalIgnoreCase))
+            {
+                var box = obj.Geometry.GetBoundingBox(true);
+                if (box.IsValid) scene.Doors.Add(new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y));
+            }
+        }
+        if (z == double.MaxValue) z = 0;
+
+        var dividerLayer = FindLayerCaseInsensitive(doc, DividerLayerName);
+        if (dividerLayer != null)
+        {
+            foreach (var obj in EnumerateDocObjects(doc))
+            {
+                if (!ObjectOnLayer(doc, obj, dividerLayer) || !(obj.Geometry is Curve curve)) continue;
+                var pts = PathPoints(curve);
+                if (pts.Count >= 2) scene.Dividers.Add(pts);
+            }
+        }
+        return scene;
     }
 
     private static List<RhinoObject> RoomMarkers(RhinoDoc doc)

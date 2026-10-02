@@ -792,8 +792,10 @@ namespace RhinoMCPPlugin.Forsk
 
         static string SelectedRoom(RhinoDoc doc)
         {
-            foreach (var obj in RhinoMCPFunctions.ListSelected(doc))
+            foreach (var picked in RhinoMCPFunctions.ListSelected(doc))
             {
+                // A floor plate stands for its room's marker.
+                var obj = RhinoMCPFunctions.ResolveRoomHandle(doc, picked);
                 var attr = obj?.Attributes;
                 if (attr == null || attr.GetUserString("forsk:kind") != "room") continue;
                 return attr.GetUserString("forsk:room_name") ?? attr.GetUserString("forsk:room_id") ?? obj.Name;

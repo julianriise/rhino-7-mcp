@@ -24,6 +24,9 @@ def rooms_from_layer(
     Layer X-EXIST returns count 0: existing underlay is not a bake source.
 
     Does not detect rooms from walls and does not extrude to wall height.
+    Then each room the walls close gets a 20 mm floor plate on A-ROOM::Plate
+    (forsk:kind=room_plate) so a click inside the room picks it; a room the
+    walls do not close gets none, listed in no_plate with why.
 
     Parameters:
     - layer: Source layer, case-insensitive (default "A-ROOM")
@@ -32,7 +35,7 @@ def rooms_from_layer(
     - join_tolerance: Optional join tolerance for open segments
 
     Returns:
-    Dictionary with ids, forsk_ids, count, warnings, and message.
+    Dictionary with ids, forsk_ids, count, plate_ids, no_plate, warnings, and message.
     """
     try:
         rhino = get_rhino_connection()
@@ -54,6 +57,8 @@ def rooms_from_layer(
             "joined": result.get("joined"),
             "closed": result.get("closed"),
             "skipped": result.get("skipped"),
+            "plate_ids": result.get("plate_ids", []),
+            "no_plate": result.get("no_plate", []),
             "warnings": result.get("warnings", []),
             "message": result.get("message", "Rooms created"),
         }

@@ -38,6 +38,7 @@
       "items": {
         "type": "object",
         "properties": {
+          "name": { "type": "string", "description": "The region's name from its labels (Rom when none); empty for a divider" },
           "reason": { "type": "string" },
           "x": { "type": "number" },
           "y": { "type": "number" }
@@ -45,7 +46,25 @@
         "required": ["reason", "x", "y"],
         "additionalProperties": false
       },
-      "description": "Regions left open: an undoored gap, or a space divider that meets no wall"
+      "description": "Regions left open: an undoored gap, or a space divider that meets no wall. They have no marker, no plate and no daylight cells."
+    },
+    "plate_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "GUIDs of the floor plates (forsk:kind room_plate), one per room the walls close. All plates are rebuilt with the markers."
+    },
+    "no_plate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room": { "type": "string" },
+          "why": { "type": "string", "description": "gap 0.9 m without a door, its walls do not close, ..." }
+        },
+        "required": ["room", "why"],
+        "additionalProperties": false
+      },
+      "description": "Rooms with a marker but no plate, because the walls do not close them; the message names them."
     },
     "labels_suspect": {
       "type": "array",
@@ -67,7 +86,7 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "message": { "type": "string", "description": "15 rooms, 412.3 m². 1 open: gap 0.9 m without a door." }
+    "message": { "type": "string", "description": "15 rooms, 412.3 m². 1 open: Bod (gap 0.9 m without a door)." }
   },
   "required": ["ids", "count", "detected", "area_m2", "open", "message"],
   "additionalProperties": false

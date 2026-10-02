@@ -415,6 +415,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool PathReads;
         /// <summary>How many straight runs a generated wall's path holds (WallJoins.Runs); 0 when it does not read.</summary>
         public int Runs;
+        /// <summary>forsk:marker on a room plate: the id of the room marker it stands for.</summary>
+        public string Marker;
     }
 
     /// <summary>

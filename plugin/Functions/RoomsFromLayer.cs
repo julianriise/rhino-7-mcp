@@ -11,12 +11,20 @@ namespace RhinoMCPPlugin.Functions;
 /// Room markers from closed curves on A-ROOM (alias layer room): each the
 /// room's boundary curve with its tag data, no surface. A planar surface on
 /// the plan Z is the floor slab's top face and z-fights in Rendered mode.
-/// Source curves stay. clear_generated removes the markers.
+/// Source curves stay. clear_generated removes the markers. Then the floor
+/// plates are rebuilt from the markers (RoomPlates).
 /// </summary>
 public partial class RhinoMCPFunctions
 {
     [McpCommand("rooms_from_layer", ModelView = true)]
     public JObject RoomsFromLayer(JObject parameters)
+    {
+        var result = BakeRoomMarkers(parameters);
+        AddRoomPlates(RhinoDoc.ActiveDoc, result);
+        return result;
+    }
+
+    private JObject BakeRoomMarkers(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
         var layerName = parameters["layer"]?.ToString();

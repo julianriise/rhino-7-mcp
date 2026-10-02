@@ -7,9 +7,9 @@
   "properties": {
     "kinds": {
       "type": "array",
-      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker, room, analysis (the daylight overlay). drawing and layout are not in the default; pass either explicitly to delete those objects.",
+      "description": "forsk:kind values to delete. Default wall, floor, roof, opening, opening_marker, room, room_plate (the rooms' floor plates), analysis (the daylight overlay). drawing and layout are not in the default; pass either explicitly to delete those objects.",
       "items": { "type": "string" },
-      "default": ["wall", "floor", "roof", "opening", "opening_marker", "room", "analysis"]
+      "default": ["wall", "floor", "roof", "opening", "opening_marker", "room", "room_plate", "analysis"]
     },
     "level": {
       "type": "string",

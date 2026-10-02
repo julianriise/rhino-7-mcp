@@ -118,11 +118,13 @@ public partial class RhinoMCPFunctions
 
         var selected = new JArray();
         var roomLayer = ResolveRoomSourceLayer(doc, "A-ROOM");
-        foreach (var obj in ListSelected(doc))
+        foreach (var picked in ListSelected(doc))
         {
+            // A floor plate stands for its room's marker.
+            var obj = ResolveRoomHandle(doc, picked);
             if (IsRoomMarker(obj))
             {
-                selected.Add(obj.Id.ToString());
+                if (!selected.Any(t => t.ToString() == obj.Id.ToString())) selected.Add(obj.Id.ToString());
                 continue;
             }
             // A marker is a curve on its room's outline, so a click may pick the

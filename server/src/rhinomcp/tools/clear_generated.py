@@ -31,7 +31,7 @@ def clear_generated(
     Prefer tagged clear for rebuilds.
 
     Parameters:
-    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room, analysis).
+    - kinds: forsk:kind values (default wall, floor, roof, opening, opening_marker, room, room_plate, analysis).
       Omit drawing. Pass drawing only when sheets should be deleted.
     - level: optional forsk:level filter
     - dry_run: list matching ids without deleting (default false)

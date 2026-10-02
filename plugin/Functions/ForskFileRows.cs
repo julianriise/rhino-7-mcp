@@ -58,7 +58,8 @@ public partial class RhinoMCPFunctions
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,
                 Area = obj.Attributes.GetUserString("forsk:area"),
                 PathReads = wallRings != null,
-                Runs = wallRings == null ? 0 : WallJoins.Runs(wallRings, Math.Max(doc.ModelAbsoluteTolerance, 1.0)).Count
+                Runs = wallRings == null ? 0 : WallJoins.Runs(wallRings, Math.Max(doc.ModelAbsoluteTolerance, 1.0)).Count,
+                Marker = obj.Attributes.GetUserString("forsk:marker")
             });
         }
         return rows;

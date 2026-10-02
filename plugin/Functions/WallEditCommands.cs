@@ -659,20 +659,23 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    /// <summary>The room given by id, else the one room selected.</summary>
+    /// <summary>The room given by id, else the one room selected. A floor plate stands for its room.</summary>
     private static RhinoObject ResolveRoom(RhinoDoc doc, JObject parameters)
     {
         var idToken = parameters?["id"]?.ToString();
         if (!string.IsNullOrWhiteSpace(idToken))
         {
-            var obj = Guid.TryParse(idToken, out var guid) ? doc.Objects.FindId(guid) : null;
+            var obj = ResolveRoomHandle(doc, Guid.TryParse(idToken, out var guid) ? doc.Objects.FindId(guid) : null);
             if (obj == null || !IsRoomMarker(obj))
                 throw new InvalidOperationException("Not a Forsk room.");
             return obj;
         }
         var rooms = new List<RhinoObject>();
-        foreach (var obj in ListSelected(doc))
-            if (IsRoomMarker(obj)) rooms.Add(obj);
+        foreach (var picked in ListSelected(doc))
+        {
+            var obj = ResolveRoomHandle(doc, picked);
+            if (IsRoomMarker(obj) && !rooms.Exists(r => r.Id == obj.Id)) rooms.Add(obj);
+        }
         if (rooms.Count != 1)
             throw new InvalidOperationException("Select one room, then say it again.");
         return rooms[0];

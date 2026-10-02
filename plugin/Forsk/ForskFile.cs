@@ -251,10 +251,13 @@ namespace RhinoMCPPlugin.Forsk
         {
             var kinds = new HashSet<Picked>();
             var openingKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var selected = new HashSet<string>(rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? ""), StringComparer.Ordinal);
             foreach (var row in rows)
             {
                 if (row == null || !row.Selected) continue;
-                facts.PickedCount++;
+                // A plate selected with its marker is the same room.
+                var counted = !(Is(row.Kind, "room_plate") && !string.IsNullOrEmpty(row.Marker) && selected.Contains(row.Marker));
+                if (counted) facts.PickedCount++;
                 var picked = PickOf(row);
                 kinds.Add(picked);
                 if (picked == Picked.Opening) openingKinds.Add(row.OpeningKind ?? "");
@@ -274,7 +277,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 if (Is(row.Kind, "wall")) return Picked.Wall;
                 if (Is(row.Kind, "opening_marker") || Is(row.Kind, "opening")) return Picked.Opening;
-                if (Is(row.Kind, "room")) return Picked.Room;
+                if (Is(row.Kind, "room") || Is(row.Kind, "room_plate")) return Picked.Room;
                 return Picked.Other;
             }
             if (row.Existing || Is(row.ImportKind, "underlay")) return Picked.Other;

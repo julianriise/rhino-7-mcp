@@ -613,3 +613,8 @@ def test_split_walls_give_the_same_daylight_per_room():
     assert a.keys() == b.keys() == {"r01", "r02"}
     for room in a:
         assert b[room] == pytest.approx(a[room], rel=0.01), room
+
+
+def test_the_mesh_floats_above_the_room_plates():
+    """S3: room plates stand 20 mm on the slab (RoomPlate.ThicknessMm, pinned in RoomPlateTests); the mesh sits above them."""
+    assert fd.FLOOR_OFFSET_MM == 50.0

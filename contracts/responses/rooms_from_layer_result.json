@@ -20,6 +20,24 @@
     "joined": { "type": "integer" },
     "closed": { "type": "integer" },
     "skipped": { "type": "integer" },
+    "plate_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "GUIDs of the floor plates (forsk:kind room_plate), one per room the walls close. All plates are rebuilt with the markers."
+    },
+    "no_plate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room": { "type": "string" },
+          "why": { "type": "string", "description": "gap 0.9 m without a door, its walls do not close, ..." }
+        },
+        "required": ["room", "why"],
+        "additionalProperties": false
+      },
+      "description": "Rooms with a marker but no plate, because the walls do not close them; the message names them."
+    },
     "warnings": {
       "type": "array",
       "items": { "type": "string" }

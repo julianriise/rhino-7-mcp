@@ -89,6 +89,8 @@ public static class RoomDetect
     {
         public string Reason;
         public Pt At;
+        /// <summary>The open region's outline, so a label can name it. Null for a divider that meets no wall.</summary>
+        public List<Pt> Ring;
     }
 
     public sealed class Result
@@ -141,7 +143,7 @@ public static class RoomDetect
             if (gap > 0)
             {
                 if (area >= scene.MinArea)
-                    result.Open.Add(new Open { Reason = "gap " + Metres(gap) + " m without a door", At = face.Inside });
+                    result.Open.Add(new Open { Reason = "gap " + Metres(gap) + " m without a door", At = face.Inside, Ring = Simplify(plan.Points(face), tol) });
                 continue;
             }
             if (area < scene.MinArea)
@@ -356,6 +358,36 @@ public static class RoomDetect
             if (Contains(ring, label.At)) inside.Add(label);
         TryInside(new List<List<Pt>> { ring }, out var at);
         return PickLabel(inside, Math.Abs(Area(ring)), at);
+    }
+
+    /// <summary>
+    /// The rooms receipt: how many rooms and their area, then each region the
+    /// walls do not close, named by its labels and grouped by why. Those have
+    /// no room, so no plate and no daylight cells.
+    /// </summary>
+    public static string Message(int count, double squareMetres, IList<Open> open, IList<Label> labels)
+    {
+        var text = count + " room" + (count == 1 ? "" : "s") + ", "
+            + squareMetres.ToString("0.0", CultureInfo.InvariantCulture) + " m²";
+        if (open.Count == 0) return text + ".";
+        var reasons = new List<string>();
+        var names = new Dictionary<string, List<string>>();
+        foreach (var region in open)
+        {
+            if (!names.ContainsKey(region.Reason))
+            {
+                reasons.Add(region.Reason);
+                names[region.Reason] = new List<string>();
+            }
+            if (region.Ring != null) names[region.Reason].Add(Name(labels, region.Ring));
+        }
+        var parts = new List<string>();
+        foreach (var reason in reasons)
+        {
+            names[reason].Sort(StringComparer.CurrentCulture);
+            parts.Add(names[reason].Count == 0 ? reason : string.Join(", ", names[reason]) + " (" + reason + ")");
+        }
+        return text + ". " + open.Count + " open: " + string.Join("; ", parts) + ".";
     }
 
     /// <summary>

@@ -35,6 +35,10 @@ static class Row
     public static ChipRow Room(bool selected = false, string name = "Stue") =>
         new ChipRow { Id = Id(), Generated = true, Kind = "room", Layer = "A-ROOM", Visible = true, Selected = selected, Curve = true, Closed = true, Stamp = name, Name = name };
 
+    /// <summary>The floor plate of a room (selection S3): kind room_plate, standing for its marker.</summary>
+    public static ChipRow Plate(ChipRow marker, bool selected = false) =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "room_plate", Layer = "A-ROOM::Plate", Visible = true, Selected = selected, Solid = true, Closed = true, Stamp = marker.Name + "-plate", Name = marker.Name, Area = marker.Area, Marker = marker.Id };
+
     public static ChipRow Map(bool visible = true, bool stale = false) =>
         new ChipRow { Id = Id(), Generated = true, Kind = "analysis", Layer = "A-ANALYSE", Visible = visible, Stale = stale };
 

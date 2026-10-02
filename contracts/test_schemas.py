@@ -807,6 +807,19 @@ def test_responses():
         "message": "16 rooms, 399.5 m². Labels suspect 1 (rd-10): a DXF escape lost on import. Import the DXF with dxf_import.",
     }):
         all_passed = False
+    # S3: each open region named, and the floor plates with the rooms that got none.
+    if not validate("responses/rooms_detect_result.json", {
+        "ids": ["12345678-1234-1234-1234-123456789012"], "count": 1, "detected": 1, "area_m2": 12.4,
+        "open": [{"name": "Bod", "reason": "gap 0.9 m without a door", "x": 2000.0, "y": 2000.0}],
+        "plate_ids": ["12345678-1234-1234-1234-123456789013"], "no_plate": [{"room": "Hall", "why": "gap 1.2 m without a door"}],
+        "message": "1 room, 12.4 m². 1 open: Bod (gap 0.9 m without a door). No floor plate for Hall (gap 1.2 m without a door).",
+    }):
+        all_passed = False
+    if not validate("responses/rooms_from_layer_result.json", {
+        "ids": ["12345678-1234-1234-1234-123456789012"], "count": 1, "plate_ids": [], "no_plate": [{"room": "Bod", "why": "its walls do not close"}],
+        "message": "Created 1 room marker(s) on A-ROOM from layer 'A-ROOM'. No floor plate for Bod (its walls do not close).",
+    }):
+        all_passed = False
 
     print("  make2d_view_result:")
     guid = "12345678-1234-1234-1234-123456789012"
