@@ -62,7 +62,15 @@ public class ToolPackTests
                 Assert.Equal(union, sent);
             else
                 Assert.True(sent.Count < union.Count, c["id"] + ": " + intent + " sends " + sent.Count + " of " + union.Count);
-            Assert.Subset(union.ToHashSet(), sent.ToHashSet());
+            // Support's list is read-only and adds debug_report, which the modelling union does not carry.
+            if (intent == ForskIntent.Support)
+            {
+                Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", "debug_report" }, sent);
+                Assert.DoesNotContain("select_objects", sent);
+                Assert.DoesNotContain("capture_viewport", sent);
+            }
+            else
+                Assert.Subset(union.ToHashSet(), sent.ToHashSet());
         }
     }
 
