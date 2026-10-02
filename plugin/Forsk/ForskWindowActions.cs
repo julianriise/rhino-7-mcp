@@ -75,7 +75,7 @@ namespace RhinoMCPPlugin.Forsk
             var facts = ReadFacts(doc);
             if (!action.Shows(facts))
             {
-                thread.Add("line", ForskText.Format("bar.refused", "label", action.Label));
+                thread.AddLine(ForskText.Format("bar.refused", "label", action.Label));
                 MarkDirty();
                 Render();
                 return;

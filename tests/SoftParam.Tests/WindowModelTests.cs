@@ -132,6 +132,22 @@ public class WindowModelTests : IDisposable
     }
 
     [Fact]
+    public void TheSameStaleNotice_IsNotAddedTwiceInARow()
+    {
+        var thread = new DocThread();
+        var notice = ForskText.Format("bar.refused", "label", "Import a plan");
+
+        thread.AddLine(notice);
+        thread.AddLine(notice);
+
+        Assert.Single(thread.Items);
+        thread.Add("user", "Print PDF");
+        thread.AddLine(notice);
+        Assert.Equal(3, thread.Items.Count);
+        Assert.Equal(notice, thread.Items[2]["text"]!.ToString());
+    }
+
+    [Fact]
     public void TheBusyLine_IsInTheModel_NotOnDisk()
     {
         var thread = new DocThread { Path = "/p/a.3dm", Busy = "Printing… step 1 of 2: laying out the sheets" };

@@ -71,6 +71,23 @@ namespace RhinoMCPPlugin.Forsk
             return Push(new JObject { ["role"] = role, ["text"] = text.Trim() });
         }
 
+        /// <summary>
+        /// A line in the thread. The same line already at the end is not added
+        /// again, so one stale notice does not stack when it arrives twice.
+        /// </summary>
+        public JObject AddLine(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            text = text.Trim();
+            if (Items.Count > 0)
+            {
+                var last = Items[Items.Count - 1];
+                if (last["role"]?.ToString() == "line" && last["text"]?.ToString() == text)
+                    return last;
+            }
+            return Push(new JObject { ["role"] = "line", ["text"] = text });
+        }
+
         /// <summary>A receipt: one line per change, the object in bold.</summary>
         public JObject AddReceipt(bool ok, string subject, string text)
         {
