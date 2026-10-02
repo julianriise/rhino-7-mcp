@@ -92,6 +92,7 @@ public partial class RhinoMCPFunctions
         var markerPrefix = openingKind == "window" ? "window-" : "door-";
         var markerIndex = NextNameIndex(doc, markerPrefix);
         var openLayer = EnsureLayer(doc, "A-OPEN", Color.FromArgb(120, 160, 200));
+        EnsureOpeningBlockLayer(doc);
 
         var failures = new JArray();
         var markerIds = new JArray();

@@ -120,7 +120,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Default object iteration skips hidden layers. A-OPEN and A-ROOF are hidden.
+    /// Default object iteration skips hidden layers and hidden objects. A-ROOF is
+    /// off. Opening markers are object-hidden on A-OPEN, which stays on.
     /// </summary>
     private static IEnumerable<RhinoObject> EnumerateDocObjects(RhinoDoc doc)
     {

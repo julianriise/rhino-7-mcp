@@ -27,33 +27,59 @@ public class OpeningBlockSourceTests
     }
 
     [Fact]
-    public void MarkersAreHiddenAfterTheBlockLayerIsShown()
+    public void WindowAndDoorLayers_StayOn_MarkersStayHidden()
     {
-        // S2 left markers as normal objects on parent A-OPEN while A-OPEN::Block
-        // is a visible child. Shaded view then draws that blue marker in front
-        // of the frame. The layer is turned off again after the child is shown,
-        // and each marker is object-hidden.
+        // Frames, leaves and glass are the block on A-OPEN::Block. A hidden
+        // parent hides that child, so A-OPEN is created on and Generate turns
+        // it on. Markers stay object-hidden. Print still skips the marker
+        // layer in clay and keeps the A-OPEN pen.
         var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
+        var lookup = File.ReadAllText(Path.Combine(FunctionsDir(), "LayerLookup.cs"));
+        var hiddenStart = lookup.IndexOf("bool LayerHiddenByDefault", StringComparison.Ordinal);
+        var hiddenEnd = lookup.IndexOf("private Layer EnsureLayer", StringComparison.Ordinal);
+        Assert.True(hiddenStart >= 0 && hiddenEnd > hiddenStart);
+        var hidden = lookup.Substring(hiddenStart, hiddenEnd - hiddenStart);
+        Assert.Contains("A-ROOF", hidden, StringComparison.Ordinal);
+        Assert.DoesNotContain("A-OPEN", hidden, StringComparison.Ordinal);
+
         var wrapperStart = blocks.IndexOf("Layer EnsureOpeningBlockLayer(RhinoDoc doc)", StringComparison.Ordinal);
         var coreStart = blocks.IndexOf("Layer EnsureOpeningBlockLayerCore(", StringComparison.Ordinal);
-        Assert.True(wrapperStart >= 0 && coreStart > wrapperStart, "block layer wrapper calls the core");
+        Assert.True(wrapperStart >= 0 && coreStart > wrapperStart);
         var wrapper = blocks.Substring(wrapperStart, coreStart - wrapperStart);
-        var coreCall = wrapper.IndexOf("EnsureOpeningBlockLayerCore(doc)", StringComparison.Ordinal);
-        var hideCall = wrapper.IndexOf("HideOpeningMarkers(doc)", StringComparison.Ordinal);
-        Assert.True(coreCall >= 0 && hideCall > coreCall, "markers are hidden after the block layer is shown");
-        var show = blocks.IndexOf("IsVisible = true", StringComparison.Ordinal);
-        var parentOff = blocks.IndexOf("parent.IsVisible = false", StringComparison.Ordinal);
-        Assert.True(show >= 0 && parentOff > show, "A-OPEN is turned off after the child is shown");
-        Assert.Contains("Objects.Hide", blocks, StringComparison.Ordinal);
+        Assert.True(
+            wrapper.IndexOf("HideOpeningMarkers(doc)", StringComparison.Ordinal) >
+            wrapper.IndexOf("EnsureOpeningBlockLayerCore(doc)", StringComparison.Ordinal));
+
+        var hideStart = blocks.IndexOf("internal static void HideOpeningMarkers", StringComparison.Ordinal);
+        var core = blocks.Substring(coreStart, hideStart - coreStart);
+        Assert.Contains("ShowLayer(doc, parent)", core, StringComparison.Ordinal);
+        Assert.Contains("IsVisible = true", core, StringComparison.Ordinal);
+
+        var hideEnd = blocks.IndexOf("private static void ShowLayer", StringComparison.Ordinal);
+        var hide = blocks.Substring(hideStart, hideEnd - hideStart);
+        Assert.Contains("Objects.Hide", hide, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsVisible", hide, StringComparison.Ordinal);
+
         var openings = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningsFromLayer.cs"));
+        var genStart = openings.IndexOf("OpeningsFromLayer(JObject parameters)", StringComparison.Ordinal);
+        var genEnd = openings.IndexOf("private sealed class WallSolid", StringComparison.Ordinal);
+        var gen = openings.Substring(genStart, genEnd - genStart);
+        var made = gen.IndexOf("EnsureLayer(doc, \"A-OPEN\"", StringComparison.Ordinal);
+        var shown = gen.IndexOf("EnsureOpeningBlockLayer(doc)", StringComparison.Ordinal);
+        Assert.True(made >= 0 && shown > made);
         Assert.Contains("HideOpeningMarker", openings, StringComparison.Ordinal);
+
+        var layout = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"));
+        Assert.Contains("layer.Name.Equals(\"A-OPEN\", StringComparison.OrdinalIgnoreCase)", layout, StringComparison.Ordinal);
+        var ink = File.ReadAllText(Path.Combine(FunctionsDir(), "PrintInk.cs"));
+        Assert.Contains("[\"A-OPEN\"] = new Spec(70, 70, 70, 0.18)", ink, StringComparison.Ordinal);
     }
 
     [Fact]
     public void AFrameResolvesToItsMarkerWithFindId()
     {
-        // Objects.Find misses a marker on hidden A-OPEN, so a selected frame
-        // came back as itself and move said "Not an opening marker."
+        // Objects.Find misses a hidden marker, so a selected frame came back
+        // as itself and move said "Not an opening marker."
         var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
         var start = blocks.IndexOf("RhinoObject ResolveOpeningHandle", StringComparison.Ordinal);
         var end = blocks.IndexOf("int OpeningBlockDefIndex", StringComparison.Ordinal);

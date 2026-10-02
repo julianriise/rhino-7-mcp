@@ -31,7 +31,7 @@ public partial class RhinoMCPFunctions
         bool includeGeometry = parameters["include_geometry"]?.ToObject<bool>() ?? true;
         bool includeAttributes = parameters["include_attributes"]?.ToObject<bool>() ?? false;
         // Rhino's default object list skips hidden objects and objects on layers
-        // that are off, such as A-OPEN with the opening markers.
+        // that are off. Opening markers are object-hidden; A-ROOF is off.
         bool includeHidden = parameters["include_hidden"]?.ToObject<bool>() ?? false;
         var source = includeHidden
             ? doc.Objects.GetObjectList(new ObjectEnumeratorSettings

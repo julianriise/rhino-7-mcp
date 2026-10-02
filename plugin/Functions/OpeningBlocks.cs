@@ -41,10 +41,10 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Visible child of hidden A-OPEN. Parent off does not hide a child in Rhino 7,
-    /// so frames show in the clay. Showing that child also draws the parent's
-    /// objects in shaded view: the marker is a solid in A-OPEN's blue, in front
-    /// of the frame. Markers are hidden objects on A-OPEN, which stays off.
+    /// A-OPEN and A-OPEN::Block stay on. Frames, leaves and glass are the block
+    /// on the child layer, and a hidden parent hides that child. Markers stay
+    /// object-hidden on A-OPEN so shaded view does not draw the blue solid in
+    /// front of the frame.
     /// </summary>
     private Layer EnsureOpeningBlockLayer(RhinoDoc doc)
     {
@@ -56,6 +56,7 @@ public partial class RhinoMCPFunctions
     private Layer EnsureOpeningBlockLayerCore(RhinoDoc doc)
     {
         var parent = EnsureLayer(doc, "A-OPEN", Color.FromArgb(120, 160, 200));
+        ShowLayer(doc, parent);
         var existing = FindLayerCaseInsensitive(doc, OpeningBlockLayerPath);
         if (existing != null)
         {
@@ -95,33 +96,26 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// A-OPEN off, and every opening marker object-hidden. A visible child does
-    /// not keep its parent hidden in shaded view, so the layer alone is not enough.
-    /// Outside an open undo record this writes no undo of its own.
+    /// Every opening marker is object-hidden. The A-OPEN layer stays on so the
+    /// frame, leaf and glass on A-OPEN::Block stay visible. Outside an open
+    /// undo record this writes no undo of its own.
     /// </summary>
     internal static void HideOpeningMarkers(RhinoDoc doc)
     {
         if (doc == null) return;
-        var parent = OpeningMarkerLayer(doc);
-        var layerOn = parent != null && parent.IsVisible;
         var shown = new List<Guid>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
             if (!obj.IsHidden) shown.Add(obj.Id);
         }
-        if (!layerOn && shown.Count == 0) return;
+        if (shown.Count == 0) return;
 
         var record = doc.UndoRecordingEnabled;
         var active = doc.UndoRecordingIsActive;
         if (!active) doc.UndoRecordingEnabled = false;
         try
         {
-            if (layerOn)
-            {
-                parent.IsVisible = false;
-                doc.Layers.Modify(parent, parent.Index, true);
-            }
             foreach (var id in shown)
                 doc.Objects.Hide(id, true);
         }
@@ -131,6 +125,14 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    /// <summary>Turn a window or door layer on. A layer that is already on is left alone.</summary>
+    private static void ShowLayer(RhinoDoc doc, Layer layer)
+    {
+        if (doc == null || layer == null || layer.IsVisible) return;
+        layer.IsVisible = true;
+        doc.Layers.Modify(layer, layer.Index, true);
+    }
+
     private static void HideOpeningMarker(RhinoDoc doc, Guid id)
     {
         if (doc == null || id == Guid.Empty) return;
@@ -138,21 +140,6 @@ public partial class RhinoMCPFunctions
         if (obj == null || obj.IsHidden) return;
         if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) return;
         doc.Objects.Hide(id, true);
-    }
-
-    /// <summary>The A-OPEN parent, not A-OPEN::Block. Markers live here.</summary>
-    private static Layer OpeningMarkerLayer(RhinoDoc doc)
-    {
-        if (doc == null) return null;
-        for (var i = 0; i < doc.Layers.Count; i++)
-        {
-            var layer = doc.Layers[i];
-            if (layer == null || layer.IsDeleted) continue;
-            if (layer.ParentLayerId != Guid.Empty) continue;
-            if (!layer.Name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase)) continue;
-            return layer;
-        }
-        return null;
     }
 
     private Guid AddOpeningBlock(
@@ -266,7 +253,7 @@ public partial class RhinoMCPFunctions
         var id = OpeningResolve.MarkerOf(OpeningParts(doc, obj), ToOpeningPart(obj));
         if (string.IsNullOrEmpty(id) || !Guid.TryParse(id, out var guid) || guid == obj.Id)
             return obj;
-        // Find skips an object whose layer is off. Markers live on A-OPEN.
+        // Find skips a hidden object. Markers stay object-hidden on A-OPEN.
         var marker = doc?.Objects.FindId(guid);
         return marker ?? obj;
     }

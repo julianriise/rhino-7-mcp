@@ -33,13 +33,14 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// A-OPEN (markers) and A-ROOF stay off by default so clay shows walls/floor with holes only.
+    /// A-ROOF stays off so clay shows walls and floor. A-OPEN stays on: frames,
+    /// leaves and glass live on A-OPEN::Block, and a hidden parent hides that
+    /// child. Opening markers are object-hidden instead.
     /// </summary>
     private static bool LayerHiddenByDefault(string name)
     {
         if (string.IsNullOrEmpty(name)) return false;
-        return name.Equals("A-OPEN", StringComparison.OrdinalIgnoreCase) ||
-               name.Equals("A-ROOF", StringComparison.OrdinalIgnoreCase);
+        return name.Equals("A-ROOF", StringComparison.OrdinalIgnoreCase);
     }
 
     private Layer EnsureLayer(RhinoDoc doc, string name, Color color)
