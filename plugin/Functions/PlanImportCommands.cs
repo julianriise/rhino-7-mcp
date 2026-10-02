@@ -111,6 +111,9 @@ public partial class RhinoMCPFunctions
         // The licence of the model that read the plan stays with it in the .3dm.
         if (resolved.Licence != null) underlayAttr.SetUserString("forsk:import_licence", resolved.Licence);
         underlayAttr.SetUserString(ImportSourceKey, PlanImport.SourceJson(plan));
+        // Check the plan reads these rows back; it is absent while none are stored.
+        if (cleaned.Review.Count > 0)
+            underlayAttr.SetUserString(ImportReviewRowsKey, new JArray(cleaned.Review).ToString(Newtonsoft.Json.Formatting.None));
         doc.Objects.ModifyAttributes(underlayId, underlayAttr, true);
         KeepLayerOffPrint(doc, underlayLayer);
         underlayLayer.IsLocked = true;

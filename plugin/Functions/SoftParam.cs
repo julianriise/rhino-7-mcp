@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using RhinoMCPPlugin.Forsk;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
@@ -30,7 +31,7 @@ public partial class RhinoMCPFunctions
         public double Distance;
     }
 
-    [McpCommand("rebuild_host_wall", ModelView = true)]
+    [McpCommand("rebuild_host_wall", ModelView = true, Map = MapEdit.Opening)]
     public JObject RebuildHostWall(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

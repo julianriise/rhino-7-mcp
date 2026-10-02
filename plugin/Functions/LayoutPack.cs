@@ -449,6 +449,7 @@ public partial class RhinoMCPFunctions
         var curveNote = drawingNotes.Count == 0
             ? ""
             : " Greyscale drawing: " + string.Join(", ", drawingNotes.ToArray()) + ".";
+        StampSheetFingerprint(doc);
         return new JObject
         {
             ["pages"] = pages,

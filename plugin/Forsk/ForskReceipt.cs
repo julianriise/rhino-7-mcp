@@ -1,0 +1,90 @@
+using System;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
+
+namespace RhinoMCPPlugin.Forsk
+{
+    /// <summary>
+    /// One line per change, from structured data: done, failed or skipped, the
+    /// object in bold, then what happened ("✓ D02 moved 400 mm along w01"). The
+    /// object is the first Forsk id the tool's message names (w01, D02, V03,
+    /// rd-01), else the step's label from ForskText. No RhinoCommon.
+    /// </summary>
+    public sealed class ForskReceipt
+    {
+        static readonly Regex ForskId = new Regex(@"\b(w\d{2,}|[DV]\d{2,}|rd-\d{2,})\b", RegexOptions.CultureInvariant);
+
+        /// <summary>True done, false failed, null skipped or cancelled.</summary>
+        public bool? Ok;
+        public string Subject;
+        public string Text;
+
+        public JObject ToJson()
+        {
+            var item = new JObject { ["role"] = "receipt", ["text"] = Text ?? "" };
+            if (Ok.HasValue) item["ok"] = Ok.Value;
+            if (!string.IsNullOrWhiteSpace(Subject)) item["subject"] = Subject;
+            return item;
+        }
+
+        /// <summary>A tool call's receipt from its envelope.</summary>
+        public static ForskReceipt From(string tool, JObject envelope)
+        {
+            var label = StepLabel(tool);
+            if (envelope == null) return new ForskReceipt { Ok = false, Subject = label, Text = "no result" };
+            var status = envelope["status"]?.ToString();
+            if (!string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
+            {
+                var error = envelope["message"]?.ToString();
+                return new ForskReceipt { Ok = false, Subject = label, Text = Sentences(string.IsNullOrWhiteSpace(error) ? "failed" : error, 1) };
+            }
+            var result = envelope["result"] as JObject;
+            var message = result?["message"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                var text = Sentences(message, 2);
+                var id = ForskId.Match(text);
+                return new ForskReceipt { Ok = true, Subject = id.Success ? id.Value : label, Text = text };
+            }
+            var count = (result?["count"] ?? result?["opening_count"] ?? result?["cut_count"])?.ToString();
+            return new ForskReceipt
+            {
+                Ok = true,
+                Subject = label,
+                Text = string.IsNullOrEmpty(count) ? ForskText.Get("receipt.ok") : count
+            };
+        }
+
+        /// <summary>A "Label · ok · rest" line, as ForskPrint and ForskBake return them.</summary>
+        public static ForskReceipt FromLine(string line)
+        {
+            var parts = (line ?? "").Split(new[] { " · " }, 3, StringSplitOptions.None);
+            if (parts.Length < 2) return new ForskReceipt { Text = (line ?? "").Trim() };
+            var state = parts[1].Trim().ToLowerInvariant();
+            bool? ok = state == "error" ? false : state == "ok" ? true : (bool?)null;
+            var text = parts.Length > 2 ? parts[2] : parts[1];
+            return new ForskReceipt { Ok = ok, Subject = StepLabel(parts[0].Trim()), Text = text.Trim() };
+        }
+
+        /// <summary>The label a step shows when its message names no object.</summary>
+        public static string StepLabel(string tool)
+        {
+            var key = "tool." + (tool ?? "");
+            return ForskText.Has(key) ? ForskText.Get(key) : tool ?? "";
+        }
+
+        /// <summary>The first sentences of a message: a receipt stays one line.</summary>
+        static string Sentences(string text, int max)
+        {
+            var one = (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+            var count = 0;
+            for (var i = 0; i < one.Length; i++)
+            {
+                if (one[i] != '.' && one[i] != '!' && one[i] != '?') continue;
+                if (i + 1 < one.Length && one[i + 1] != ' ') continue;
+                if (++count == max) return one.Substring(0, i + 1);
+            }
+            return one;
+        }
+    }
+}

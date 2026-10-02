@@ -58,7 +58,10 @@ namespace RhinoMCPPlugin.Forsk
         {
             var doc = RhinoDoc.ActiveDoc;
             if (doc == null) return ForskTools.Fail("No active document.");
-            var record = doc.BeginUndoRecord(visible ? "Forsk: show daylight" : "Forsk: hide daylight");
+            // Inside a pill's record, the hide or show is part of it.
+            var own = !doc.UndoRecordingIsActive;
+            var record = own ? doc.BeginUndoRecord(visible ? "Forsk: show daylight" : "Forsk: hide daylight") : 0;
+            ForskCalls.Enter();
             try
             {
                 return new JObject
@@ -73,7 +76,8 @@ namespace RhinoMCPPlugin.Forsk
             }
             finally
             {
-                doc.EndUndoRecord(record);
+                ForskCalls.Exit();
+                if (own) doc.EndUndoRecord(record);
             }
         }
 

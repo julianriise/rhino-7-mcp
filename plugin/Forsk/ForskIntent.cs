@@ -366,10 +366,11 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// One document object as the Daylight chip sees it. The rows come from the
-    /// same enumeration daylight_scene uses: hidden layers such as A-OPEN
-    /// included, X-EXIST left out. Visible is false when the object or its
-    /// layer is hidden, so a hidden daylight mesh still counts.
+    /// One document object as Forsk sees it: the chips and the v3 classifier
+    /// read the same rows. They come from one enumeration with hidden layers
+    /// such as A-OPEN included. Visible is false when the object or its layer
+    /// is hidden, so a hidden daylight mesh still counts. An object on X-EXIST
+    /// or marked existing is a row with Existing set; the chips skip it.
     /// </summary>
     public sealed class ChipRow
     {
@@ -382,6 +383,21 @@ namespace RhinoMCPPlugin.Forsk
         public string ImportKind;
         /// <summary>forsk:import_scale_status on the underlay: user once two points set it.</summary>
         public string ScaleStatus;
+        /// <summary>The object's id. The sheet fingerprint keys on it.</summary>
+        public string Id;
+        /// <summary>On X-EXIST, or forsk:kind=existing.</summary>
+        public bool Existing;
+        public bool Selected;
+        public bool Curve;
+        /// <summary>A closed curve, or a closed solid.</summary>
+        public bool Closed;
+        public bool Solid;
+        /// <summary>forsk:daylight_stale=1 on a daylight mesh: the model changed after the map was made.</summary>
+        public bool Stale;
+        /// <summary>forsk:import_review_rows on the underlay: the import's review rows, as JSON.</summary>
+        public string Review;
+        /// <summary>The edit stamp of a generated object: its geometry and its forsk strings, hashed.</summary>
+        public string Stamp;
     }
 
     /// <summary>
@@ -462,7 +478,7 @@ namespace RhinoMCPPlugin.Forsk
             HasUnderlay = ScaleSet = false;
             foreach (var row in rows)
             {
-                if (row == null || !Is(row.ImportKind, "underlay")) continue;
+                if (row == null || row.Existing || !Is(row.ImportKind, "underlay")) continue;
                 HasUnderlay = true;
                 if (Is(row.ScaleStatus, "user")) ScaleSet = true;
             }
@@ -474,7 +490,7 @@ namespace RhinoMCPPlugin.Forsk
             HasWindows = HasRooms = HasOverlay = OverlayVisible = false;
             foreach (var row in rows)
             {
-                if (row == null) continue;
+                if (row == null || row.Existing) continue;
                 if (!row.Generated) continue;
                 if (Is(row.Kind, "room")) HasRooms = true;
                 else if (Is(row.Kind, "analysis"))

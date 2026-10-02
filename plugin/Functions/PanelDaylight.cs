@@ -58,29 +58,4 @@ public partial class RhinoMCPFunctions
         }
         return result;
     }
-
-    /// <summary>
-    /// Daylight chip rows from the objects daylight_scene reads: hidden layers
-    /// (A-OPEN) included, X-EXIST left out, the overlay as it is on A-ANALYSE now.
-    /// </summary>
-    public static List<ChipRow> ChipRows(RhinoDoc doc)
-    {
-        var rows = new List<ChipRow>();
-        foreach (var obj in EnumerateDocObjects(doc))
-        {
-            if (obj?.Attributes == null || IsExistingUnderlay(doc, obj)) continue;
-            var index = obj.Attributes.LayerIndex;
-            rows.Add(new ChipRow
-            {
-                Generated = IsForskGenerated(obj),
-                Kind = GetForskKind(obj),
-                OpeningKind = obj.Attributes.GetUserString("forsk:opening_kind"),
-                Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
-                Visible = obj.Visible,
-                ImportKind = obj.Attributes.GetUserString(ImportKindKey),
-                ScaleStatus = obj.Attributes.GetUserString(ImportScaleStatusKey)
-            });
-        }
-        return rows;
-    }
 }

@@ -31,6 +31,13 @@ public sealed class McpCommandAttribute : Attribute
     /// </summary>
     public bool ModelView { get; set; }
 
+    /// <summary>
+    /// What a successful call does to the daylight map. Opening: the map is
+    /// marked out of date. Wall: marked out of date and hidden. The dispatcher
+    /// writes it after the handler returns, inside the same undo record.
+    /// </summary>
+    public Forsk.MapEdit Map { get; set; }
+
     public McpCommandAttribute(string name)
     {
         Name = name;

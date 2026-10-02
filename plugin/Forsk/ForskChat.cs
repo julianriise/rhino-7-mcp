@@ -240,8 +240,10 @@ namespace RhinoMCPPlugin.Forsk
             if (doc == null) return Fail("No active document.");
 
             uint record = 0;
-            var undo = !entry.ReadOnly;
+            // One record per pill or answer: while the window's record is open, this call writes into it.
+            var undo = !entry.ReadOnly && !doc.UndoRecordingIsActive;
             if (undo) record = doc.BeginUndoRecord("Forsk: " + name);
+            ForskCalls.Enter();
             try
             {
                 var result = entry.Handler(parameters);
@@ -257,6 +259,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             finally
             {
+                ForskCalls.Exit();
                 if (undo) doc.EndUndoRecord(record);
             }
         }
@@ -1345,7 +1348,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 if (generated == "1" && string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
                     chip.HasWalls = true;
                 if (!(obj.Geometry is Curve)) continue;
-                if (IsPlanLayer(LayerName(doc, obj)))
+                if (FileClassifier.IsPlanLayer(LayerName(doc, obj)))
                     chip.HasPlan = true;
             }
             var rows = RhinoMCPFunctions.ChipRows(doc);
@@ -1501,19 +1504,6 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 // Unreadable settings file: the same defaults the bake tools use.
             }
             return numbers;
-        }
-
-        static bool IsPlanLayer(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return false;
-            var key = name.Trim().ToLowerInvariant();
-            if (key.StartsWith("s-")) return false;
-            if (key == "x-exist") return false;
-            if (key == "wall" || key == "door" || key == "window" || key == "room" || key == "plan" || key == "a-room")
-                return true;
-            if (key.StartsWith("a-") && key.Contains("plan"))
-                return true;
-            return false;
         }
 
         static string LayerName(RhinoDoc doc, RhinoObject obj)

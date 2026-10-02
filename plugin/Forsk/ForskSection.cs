@@ -147,7 +147,10 @@ namespace RhinoMCPPlugin.Forsk
         static JObject Store(RhinoDoc doc, Sections.Drawn drawn, bool ownUndo)
         {
             uint record = 0;
+            // Inside a pill's record, the section is part of it.
+            ownUndo = ownUndo && !doc.UndoRecordingIsActive;
             if (ownUndo) record = doc.BeginUndoRecord("Forsk: section_pick");
+            ForskCalls.Enter();
             var id = Guid.Empty;
             var created = false;
             var hid = false;
@@ -187,6 +190,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             finally
             {
+                ForskCalls.Exit();
                 if (ownUndo) doc.EndUndoRecord(record);
             }
         }

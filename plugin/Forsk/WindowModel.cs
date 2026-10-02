@@ -179,6 +179,27 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
+    /// <summary>
+    /// The page's whole model for one document: the file name, Target, the
+    /// status line, the thread, and the pinned bar. C# builds it from the
+    /// thread and the classifier's facts; the page draws it. An empty thread
+    /// shows one local sentence that names the file state; it is not stored,
+    /// so it never goes out of date.
+    /// </summary>
+    public static class WindowView
+    {
+        public static JObject Build(DocThread thread, FileFacts facts, string target)
+        {
+            var model = thread.ToJson();
+            if (thread.Items.Count == 0)
+                ((JArray)model["thread"]).Add(new JObject { ["role"] = "line", ["id"] = "state", ["text"] = ForskRegistry.StateSentence(facts) });
+            model["target"] = target ?? "";
+            model["status"] = ForskRegistry.Status(facts);
+            model["bar"] = ForskRegistry.Bar(facts).ToJson();
+            return model;
+        }
+    }
+
     /// <summary>The window serves every open file: one thread per document, keyed by RuntimeSerialNumber.</summary>
     public sealed class WindowModels
     {

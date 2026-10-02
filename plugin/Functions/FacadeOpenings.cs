@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using RhinoMCPPlugin.Forsk;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
@@ -74,7 +75,7 @@ public partial class RhinoMCPFunctions
         public const double DummyThin = 1.0;
     }
 
-    [McpCommand("delete_opening", ModelView = true)]
+    [McpCommand("delete_opening", ModelView = true, Map = MapEdit.Opening)]
     public JObject DeleteOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -128,7 +129,7 @@ public partial class RhinoMCPFunctions
         return DeleteOpeningResult(doc, removals, commits, before, tol);
     }
 
-    [McpCommand("add_opening", ModelView = true)]
+    [McpCommand("add_opening", ModelView = true, Map = MapEdit.Opening)]
     public JObject AddOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -197,7 +198,7 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
-    [McpCommand("move_opening", ModelView = true)]
+    [McpCommand("move_opening", ModelView = true, Map = MapEdit.Opening)]
     public JObject MoveOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -255,7 +256,7 @@ public partial class RhinoMCPFunctions
             doc, rec, host, markerBrep, rec.Width, rec.Sill, rec.Head, slide.T, message);
     }
 
-    [McpCommand("set_opening", ModelView = true)]
+    [McpCommand("set_opening", ModelView = true, Map = MapEdit.Opening)]
     public JObject SetOpening(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -321,7 +322,7 @@ public partial class RhinoMCPFunctions
             ProjectRecordedT(doc, rec), message);
     }
 
-    [McpCommand("set_opening_type", ModelView = true)]
+    [McpCommand("set_opening_type", ModelView = true, Map = MapEdit.Opening)]
     public JObject SetOpeningType(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

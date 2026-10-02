@@ -11,7 +11,8 @@ namespace RhinoMCPPlugin.Functions;
 /// After a wall edit succeeds, the floor slab and flat roof that were built
 /// from that record's outer outline are rebuilt the same way (downward
 /// extrude, the roof's thickness and overhang kept), and rooms are detected
-/// again. A daylight map that was shown is hidden. A failure here rolls the
+/// again. The dispatcher then hides a shown daylight map and marks it out of
+/// date (McpCommand Map = MapEdit.Wall). A failure here rolls the
 /// slabs back; the caller rolls the wall back.
 /// </summary>
 public partial class RhinoMCPFunctions
@@ -53,8 +54,7 @@ public partial class RhinoMCPFunctions
             }
             var rooms = RoomsDetect(new JObject());
             var count = rooms?["count"]?.ToObject<int>() ?? 0;
-            if (daylight)
-                SetAnalysisVisible(doc, false);
+            // The dispatcher hides the map and marks it stale (Map = MapEdit.Wall).
             return WallFollowPlan.Sentence(floorDone, roofDone, count, daylight);
         }
         catch (Exception ex)

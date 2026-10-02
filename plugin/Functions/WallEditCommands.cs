@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Globalization;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using RhinoMCPPlugin.Forsk;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
@@ -28,7 +29,7 @@ public partial class RhinoMCPFunctions
         public string Label;
     }
 
-    [McpCommand("move_wall", ModelView = true)]
+    [McpCommand("move_wall", ModelView = true, Map = MapEdit.Wall)]
     public JObject MoveWall(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -111,7 +112,7 @@ public partial class RhinoMCPFunctions
         return result;
     }
 
-    [McpCommand("delete_wall", ModelView = true)]
+    [McpCommand("delete_wall", ModelView = true, Map = MapEdit.Wall)]
     public JObject DeleteWall(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
@@ -195,7 +196,7 @@ public partial class RhinoMCPFunctions
         return result;
     }
 
-    [McpCommand("add_wall", ModelView = true)]
+    [McpCommand("add_wall", ModelView = true, Map = MapEdit.Wall)]
     public JObject AddWall(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;

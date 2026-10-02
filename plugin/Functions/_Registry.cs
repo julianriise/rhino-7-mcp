@@ -55,6 +55,18 @@ public partial class RhinoMCPFunctions
                 };
             }
 
+            if (attr.Map != Forsk.MapEdit.None)
+            {
+                var edit = attr.Map;
+                var inner = handler;
+                handler = parameters =>
+                {
+                    var result = inner(parameters);
+                    MarkMapAfterEdit(RhinoDoc.ActiveDoc, edit);
+                    return result;
+                };
+            }
+
             if (table.ContainsKey(attr.Name))
             {
                 throw new InvalidOperationException(
