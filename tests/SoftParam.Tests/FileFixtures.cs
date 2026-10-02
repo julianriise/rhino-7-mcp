@@ -13,8 +13,9 @@ static class Row
     }
 
     /// <param name="path">The wall carries a forsk:path that reads, as every baked wall does. False: one that does not (F2's join graph cannot see it).</param>
-    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01", bool path = true) =>
-        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp, PathReads = path };
+    /// <param name="runs">Straight runs in its path: 1 for a wall baked one per run, more for a whole record made before selection S1.</param>
+    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01", bool path = true, int runs = 1) =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp, PathReads = path, Runs = path ? runs : 0 };
 
     public static ChipRow Floor() =>
         new ChipRow { Id = Id(), Generated = true, Kind = "floor", Layer = "A-FLOR", Visible = true, Solid = true, Closed = true, Stamp = "floor" };
@@ -102,6 +103,7 @@ static class Docs
         ("house, room selected, a wall without a path", () => Of(House(roomSelected: true).Append(Row.Wall(stamp: "w02", path: false)).ToArray())),
         ("house, box selected", () => Of(House().Append(Row.Box(selected: true)).ToArray())),
         ("walls only", () => Of(Row.Wall(), Row.Floor())),
+        ("one whole wall record", () => Of(Row.Wall(runs: 7), Row.Floor(), Row.Room(), Row.Window())),
         ("rooms, no window", () => Of(Row.Wall(), Row.Floor(), Row.Room(), Row.Door())),
         ("rooms, no window, no key", () => Of(Row.Wall(), Row.Floor(), Row.Room(), Row.Door()).With(d => d.KeyPresent = false)),
         ("map shown", () => Of(House().Append(Row.Map(visible: true)).ToArray())),

@@ -63,6 +63,7 @@
             "move_wall",
             "delete_wall",
             "add_wall",
+            "split_walls",
             "room_push_pull",
             "rebuild_host_wall",
             "clear_generated",

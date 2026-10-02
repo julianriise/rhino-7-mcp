@@ -53,6 +53,7 @@ namespace RhinoMCPPlugin.Forsk
             "move_wall",
             "delete_wall",
             "add_wall",
+            "split_walls",
             "room_push_pull"
         };
 
@@ -446,6 +447,12 @@ namespace RhinoMCPPlugin.Forsk
                         ["side"] = Compass("The outer wall facing this way. Exclusive with at."),
                         ["at"] = Pair("[x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side."),
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
+                    }),
+                Fn("split_walls",
+                    "Split each wall record that holds more than one straight run into one record per run, so a click picks one wall. Files made before this version keep one record for the whole plan. The union stays the same, so rooms, the floor and the joined edits read as before. Each opening goes to the wall that holds it and is cut again. A record whose split is refused (a curved wall, an opening across two of its walls) stays whole and the receipt says why. One undo. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["id"] = Str("Wall GUID: split that record only. Omit to split every whole record.")
                     }),
                 Fn("room_push_pull",
                     "Push or pull one side of a room: the wall run whose face is that side moves out (the room grows) or in, and the walls joined to it follow, as move_wall moves it. The room is id, else the one selected room. The receipt names the room and the walls that followed. Refused as move_wall refuses. Refuses X-EXIST.",

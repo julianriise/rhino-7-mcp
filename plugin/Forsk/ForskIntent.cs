@@ -413,6 +413,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Area;
         /// <summary>A generated wall whose forsk:path reads as wall loops: the join graph can see it.</summary>
         public bool PathReads;
+        /// <summary>How many straight runs a generated wall's path holds (WallJoins.Runs); 0 when it does not read.</summary>
+        public int Runs;
     }
 
     /// <summary>

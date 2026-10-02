@@ -344,7 +344,6 @@ public partial class RhinoMCPFunctions
         if (oldHost == Guid.Empty || newHost == Guid.Empty || oldHost == newHost)
             return;
         var oldStr = oldHost.ToString();
-        var newStr = newHost.ToString();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             var kind = GetForskKind(obj);
@@ -353,12 +352,18 @@ public partial class RhinoMCPFunctions
                 continue;
             if (obj.Attributes.GetUserString("forsk:host") != oldStr)
                 continue;
-            obj.Attributes.SetUserString("forsk:host", newStr);
-            var stable = ReadForskUserString(doc, newHost, "forsk:id");
-            if (!string.IsNullOrEmpty(stable))
-                obj.Attributes.SetUserString("forsk:host_id", stable);
-            obj.CommitChanges();
+            RehostOpening(doc, obj, newHost);
         }
+    }
+
+    /// <summary>An opening's marker or block now stands in another wall: its host GUID and the wall's forsk:id.</summary>
+    private static void RehostOpening(RhinoDoc doc, RhinoObject obj, Guid newHost)
+    {
+        obj.Attributes.SetUserString("forsk:host", newHost.ToString());
+        var stable = ReadForskUserString(doc, newHost, "forsk:id");
+        if (!string.IsNullOrEmpty(stable))
+            obj.Attributes.SetUserString("forsk:host_id", stable);
+        obj.CommitChanges();
     }
 
     private Guid AddOpeningMarker(

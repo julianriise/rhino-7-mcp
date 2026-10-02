@@ -129,29 +129,23 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// The building's outer wall faces in drawing mm: each Forsk wall's path
-    /// outline (the footprint before openings are cut), except one that lies
-    /// inside another wall's.
+    /// The building's outer wall faces in drawing mm: the outline of each
+    /// cluster of walls that touch (WallJoins), from their paths (the
+    /// footprint before openings are cut), except one inside another's.
     /// </summary>
     private static List<List<RoomDetect.Pt>> PlanOutlines(RhinoDoc doc, Transform worldToHld, Vector3d delta, double tol)
     {
-        var rings = new List<List<RoomDetect.Pt>>();
+        var records = new List<List<List<RoomDetect.Pt>>>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (!IsForskGenerated(obj) || !string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (!_drawIncludeExisting && IsExistingUnderlay(doc, obj)) continue;
-            if (!TryDecodeWallPath(obj.Attributes.GetUserString("forsk:path"), out var outer, out var holes)) continue;
-            var points = LoopPoints(outer, tol);
-            outer.Dispose();
-            foreach (var hole in holes) hole.Dispose();
-            if (points == null || points.Count < 3) continue;
-            rings.Add(points.Select(p => ToDrawing(p, worldToHld, delta)).Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList());
+            var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            if (rings != null) records.Add(rings);
         }
-        return rings
-            .Where(ring => !rings.Any(other => other != ring
-                && Math.Abs(RoomDetect.Area(other)) > Math.Abs(RoomDetect.Area(ring))
-                && RoomDetect.Contains(other, ring[0])))
+        return WallJoins.Outlines(records, Math.Max(tol, 1.0))
+            .Select(ring => ring.Select(p => ToDrawing(new Point3d(p.X, p.Y, 0), worldToHld, delta)).Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList())
             .ToList();
     }
 

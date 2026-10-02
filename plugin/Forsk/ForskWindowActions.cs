@@ -190,6 +190,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.delete":
                     AskWallSide(thread, facts);
                     return;
+                case "wall.split":
+                    Job(thread, action.Id, label, sink => sink.Tool("split_walls", new JObject()));
+                    return;
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;

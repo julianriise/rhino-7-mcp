@@ -282,7 +282,8 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException(why);
             }
             drawingNotes.Add(
-                spec.View + " " + drawn.Count.ToString(CultureInfo.InvariantCulture));
+                spec.View + " " + drawn.Count.ToString(CultureInfo.InvariantCulture)
+                + (string.IsNullOrEmpty(drawn.WallNote) ? "" : " (" + drawn.WallNote + ")"));
 
             // Plan strokes and tags were drawn at strokeScale. The detail, the
             // title block, and the view title use that same value.

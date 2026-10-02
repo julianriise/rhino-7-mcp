@@ -3095,6 +3095,55 @@ class TestAddWallTool:
             assert "destructiveHint=True" in (tools / name).read_text(), name
 
 
+class TestSplitWallsTool:
+    """Selection S1: whole wall records split into one record per run; the wire carries only an id."""
+
+    @patch("rhinomcp.tools.split_walls.get_rhino_connection")
+    def test_no_id_splits_every_record(self, mock_get_conn):
+        from rhinomcp.tools.split_walls import split_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "split": [{"forsk_id": "w01", "into": ["w02", "w03", "w04", "w05"], "openings": 2}],
+            "walls": 4,
+            "openings_moved": 2,
+            "refused": [],
+            "ok": True,
+            "message": "Split w01 into 4 walls, w02 to w05.",
+        }
+        mock_get_conn.return_value = mock_conn
+        result = split_walls(ctx=None)
+        mock_conn.send_command.assert_called_once_with("split_walls", {})
+        assert result["success"] is True
+        assert result["walls"] == 4
+        assert result["split"][0]["into"] == ["w02", "w03", "w04", "w05"]
+        assert result["refused"] == []
+
+    @patch("rhinomcp.tools.split_walls.get_rhino_connection")
+    def test_id_passes_through_and_refusals_come_back(self, mock_get_conn):
+        from rhinomcp.tools.split_walls import split_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "split": [],
+            "walls": 0,
+            "openings_moved": 0,
+            "refused": [{"forsk_id": "w01", "why": "Not split: D01 stands across two of its walls."}],
+            "ok": True,
+            "message": "No wall was split.",
+        }
+        mock_get_conn.return_value = mock_conn
+        result = split_walls(ctx=None, id="g1")
+        assert mock_conn.send_command.call_args[0] == ("split_walls", {"id": "g1"})
+        assert result["refused"][0]["why"].startswith("Not split")
+
+    def test_marked_destructive(self):
+        from pathlib import Path
+
+        tool = Path(__file__).parent.parent / "src" / "rhinomcp" / "tools" / "split_walls.py"
+        assert "destructiveHint=True" in tool.read_text()
+
+
 class TestRebuildHostWallTool:
     @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
     def test_selection_omits_id(self, mock_get_conn):

@@ -106,6 +106,27 @@ public class RegistryTests
         Assert.Contains(ForskRegistry.Card(Docs.Facts("house, wall selected")).Actions, a => a.Id == "wall.delete");
     }
 
+    [Fact]
+    public void SplitWalls_IsOnTheCard_ForAWholeRecord_ForTheModeller()
+    {
+        var f = Docs.Facts("one whole wall record");
+        Assert.True(f.WholeWalls);
+        var group = ForskRegistry.Card(f).Groups.Single(g => g.Actions.Any(a => a.Id == "wall.split"));
+        Assert.Equal(ForskText.Get("group.model"), group.Title);
+        Assert.Equal("Split walls for picking", ForskText.Label("wall.split"));
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("wall.split"));
+        // Walls baked one per run have nothing to split.
+        Assert.False(Docs.Facts("house").WholeWalls);
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "wall.split");
+    }
+
+    [Theory]
+    [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
+    public void SplitWalls_IsNeverInTheBar(string name)
+    {
+        Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts(name)).Slots, a => a.Id == "wall.split");
+    }
+
     [Theory]
     [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
     public void Slot1_ReadsTheFileOnly(string name)

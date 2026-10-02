@@ -272,6 +272,8 @@ def test_new_commands():
         ("commands/add_wall.json", {"from": [5000, 200], "to": [5000, 3800]}),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500}),
         ("commands/room_push_pull.json", {"id": GUID, "side": "east", "distance_mm": 300, "way": "in"}),
+        ("commands/split_walls.json", {}),
+        ("commands/split_walls.json", {"id": GUID}),
         ("commands/add_wall.json", {"from": [2000, 6000], "to": [6000, 6000], "thickness": 100, "height": 2400}),
         ("commands/add_wall.json", {"line_id": GUID}),
         ("commands/rebuild_host_wall.json", {}),
@@ -1108,6 +1110,17 @@ def test_responses():
     }
     if not validate("responses/room_push_pull_result.json", push):
         all_passed = False
+    print("  split_walls_result:")
+    split = {
+        "split": [{"forsk_id": "w01", "into": ["w02", "w03", "w04", "w05"], "openings": 2}],
+        "walls": 4,
+        "openings_moved": 2,
+        "refused": [{"forsk_id": "w06", "why": "Not split: the wall bends in a curve near (0, 3000), and a curved wall stays one record."}],
+        "ok": True,
+        "message": "Split w01 into 4 walls, w02 to w05. 2 openings went to the walls that hold them.",
+    }
+    if not validate("responses/split_walls_result.json", split):
+        all_passed = False
     linking = {**add_wall, "forsk_id": "w03", "joined": False, "joins": ["w01", "w02"], "holes": 0,
                "message": "Added w03, a 200 mm wall joined to w01 and w02, 1900 mm long and 3000 mm high. 1 room updated."}
     if not validate("responses/add_wall_result.json", linking):
@@ -1256,6 +1269,8 @@ def test_invalid_examples():
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
         ("commands/move_wall.json", {"toward": "north", "distance_mm": 500}, "move_wall needs side or at"),
         ("commands/room_push_pull.json", {"distance_mm": 500}, "room_push_pull needs a side"),
+        ("commands/split_walls.json", {"side": "north"}, "split_walls takes no side"),
+        ("commands/split_walls.json", {"id": "w01"}, "split_walls id is a GUID"),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "way": "up"}, "room_push_pull way is out or in"),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 0}, "room_push_pull distance above 0"),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "at": [0, 0]}, "room_push_pull unknown field"),
@@ -1270,6 +1285,17 @@ def test_invalid_examples():
             {"host_id": "", "record_deleted": True, "openings_deleted": [], "holes": 0, "ok": True, "message": "m",
              "followed": [{"forsk_id": "w03", "wall": "the east wall", "change_mm": "short"}]},
             "delete_wall followed change is a number",
+        ),
+        (
+            "responses/split_walls_result.json",
+            {"split": [{"forsk_id": "w01", "into": "w02", "openings": 0}], "walls": 1, "openings_moved": 0,
+             "refused": [], "ok": True, "message": "m"},
+            "split_walls into is a list",
+        ),
+        (
+            "responses/split_walls_result.json",
+            {"split": [], "walls": 0, "openings_moved": 0, "refused": [{"forsk_id": "w01"}], "ok": True, "message": "m"},
+            "split_walls refused says why",
         ),
         (
             "responses/add_wall_result.json",
@@ -1546,7 +1572,7 @@ def test_protocol_envelope():
         "rooms_from_layer",
         "mark_as_existing",
         "delete_opening", "add_opening", "move_opening", "set_opening", "set_opening_type",
-        "move_wall", "delete_wall", "add_wall", "rebuild_host_wall",
+        "move_wall", "delete_wall", "add_wall", "split_walls", "rebuild_host_wall",
         "clear_generated",
         "make2d_view", "sheet_pack", "clear_drawings",
         "set_project_meta", "layout_pack", "export_pdf", "clear_layouts", "print_profile",

@@ -575,3 +575,41 @@ def test_clear_tool_reports_remaining(mock_get_conn):
     result = daylight_clear(ctx=None)
     conn.send_command.assert_called_once_with("daylight_clear", {})
     assert (result["success"], result["count"], result["remaining"]) == (True, 1, 0)
+
+
+def split_two_rooms() -> dict:
+    """two_rooms() as selection S1 bakes it: one wall record per run, the
+    north and south walls full length, the east, west and partition between
+    them. Each opening on the record that holds it."""
+    scene = two_rooms()
+    pieces = {
+        "w02": [[0, 4800], [10000, 4800], [10000, 5000], [0, 5000]],
+        "w03": [[0, 0], [10000, 0], [10000, 200], [0, 200]],
+        "w04": [[0, 200], [200, 200], [200, 4800], [0, 4800]],
+        "w05": [[9800, 200], [10000, 200], [10000, 4800], [9800, 4800]],
+        "w06": [[4900, 200], [5100, 200], [5100, 4800], [4900, 4800]],
+    }
+    scene["walls"] = [{"id": k, "thickness": 200, "rings": [ring]} for k, ring in pieces.items()]
+    hosts = {"window-01": "w02", "window-02": "w02", "door-01": "w06"}
+    for opening in scene["openings"]:
+        opening["host_id"] = hosts[opening["id"]]
+    return scene
+
+
+def room_means(run) -> dict:
+    means = {}
+    for r in run.rooms:
+        cells = [c for c in run.cells if c.room == r]
+        means[run.model.rooms[r].id] = sum(c.df * c.area for c in cells) / sum(c.area for c in cells)
+    return means
+
+
+def test_split_walls_give_the_same_daylight_per_room():
+    """S1: the walls as one record or as one record per run light each room the same, within 1 %."""
+    whole = fd.run_scene(two_rooms())
+    split = fd.run_scene(split_two_rooms())
+    assert (split.spaces, split.windows, len(split.cells)) == (whole.spaces, whole.windows, len(whole.cells))
+    a, b = room_means(whole), room_means(split)
+    assert a.keys() == b.keys() == {"r01", "r02"}
+    for room in a:
+        assert b[room] == pytest.approx(a[room], rel=0.01), room

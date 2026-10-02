@@ -61,6 +61,7 @@ namespace RhinoMCPPlugin.Forsk
             ["wall.move.prefill"] = "Move the north wall {n} mm north",
             ["wall.move.prefill.nb"] = "Flytt veggen i nord {n} mm mot nord",
             ["wall.move.reason"] = "The click selects the whole wall record.",
+            ["wall.split"] = "Split walls for picking",
             ["wall.delete"] = "Delete",
             ["wall.delete.ask"] = "Which wall run goes? A click selects the whole wall record.",
             ["wall.delete.inner"] = "For an inner wall, say it: “delete the wall at 4000, 2500”.",
@@ -226,6 +227,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.move_wall"] = "Wall",
             ["tool.delete_wall"] = "Wall",
             ["tool.add_wall"] = "Wall",
+            ["tool.split_walls"] = "Wall",
             ["tool.room_push_pull"] = "Room",
             ["receipt.ok"] = "done",
         };

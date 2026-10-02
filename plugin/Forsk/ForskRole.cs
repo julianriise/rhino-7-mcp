@@ -70,6 +70,7 @@ namespace RhinoMCPPlugin.Forsk
                     return ForskRole.Planner;
                 case "file.generate":
                 case "file.rebuild":
+                case "wall.split":
                 case "wall.move":
                 case "wall.delete":
                 case "room.push_pull":

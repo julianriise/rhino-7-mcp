@@ -86,6 +86,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool HasWalls;
         /// <summary>Every generated wall has a path that reads, so the join graph sees every wall (F2).</summary>
         public bool JoinGraph;
+        /// <summary>A generated wall holds more than one straight run, so a click picks all of them (selection S1).</summary>
+        public bool WholeWalls;
         public bool HasPlanCurves;
         public bool HasUnderlay;
         public bool ScaleSet;
@@ -176,6 +178,7 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         facts.HasWalls = true;
                         if (!row.PathReads) wallsRead = false;
+                        if (row.Runs > 1) facts.WholeWalls = true;
                     }
                     else if (Is(row.Kind, "room"))
                     {

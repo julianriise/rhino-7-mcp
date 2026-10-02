@@ -472,6 +472,182 @@ public partial class RhinoMCPFunctions
         return moved;
     }
 
+    private sealed class SplitPlan
+    {
+        public RhinoObject Wall;
+        public string ForskId;
+        public List<WallSplit.Piece> Pieces;
+        /// <summary>Each opening on the record and the piece that holds it.</summary>
+        public List<(RhinoObject Marker, int Piece)> Openings = new List<(RhinoObject, int)>();
+    }
+
+    /// <summary>
+    /// Selection S1 for a file made before it: each whole wall record (more
+    /// than one straight run) becomes one record per run (WallSplit), with the
+    /// same union, so the join graph, the rooms and the floor read as before.
+    /// Each opening goes to the piece that holds it, and that piece is rebuilt
+    /// with its openings cut; the old record goes. One undo. A record the split
+    /// refuses, or one with an opening across two pieces, stays whole and the
+    /// receipt says why. A failure puts every record back.
+    /// </summary>
+    [McpCommand("split_walls", ModelView = true, Map = MapEdit.Wall)]
+    public JObject SplitWalls(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var idToken = parameters?["id"]?.ToString();
+        var given = !string.IsNullOrWhiteSpace(idToken);
+        var guid = Guid.Empty;
+        if (given && !Guid.TryParse(idToken, out guid))
+            throw new InvalidOperationException("Not a Forsk wall.");
+
+        var walls = new List<RhinoObject>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase) || IsExistingUnderlay(doc, obj))
+                continue;
+            if (given && obj.Id != guid) continue;
+            walls.Add(obj);
+        }
+        if (walls.Count == 0)
+            throw new InvalidOperationException(given ? "Not a Forsk wall." : "No Forsk walls. Generate the 3D model first.");
+
+        var plans = new List<SplitPlan>();
+        var refused = new JArray();
+        foreach (var wall in walls)
+        {
+            var forskId = wall.Attributes.GetUserString("forsk:id");
+            if (string.IsNullOrEmpty(forskId)) forskId = wall.Name ?? "a wall";
+            var rings = WallEdit.Rings(wall.Attributes.GetUserString("forsk:path"));
+            string why = null;
+            var graph = rings == null ? null : WallJoins.Build(new List<List<List<RoomDetect.Pt>>> { rings }, new List<int> { 0 }, tol);
+            var pieces = graph == null ? null : WallSplit.Pieces(graph, tol, out why);
+            if (pieces == null)
+            {
+                refused.Add(new JObject { ["forsk_id"] = forskId, ["why"] = why ?? MissingWallPathMessage });
+                continue;
+            }
+            if (pieces.Count < 2) continue;
+            var plan = new SplitPlan { Wall = wall, ForskId = forskId, Pieces = pieces };
+            string across = null;
+            foreach (var marker in MarkersOnHost(doc, wall.Id, wall.Attributes.GetUserString("forsk:id")))
+            {
+                var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+                if (!box.IsValid) continue;
+                var footprint = new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y);
+                var holder = pieces.FindIndex(p => WallEdit.Holds(new List<List<RoomDetect.Pt>> { p.Ring }, footprint));
+                if (holder < 0)
+                {
+                    across = MarkerLabel(marker);
+                    break;
+                }
+                plan.Openings.Add((marker, holder));
+            }
+            if (across != null)
+            {
+                refused.Add(new JObject { ["forsk_id"] = forskId, ["why"] = "Not split: " + across + " stands across two of its walls." });
+                continue;
+            }
+            plans.Add(plan);
+        }
+
+        var split = new JArray();
+        var moved = 0;
+        if (plans.Count > 0)
+        {
+            var undos = new List<HostUndo>();
+            var added = new List<Guid>();
+            try
+            {
+                foreach (var plan in plans)
+                {
+                    var undo = SnapshotWholeHost(doc, plan.Wall.Id);
+                    undos.Add(undo);
+                    var old = plan.Wall;
+                    var extent = old.Geometry.GetBoundingBox(true);
+                    var height = ParseMm(old.Attributes.GetUserString("forsk:height")) ?? extent.Max.Z - extent.Min.Z;
+                    var hosts = new List<Guid>();
+                    var into = new JArray();
+                    foreach (var piece in plan.Pieces)
+                    {
+                        var path = WallEdit.Path(new List<List<RoomDetect.Pt>> { piece.Ring });
+                        var solid = PrepareFreshSolid(ExtrudeFromPath(path, height, tol, new JArray()), tol, out var diagnostic);
+                        if (solid == null)
+                            throw new InvalidOperationException("A piece of " + plan.ForskId + " did not extrude. " + diagnostic);
+                        if (Math.Abs(extent.Min.Z) > 1e-9) solid.Translate(new Vector3d(0, 0, extent.Min.Z));
+                        var number = NextWallNumber(doc);
+                        var forskId = FormatStableId("w", number);
+                        var attr = old.Attributes.Duplicate();
+                        attr.Name = "wall-" + number.ToString("D2", CultureInfo.InvariantCulture);
+                        attr.SetUserString("forsk:id", forskId);
+                        attr.SetUserString("forsk:path", path);
+                        var read = MeasureWallThickness(path, solid, tol);
+                        if (read.Millimetres > 0) attr.SetUserString("forsk:thickness", FormatMm(read.Millimetres));
+                        var id = doc.Objects.AddBrep(solid, attr);
+                        if (id == Guid.Empty)
+                            throw new InvalidOperationException("Rhino did not take a piece of " + plan.ForskId + ".");
+                        added.Add(id);
+                        hosts.Add(id);
+                        into.Add(forskId);
+                    }
+                    foreach (var opening in plan.Openings)
+                    {
+                        RehostOpening(doc, opening.Marker, hosts[opening.Piece]);
+                        var block = doc.Objects.FindId(FindOpeningBlock(doc, opening.Marker.Id));
+                        if (block != null) RehostOpening(doc, block, hosts[opening.Piece]);
+                    }
+                    if (!doc.Objects.Delete(old.Id, true))
+                        throw new InvalidOperationException("Could not delete " + plan.ForskId + ".");
+                    var cut = new HashSet<int>();
+                    foreach (var opening in plan.Openings)
+                    {
+                        if (!cut.Add(opening.Piece)) continue;
+                        var result = RebuildHostWall(new JObject { ["id"] = hosts[opening.Piece].ToString() });
+                        undo.NewBlocks.AddRange(GuidList(result?["block_ids"] as JArray));
+                        if (Guid.TryParse(result?["host_id"]?.ToString(), out var after) && after != hosts[opening.Piece])
+                            added.Add(after);
+                    }
+                    moved += plan.Openings.Count;
+                    split.Add(new JObject { ["forsk_id"] = plan.ForskId, ["into"] = into, ["openings"] = plan.Openings.Count });
+                }
+            }
+            catch (Exception ex)
+            {
+                foreach (var id in added)
+                    if (doc.Objects.FindId(id) != null) doc.Objects.Delete(id, true);
+                for (var i = undos.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, undos[i]);
+                throw new InvalidOperationException("Walls not split. " + ex.Message, ex);
+            }
+        }
+        else if (given && refused.Count > 0)
+            throw new InvalidOperationException(refused[0]["why"]?.ToString());
+
+        var walled = 0;
+        foreach (var item in split) walled += ((JArray)item["into"]).Count;
+        var parts = new List<string>();
+        foreach (var item in split)
+        {
+            var into = (JArray)item["into"];
+            parts.Add(item["forsk_id"] + " into " + into.Count + " walls, " + into[0] + " to " + into[into.Count - 1]);
+        }
+        var message = split.Count == 0
+            ? (refused.Count == 0 ? "Every wall is one straight run already." : "No wall was split.")
+            : "Split " + string.Join("; ", parts) + "."
+                + (moved == 0 ? "" : moved == 1 ? " 1 opening went to the wall that holds it." : " " + moved + " openings went to the walls that hold them.");
+        foreach (var item in refused)
+            message += " " + item["forsk_id"] + " stays one record. " + item["why"];
+        doc.Views.Redraw();
+        return new JObject
+        {
+            ["split"] = split,
+            ["walls"] = walled,
+            ["openings_moved"] = moved,
+            ["refused"] = refused,
+            ["ok"] = true,
+            ["message"] = message
+        };
+    }
+
     private static string Opposite(string side)
     {
         switch (side)

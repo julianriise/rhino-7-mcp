@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "split_walls.json",
+  "title": "SplitWalls Command",
+  "description": "Split each wall record that holds more than one straight run into one record per run, with the same union, so a click picks one wall. A corner goes to the longer run, then the one facing north or south; a tee stays with the through run. Each opening goes to the piece that holds it, and that piece is rebuilt with its openings cut; the old record is deleted. A record the split refuses (a curve, an opening across two pieces) stays whole and is listed in refused. One undo. Id omitted splits every whole record. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID: split that record only. Omit to split every whole record."
+    }
+  },
+  "additionalProperties": false
+}

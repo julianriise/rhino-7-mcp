@@ -120,8 +120,9 @@ public partial class RhinoMCPFunctions
         }
 
         var geometries = new List<GeometryBase>();
+        var wallSolids = WallClusterSolids(doc, sources, out _);
         foreach (var obj in sources)
-            AppendDrawable(obj, Transform.Identity, geometries, 0);
+            AppendSource(obj, wallSolids, geometries);
         if (geometries.Count == 0)
         {
             return SheetViewResult(spec.View, spec.Layer, new JArray(), NothingToDrawMessage);
@@ -426,6 +427,67 @@ public partial class RhinoMCPFunctions
             || kind.Equals("opening", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Selection S1: walls that touch draw as one solid, so the joints between
+    /// their records draw no seam. Each cluster of more than one generated
+    /// wall (WallJoins) is unioned into one temporary solid with its coplanar
+    /// faces merged, never added to the document. The cluster's first record
+    /// carries the solid and the others draw nothing. A cluster whose union
+    /// fails draws its records, and the note says so.
+    /// </summary>
+    private static Dictionary<Guid, Brep> WallClusterSolids(RhinoDoc doc, IList<RhinoObject> sources, out string note)
+    {
+        note = null;
+        var solids = new Dictionary<Guid, Brep>();
+        var tolerance = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
+        var walls = new List<RhinoObject>();
+        var records = new List<List<List<RoomDetect.Pt>>>();
+        foreach (var obj in sources)
+        {
+            if (!(obj?.Geometry is Brep) || !IsForskGenerated(obj) || IsExistingUnderlay(doc, obj)
+                || !string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            if (rings == null) continue;
+            walls.Add(obj);
+            records.Add(rings);
+        }
+        var failed = 0;
+        foreach (var cluster in WallJoins.Clusters(records, Math.Max(tolerance, 1.0)))
+        {
+            if (cluster.Count < 2) continue;
+            var breps = new List<Brep>();
+            foreach (var i in cluster) breps.Add(((Brep)walls[i].Geometry).DuplicateBrep());
+            Brep[] union;
+            try { union = Brep.CreateBooleanUnion(breps, tolerance); }
+            catch { union = null; }
+            if (union == null || union.Length != 1 || union[0] == null || !union[0].IsValid)
+            {
+                failed++;
+                continue;
+            }
+            union[0].MergeCoplanarFaces(tolerance);
+            solids[walls[cluster[0]].Id] = union[0];
+            for (var k = 1; k < cluster.Count; k++) solids[walls[cluster[k]].Id] = null;
+        }
+        if (failed > 0)
+            note = failed == 1
+                ? "One group of joined walls did not union, so its joints show."
+                : failed + " groups of joined walls did not union, so their joints show.";
+        return solids;
+    }
+
+    /// <summary>A source as drawn: a wall cluster's one solid, else the object itself.</summary>
+    private static void AppendSource(RhinoObject obj, Dictionary<Guid, Brep> wallSolids, List<GeometryBase> sink)
+    {
+        if (wallSolids.TryGetValue(obj.Id, out var solid))
+        {
+            if (solid != null) sink.Add(solid.DuplicateBrep());
+            return;
+        }
+        AppendDrawable(obj, Transform.Identity, sink, 0);
+    }
+
     private static void AppendDrawable(RhinoObject obj, Transform xform, List<GeometryBase> sink, int depth)
     {
         if (obj == null || depth > 6) return;
@@ -685,14 +747,23 @@ public partial class RhinoMCPFunctions
     /// fully above the plan's plane does not cross, so it is not filled.
     /// </summary>
     private static List<List<Curve>> SectionFillLoops(
-        IList<RhinoObject> sources, Plane cut, bool fillFloors, double tolerance, List<string> owners = null)
+        IList<RhinoObject> sources, Plane cut, bool fillFloors, double tolerance, List<string> owners = null,
+        Dictionary<Guid, Brep> wallSolids = null)
     {
         var groups = new List<List<Curve>>();
         if (sources == null) return groups;
         foreach (var obj in sources)
         {
             var before = groups.Count;
-            CollectSectionGroups(obj, Transform.Identity, cut, fillFloors, tolerance, groups, 0);
+            if (wallSolids != null && obj != null && wallSolids.TryGetValue(obj.Id, out var solid))
+            {
+                // The cluster's one solid, so the poché has no seam between its records.
+                var group = new List<Curve>();
+                if (solid != null) ContourMass(solid, cut, tolerance, group);
+                if (group.Count > 0) groups.Add(group);
+            }
+            else
+                CollectSectionGroups(obj, Transform.Identity, cut, fillFloors, tolerance, groups, 0);
             var owner = obj?.Attributes?.GetUserString("forsk:id");
             if (string.IsNullOrEmpty(owner)) owner = obj?.Id.ToString() ?? "";
             for (var i = before; i < groups.Count; i++)
@@ -1185,6 +1256,8 @@ public partial class RhinoMCPFunctions
         // F5.2 dimensions as PlanStats counts them.
         public PlanStats Dims;
         public string SymbolNote;
+        /// <summary>Joined walls that did not union for the drawing, so their joints show. Null when every cluster did.</summary>
+        public string WallNote;
         public string RoomText;
         // F5.3: what a section sheet drew. Null on the plan and elevations.
         public SectionStats Section;
@@ -1249,13 +1322,14 @@ public partial class RhinoMCPFunctions
         }
 
         var geometries = new List<GeometryBase>();
+        var wallSolids = WallClusterSolids(doc, sources, out result.WallNote);
         foreach (var obj in sources)
         {
             // Plan symbols replace the frame. Elevations and sections keep the 3D block.
             if (plan
                 && string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
-            AppendDrawable(obj, Transform.Identity, geometries, 0);
+            AppendSource(obj, wallSolids, geometries);
         }
         if (geometries.Count == 0)
         {
@@ -1405,7 +1479,7 @@ public partial class RhinoMCPFunctions
             if (clip.HasValue && haveWorldToHld)
             {
                 fillGroups = SectionFillLoops(
-                    sources, section != null ? clip.Value : PlanFillPlane(clip.Value), section != null, tolerance, fillOwners);
+                    sources, section != null ? clip.Value : PlanFillPlane(clip.Value), section != null, tolerance, fillOwners, wallSolids);
                 if (section != null)
                 {
                     // The heights are read off the model-space loops before they move onto the sheet.

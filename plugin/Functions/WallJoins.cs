@@ -328,6 +328,32 @@ public static class WallJoins
         return pieces.Count == 1 ? pieces[0] : null;
     }
 
+    /// <summary>
+    /// The facades: each cluster's outer loop, except one that lies inside a
+    /// larger one. A cluster whose union does not read as one piece gives its
+    /// records' outer loops.
+    /// </summary>
+    public static List<List<Pt>> Outlines(IList<List<List<Pt>>> records, double tol)
+    {
+        var rings = new List<List<Pt>>();
+        foreach (var cluster in Clusters(records, tol))
+        {
+            var shape = Shape(records, cluster, tol);
+            if (shape != null) rings.Add(shape[0]);
+            else foreach (var i in cluster) rings.Add(records[i][0]);
+        }
+        var outlines = new List<List<Pt>>();
+        foreach (var ring in rings)
+        {
+            var inside = false;
+            foreach (var other in rings)
+                if (other != ring && Math.Abs(RoomDetect.Area(other)) > Math.Abs(RoomDetect.Area(ring)) && RoomDetect.Contains(other, ring[0]))
+                    inside = true;
+            if (!inside) outlines.Add(ring);
+        }
+        return outlines;
+    }
+
     /// <summary>The records' union as separate regions, each an outer loop with its holes.</summary>
     static List<List<List<Pt>>> Pieces(IList<List<List<Pt>>> records, IList<int> cluster, double tol)
     {

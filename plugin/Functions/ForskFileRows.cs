@@ -31,6 +31,9 @@ public partial class RhinoMCPFunctions
             var index = obj.Attributes.LayerIndex;
             var geometry = obj.Geometry;
             var generated = IsForskGenerated(obj);
+            var wallRings = generated && string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)
+                ? WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"))
+                : null;
             var solid = geometry is Brep brep && brep.IsSolid
                 || geometry is Extrusion extrusion && extrusion.IsSolid
                 || geometry is Mesh mesh && mesh.IsClosed;
@@ -54,8 +57,8 @@ public partial class RhinoMCPFunctions
                 Stamp = generated ? EditStamp(obj) : null,
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,
                 Area = obj.Attributes.GetUserString("forsk:area"),
-                PathReads = generated && string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)
-                    && WallEdit.Rings(obj.Attributes.GetUserString("forsk:path")) != null
+                PathReads = wallRings != null,
+                Runs = wallRings == null ? 0 : WallJoins.Runs(wallRings, Math.Max(doc.ModelAbsoluteTolerance, 1.0)).Count
             });
         }
         return rows;

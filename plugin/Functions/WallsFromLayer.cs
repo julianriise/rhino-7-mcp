@@ -90,33 +90,36 @@ public partial class RhinoMCPFunctions
                         : EncodePathFromBrep(brep, profiles.Tol);
                     if (string.IsNullOrEmpty(path))
                         warnings.Add("Could not store a param path on " + namePrefix + index.ToString("D2") + ".");
-                    var read = MeasureWallThickness(path, brep, profiles.Tol);
-                    if (!read.Measured && string.IsNullOrEmpty(thicknessNote))
-                        thicknessNote = read.Receipt;
-                    var thickness = read.Millimetres;
-                    var attr = new ObjectAttributes
+                    foreach (var record in SplitWallBake(brep, path, height, profiles.Tol, warnings))
                     {
-                        Name = $"{namePrefix}{index:D2}",
-                        LayerIndex = targetLayer.Index,
-                        MaterialSource = ObjectMaterialSource.MaterialFromLayer
-                    };
-                    var forskId = FormatStableId("w", index);
-                    StampForskTags(attr, new ForskStamp
-                    {
-                        Kind = "wall",
-                        Level = "0",
-                        Id = forskId,
-                        Height = height,
-                        Thickness = thickness > 0 ? (double?)thickness : null,
-                        Path = path,
-                        SourceLayer = profiles.SourceLayer.Name
-                    });
-                    var id = doc.Objects.AddBrep(brep, attr);
-                    if (id != Guid.Empty)
-                    {
-                        ids.Add(id.ToString());
-                        forskIds.Add(forskId);
-                        index++;
+                        var read = MeasureWallThickness(record.Path, record.Brep, profiles.Tol);
+                        if (!read.Measured && string.IsNullOrEmpty(thicknessNote))
+                            thicknessNote = read.Receipt;
+                        var thickness = read.Millimetres;
+                        var attr = new ObjectAttributes
+                        {
+                            Name = $"{namePrefix}{index:D2}",
+                            LayerIndex = targetLayer.Index,
+                            MaterialSource = ObjectMaterialSource.MaterialFromLayer
+                        };
+                        var forskId = FormatStableId("w", index);
+                        StampForskTags(attr, new ForskStamp
+                        {
+                            Kind = "wall",
+                            Level = "0",
+                            Id = forskId,
+                            Height = height,
+                            Thickness = thickness > 0 ? (double?)thickness : null,
+                            Path = record.Path,
+                            SourceLayer = profiles.SourceLayer.Name
+                        });
+                        var id = doc.Objects.AddBrep(record.Brep, attr);
+                        if (id != Guid.Empty)
+                        {
+                            ids.Add(id.ToString());
+                            forskIds.Add(forskId);
+                            index++;
+                        }
                     }
                 }
             }
@@ -150,6 +153,44 @@ public partial class RhinoMCPFunctions
 
         doc.Views.Redraw();
         return result;
+    }
+
+    /// <summary>
+    /// Selection S1: one record per straight run, so a click picks one wall.
+    /// The bake's outline is cut into pieces (WallSplit) and each piece is
+    /// extruded as its own solid at the bake's base. A bake the split refuses,
+    /// or whose piece will not extrude, stays one record, and the warnings say why.
+    /// </summary>
+    private List<(Brep Brep, string Path)> SplitWallBake(Brep brep, string path, double height, double tol, JArray warnings)
+    {
+        var whole = new List<(Brep Brep, string Path)> { (brep, path) };
+        var rings = WallEdit.Rings(path);
+        if (rings == null) return whole;
+        var splitTol = Math.Max(tol, 1.0);
+        var graph = WallJoins.Build(new List<List<List<RoomDetect.Pt>>> { rings }, new List<int> { 0 }, splitTol);
+        string why = null;
+        var pieces = graph == null ? null : WallSplit.Pieces(graph, splitTol, out why);
+        if (pieces == null)
+        {
+            if (!string.IsNullOrEmpty(why)) warnings.Add("A wall stays one record. " + why);
+            return whole;
+        }
+        if (pieces.Count < 2) return whole;
+        var z = brep.GetBoundingBox(true).Min.Z;
+        var split = new List<(Brep Brep, string Path)>();
+        foreach (var piece in pieces)
+        {
+            var piecePath = WallEdit.Path(new List<List<RoomDetect.Pt>> { piece.Ring });
+            var solid = PrepareFreshSolid(ExtrudeFromPath(piecePath, height, tol, warnings), tol, out var diagnostic);
+            if (solid == null)
+            {
+                warnings.Add("A wall stays one record. Not split: a piece did not extrude. " + diagnostic);
+                return whole;
+            }
+            if (Math.Abs(z) > 1e-9) solid.Translate(new Vector3d(0, 0, z));
+            split.Add((solid, piecePath));
+        }
+        return split;
     }
 
     private sealed class WallBake
