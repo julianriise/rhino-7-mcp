@@ -210,15 +210,28 @@ namespace RhinoMCPPlugin.Forsk
             if (thread != null) thread.Prefill = null;
         }
 
+        /// <summary>
+        /// Eto's ExecuteScript waits by running the event loop (RunIteration until
+        /// the task completes), so a page action or a job's post could re-enter
+        /// mid-render. Scripts go asynchronously instead: WebKit runs them in the
+        /// order they were sent, and nothing here needs their result.
+        /// </summary>
         void Script(string function, JToken argument)
+        {
+            RunScript(ForskPage.Call(function, argument), function);
+        }
+
+        void RunScript(string script, string what)
         {
             try
             {
-                _web.ExecuteScript(ForskPage.Call(function, argument));
+                _web.ExecuteScriptAsync(script).ContinueWith(
+                    t => Log("script " + what + " · " + t.Exception?.GetBaseException().Message),
+                    System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
             }
             catch (Exception e)
             {
-                Log("script " + function + " · " + e.Message);
+                Log("script " + what + " · " + e.Message);
             }
         }
 
@@ -331,7 +344,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Focus();
                 _web.Focus();
-                if (_ready) _web.ExecuteScript("Forsk.focus()");
+                if (_ready) RunScript("Forsk.focus()", "focus");
             }
             catch (Exception e)
             {
