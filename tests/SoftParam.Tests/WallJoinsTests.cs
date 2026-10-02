@@ -86,6 +86,91 @@ public class WallJoinsTests
         Assert.All(g.Runs, r => Assert.Equal(200, r.Thickness, 3));
     }
 
+    [Fact]
+    public void FourButtingRecords_MoveNorth500_TheNorthRecordMoves_EastAndWestGrow()
+    {
+        var records = FourRects();
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out var why), why);
+        Assert.True(WallJoins.TryMove(records, g, run, 500, Tol, out var moved, out why), why);
+
+        Assert.Equal(new[] { 0, 2, 3 }, moved.Records.Keys.OrderBy(k => k));
+        Assert.Equal(Box(0, 4300, 8000, 4500), Sorted(moved.Records[0][0]));
+        Assert.Equal(Box(0, 200, 200, 4300), Sorted(moved.Records[2][0]));
+        Assert.Equal(Box(7800, 200, 8000, 4300), Sorted(moved.Records[3][0]));
+        // The room stays one room, 500 mm deeper.
+        Assert.Equal(2, moved.Shape.Count);
+        Assert.Equal(Box(200, 200, 7800, 4300), Sorted(moved.Shape[1]));
+        Assert.Equal(new[] { "the east wall +500 [3]", "the west wall +500 [2]" }, Lines(moved));
+    }
+
+    [Fact]
+    public void Tee_MovingTheNorthWall_StretchesThePartition()
+    {
+        var records = new List<List<List<Pt>>> { TwoRooms() };
+        var g = Graph(records);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out _));
+        Assert.True(WallJoins.TryMove(records, g, run, 500, Tol, out var moved, out var why), why);
+        Assert.Equal(new[] { "the east wall +500 [0]", "the wall at (4000, 2000) +500 [0]", "the west wall +500 [0]" }, Lines(moved));
+        Assert.Equal(3, moved.Shape.Count);
+    }
+
+    [Fact]
+    public void SixtyDegreeCorner_TheNeighbourSlidesAlongItsLine_AndKeepsItsThickness()
+    {
+        var dir = new Pt(Math.Cos(Math.PI * 2 / 3), Math.Sin(Math.PI * 2 / 3));
+        var l = Mitre(new() { new(0, 0), new(4000, 0), new(4000 + 3000 * dir.X, 3000 * dir.Y) }, 200);
+        var records = new List<List<List<Pt>>> { new() { l } };
+        var g = Graph(records);
+        Assert.True(WallEdit.TryPick(g.Shape, new Pt(2000, 0), Tol, out var run, out var why), why);
+        Assert.Equal("east–west", WallEdit.Runs(run));
+        Assert.True(WallJoins.TryMove(records, g, run, -300, Tol, out var moved, out why), why);
+
+        var after = WallJoins.Runs(moved.Shape, Tol);
+        Assert.Equal(2, after.Count);
+        Assert.All(after, r => Assert.Equal(200, r.Thickness, 3));
+        var leaning = after.Single(r => Math.Abs(r.Dir.Y) > 0.5);
+        Assert.Equal(Math.Abs(dir.X), Math.Abs(leaning.Dir.X), 6);
+        // 300 mm across the run is 300 / sin 60° along the leaning wall.
+        var followed = Assert.Single(moved.Followed);
+        Assert.Equal(Math.Round(300 / Math.Sin(Math.PI / 3)), followed.ChangeMm);
+    }
+
+    [Fact]
+    public void FourButtingRecords_ClosingTheRoom_IsRefused_AndNothingMoves()
+    {
+        var records = FourRects();
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out _));
+        Assert.False(WallJoins.TryMove(records, g, run, -3700, Tol, out var moved, out var why));
+        Assert.Null(moved);
+        Assert.Equal("Not moved: 3700 mm would close the room or wall beyond it, 3600 mm deep.", why);
+        Assert.Equal(Box(0, 3800, 8000, 4000), Sorted(records[0][0]));
+    }
+
+    [Fact]
+    public void ARecordTheRunLeavesBehind_IsRefused()
+    {
+        // A stray block inside the north wall is its own record. It touches no
+        // face line, so it would stay behind when the wall moves.
+        var records = new List<List<List<Pt>>> { new() { Rect(0, 3800, 8000, 4000) }, new() { Rect(3000, 3850, 3100, 3950) } };
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.Equal(2, g.Records.Count);
+        Assert.True(WallEdit.TryPickSide(g.Shape, "north", Tol, out var run, out _));
+        Assert.False(WallJoins.TryMove(records, g, run, 500, Tol, out var moved, out var why));
+        Assert.Null(moved);
+        Assert.Equal("Not moved: the walls joined to it would not follow cleanly.", why);
+    }
+
+    static string[] Lines(WallJoins.Moved moved) => moved.Followed
+        .Select(f => f.Wall + " " + (f.ChangeMm > 0 ? "+" : "") + f.ChangeMm + " [" + string.Join(",", f.Records) + "]")
+        .OrderBy(x => x).ToArray();
+
+    static (double, double, double, double) Sorted(List<Pt> ring) =>
+        (ring.Min(p => p.X), ring.Min(p => p.Y), ring.Max(p => p.X), ring.Max(p => p.Y));
+
+    static (double, double, double, double) Box(double x0, double y0, double x1, double y1) => (x0, y0, x1, y1);
+
     static WallJoins.Graph Graph(List<List<List<Pt>>> records) =>
         WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
 

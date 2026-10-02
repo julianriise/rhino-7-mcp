@@ -26,6 +26,8 @@ public static class WallEdit
     const double ParallelSin = 0.01;
     /// <summary>A compass word moves a run only when the run's normal is within 45° of it.</summary>
     const double CompassCos = 0.7;
+    /// <summary>A wall that meets a moving run at under 15° (sine) would slide too far along itself.</summary>
+    const double MinMeetSin = 0.26;
 
     public sealed class Run
     {
@@ -167,46 +169,42 @@ public static class WallEdit
     }
 
     /// <summary>
-    /// Both faces of the run moved by along the normal. A wall that meets the
-    /// run stretches or shortens with it; one that would close up (the room
-    /// or wall beyond run out of depth) or cross another wall refuses the move.
+    /// Both faces of the run moved by along the normal. Every vertex on one of
+    /// the run's face lines, within its length, moves (Slides), so a wall that
+    /// meets the run stretches or shortens with it and keeps its direction.
+    /// One that would close up (the room or wall beyond run out of depth) or
+    /// cross another wall refuses the move.
     /// </summary>
     public static bool TryMove(List<List<Pt>> rings, Run run, double by, double tol, out List<List<Pt>> moved, out string why)
     {
         moved = null;
-        why = null;
-        var shift = new Pt(run.Normal.X * by, run.Normal.Y * by);
-        var moving = new HashSet<(int, int)>();
-        foreach (var e in run.Edges)
-        {
-            moving.Add((e.Loop, e.Edge));
-            moving.Add((e.Loop, (e.Edge + 1) % rings[e.Loop].Count));
-        }
+        var slides = Slides(rings, run, by, tol, out why);
+        if (slides == null) return false;
 
         var next = new List<List<Pt>>();
         for (var k = 0; k < rings.Count; k++)
         {
             var ring = new List<Pt>(rings[k]);
             for (var i = 0; i < ring.Count; i++)
-                if (moving.Contains((k, i))) ring[i] = new Pt(Round(ring[i].X + shift.X), Round(ring[i].Y + shift.Y));
+                if (slides.TryGetValue((k, i), out var to)) ring[i] = to;
             next.Add(ring);
         }
 
-        // A wall that meets the run: one end moves, and it must keep its direction.
+        // An edge with a moving end must keep its direction and some length.
         var closest = double.MaxValue;
         var changed = new List<(int Loop, int Edge)>();
         for (var k = 0; k < rings.Count; k++)
             for (var i = 0; i < rings[k].Count; i++)
             {
                 var j = (i + 1) % rings[k].Count;
-                var ends = (moving.Contains((k, i)) ? 1 : 0) + (moving.Contains((k, j)) ? 1 : 0);
+                var ends = (slides.ContainsKey((k, i)) ? 1 : 0) + (slides.ContainsKey((k, j)) ? 1 : 0);
                 if (ends == 0) continue;
                 changed.Add((k, i));
-                if (ends == 2) continue;
                 var before = Sub(rings[k][j], rings[k][i]);
                 var after = Sub(next[k][j], next[k][i]);
+                if (ends == 2 && Len(before) < tol) continue;
                 if (Dot(before, after) <= 0 || Len(after) < tol)
-                    closest = Math.Min(closest, Math.Abs(Dot(before, run.Normal)));
+                    closest = Math.Min(closest, ends == 1 ? Math.Abs(Dot(before, run.Normal)) : Len(before));
             }
         if (closest < double.MaxValue)
         {
@@ -236,6 +234,57 @@ public static class WallEdit
         moved = new List<List<Pt>>();
         foreach (var ring in next) moved.Add(RoomDetect.Simplify(ring, tol));
         return true;
+    }
+
+    /// <summary>
+    /// Where each vertex on one of the run's face lines, within its length,
+    /// goes. It slides along the one edge of its ring that leaves that line,
+    /// so a wall meeting the run at any angle keeps its direction and
+    /// thickness; at 90° that is a move along the normal. A vertex with no
+    /// such edge, or two, moves along the normal. Null, with why, when a wall
+    /// meets the run at under 15° and would slide too far along itself.
+    /// </summary>
+    internal static Dictionary<(int Loop, int Index), Pt> Slides(List<List<Pt>> rings, Run run, double by, double tol, out string why)
+    {
+        why = null;
+        var slides = new Dictionary<(int, int), Pt>();
+        for (var k = 0; k < rings.Count; k++)
+        {
+            var ring = rings[k];
+            for (var i = 0; i < ring.Count; i++)
+            {
+                var p = ring[i];
+                var s = Dot(p, run.Dir);
+                if (s < run.Lo - tol || s > run.Hi + tol) continue;
+                var c = Dot(p, run.Normal);
+                double line;
+                if (Math.Abs(c - run.Near) <= tol) line = run.Near;
+                else if (Math.Abs(c - run.Far) <= tol) line = run.Far;
+                else continue;
+
+                var leaving = 0;
+                var leave = default(Pt);
+                foreach (var q in new[] { ring[(i - 1 + ring.Count) % ring.Count], ring[(i + 1) % ring.Count] })
+                {
+                    if (Math.Abs(Dot(q, run.Normal) - line) <= tol) continue;
+                    leaving++;
+                    leave = Unit(p, q);
+                }
+                var to = Along(p, run.Normal, by);
+                if (leaving == 1)
+                {
+                    var dn = Dot(leave, run.Normal);
+                    if (Math.Abs(dn) < MinMeetSin)
+                    {
+                        why = "Not moved: a wall meets it at under 15° near " + At(p) + ".";
+                        return null;
+                    }
+                    to = Along(p, leave, by / dn);
+                }
+                slides[(k, i)] = new Pt(Round(to.X), Round(to.Y));
+            }
+        }
+        return slides;
     }
 
     /// <summary>

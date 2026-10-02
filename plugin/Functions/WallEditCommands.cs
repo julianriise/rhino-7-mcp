@@ -23,10 +23,17 @@ public partial class RhinoMCPFunctions
     private sealed class WallPick
     {
         public WallSolid Host;
+        /// <summary>The host record's own rings.</summary>
         public List<List<RoomDetect.Pt>> Rings;
+        /// <summary>The run, picked on the cluster's shape.</summary>
         public WallEdit.Run Run;
         /// <summary>The run as the receipt names it: the north wall, or the wall at (x, y).</summary>
         public string Label;
+        /// <summary>Every wall record whose path reads, and its rings, by the same index.</summary>
+        public List<RhinoObject> Walls;
+        public List<List<List<RoomDetect.Pt>>> Records;
+        /// <summary>The host's cluster: the records that touch it, read as one shape (WallJoins).</summary>
+        public WallJoins.Graph Graph;
     }
 
     [McpCommand("move_wall", ModelView = true, Map = MapEdit.Wall)]
@@ -39,54 +46,76 @@ public partial class RhinoMCPFunctions
             throw new ArgumentException("distance_mm must be positive.");
         var pick = PickWallRun(doc, parameters, tol);
         if (!WallEdit.TryToward(pick.Run, parameters?["toward"]?.ToString(), distance.Value, out var by, out var why)
-            || !WallEdit.TryMove(pick.Rings, pick.Run, by, tol, out var moved, out why))
+            || !WallJoins.TryMove(pick.Records, pick.Graph, pick.Run, by, tol, out var moved, out why))
             throw new InvalidOperationException(why);
 
-        var host = pick.Host;
-        var forskId = host.Attributes?.GetUserString("forsk:id");
-        // The openings on the run go with it. One on a wall that meets the run stays,
-        // and the run must not land on it or leave it past the end of its wall.
-        var onRun = new List<RhinoObject>();
-        foreach (var marker in MarkersOnHost(doc, host.Id, forskId))
+        // The openings on the run go with it, from every record in the cluster. One on
+        // a wall that meets the run stays, and the run must not land on it or leave it
+        // past the end of its wall.
+        var onRun = new List<(int Wall, RhinoObject Marker)>();
+        foreach (var i in pick.Graph.Records)
         {
-            var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
-            if (!box.IsValid) continue;
-            if (WallEdit.InBand(pick.Run, new RoomDetect.Pt(box.Center.X, box.Center.Y), tol))
-                onRun.Add(marker);
-            else if (!WallEdit.Clear(moved, pick.Run, by, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), tol))
-                throw new InvalidOperationException("Not moved: " + (string.IsNullOrEmpty(marker.Name) ? "an opening" : marker.Name)
-                    + " would sit in the moved wall or past the end of its own.");
+            var wall = pick.Walls[i];
+            foreach (var marker in MarkersOnHost(doc, wall.Id, wall.Attributes?.GetUserString("forsk:id")))
+            {
+                var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+                if (!box.IsValid) continue;
+                if (WallEdit.InBand(pick.Run, new RoomDetect.Pt(box.Center.X, box.Center.Y), tol))
+                    onRun.Add((i, marker));
+                else if (!WallEdit.Clear(moved.Shape, pick.Run, by, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), tol))
+                    throw new InvalidOperationException("Not moved: " + MarkerLabel(marker)
+                        + " would sit in the moved wall or past the end of its own.");
+            }
         }
 
+        // The record the run stands in names it; else the wall picked.
+        var owner = pick.Graph.Records.FindIndex(i => WallEdit.InRegion(pick.Records[i], WallJoins.Middle(pick.Run)));
+        var named = owner >= 0 ? pick.Walls[pick.Graph.Records[owner]].Id : pick.Host.Id;
+        var forskId = doc.Objects.FindId(named)?.Attributes?.GetUserString("forsk:id");
+        var touched = new List<int>(moved.Records.Keys);
+        foreach (var item in onRun)
+            if (!touched.Contains(item.Wall)) touched.Add(item.Wall);
+
         var shift = new Vector3d(pick.Run.Normal.X * by, pick.Run.Normal.Y * by, 0);
-        var undo = SnapshotWholeHost(doc, host.Id);
-        var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
+        var sourceLayer = pick.Host.Attributes?.GetUserString("forsk:source_layer");
+        var undos = new List<HostUndo>();
         var carried = new JArray();
-        JObject rebuilt;
+        var rebuiltIds = new Dictionary<Guid, Guid>();
+        JObject rebuilt = null;
         string followed;
         try
         {
-            WriteWallPath(doc, host.Id, WallEdit.Path(moved));
-            foreach (var marker in onRun)
+            foreach (var i in touched) undos.Add(SnapshotWholeHost(doc, pick.Walls[i].Id));
+            foreach (var record in moved.Records)
+                WriteWallPath(doc, pick.Walls[record.Key].Id, WallEdit.Path(record.Value));
+            foreach (var item in onRun)
             {
-                var brep = GetBrepFromObject(marker)?.DuplicateBrep();
-                if (brep == null || !brep.Translate(shift) || !doc.Objects.Replace(marker.Id, brep))
+                var brep = GetBrepFromObject(item.Marker)?.DuplicateBrep();
+                if (brep == null || !brep.Translate(shift) || !doc.Objects.Replace(item.Marker.Id, brep))
                     throw new InvalidOperationException("Opening marker not found.");
-                carried.Add(marker.Id.ToString());
+                carried.Add(item.Marker.Id.ToString());
             }
-            rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
-            followed = FollowNeighbours(doc, sourceLayer, pick.Rings, moved);
+            foreach (var undo in undos)
+            {
+                var result = RebuildHostWall(new JObject { ["id"] = undo.HostBefore.ToString() });
+                undo.Committed = true;
+                undo.HostAfter = Guid.TryParse(result?["host_id"]?.ToString(), out var after) ? after : undo.HostBefore;
+                undo.NewBlocks = GuidList(result?["block_ids"] as JArray);
+                rebuiltIds[undo.HostBefore] = undo.HostAfter;
+                if (undo.HostBefore == named) rebuilt = result;
+            }
+            followed = FollowNeighbours(doc, sourceLayer, pick.Graph.Shape, moved.Shape);
         }
         catch (Exception ex)
         {
-            RollbackCommittedHost(doc, undo);
+            for (var i = undos.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, undos[i]);
             throw new InvalidOperationException("Wall not moved. " + ex.Message, ex);
         }
 
-        var hostId = Guid.TryParse(rebuilt?["host_id"]?.ToString(), out var parsed) ? parsed : host.Id;
+        var hostId = rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
         var heading = WallEdit.Heading(pick.Run, by);
         var with = carried.Count == 0 ? "" : carried.Count == 1 ? ", 1 opening with it" : ", " + carried.Count + " openings with it";
-        var result = new JObject
+        var moveResult = new JObject
         {
             ["host_id"] = hostId.ToString(),
             ["forsk_id"] = forskId ?? "",
@@ -107,9 +136,9 @@ public partial class RhinoMCPFunctions
                 + ". " + followed
         };
         var report = HostOpeningReport(doc, hostId, Guid.Empty, Point3d.Unset);
-        if (report != null) result.Merge(report);
+        if (report != null) moveResult.Merge(report);
         doc.Views.Redraw();
-        return result;
+        return moveResult;
     }
 
     [McpCommand("delete_wall", ModelView = true, Map = MapEdit.Wall)]
@@ -421,16 +450,35 @@ public partial class RhinoMCPFunctions
         var rings = WallEdit.Rings(host.Attributes?.GetUserString("forsk:path"));
         if (rings == null)
             throw new InvalidOperationException(MissingWallPathMessage);
+        var walls = new List<RhinoObject>();
+        var records = new List<List<List<RoomDetect.Pt>>>();
+        var index = -1;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase) || IsExistingUnderlay(doc, obj))
+                continue;
+            var path = obj.Id == host.Id ? rings : WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            if (path == null) continue;
+            if (obj.Id == host.Id) index = walls.Count;
+            walls.Add(obj);
+            records.Add(path);
+        }
+        if (index < 0)
+            throw new InvalidOperationException("Not a Forsk wall.");
+        // The records that touch the host are read as one shape; a lone record is its own rings.
+        var graph = WallJoins.Build(records, WallJoins.ClusterOf(records, index, tol), tol)
+            ?? WallJoins.Build(records, new List<int> { index }, tol);
+
         WallEdit.Run run;
         string why;
         var ok = hasAt
-            ? WallEdit.TryPick(rings, at, tol, out run, out why)
-            : WallEdit.TryPickSide(rings, side, tol, out run, out why);
+            ? WallEdit.TryPick(graph.Shape, at, tol, out run, out why)
+            : WallEdit.TryPickSide(graph.Shape, side, tol, out run, out why);
         if (!ok) throw new InvalidOperationException(why);
         var label = hasSide
             ? "the " + side.Trim().ToLowerInvariant() + " wall"
             : "the wall at (" + FormatMm(Math.Round(at.X)) + ", " + FormatMm(Math.Round(at.Y)) + ")";
-        return new WallPick { Host = host, Rings = rings, Run = run, Label = label };
+        return new WallPick { Host = host, Rings = rings, Run = run, Label = label, Walls = walls, Records = records, Graph = graph };
     }
 
     private WallSolid ResolveWallRecord(RhinoDoc doc, JObject parameters, RoomDetect.Pt? at, double tol)

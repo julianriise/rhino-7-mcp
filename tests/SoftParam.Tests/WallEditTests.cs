@@ -153,9 +153,10 @@ public class WallEditTests
     }
 
     [Fact]
-    public void DiagonalNeighbour_Turns_AndACrossingIsRefused()
+    public void DiagonalNeighbour_SlidesAlongItsOwnLine()
     {
-        // A ring whose east wall leans: the north wall's east end follows it naively.
+        // A ring whose east wall leans. F2: the north wall's east end slides down
+        // the leaning wall's faces, so that wall keeps its line and its thickness.
         var rings = new List<List<Pt>>
         {
             new List<Pt> { new(0, 0), new(8000, 0), new(9000, 4000), new(0, 4000) },
@@ -163,8 +164,8 @@ public class WallEditTests
         };
         Assert.True(WallEdit.TryPickSide(rings, "north", Tol, out var run, out var why), why);
         Assert.True(WallEdit.TryMove(rings, run, -1000, Tol, out var moved, out why), why);
-        Assert.Contains(new Pt(9000, 3000), moved[0]);
-        Assert.Contains(new Pt(8745, 2800), moved[1]);
+        Assert.Contains(new Pt(8750, 3000), moved[0]);
+        Assert.Contains(new Pt(8495, 2800), moved[1]);
     }
 
     [Fact]

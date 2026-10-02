@@ -69,25 +69,143 @@ public static class WallJoins
             return list;
         }
 
-        /// <summary>The run on the same two faces that shares most of this one's length, or -1. Runs face east or north, so faces compare directly.</summary>
-        public int Find(WallEdit.Run run, double tol)
+        public int Find(WallEdit.Run run, double tol) => WallJoins.Find(Runs, run, tol);
+    }
+
+    /// <summary>The run on the same two faces that shares most of this one's length, or -1. Runs face east or north, so faces compare directly.</summary>
+    public static int Find(IList<WallEdit.Run> runs, WallEdit.Run run, double tol)
+    {
+        var best = -1;
+        var overlap = tol;
+        for (var i = 0; i < runs.Count; i++)
         {
-            var best = -1;
-            var overlap = tol;
-            for (var i = 0; i < Runs.Count; i++)
+            var r = runs[i];
+            if (Dot(r.Normal, run.Normal) < 0.99) continue;
+            if (Math.Abs(r.Near - run.Near) > tol || Math.Abs(r.Far - run.Far) > tol) continue;
+            var shared = Math.Min(run.Hi, r.Hi) - Math.Max(run.Lo, r.Lo);
+            if (shared > overlap)
             {
-                var r = Runs[i];
-                if (Dot(r.Normal, run.Normal) < 0.99) continue;
-                if (Math.Abs(r.Near - run.Near) > tol || Math.Abs(r.Far - run.Far) > tol) continue;
-                var shared = Math.Min(run.Hi, r.Hi) - Math.Max(run.Lo, r.Lo);
-                if (shared > overlap)
-                {
-                    overlap = shared;
-                    best = i;
-                }
+                overlap = shared;
+                best = i;
             }
-            return best;
         }
+        return best;
+    }
+
+    /// <summary>A wall joined to the edited run, as it followed.</summary>
+    public sealed class Followed
+    {
+        /// <summary>Its name before the edit: the east wall, or the wall at (x, y).</summary>
+        public string Wall;
+        /// <summary>How much longer it got, mm. Shorter is below 0.</summary>
+        public double ChangeMm;
+        /// <summary>The records it stands in.</summary>
+        public List<int> Records = new List<int>();
+    }
+
+    public sealed class Moved
+    {
+        /// <summary>The cluster's shape after the move.</summary>
+        public List<List<Pt>> Shape;
+        /// <summary>Each record that changed, by its index in the records given, and its rings after.</summary>
+        public Dictionary<int, List<List<Pt>>> Records = new Dictionary<int, List<List<Pt>>>();
+        public List<Followed> Followed = new List<Followed>();
+    }
+
+    /// <summary>
+    /// The run moved by along its normal across the whole cluster. The shape
+    /// moves as WallEdit moves it, with its refusals, and must keep every room
+    /// closed. Each record in a cluster of more than one moves by the same
+    /// rule, and together they must make the moved shape again. A cluster of
+    /// one is its record, so a lone record moves exactly as WallEdit moves it.
+    /// </summary>
+    public static bool TryMove(IList<List<List<Pt>>> records, Graph graph, WallEdit.Run run, double by, double tol, out Moved moved, out string why)
+    {
+        moved = null;
+        if (!WallEdit.TryMove(graph.Shape, run, by, tol, out var shape, out why)) return false;
+        if (!SameRooms(graph.Shape, shape, tol))
+        {
+            why = "Not moved: a room would not stay closed.";
+            return false;
+        }
+        var result = new Moved { Shape = shape };
+        if (graph.Records.Count == 1)
+            result.Records[graph.Records[0]] = shape;
+        else
+        {
+            var after = new List<List<List<Pt>>>(records);
+            foreach (var i in graph.Records)
+            {
+                var slides = WallEdit.Slides(records[i], run, by, tol, out why);
+                if (slides == null) return false;
+                if (slides.Count == 0) continue;
+                if (!WallEdit.TryMove(records[i], run, by, tol, out var rings, out why))
+                {
+                    why = NotCleanly;
+                    return false;
+                }
+                result.Records[i] = rings;
+                after[i] = rings;
+            }
+            var union = Shape(after, graph.Records, tol);
+            if (union == null || union.Count != shape.Count || Math.Abs(Area(union) - Area(shape)) > tol * Perimeter(shape))
+            {
+                why = NotCleanly;
+                return false;
+            }
+        }
+
+        var self = graph.Find(run, tol);
+        if (self >= 0)
+        {
+            var later = Runs(shape, tol);
+            foreach (var n in graph.Neighbours(self))
+            {
+                var before = graph.Runs[n];
+                var j = Find(later, before, tol);
+                if (j < 0) continue;
+                var change = Math.Round(later[j].Length - before.Length);
+                if (Math.Abs(change) < 1) continue;
+                var followed = new Followed { Wall = graph.Names[n], ChangeMm = change };
+                foreach (var i in graph.Records)
+                    if (WallEdit.InRegion(records[i], Middle(before))) followed.Records.Add(i);
+                result.Followed.Add(followed);
+            }
+        }
+        moved = result;
+        return true;
+    }
+
+    const string NotCleanly = "Not moved: the walls joined to it would not follow cleanly.";
+
+    /// <summary>As many rooms as before, and none closed up.</summary>
+    static bool SameRooms(List<List<Pt>> before, List<List<Pt>> after, double tol)
+    {
+        if (after == null || after.Count != before.Count) return false;
+        for (var k = 1; k < after.Count; k++)
+            if (Math.Abs(RoomDetect.Area(after[k])) <= tol * tol) return false;
+        return true;
+    }
+
+    /// <summary>The area the walls cover: the outer loop less the holes.</summary>
+    static double Area(List<List<Pt>> rings)
+    {
+        var area = Math.Abs(RoomDetect.Area(rings[0]));
+        for (var k = 1; k < rings.Count; k++) area -= Math.Abs(RoomDetect.Area(rings[k]));
+        return area;
+    }
+
+    static double Perimeter(List<List<Pt>> rings)
+    {
+        var length = 0.0;
+        foreach (var ring in rings)
+            for (var i = 0; i < ring.Count; i++)
+            {
+                var a = ring[i];
+                var b = ring[(i + 1) % ring.Count];
+                length += Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+            }
+        return length;
     }
 
     /// <summary>The records that touch, grouped. Every record is in exactly one cluster.</summary>
