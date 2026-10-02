@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using Rhino;
 using Rhino.Display;
@@ -171,9 +172,19 @@ public partial class RhinoMCPFunctions
             : "door";
         var style = ResolvedOpeningStyle(doc, markerId, kindTag);
         WriteOpeningStyle(doc, markerId, style);
+        if (!TryOpeningPlane(center, widthDir, thickDir, out var wall))
+            return Guid.Empty;
         var inward = segment != null ? segment.Inward : thickDir;
+        OpeningFacing(wall, inward, out var yInward, out var xLeft);
+        // The definition is the left-hand, plane-relative swing. Hand and the
+        // wall's X mirror live on the instance transform.
+        var built = DefinitionStyle(style, yInward);
+        var key = OpeningBlockShare.Key.From(
+            kindTag, width, sill, head, thickness, pad, built.TypeId, built.Swing);
+        if (key.HeightMm <= 0 || key.WidthMm <= 0 || key.FrameMm <= 0) return Guid.Empty;
+        var canonical = new Plane(Point3d.Origin, Vector3d.XAxis, Vector3d.YAxis);
         var parts = BuildOpeningBlockParts(
-            center, widthDir, thickDir, inward, width, thickness, sill, head, pad, style, tol);
+            canonical, 1, 1, key.WidthMm, key.FrameMm, key.SillMm, key.SillMm + key.HeightMm, key.PadMm, built, tol);
         if (parts.Count == 0) return Guid.Empty;
 
         var layer = EnsureOpeningBlockLayer(doc);
@@ -201,8 +212,28 @@ public partial class RhinoMCPFunctions
         StampOpeningStyle(attr, style);
         attr.SetUserString("forsk:parts", FormatOpeningParts(parts));
 
-        var id = CommitOpeningBlock(doc, name, attr, parts);
+        var mirror = OpeningTypes.HandSign(style.Hand, xLeft) < 0;
+        var placed = OpeningBlockShare.Placement.On(
+            wall.OriginX, wall.OriginY, wall.XAxis.X, wall.XAxis.Y, wall.YAxis.X, wall.YAxis.Y, mirror);
+        var id = CommitOpeningBlock(doc, key, placed, attr, parts);
         return id;
+    }
+
+    /// <summary>
+    /// Left hand, and the swing relative to the wall plane's +Y, so one
+    /// definition serves every wall. The stored style on the marker is unchanged.
+    /// </summary>
+    private static OpeningTypes.Record DefinitionStyle(OpeningTypes.Record style, int yInward)
+    {
+        if (style == null) return null;
+        var swing = style.Swing;
+        if (!string.IsNullOrEmpty(swing))
+            swing = OpeningTypes.SwingSign(style, yInward) < 0 ? "out" : "in";
+        var hand = string.IsNullOrEmpty(style.Hand) ? null : "L";
+        OpeningTypes.Record built;
+        if (OpeningTypes.TryRead(style.Kind, style.TypeId, hand, swing, out built, out _))
+            return built;
+        return style;
     }
 
     private void DeleteOpeningBlocks(RhinoDoc doc, Guid markerId)
@@ -224,11 +255,90 @@ public partial class RhinoMCPFunctions
 
         foreach (var obj in doomed)
         {
+            // The definition stays while another opening still instances it.
             var defIndex = OpeningBlockDefIndex(obj);
             doc.Objects.Delete(obj.Id, true);
-            if (defIndex >= 0)
-                doc.InstanceDefinitions.Delete(defIndex, true, true);
+            DeleteOpeningDefinitionIfUnused(doc, defIndex);
         }
+    }
+
+    /// <summary>
+    /// Point every opening that still has its own block at the shared definition
+    /// for its size, and delete the private definitions afterwards. An opening
+    /// that already instances a shared definition is left as it is.
+    /// </summary>
+    public int CollapseOpeningBlocks(RhinoDoc doc)
+    {
+        if (doc == null) return 0;
+        var markers = new List<RhinoObject>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
+                markers.Add(obj);
+        }
+        var rebuilt = 0;
+        foreach (var marker in markers)
+        {
+            var blockId = FindOpeningBlock(doc, marker.Id);
+            var block = blockId == Guid.Empty ? null : doc.Objects.FindId(blockId);
+            var desc = (block as InstanceObject)?.InstanceDefinition?.Description ?? "";
+            if (desc.StartsWith(OpeningBlockShare.TokenPrefix, StringComparison.Ordinal))
+                continue;
+            if (block == null) continue;
+            try
+            {
+                var rec = ReadOpeningRecord(marker);
+                var host = ReadHostWall(doc, rec.HostId, false);
+                var kept = block.Attributes?.GetUserString("forsk:id");
+                var along = block.Attributes?.GetUserString("forsk:t");
+                var offset = block.Attributes?.GetUserString("forsk:offset");
+                var oldId = block.Id;
+                var oldDef = OpeningBlockDefIndex(block);
+                // The new instance is added first. A miss leaves the private block in place.
+                var id = AddOpeningBlock(
+                    doc,
+                    marker.Id,
+                    marker.Name,
+                    host.Id,
+                    KindToTag(rec.Kind),
+                    new OpeningFootprint { Bbox = rec.MarkerBbox },
+                    rec.Sill,
+                    rec.Head,
+                    rec.Width,
+                    FacadeConst.Pad,
+                    marker.Attributes?.GetUserString("forsk:source_layer"),
+                    host.Brep,
+                    null);
+                if (id == Guid.Empty) continue;
+                var freshDef = OpeningBlockDefIndex(doc.Objects.FindId(id));
+                if (!doc.Objects.Delete(oldId, true))
+                {
+                    doc.Objects.Delete(id, true);
+                    DeleteOpeningDefinitionIfUnused(doc, freshDef);
+                    continue;
+                }
+                DeleteOpeningDefinitionIfUnused(doc, oldDef);
+                WriteOpeningBlockId(doc, id, kept);
+                CopyOpeningString(doc, id, "forsk:t", along);
+                CopyOpeningString(doc, id, "forsk:offset", offset);
+                rebuilt++;
+            }
+            catch (Exception)
+            {
+                // A miss before the old instance is deleted leaves that opening as it was.
+            }
+        }
+        PurgeOpeningBlockDefinitions(doc);
+        return rebuilt;
+    }
+
+    static void CopyOpeningString(RhinoDoc doc, Guid id, string key, string value)
+    {
+        if (doc == null || id == Guid.Empty || string.IsNullOrEmpty(key) || string.IsNullOrEmpty(value)) return;
+        var obj = doc.Objects.FindId(id);
+        if (obj?.Attributes == null) return;
+        obj.Attributes.SetUserString(key, value);
+        obj.CommitChanges();
     }
 
     /// <summary>
@@ -303,12 +413,9 @@ public partial class RhinoMCPFunctions
         {
             var idef = doc.InstanceDefinitions[i];
             if (idef == null || idef.IsDeleted) continue;
-            if (!string.Equals(idef.Description, OpeningBlockDefDescription, StringComparison.Ordinal))
+            if (!IsOpeningBlockDefinition(idef))
                 continue;
-            InstanceObject[] refs = null;
-            try { refs = idef.GetReferences(-1); }
-            catch (Exception) { refs = null; }
-            if (refs != null && refs.Length > 0) continue;
+            if (OpeningDefinitionInUse(doc, i)) continue;
             doc.InstanceDefinitions.Delete(i, true, true);
         }
     }
@@ -379,8 +486,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// A block instance can carry no user strings of its own. The definition
-    /// members still have forsk:marker_id.
+    /// A legacy block can carry no user strings of its own, so the marker is
+    /// read off its private definition. A shared definition has no marker.
     /// </summary>
     private static void FillMarkerFromDefinition(RhinoObject obj, OpeningResolve.Part part)
     {
@@ -405,30 +512,136 @@ public partial class RhinoMCPFunctions
 
     private static int OpeningBlockDefIndex(RhinoObject obj)
     {
-        if (!(obj is InstanceObject inst) || inst.InstanceDefinition == null)
+        var idef = (obj as InstanceObject)?.InstanceDefinition;
+        if (idef == null || !IsOpeningBlockDefinition(idef))
             return -1;
-        if (!string.Equals(inst.InstanceDefinition.Description, OpeningBlockDefDescription, StringComparison.Ordinal))
-            return -1;
-        return inst.InstanceDefinition.Index;
+        return idef.Index;
+    }
+
+    static bool IsOpeningBlockDefinition(InstanceDefinition idef)
+    {
+        var desc = idef?.Description ?? "";
+        return desc.Equals(OpeningBlockDefDescription, StringComparison.Ordinal)
+            || desc.StartsWith(OpeningBlockShare.TokenPrefix, StringComparison.Ordinal);
+    }
+
+    /// <summary>True when a live instance still points at this definition.</summary>
+    static bool OpeningDefinitionInUse(RhinoDoc doc, int index)
+    {
+        if (doc == null || index < 0 || index >= doc.InstanceDefinitions.Count) return false;
+        var idef = doc.InstanceDefinitions[index];
+        if (idef == null || idef.IsDeleted) return false;
+        InstanceObject[] refs = null;
+        try { refs = idef.GetReferences(-1); }
+        catch (Exception) { return true; }
+        if (refs == null) return false;
+        foreach (var refer in refs)
+            if (refer != null && !refer.IsDeleted) return true;
+        return false;
+    }
+
+    /// <summary>Drop a definition only after its last instance is gone. A shared one stays.</summary>
+    static bool DeleteOpeningDefinitionIfUnused(RhinoDoc doc, int index)
+    {
+        if (OpeningDefinitionInUse(doc, index)) return false;
+        try { return doc.InstanceDefinitions.Delete(index, true, true); }
+        catch (Exception) { return false; }
+    }
+
+    int FindOpeningDefinition(RhinoDoc doc, OpeningBlockShare.Key key)
+    {
+        if (doc == null || key == null) return -1;
+        var token = key.Token;
+        for (var i = 0; i < doc.InstanceDefinitions.Count; i++)
+        {
+            var idef = doc.InstanceDefinitions[i];
+            if (idef == null || idef.IsDeleted) continue;
+            if (string.Equals(idef.Description, token, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
+    }
+
+    static string PickDefinitionName(RhinoDoc doc, OpeningBlockShare.Key key)
+    {
+        var readable = OpeningBlockShare.Readable(key);
+        if (!DefinitionNameTaken(doc, readable)) return readable;
+        var suffixed = readable + " · " + OpeningBlockShare.Suffix(key);
+        if (!DefinitionNameTaken(doc, suffixed)) return suffixed;
+        for (var n = 2; ; n++)
+        {
+            var candidate = suffixed + " " + n.ToString(CultureInfo.InvariantCulture);
+            if (!DefinitionNameTaken(doc, candidate)) return candidate;
+        }
+    }
+
+    static bool DefinitionNameTaken(RhinoDoc doc, string name)
+    {
+        if (doc == null || string.IsNullOrEmpty(name)) return false;
+        for (var i = 0; i < doc.InstanceDefinitions.Count; i++)
+        {
+            var idef = doc.InstanceDefinitions[i];
+            if (idef == null || idef.IsDeleted) continue;
+            if (string.Equals(idef.Name, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    static Transform OpeningInstanceTransform(OpeningBlockShare.Placement placed)
+    {
+        var transform = Transform.Identity;
+        transform.M00 = placed.Xx;
+        transform.M10 = placed.Xy;
+        transform.M01 = placed.Yx;
+        transform.M11 = placed.Yy;
+        transform.M22 = 1;
+        transform.M03 = placed.Ox;
+        transform.M13 = placed.Oy;
+        return transform;
     }
 
     private Guid CommitOpeningBlock(
-        RhinoDoc doc, string name, ObjectAttributes attr, List<OpeningPart> parts)
+        RhinoDoc doc, OpeningBlockShare.Key key, OpeningBlockShare.Placement placed, ObjectAttributes attr, List<OpeningPart> parts)
     {
-        var geom = new List<GeometryBase>();
-        var attrs = new List<ObjectAttributes>();
-        foreach (var part in parts)
+        var index = FindOpeningDefinition(doc, key);
+        var created = false;
+        if (index < 0)
         {
-            if (part?.Geometry == null || !part.Geometry.IsValid) continue;
-            if (string.IsNullOrEmpty(part.Part)) continue;
-            var partAttr = attr.Duplicate();
-            partAttr.Name = name;
-            partAttr.SetUserString("forsk:part", part.Part);
-            ApplyOpeningPartMaterial(doc, partAttr, part.Glass);
-            geom.Add(part.Geometry);
-            attrs.Add(partAttr);
+            var geom = new List<GeometryBase>();
+            var attrs = new List<ObjectAttributes>();
+            foreach (var part in parts)
+            {
+                if (part?.Geometry == null || !part.Geometry.IsValid) continue;
+                if (string.IsNullOrEmpty(part.Part)) continue;
+                // Part geometry only. The marker and forsk:id stay on the instance.
+                var partAttr = new ObjectAttributes
+                {
+                    Name = part.Part,
+                    LayerIndex = attr.LayerIndex,
+                    ColorSource = ObjectColorSource.ColorFromLayer
+                };
+                partAttr.SetUserString("forsk:part", part.Part);
+                ApplyOpeningPartMaterial(doc, partAttr, part.Glass);
+                geom.Add(part.Geometry);
+                attrs.Add(partAttr);
+            }
+            if (geom.Count == 0) return Guid.Empty;
+
+            var defName = PickDefinitionName(doc, key);
+            index = doc.InstanceDefinitions.Add(
+                defName, key.Token, Point3d.Origin, geom, attrs);
+            if (index < 0)
+            {
+                var suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
+                index = doc.InstanceDefinitions.Add(
+                    defName + " " + suffix, key.Token, Point3d.Origin, geom, attrs);
+            }
+            // No block, no parts: loose parts would pick one at a time (selection S2).
+            if (index < 0) return Guid.Empty;
+            created = true;
+            BindOpeningPartAttributes(doc, index, attrs);
         }
-        if (geom.Count == 0) return Guid.Empty;
 
         // The instance keeps the opening identity. It does not carry one
         // material, so definition objects keep wood and glass.
@@ -436,21 +649,9 @@ public partial class RhinoMCPFunctions
         attr.MaterialIndex = -1;
         attr.ColorSource = ObjectColorSource.ColorFromLayer;
 
-        var index = doc.InstanceDefinitions.Add(
-            name, OpeningBlockDefDescription, Point3d.Origin, geom, attrs);
-        if (index < 0)
-        {
-            var suffix = Guid.NewGuid().ToString("N").Substring(0, 6);
-            index = doc.InstanceDefinitions.Add(
-                name + "-" + suffix, OpeningBlockDefDescription, Point3d.Origin, geom, attrs);
-        }
-        // No block, no parts: loose parts would pick one at a time (selection S2).
-        if (index < 0) return Guid.Empty;
-
-        BindOpeningPartAttributes(doc, index, attrs);
-        var id = doc.Objects.AddInstanceObject(index, Transform.Identity, attr);
+        var id = doc.Objects.AddInstanceObject(index, OpeningInstanceTransform(placed), attr);
         if (id != Guid.Empty) return id;
-        doc.InstanceDefinitions.Delete(index, true, true);
+        if (created) DeleteOpeningDefinitionIfUnused(doc, index);
         return Guid.Empty;
     }
 
@@ -645,10 +846,9 @@ public partial class RhinoMCPFunctions
     }
 
     private static List<OpeningPart> BuildOpeningBlockParts(
-        Point3d center,
-        Vector3d widthDir,
-        Vector3d thickDir,
-        Vector3d inward,
+        Plane plane,
+        int yInward,
+        int xLeft,
         double width,
         double thickness,
         double sill,
@@ -658,9 +858,7 @@ public partial class RhinoMCPFunctions
         double tol)
     {
         var parts = new List<OpeningPart>();
-        if (style == null) return parts;
-        if (!TryOpeningPlane(center, widthDir, thickDir, out var plane))
-            return parts;
+        if (style == null || !plane.IsValid) return parts;
 
         var window = string.Equals(style.Kind, "window", StringComparison.OrdinalIgnoreCase);
         if (!OpeningElement.TryLayout(window, width, sill, head, thickness, pad, out var layout))
@@ -686,7 +884,6 @@ public partial class RhinoMCPFunctions
                 plane, outerHalf, innerHalf, halfThick, face, frameZ0, z1), "frame", boolTol);
         if (parts.Count == 0) return parts;
 
-        OpeningFacing(plane, inward, out var yInward, out var xLeft);
         if (window)
             AddWindowContents(
                 parts, plane, style, innerHalf, outerHalf, halfThick, face, z0, z1,

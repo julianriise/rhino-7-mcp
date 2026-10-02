@@ -283,6 +283,7 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        PurgeOpeningBlockDefinitions(doc);
         doc.Views.Redraw();
 
         var wallIds = new JArray(walls.Select(w => w.Id.ToString()));

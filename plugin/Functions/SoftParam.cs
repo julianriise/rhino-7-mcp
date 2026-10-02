@@ -194,6 +194,7 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        PurgeOpeningBlockDefinitions(doc);
         doc.Views.Redraw();
         var label = string.IsNullOrEmpty(forskId) ? host.Attributes?.Name : forskId;
         if (string.IsNullOrEmpty(label)) label = "host wall";

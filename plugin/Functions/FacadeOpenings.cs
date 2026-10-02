@@ -1604,10 +1604,12 @@ public partial class RhinoMCPFunctions
     {
         if (doc == null || obj == null) return false;
         var def = OpeningBlockDefIndex(obj);
-        bag.Add(new RemovedPiece { Object = obj, DefinitionIndex = def });
+        var piece = new RemovedPiece { Object = obj, DefinitionIndex = -1 };
+        bag.Add(piece);
         if (!doc.Objects.Delete(obj.Id, true)) return false;
-        if (def >= 0)
-            doc.InstanceDefinitions.Delete(def, true, true);
+        // A shared definition is still in use. Undo restores it only when this was the last instance.
+        if (DeleteOpeningDefinitionIfUnused(doc, def))
+            piece.DefinitionIndex = def;
         return true;
     }
 
@@ -1642,8 +1644,7 @@ public partial class RhinoMCPFunctions
                 if (obj == null) continue;
                 var def = OpeningBlockDefIndex(obj);
                 doc.Objects.Delete(obj.Id, true);
-                if (def >= 0)
-                    doc.InstanceDefinitions.Delete(def, true, true);
+                DeleteOpeningDefinitionIfUnused(doc, def);
             }
         }
 

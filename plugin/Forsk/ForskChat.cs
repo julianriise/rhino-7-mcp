@@ -1009,6 +1009,11 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             // Drawn outlines already became markers when the count is above zero.
             if (BakeChip.ShouldDetectRooms(ResultCount(rooms)))
                 Step("rooms_detect", new JObject(), lines, false);
+            // An existing file's private window-06-block definitions fold into the shared ones.
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                new RhinoMCPFunctions().CollapseOpeningBlocks(RhinoDoc.ActiveDoc);
+            }));
             return Finish(lines);
         }
 
