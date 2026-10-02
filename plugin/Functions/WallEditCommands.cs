@@ -393,6 +393,87 @@ public partial class RhinoMCPFunctions
         return result;
     }
 
+    /// <summary>
+    /// F2 push-pull: one side of a room moves out or in. The side is the wall
+    /// run whose face is that side of the room, and it moves as move_wall moves
+    /// it, joined walls and all. The room is the one given, else the one selected.
+    /// </summary>
+    [McpCommand("room_push_pull", ModelView = true, Map = MapEdit.Wall)]
+    public JObject RoomPushPull(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var side = (parameters?["side"]?.ToString() ?? "").Trim().ToLowerInvariant();
+        var way = (parameters?["way"]?.ToString() ?? "out").Trim().ToLowerInvariant();
+        if (way != "out" && way != "in")
+            throw new ArgumentException("way is out or in.");
+        var distance = ReadOptionalDouble(parameters, "distance_mm");
+        if (!distance.HasValue || distance.Value <= 0)
+            throw new ArgumentException("distance_mm must be positive.");
+
+        var room = ResolveRoom(doc, parameters);
+        var outline = RoomMarkerOutline(room);
+        var ring = outline == null ? null : PathPoints(outline);
+        if (!WallJoins.TryRoomSide(ring, side, tol, out var at, out var why))
+            throw new InvalidOperationException(why);
+        var name = room.Attributes?.GetUserString("forsk:room_name");
+        if (string.IsNullOrWhiteSpace(name)) name = string.IsNullOrWhiteSpace(room.Name) ? "the room" : room.Name;
+
+        var toward = way == "out" ? side : Opposite(side);
+        JObject moved;
+        try
+        {
+            moved = MoveWall(new JObject { ["at"] = new JArray(at.X, at.Y), ["toward"] = toward, ["distance_mm"] = distance.Value });
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(ex.Message.Replace("Not moved:", "Not " + (way == "out" ? "pushed" : "pulled") + ":"), ex);
+        }
+
+        var count = (moved["openings_moved"] as JArray)?.Count ?? 0;
+        var with = count == 0 ? "" : count == 1 ? ", 1 opening with it" : ", " + count + " openings with it";
+        var names = new List<string>();
+        foreach (var f in moved["followed"] as JArray ?? new JArray()) names.Add(f["wall"]?.ToString());
+        if (names.Count > 0) with += "; " + WallFollowPlan.Walls(names) + " followed";
+        moved["room"] = name;
+        moved["room_id"] = room.Id.ToString();
+        moved["side"] = side;
+        moved["way"] = way;
+        moved["message"] = (way == "out" ? "Pushed " : "Pulled ") + name + (name.EndsWith("s", StringComparison.Ordinal) ? "' " : "'s ")
+            + side + " side " + FormatMm(Math.Round(distance.Value)) + " mm " + way + with + ". " + moved["rebuilt"];
+        return moved;
+    }
+
+    private static string Opposite(string side)
+    {
+        switch (side)
+        {
+            case "north": return "south";
+            case "south": return "north";
+            case "east": return "west";
+            default: return "east";
+        }
+    }
+
+    /// <summary>The room given by id, else the one room selected.</summary>
+    private static RhinoObject ResolveRoom(RhinoDoc doc, JObject parameters)
+    {
+        var idToken = parameters?["id"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(idToken))
+        {
+            var obj = Guid.TryParse(idToken, out var guid) ? doc.Objects.FindId(guid) : null;
+            if (obj == null || !IsRoomMarker(obj))
+                throw new InvalidOperationException("Not a Forsk room.");
+            return obj;
+        }
+        var rooms = new List<RhinoObject>();
+        foreach (var obj in ListSelected(doc))
+            if (IsRoomMarker(obj)) rooms.Add(obj);
+        if (rooms.Count != 1)
+            throw new InvalidOperationException("Select one room, then say it again.");
+        return rooms[0];
+    }
+
     /// <summary>The walls that followed, for the result and the review card: the record, the name, the change in length.</summary>
     private static JArray FollowedJson(WallPick pick, IEnumerable<WallJoins.Followed> followed)
     {

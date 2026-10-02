@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "room_push_pull_result.json",
+  "title": "RoomPushPullResult",
+  "description": "One side of a room moved: move_wall's result for that run, with the room named.",
+  "type": "object",
+  "properties": {
+    "room": { "type": "string", "description": "The room's name, or the room." },
+    "room_id": { "type": "string" },
+    "side": { "type": "string", "enum": ["north", "south", "east", "west"] },
+    "way": { "type": "string", "enum": ["out", "in"] },
+    "host_id": { "type": "string" },
+    "forsk_id": { "type": "string" },
+    "wall": { "type": "string" },
+    "toward": { "type": "string", "enum": ["north", "south", "east", "west"] },
+    "distance_mm": { "type": "number" },
+    "openings_moved": { "type": "array", "items": { "type": "string" } },
+    "followed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": { "type": "string" },
+          "wall": { "type": "string" },
+          "change_mm": { "type": "number" }
+        },
+        "required": ["forsk_id", "wall", "change_mm"]
+      }
+    },
+    "records": { "type": "array", "items": { "type": "string" } },
+    "rebuilt": { "type": "string" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["room", "side", "way", "toward", "distance_mm", "ok", "message"]
+}

@@ -51,6 +51,8 @@ namespace RhinoMCPPlugin.Forsk
                     return Opening("opening.resize.prefill", f, nb, f?.PickedOpeningKind == "door" ? "900" : "1200");
                 case "wall.move":
                     return Fill(ForskText.Get(nb ? "wall.move.prefill.nb" : "wall.move.prefill"), "", "500");
+                case "room.push_pull":
+                    return Fill(ForskText.Get(nb ? "room.push_pull.prefill.nb" : "room.push_pull.prefill"), "", "500");
                 default:
                     return null;
             }

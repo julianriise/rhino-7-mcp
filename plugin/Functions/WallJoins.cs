@@ -430,6 +430,48 @@ public static class WallJoins
         return names;
     }
 
+    /// <summary>
+    /// A point just outside one side of a room, in the wall: the middle of the
+    /// room's edge that faces that compass side, furthest out, 1 mm out. A
+    /// pick there (WallEdit.TryPick) finds the run whose face is that side.
+    /// </summary>
+    public static bool TryRoomSide(List<Pt> room, string side, double tol, out Pt at, out string why)
+    {
+        at = default;
+        why = null;
+        if (room == null || room.Count < 3)
+        {
+            why = "The room has no outline.";
+            return false;
+        }
+        if (!Sections.TryCompass(side, out var w))
+        {
+            why = "side is north, south, east or west.";
+            return false;
+        }
+        var outward = RoomDetect.Area(room) > 0 ? 1.0 : -1.0;
+        var best = double.MinValue;
+        var found = false;
+        for (var i = 0; i < room.Count; i++)
+        {
+            var a = room[i];
+            var b = room[(i + 1) % room.Count];
+            var len = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+            if (len <= tol) continue;
+            // A counterclockwise room's outside is to the right of each edge.
+            var n = new Pt(outward * (b.Y - a.Y) / len, -outward * (b.X - a.X) / len);
+            if (Dot(n, w) < 0.7) continue;
+            var mid = new Pt((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
+            var reach = Dot(mid, w) + 1e-6 * len;
+            if (reach <= best) continue;
+            best = reach;
+            at = new Pt(mid.X + n.X * Math.Max(tol, 1.0), mid.Y + n.Y * Math.Max(tol, 1.0));
+            found = true;
+        }
+        if (!found) why = "The room has no side facing " + side.Trim().ToLowerInvariant() + ".";
+        return found;
+    }
+
     /// <summary>The middle of the run's band.</summary>
     public static Pt Middle(WallEdit.Run run)
     {

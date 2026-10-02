@@ -53,7 +53,9 @@ public partial class RhinoMCPFunctions
                 Review = obj.Attributes.GetUserString(ImportReviewRowsKey),
                 Stamp = generated ? EditStamp(obj) : null,
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,
-                Area = obj.Attributes.GetUserString("forsk:area")
+                Area = obj.Attributes.GetUserString("forsk:area"),
+                PathReads = generated && string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)
+                    && WallEdit.Rings(obj.Attributes.GetUserString("forsk:path")) != null
             });
         }
         return rows;

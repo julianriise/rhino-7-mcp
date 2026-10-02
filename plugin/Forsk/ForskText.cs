@@ -43,6 +43,9 @@ namespace RhinoMCPPlugin.Forsk
             ["daylight.room"] = "Daylight for this room",
             ["section.add"] = "Add a section",
             ["section.room"] = "Section through this room",
+            ["room.push_pull"] = "Push or pull a side",
+            ["room.push_pull.prefill"] = "Push the north side of this room {n} mm out",
+            ["room.push_pull.prefill.nb"] = "Skyv nordsiden av rommet {n} mm ut",
             ["section.remove"] = "Remove a section",
             ["opening.move"] = "Move",
             ["opening.move.prefill"] = "Move this {kind} {n} mm along the wall",
@@ -222,6 +225,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.move_wall"] = "Wall",
             ["tool.delete_wall"] = "Wall",
             ["tool.add_wall"] = "Wall",
+            ["tool.room_push_pull"] = "Room",
             ["receipt.ok"] = "done",
         };
 

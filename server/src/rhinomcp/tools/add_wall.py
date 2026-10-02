@@ -82,6 +82,7 @@ def add_wall(
             "host_id": result.get("host_id"),
             "forsk_id": result.get("forsk_id"),
             "joined": result.get("joined"),
+            "joins": result.get("joins", []),
             "from": result.get("from"),
             "to": result.get("to"),
             "thickness": result.get("thickness"),

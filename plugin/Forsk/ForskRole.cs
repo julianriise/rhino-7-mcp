@@ -72,6 +72,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.rebuild":
                 case "wall.move":
                 case "wall.delete":
+                case "room.push_pull":
                 case "exist.mark":
                 case "edit.undo":
                 case "opening.move":

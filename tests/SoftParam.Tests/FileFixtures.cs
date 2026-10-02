@@ -12,8 +12,9 @@ static class Row
         return "00000000-0000-0000-0000-" + (++_next).ToString("D12");
     }
 
-    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01") =>
-        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp };
+    /// <param name="path">The wall carries a forsk:path that reads, as every baked wall does. False: one that does not (F2's join graph cannot see it).</param>
+    public static ChipRow Wall(bool visible = true, bool selected = false, string stamp = "w01", bool path = true) =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "wall", Layer = "A-WALL", Visible = visible, Selected = selected, Solid = true, Closed = true, Stamp = stamp, PathReads = path };
 
     public static ChipRow Floor() =>
         new ChipRow { Id = Id(), Generated = true, Kind = "floor", Layer = "A-FLOR", Visible = true, Solid = true, Closed = true, Stamp = "floor" };
@@ -98,6 +99,7 @@ static class Docs
         ("house, wall selected", () => Of(House(wallSelected: true))),
         ("house, wall selected, no key", () => Of(House(wallSelected: true)).With(d => d.KeyPresent = false)),
         ("house, room selected", () => Of(House(roomSelected: true))),
+        ("house, room selected, a wall without a path", () => Of(House(roomSelected: true).Append(Row.Wall(stamp: "w02", path: false)).ToArray())),
         ("house, box selected", () => Of(House().Append(Row.Box(selected: true)).ToArray())),
         ("walls only", () => Of(Row.Wall(), Row.Floor())),
         ("rooms, no window", () => Of(Row.Wall(), Row.Floor(), Row.Room(), Row.Door())),

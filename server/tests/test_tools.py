@@ -2866,6 +2866,59 @@ class TestSetOpeningTypeTool:
         mock_get_conn.assert_not_called()
 
 
+class TestRoomPushPullTool:
+    """F2 J5: one side of a room moves; the wire carries side, distance, way and id."""
+
+    @patch("rhinomcp.tools.room_push_pull.get_rhino_connection")
+    def test_side_and_way_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.room_push_pull import room_push_pull
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "room": "Stue",
+            "side": "north",
+            "way": "out",
+            "toward": "north",
+            "distance_mm": 500,
+            "followed": [{"forsk_id": "w01", "wall": "the east wall", "change_mm": 500}],
+            "records": ["w01"],
+            "rebuilt": "Floor and 2 rooms updated.",
+            "ok": True,
+            "message": "Pushed Stue's north side 500 mm out; the east wall followed. Floor and 2 rooms updated.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = room_push_pull(ctx=None, side="north", distance_mm=500)
+        mock_conn.send_command.assert_called_once_with(
+            "room_push_pull", {"side": "north", "distance_mm": 500, "way": "out"}
+        )
+        assert result["success"] is True
+        assert result["room"] == "Stue"
+        assert result["followed"][0]["wall"] == "the east wall"
+
+    @patch("rhinomcp.tools.room_push_pull.get_rhino_connection")
+    def test_in_and_id_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.room_push_pull import room_push_pull
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"ok": True, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        room_push_pull(ctx=None, side="east", distance_mm=300, way="in", id="g1")
+        assert mock_conn.send_command.call_args[0] == (
+            "room_push_pull", {"side": "east", "distance_mm": 300, "way": "in", "id": "g1"}
+        )
+
+    @patch("rhinomcp.tools.room_push_pull.get_rhino_connection")
+    def test_rejects_bad_side_way_and_distance(self, mock_get_conn):
+        from rhinomcp.tools.room_push_pull import room_push_pull
+
+        assert room_push_pull(ctx=None, side="up", distance_mm=500)["success"] is False
+        assert room_push_pull(ctx=None, side="north", distance_mm=500, way="sideways")["success"] is False
+        assert room_push_pull(ctx=None, side="north", distance_mm=0)["success"] is False
+        mock_get_conn.assert_not_called()
+
+
 class TestMoveWallTool:
     """F3.1: one wall run moves across itself; the wire carries side or at."""
 

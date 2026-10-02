@@ -170,6 +170,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("daylight.window", Runs.Ask, "group.openings", f => f.HasWalls && f.HasRooms && !f.HasWindows && f.Map == MapState.None),
             new ForskAction("daylight.rooms", Runs.Run, "group.rooms", f => f.HasWalls && !f.HasRooms && f.Map == MapState.None),
             new ForskAction("rooms.list", Runs.Card, "group.rooms", f => f.HasRooms),
+            new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),
@@ -246,6 +247,7 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Opening) yield return Find("opening.resize");
             if (f.Picked == Picked.Room) yield return Find("daylight.room");
             if (f.Picked == Picked.Room) yield return Find("section.room");
+            if (f.Picked == Picked.Room) yield return Find("room.push_pull");
             if (f.HasWalls && f.Picked != Picked.Opening && f.Picked != Picked.Wall && f.Picked != Picked.Room)
                 yield return DaylightAction(f);
             if (f.HasWalls && f.Picked == Picked.None) yield return Find("section.add");

@@ -63,6 +63,7 @@
             "move_wall",
             "delete_wall",
             "add_wall",
+            "room_push_pull",
             "rebuild_host_wall",
             "clear_generated",
             "daylight_scene",

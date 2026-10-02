@@ -185,6 +185,7 @@ namespace RhinoMCPPlugin.Forsk
             var move = HasWord(t, "move") || HasWord(t, "shift") || HasWord(t, "nudge") || HasWord(t, "push")
                 || HasWord(t, "flytt");
             if (move && (one || HasWord(t, "walls") || HasWord(t, "veggene"))) return true;
+            if (IsRoomPushPull(t)) return true;
             if (!one) return false;
             if (HasWord(t, "delete") || HasWord(t, "remove") || HasWord(t, "fjern") || HasWord(t, "slett"))
                 return true;
@@ -192,6 +193,14 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "høy") || HasWord(t, "høyde");
             return !height && (HasWord(t, "add") || HasWord(t, "draw") || HasWord(t, "make")
                 || HasWord(t, "tegn") || HasWord(t, "lag") || HasWord(t, "legg"));
+        }
+
+        /// <summary>F2: push or pull one side of a room. "Push the north side of this room 500 mm out", "skyv nordsiden av rommet ut".</summary>
+        static bool IsRoomPushPull(string t)
+        {
+            var verb = HasWord(t, "push") || HasWord(t, "pull") || HasWord(t, "skyv") || HasWord(t, "dra");
+            var room = HasWord(t, "room") || HasWord(t, "rom") || HasWord(t, "rommet");
+            return verb && room;
         }
 
         static bool IsBuild(string t)
@@ -402,6 +411,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Name;
         /// <summary>A room's area, forsk:area, in mm².</summary>
         public string Area;
+        /// <summary>A generated wall whose forsk:path reads as wall loops: the join graph can see it.</summary>
+        public bool PathReads;
     }
 
     /// <summary>

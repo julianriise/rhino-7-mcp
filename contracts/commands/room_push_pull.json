@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "room_push_pull.json",
+  "title": "RoomPushPull Command",
+  "description": "Push or pull one side of a room (F2). The side is the wall run whose face is that side of the room; it moves out (the room grows) or in, as move_wall moves it: the walls joined to it stretch or shorten along their own lines, in every wall record that touches, and the openings on it move with it. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refused as move_wall refuses, with nothing changed. Id omitted uses the one selected room. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Room GUID (a forsk:kind room on A-ROOM). Omit to use the one selected room."
+    },
+    "side": {
+      "type": "string",
+      "enum": ["north", "south", "east", "west"],
+      "description": "The room's side that moves."
+    },
+    "distance_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "How far, in mm."
+    },
+    "way": {
+      "type": "string",
+      "enum": ["out", "in"],
+      "description": "out grows the room, in shrinks it. Default out."
+    }
+  },
+  "required": ["side", "distance_mm"],
+  "additionalProperties": false
+}

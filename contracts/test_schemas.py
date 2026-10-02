@@ -270,6 +270,8 @@ def test_new_commands():
         ("commands/delete_wall.json", {"side": "north"}),
         ("commands/delete_wall.json", {"id": GUID, "at": [5000, 2000]}),
         ("commands/add_wall.json", {"from": [5000, 200], "to": [5000, 3800]}),
+        ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500}),
+        ("commands/room_push_pull.json", {"id": GUID, "side": "east", "distance_mm": 300, "way": "in"}),
         ("commands/add_wall.json", {"from": [2000, 6000], "to": [6000, 6000], "thickness": 100, "height": 2400}),
         ("commands/add_wall.json", {"line_id": GUID}),
         ("commands/rebuild_host_wall.json", {}),
@@ -1086,6 +1088,26 @@ def test_responses():
     }
     if not validate("responses/add_wall_result.json", add_wall):
         all_passed = False
+    print("  room_push_pull_result:")
+    push = {
+        "room": "Stue",
+        "room_id": guid,
+        "side": "north",
+        "way": "out",
+        "host_id": guid,
+        "forsk_id": "w01",
+        "wall": "the wall at (2050, 3801)",
+        "toward": "north",
+        "distance_mm": 500,
+        "openings_moved": [],
+        "followed": [{"forsk_id": "w01", "wall": "the east wall", "change_mm": 500}],
+        "records": ["w01"],
+        "rebuilt": "Floor, roof and 2 rooms updated.",
+        "ok": True,
+        "message": "Pushed Stue's north side 500 mm out; the east and west walls followed. Floor, roof and 2 rooms updated.",
+    }
+    if not validate("responses/room_push_pull_result.json", push):
+        all_passed = False
     linking = {**add_wall, "forsk_id": "w03", "joined": False, "joins": ["w01", "w02"], "holes": 0,
                "message": "Added w03, a 200 mm wall joined to w01 and w02, 1900 mm long and 3000 mm high. 1 room updated."}
     if not validate("responses/add_wall_result.json", linking):
@@ -1233,6 +1255,10 @@ def test_invalid_examples():
         ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
         ("commands/move_wall.json", {"toward": "north", "distance_mm": 500}, "move_wall needs side or at"),
+        ("commands/room_push_pull.json", {"distance_mm": 500}, "room_push_pull needs a side"),
+        ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "way": "up"}, "room_push_pull way is out or in"),
+        ("commands/room_push_pull.json", {"side": "north", "distance_mm": 0}, "room_push_pull distance above 0"),
+        ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "at": [0, 0]}, "room_push_pull unknown field"),
         (
             "responses/move_wall_result.json",
             {"host_id": "x", "toward": "north", "distance_mm": 500, "faces_before": [0, 1], "faces_after": [0, 1],

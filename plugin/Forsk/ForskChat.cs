@@ -294,6 +294,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Move a wall is move_wall: side for an outer wall or at [x, y], toward, distance_mm. With neither, ask which wall. "
                     + "Delete a wall is delete_wall, named the same way; its openings go with it. "
                     + "Add a wall is add_wall: from and to [x, y], or line_id for a drawn line. "
+                    + "Push or pull a side of the selected room is room_push_pull: side, distance_mm, way out or in. "
                     + "A successful move, delete or add updates the floor, the flat roof and the rooms, and the status line is the tool message. "
                     + "A shown daylight map is hidden as out of date. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "

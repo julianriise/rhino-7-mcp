@@ -52,7 +52,8 @@ namespace RhinoMCPPlugin.Forsk
             "delete_opening",
             "move_wall",
             "delete_wall",
-            "add_wall"
+            "add_wall",
+            "room_push_pull"
         };
 
         static readonly string[] SheetsPack =
@@ -446,6 +447,16 @@ namespace RhinoMCPPlugin.Forsk
                         ["at"] = Pair("[x, y] in mm on or beside the wall, within 1000 mm. Exclusive with side."),
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
                     }),
+                Fn("room_push_pull",
+                    "Push or pull one side of a room: the wall run whose face is that side moves out (the room grows) or in, and the walls joined to it follow, as move_wall moves it. The room is id, else the one selected room. The receipt names the room and the walls that followed. Refused as move_wall refuses. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["side"] = Compass("The room's side that moves."),
+                        ["distance_mm"] = Num("How far in mm, above 0."),
+                        ["way"] = new JObject { ["type"] = "string", ["enum"] = new JArray("out", "in"), ["description"] = "out grows the room, in shrinks it." },
+                        ["id"] = Str("Room GUID. Omit to use the one selected room.")
+                    },
+                    "side", "distance_mm"),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
                     new JObject

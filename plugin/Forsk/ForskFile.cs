@@ -84,6 +84,8 @@ namespace RhinoMCPPlugin.Forsk
         public FileKind Kind;
         public bool HasGenerated;
         public bool HasWalls;
+        /// <summary>Every generated wall has a path that reads, so the join graph sees every wall (F2).</summary>
+        public bool JoinGraph;
         public bool HasPlanCurves;
         public bool HasUnderlay;
         public bool ScaleSet;
@@ -147,6 +149,7 @@ namespace RhinoMCPPlugin.Forsk
                 UndoNewest = input.UndoNewest,
                 Millimetres = input.Millimetres
             };
+            var wallsRead = true;
             var mapAny = false;
             var mapShown = false;
             var mapStale = false;
@@ -169,7 +172,11 @@ namespace RhinoMCPPlugin.Forsk
                 if (row.Generated)
                 {
                     facts.HasGenerated = true;
-                    if (Is(row.Kind, "wall")) facts.HasWalls = true;
+                    if (Is(row.Kind, "wall"))
+                    {
+                        facts.HasWalls = true;
+                        if (!row.PathReads) wallsRead = false;
+                    }
                     else if (Is(row.Kind, "room"))
                     {
                         facts.HasRooms = true;
@@ -193,6 +200,7 @@ namespace RhinoMCPPlugin.Forsk
                 }
                 facts.HasForeign = true;
             }
+            facts.JoinGraph = facts.HasWalls && wallsRead;
             facts.Map = !mapAny ? MapState.None : mapStale ? MapState.Stale : mapShown ? MapState.Shown : MapState.Hidden;
             facts.Kind = Kind(facts, rows.Count);
             facts.SheetsStale = facts.Layouts > 0
