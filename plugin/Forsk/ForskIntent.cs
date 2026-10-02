@@ -14,11 +14,14 @@ namespace RhinoMCPPlugin.Forsk
         Daylight,
         Dxf,
         Import,
+        Support,
         General
     }
 
     /// <summary>
-    /// One-turn tool bias from the message. Order is PDF or image import, print, daylight, sheets (sections too), DXF, import, edit, build.
+    /// One-turn tool bias from the message. A question, a bug report, or a feature
+    /// request is Support, ahead of the others, so "how do I print" is not Print.
+    /// Then PDF or image import, print, daylight, sheets (sections too), DXF, import, edit, build.
     /// An opening selection is edit when those words are absent.
     /// </summary>
     public static class ForskIntentRouter
@@ -27,6 +30,7 @@ namespace RhinoMCPPlugin.Forsk
         public static ForskIntent Classify(string text, Picked picked = Picked.None)
         {
             var t = Normalize(text);
+            if (Question(t) || Bug(t) || Feature(t)) return ForskIntent.Support;
             if (IsPlanFile(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
@@ -59,6 +63,32 @@ namespace RhinoMCPPlugin.Forsk
                 }
             }
             return sb.ToString().Trim();
+        }
+
+        /// <summary>A how-to: "how do I…", "what does … do", "hvordan…".</summary>
+        public static bool IsQuestion(string text) => Question(Normalize(text));
+
+        /// <summary>A bug report: "this is broken", "feil".</summary>
+        public static bool IsBug(string text) => Bug(Normalize(text));
+
+        /// <summary>A feature request: "it would be nice if…", "can you add…".</summary>
+        public static bool IsFeature(string text) => Feature(Normalize(text));
+
+        static bool Question(string t)
+        {
+            if (t.Contains("how do i")) return true;
+            if (HasWord(t, "hvordan")) return true;
+            return t.Contains("what does") && HasWord(t, "do");
+        }
+
+        static bool Bug(string t)
+        {
+            return t.Contains("this is broken") || HasWord(t, "broken") || HasWord(t, "feil");
+        }
+
+        static bool Feature(string t)
+        {
+            return t.Contains("would be nice") || t.Contains("can you add");
         }
 
         /// <summary>

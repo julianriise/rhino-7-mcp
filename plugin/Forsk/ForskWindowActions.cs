@@ -24,6 +24,7 @@ namespace RhinoMCPPlugin.Forsk
         bool _helpOpen;
         long _prefillCount;
         long _turn;
+        readonly IReportDelivery _reports = ForskReports.FileDelivery();
 
         static void Post(Action action)
         {
@@ -314,6 +315,9 @@ namespace RhinoMCPPlugin.Forsk
                     var page = int.Parse(pill.Id, CultureInfo.InvariantCulture);
                     ImportJob(thread, new JObject { ["pdf_path"] = card["data"]?["pdf_path"], ["page"] = page }, pill.Label);
                     break;
+                case "support.report":
+                    SaveReport(card, values, doc);
+                    break;
             }
             Models.Persist(thread);
             Render();
@@ -335,6 +339,23 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             if (Refuse(thread)) return;
+            // A question, a bug, or a feature request is Support, before print and the other shortcuts.
+            if (ForskIntentRouter.Classify(text) == ForskIntent.Support)
+            {
+                var report = ForskReports.Card(text, FileName(doc));
+                if (report != null)
+                {
+                    thread.Add("user", text);
+                    thread.BeginReply(TurnMark(thread, text));
+                    thread.AddCard(report, null);
+                    thread.EndReply();
+                    Models.Persist(thread);
+                    Render();
+                    return;
+                }
+                Chat(thread, text, "answer");
+                return;
+            }
             var toggle = BakeChip.MapToggle(text);
             if (toggle != DaylightAction.None)
             {
@@ -415,6 +436,33 @@ namespace RhinoMCPPlugin.Forsk
                     Finish(thread, kind, undo, serial, null, text);
                 });
             });
+        }
+
+        /// <summary>The report card, sent. The debug report rides along when the box is ticked.</summary>
+        void SaveReport(JObject card, JObject values, RhinoDoc doc)
+        {
+            var fields = new JObject();
+            foreach (var field in card["fields"] as JArray ?? new JArray())
+            {
+                var key = field["key"]?.ToString();
+                if (string.IsNullOrEmpty(key)) continue;
+                var typed = values != null && values[key] != null ? values[key].ToString() : field["value"]?.ToString() ?? "";
+                field["value"] = typed;
+                if (key == "attach") continue;
+                fields[key] = typed;
+            }
+            string debug = null;
+            var attach = values != null && values["attach"] != null ? values["attach"].ToString() : "1";
+            if (ForskReports.WantsDebug(attach))
+            {
+                try { debug = BuildDebugReport(doc); }
+                catch (Exception e)
+                {
+                    debug = ForskDebug.Redact("Debug report failed.\n" + e.GetType().Name + ": " + e.Message + "\n");
+                }
+            }
+            _reports.Deliver(ForskReports.Record(fields, debug, DateTimeOffset.UtcNow));
+            card["answer"] = ForskText.Get("support.saved");
         }
 
         /// <summary>A tool's receipt, and under it the wall review when more than the wall changed.</summary>

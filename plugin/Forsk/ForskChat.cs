@@ -41,10 +41,18 @@ namespace RhinoMCPPlugin.Forsk
             return ExecuteAllowed(name, parameters);
         }
 
+        static bool Allowed(string name)
+        {
+            return !string.IsNullOrEmpty(name)
+                && (ForskToolPacks.Union.Contains(name) || name == ForskToolPacks.DebugTool);
+        }
+
         public static JObject ExecuteAllowed(string name, JObject parameters)
         {
             if (!Catalog.ContainsKey(name))
                 return Fail("Tool " + name + " is not available in the Forsk panel.");
+            if (name == ForskToolPacks.DebugTool)
+                return ReadDebugReport();
             if (name == ForskDaylight.ToolName)
                 return ForskDaylight.Run(parameters?["target"]?.ToString(), Dispatch);
             return Dispatch(name, parameters);
@@ -130,9 +138,26 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
-        static bool Allowed(string name)
+        /// <summary>The debug report as a tool result. The receipt stays one line; the model gets the text.</summary>
+        static JObject ReadDebugReport()
         {
-            return !string.IsNullOrEmpty(name) && ForskToolPacks.Union.Contains(name);
+            try
+            {
+                var text = ForskWindow.DebugReportText(RhinoDoc.ActiveDoc);
+                return new JObject
+                {
+                    ["status"] = "success",
+                    ["result"] = new JObject
+                    {
+                        ["message"] = "Debug report.",
+                        ["report"] = text ?? ""
+                    }
+                };
+            }
+            catch (Exception e)
+            {
+                return Fail(e.Message);
+            }
         }
 
         static JObject Dispatch(string name, JObject parameters)
@@ -338,6 +363,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "When nothing was imported, give the reason and the next step from the message, such as the command that fetches the model weights. "
                     + "Set scale with no points given is plan_scale with no arguments: the user picks two points and types the length. "
                     + "Do not generate 3D here. The user reviews and traces missing walls on the wall layer first, then asks to generate.";
+            }
+            if (intent == ForskIntent.Support)
+            {
+                return "Turn bias: Support. Answer the question about Forsk or Rhino in at most two sentences. "
+                    + "The tools only read the document, the selection, and the debug report. "
+                    + "Do not edit the model. Do not select, capture, or call a tool that is not in the list. "
+                    + "Pass on what the tools say. Do not invent a count.";
             }
             if (intent == ForskIntent.Build)
             {
@@ -626,7 +658,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     var fn = call?["function"] as JObject;
                     var name = fn?["name"]?.ToString() ?? "";
                     var args = ParseArgs(fn?["arguments"]?.ToString());
-                    var envelope = CallOnUi(name, args, hooks?.DialogParent);
+                    // Support's pack is the only list it may call. A named edit tool does not run.
+                    var envelope = ForskToolPacks.Allows(intent, name)
+                        ? CallOnUi(name, args, hooks?.DialogParent)
+                        : ForskTools.Fail("Support does not change the model.");
                     hooks?.Tool?.Invoke(name, envelope);
                     if (name == ForskDxf.Tool)
                     {
@@ -681,6 +716,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             {
                 text += " Rebuild, bake again, or clear and regenerate is clear_generated, then the bake order.";
             }
+            if (intent == ForskIntent.Support)
+            {
+                text += " Answer the question. Do not edit the model, the selection, or the file.";
+            }
             return text;
         }
 
@@ -691,6 +730,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print) return "Print";
             if (intent == ForskIntent.Build) return "Build";
             if (intent == ForskIntent.Daylight) return "Daylight";
+            if (intent == ForskIntent.Support) return "Support";
             if (intent == ForskIntent.Dxf) return "Import DXF";
             if (intent == ForskIntent.Import) return "Import";
             return "General";

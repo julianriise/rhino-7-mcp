@@ -68,6 +68,12 @@ namespace RhinoMCPPlugin.Forsk
             return copied || path != null;
         }
 
+        /// <summary>The redacted debug report. Support reads it. Nothing is written to the model.</summary>
+        public static string DebugReportText(RhinoDoc doc)
+        {
+            return BuildDebugReport(doc);
+        }
+
         static string BuildDebugReport(RhinoDoc doc)
         {
             var snap = new DebugSnapshot();

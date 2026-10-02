@@ -140,7 +140,9 @@ header.top {
 .card .unit { color: var(--meta); font-size: 12px; }
 .card .field-row { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
 .card .field-row input { margin: 0; flex: 1; min-width: 0; width: auto; }
-.card .field-label { flex: none; width: 84px; color: var(--meta); font-size: 12px; }
+.card .field-label { flex: none; width: 118px; color: var(--meta); font-size: 12px; }
+.card .field-row.check .field-label { width: auto; }
+.card .field-row.check input { flex: none; width: 16px; height: 16px; padding: 0; box-shadow: none; background: transparent; }
 .card .note { color: var(--meta); font-size: 12px; margin: 6px 0 0; }
 .card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 14px; }
 .card .rows li { padding: 2px 0; }
@@ -240,6 +242,7 @@ textarea::placeholder { color: var(--faint); }
     <div id="avatar-modeller">%%AVATAR_MODELLER%%</div>
     <div id="avatar-plotter">%%AVATAR_PLOTTER%%</div>
     <div id="avatar-analyser">%%AVATAR_ANALYSER%%</div>
+    <div id="avatar-support">%%AVATAR_SUPPORT%%</div>
     <div id="avatar-render">%%AVATAR_RENDER%%</div>
   </div>
 </header>

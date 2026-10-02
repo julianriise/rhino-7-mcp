@@ -543,7 +543,7 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         static string WithAvatars(string html)
         {
-            foreach (var name in new[] { "planner", "modeller", "plotter", "analyser", "render" })
+            foreach (var name in new[] { "planner", "modeller", "plotter", "analyser", "support", "render" })
                 html = html.Replace("%%AVATAR_" + name.ToUpperInvariant() + "%%", Resource("avatar-" + name + ".svg"));
             return html;
         }

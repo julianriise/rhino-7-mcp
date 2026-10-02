@@ -22,6 +22,14 @@ public class RoleTests
     [InlineData("clear daylight", ForskIntent.Daylight, "Analyser")]
     [InlineData("is this room dark", ForskIntent.Daylight, "Analyser")]
     [InlineData("dagslys", ForskIntent.Daylight, "Analyser")]
+    [InlineData("how do I print", ForskIntent.Support, "Support")]
+    [InlineData("how do I set the scale", ForskIntent.Support, "Support")]
+    [InlineData("what does daylight do", ForskIntent.Support, "Support")]
+    [InlineData("hvordan skriver jeg ut", ForskIntent.Support, "Support")]
+    [InlineData("this is broken", ForskIntent.Support, "Support")]
+    [InlineData("feil", ForskIntent.Support, "Support")]
+    [InlineData("it would be nice if the walls hatched", ForskIntent.Support, "Support")]
+    [InlineData("can you add a stair tool", ForskIntent.Support, "Support")]
     public void EachIntent_MapsToItsRole(string sentence, ForskIntent intent, string role)
     {
         Assert.Equal(intent, ForskIntentRouter.Classify(sentence));
@@ -70,6 +78,8 @@ public class RoleTests
         Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.Modeller));
         // Analyser knows daylight.run, which is already slot 3. Print stays slot 1.
         Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.Analyser));
+        // Support has no bar action, so slot 3 stays. Print stays slot 1.
+        Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.Support));
     }
 
     [Fact]
@@ -144,7 +154,7 @@ public class RoleTests
     {
         var auto = ForskRoles.Control(ForskRole.None);
         Assert.Equal("auto", auto["value"]!.ToString());
-        Assert.Equal(new[] { "Planner", "Modeller", "Plotter", "Analyser", "Render", "Auto" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
+        Assert.Equal(new[] { "Planner", "Modeller", "Plotter", "Analyser", "Support", "Render", "Auto" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
         Assert.Equal("modeller", ForskRoles.Control(ForskRole.Modeller)["value"]!.ToString());
 
         var thread = new DocThread { Serial = 1, Override = ForskRole.Modeller };

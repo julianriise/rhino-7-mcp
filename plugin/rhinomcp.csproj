@@ -60,6 +60,9 @@
     <EmbeddedResource Include="Forsk/Page/avatar-analyser.svg">
       <LogicalName>RhinoMCPPlugin.Page.avatar-analyser.svg</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Forsk/Page/avatar-support.svg">
+      <LogicalName>RhinoMCPPlugin.Page.avatar-support.svg</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Forsk/Page/avatar-render.svg">
       <LogicalName>RhinoMCPPlugin.Page.avatar-render.svg</LogicalName>
     </EmbeddedResource>

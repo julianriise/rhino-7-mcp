@@ -57,6 +57,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskRole.cs" Link="ForskRole.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskToolPacks.cs" Link="ForskToolPacks.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskDebug.cs" Link="ForskDebug.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskReports.cs" Link="ForskReports.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -68,6 +69,7 @@
     <None Include="..\..\plugin\Forsk\Page\avatar-modeller.svg" Link="page\avatar-modeller.svg" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\avatar-plotter.svg" Link="page\avatar-plotter.svg" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\avatar-analyser.svg" Link="page\avatar-analyser.svg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugin\Forsk\Page\avatar-support.svg" Link="page\avatar-support.svg" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\avatar-render.svg" Link="page\avatar-render.svg" CopyToOutputDirectory="PreserveNewest" />
     <!-- A synthetic forsk.plan_import.v0 file: any source's output reads the same way. -->
     <None Include="..\..\server\tests\fixtures\plan_import_synthetic.json" Link="fixtures\plan_import_synthetic.json" CopyToOutputDirectory="PreserveNewest" />

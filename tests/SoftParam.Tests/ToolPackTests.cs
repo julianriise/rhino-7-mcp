@@ -23,6 +23,7 @@ public class ToolPackTests
         ["import_dxf"] = ForskIntent.Dxf,
         ["import_plan"] = ForskIntent.Import,
         ["edit"] = ForskIntent.Edit,
+        ["support"] = ForskIntent.Support,
         ["general"] = ForskIntent.General
     };
 
@@ -87,6 +88,7 @@ public class ToolPackTests
     [InlineData(ForskIntent.Print)]
     [InlineData(ForskIntent.Import)]
     [InlineData(ForskIntent.Daylight)]
+    [InlineData(ForskIntent.Support)]
     public void AnOverride_ReordersTheTools_NeverRemovesOne(ForskIntent intent)
     {
         var plain = ForskToolPacks.For(intent);
@@ -114,6 +116,20 @@ public class ToolPackTests
         Assert.Equal(daylight.Count, daylightAsAnalyser.Count);
         Assert.Equal(new[] { ForskToolPacks.DaylightTool, "rooms_detect" }, daylightAsAnalyser.Take(2));
         Assert.Contains("add_opening", daylightAsAnalyser);
+
+        // Support reads the model and the selection, then the debug report. It adds nothing to another pack and edits nothing.
+        var support = ForskToolPacks.For(ForskIntent.Support).ToList();
+        Assert.Equal(new[] { "get_document_summary", "get_selected_objects_info", "get_object_info", ForskToolPacks.DebugTool }, support);
+        Assert.Equal(support.Count, ForskToolPacks.Schemas(support).Count);
+        Assert.DoesNotContain(support, n => n.Contains("move") || n.Contains("delete") || n.Contains("add") || n == "select_objects" || n == "capture_viewport" || n == "clear_generated");
+        Assert.False(ForskToolPacks.Allows(ForskIntent.Support, "move_wall"));
+        Assert.False(ForskToolPacks.Allows(ForskIntent.Support, "select_objects"));
+        Assert.True(ForskToolPacks.Allows(ForskIntent.Support, ForskToolPacks.DebugTool));
+        Assert.True(ForskToolPacks.Allows(ForskIntent.Edit, "move_wall"));
+        var asSupport = ForskToolPacks.For(ForskIntent.General, ForskRole.Support).ToList();
+        Assert.Equal(general.Count, asSupport.Count);
+        Assert.DoesNotContain(ForskToolPacks.DebugTool, asSupport);
+        Assert.Contains("move_wall", asSupport);
     }
 
     /// <summary>The measurement, and the report when FORSK_PACK_REPORT names a path.</summary>

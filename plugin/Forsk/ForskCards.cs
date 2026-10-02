@@ -14,6 +14,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Label;
         public string Value;
         public string Unit;
+        /// <summary>A checkbox. Value "1" is ticked. The page posts "1" or "0".</summary>
+        public bool Check;
     }
 
     /// <summary>

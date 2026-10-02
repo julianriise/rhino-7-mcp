@@ -7,6 +7,7 @@ namespace RhinoMCPPlugin.Forsk
     /// <summary>
     /// The voices of the one window. None is the router's General turn.
     /// More roles may come. Area statistics land under Analyser later in v3.
+    /// Support answers questions and takes bug reports and feature requests.
     /// </summary>
     public enum ForskRole
     {
@@ -15,6 +16,7 @@ namespace RhinoMCPPlugin.Forsk
         Modeller,
         Plotter,
         Analyser,
+        Support,
         Render
     }
 
@@ -28,9 +30,9 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskRoles
     {
         /// <summary>Menu order. Render names the turn. It has no tool pack, so the tool order stays the router's. Auto follows these, as the clear.</summary>
-        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter, ForskRole.Analyser, ForskRole.Render };
+        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter, ForskRole.Analyser, ForskRole.Support, ForskRole.Render };
 
-        /// <summary>The router's role. Import is Planner, build and edit are Modeller, print and sheets are Plotter, daylight is Analyser.</summary>
+        /// <summary>The router's role. Import is Planner, build and edit are Modeller, print and sheets are Plotter, daylight is Analyser, questions and reports are Support.</summary>
         public static ForskRole Of(ForskIntent intent)
         {
             switch (intent)
@@ -46,6 +48,8 @@ namespace RhinoMCPPlugin.Forsk
                     return ForskRole.Plotter;
                 case ForskIntent.Daylight:
                     return ForskRole.Analyser;
+                case ForskIntent.Support:
+                    return ForskRole.Support;
                 default:
                     return ForskRole.None;
             }

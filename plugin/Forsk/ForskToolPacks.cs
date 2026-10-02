@@ -18,6 +18,7 @@ namespace RhinoMCPPlugin.Forsk
         public const string DaylightTool = "daylight_from_model";
         public const string ImportTool = "plan_import";
         public const string ScaleTool = "plan_scale";
+        public const string DebugTool = "debug_report";
 
         /// <summary>Every turn reads the document and the selection.</summary>
         static readonly string[] Shared =
@@ -92,19 +93,45 @@ namespace RhinoMCPPlugin.Forsk
 
         static readonly string[] DxfPack = { ForskDxf.Tool };
 
+        /// <summary>
+        /// Read-only model and selection info, then the debug report.
+        /// No select, no capture, no tool that edits the model.
+        /// </summary>
+        static readonly string[] SupportPack =
+        {
+            "get_document_summary",
+            "get_selected_objects_info",
+            "get_object_info",
+            DebugTool
+        };
+
         /// <summary>The whole list, in the order the panel always sent it.</summary>
         public static readonly IReadOnlyList<string> Union = Distinct(Shared, BuildPack, EditPack, SheetsPack, DaylightPack, ImportPack);
 
         public static readonly IReadOnlyDictionary<string, JObject> Catalog = BuildCatalog();
 
-        /// <summary>The turn's tool names: its intent's pack after the shared reads, or the union for General.</summary>
+        /// <summary>The turn's tool names: its intent's pack after the shared reads, or the union for General. Support is only its own pack.</summary>
         public static IReadOnlyList<string> For(ForskIntent intent, ForskRole role = ForskRole.None)
         {
-            var names = intent == ForskIntent.General ? Union : Distinct(Shared, Pack(intent));
+            var names = Names(intent);
             if (role == ForskRole.None) return names;
             var first = new HashSet<string>(RoleTools(role), StringComparer.Ordinal);
             // A stable reorder: the role's tools first, each group in its own order. Nothing added or removed.
             return names.Where(first.Contains).Concat(names.Where(n => !first.Contains(n))).ToList();
+        }
+
+        /// <summary>Support may call only its pack. Every other intent keeps the panel's allow list.</summary>
+        public static bool Allows(ForskIntent intent, string name)
+        {
+            if (intent != ForskIntent.Support) return true;
+            return SupportPack.Contains(name);
+        }
+
+        static IReadOnlyList<string> Names(ForskIntent intent)
+        {
+            if (intent == ForskIntent.General) return Union;
+            if (intent == ForskIntent.Support) return SupportPack;
+            return Distinct(Shared, Pack(intent));
         }
 
         static string[] Pack(ForskIntent intent)
@@ -127,7 +154,9 @@ namespace RhinoMCPPlugin.Forsk
         /// Modeller builds and edits, Plotter prints, Analyser runs daylight and
         /// the rooms detection it needs. add_opening stays in the daylight pack
         /// so a model with no windows can still cut one, and it stays Modeller's
-        /// tool. Render has no pack, so that override does not reorder.
+        /// tool. Support's reads come first; the reorder adds nothing, so the
+        /// debug report stays on a Support turn. Render has no pack, so that
+        /// override does not reorder.
         /// </summary>
         static IEnumerable<string> RoleTools(ForskRole role)
         {
@@ -137,6 +166,7 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskRole.Modeller: return BuildPack.Concat(EditPack);
                 case ForskRole.Plotter: return PrintPack.Concat(SheetsPack);
                 case ForskRole.Analyser: return new[] { DaylightTool, "rooms_detect" };
+                case ForskRole.Support: return SupportPack;
                 default: return new string[0];
             }
         }
@@ -293,6 +323,9 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["viewport"] = Str("active, perspective, top, front, or a named view. Default active.")
                     }),
+                Fn(DebugTool,
+                    "The redacted debug report: plugin, Rhino, file, model counts, recent turns, and logs. Read only. Does not change the model or the selection.",
+                    new JObject()),
                 Fn("clear_generated",
                     "Delete generated walls, floor, roof, openings, and rooms. Leaves X-EXIST, forsk:kind=existing, and drawings.",
                     new JObject

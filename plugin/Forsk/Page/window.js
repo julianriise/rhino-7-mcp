@@ -127,10 +127,10 @@
    */
   Forsk.shownRole = function (model) {
     model = model || {};
-    var faces = { planner: 1, modeller: 1, plotter: 1, analyser: 1, render: 1 };
+    var faces = { planner: 1, modeller: 1, plotter: 1, analyser: 1, support: 1, render: 1 };
     var value = model.role && model.role.value;
     if (value && faces[value]) return value;
-    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Render: 'render' };
+    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Support: 'support', Render: 'render' };
     var thread = model.thread || [];
     for (var i = thread.length - 1; i >= 0; i--) {
       var id = marks[thread[i].mark];
@@ -158,6 +158,12 @@
     });
     if (auto) rest.push(auto);
     return rest;
+  };
+
+  /* A check field is ticked unless the card stored 0. No DOM, so it tests headless. */
+  Forsk.fieldChecked = function (field) {
+    if (!field || !field.check) return false;
+    return field.value !== '0' && field.value !== 'false';
   };
 
   /* A bullet's lead, up to the colon or the period, else its first four words. */
@@ -236,22 +242,32 @@
     }
     var inputs = [];
     (item.fields || []).forEach(function (field) {
-      var wrap = el('label', 'field-row');
-      if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+      var check = !!field.check;
+      var wrap = el('label', 'field-row' + (check ? ' check' : ''));
       var input = el('input');
-      input.type = 'text';
-      if (field.unit === 'mm') input.inputMode = 'decimal';
-      input.value = field.value || '';
-      input.setAttribute('aria-label', field.label || item.question);
       input.dataset.key = field.key;
-      wrap.appendChild(input);
-      if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
+      input.setAttribute('aria-label', field.label || item.question);
+      if (check) {
+        input.type = 'checkbox';
+        input.checked = Forsk.fieldChecked(field);
+        wrap.appendChild(input);
+        if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+      } else {
+        if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
+        input.type = 'text';
+        if (field.unit === 'mm') input.inputMode = 'decimal';
+        input.value = field.value || '';
+        wrap.appendChild(input);
+        if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
+      }
       box.appendChild(wrap);
       inputs.push(input);
     });
     function values() {
       var v = {};
-      inputs.forEach(function (input) { v[input.dataset.key] = input.value; });
+      inputs.forEach(function (input) {
+        v[input.dataset.key] = input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value;
+      });
       return v;
     }
     var pills = el('div', 'pills');
@@ -271,7 +287,12 @@
         if (item.pills && item.pills.length) sender.send({ kind: 'card', card: item.id, pill: item.pills[0].id, values: values() });
       });
     });
-    if (inputs.length) setTimeout(function () { inputs[0].focus(); inputs[0].select(); }, 0);
+    if (inputs.length) setTimeout(function () {
+      var focus = inputs[0];
+      for (var i = 0; i < inputs.length; i++) if (inputs[i].type !== 'checkbox') { focus = inputs[i]; break; }
+      focus.focus();
+      if (focus.type !== 'checkbox' && focus.select) focus.select();
+    }, 0);
     return box;
   }
 
@@ -369,7 +390,7 @@
     if (!mark) return node;
     var wrap = el('div', 'marked');
     var meta = el('div', 'meta');
-    var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Render: 'render' }[mark];
+    var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Support: 'support', Render: 'render' }[mark];
     var face = avatarNode(id, 'mini');
     if (face) meta.appendChild(face);
     meta.appendChild(el('span', 'role', mark));
