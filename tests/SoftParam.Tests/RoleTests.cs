@@ -18,17 +18,15 @@ public class RoleTests
     [InlineData("move the window 200 along the wall", ForskIntent.Edit, "Modeller")]
     [InlineData("skriv ut", ForskIntent.Print, "Plotter")]
     [InlineData("add a door schedule", ForskIntent.Sheets, "Plotter")]
+    [InlineData("run daylight", ForskIntent.Daylight, "Analyser")]
+    [InlineData("clear daylight", ForskIntent.Daylight, "Analyser")]
+    [InlineData("is this room dark", ForskIntent.Daylight, "Analyser")]
+    [InlineData("dagslys", ForskIntent.Daylight, "Analyser")]
     public void EachIntent_MapsToItsRole(string sentence, ForskIntent intent, string role)
     {
         Assert.Equal(intent, ForskIntentRouter.Classify(sentence, ""));
         Assert.Equal(role, ForskRoles.Mark(intent, ForskRole.None));
-    }
-
-    [Fact]
-    public void Daylight_HasNoRoleOfItsOwn_TheRoutersLabelNamesIt()
-    {
-        Assert.Equal(ForskRole.None, ForskRoles.Of(ForskIntent.Daylight));
-        Assert.Equal("Daylight", ForskRoles.Mark(ForskIntentRouter.Classify("dagslys", ""), ForskRole.None));
+        Assert.Equal(role, ForskRoles.Label(ForskRoles.Of(intent)));
     }
 
     [Fact]
@@ -70,6 +68,8 @@ public class RoleTests
         Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.None));
         Assert.Equal(new[] { "file.print", "edit.undo", "section.add" }, Ids(ForskRole.Plotter));
         Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.Modeller));
+        // Analyser knows daylight.run, which is already slot 3. Print stays slot 1.
+        Assert.Equal(new[] { "file.print", "edit.undo", "daylight.run" }, Ids(ForskRole.Analyser));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class RoleTests
     {
         var auto = ForskRoles.Control(ForskRole.None);
         Assert.Equal("auto", auto["value"]!.ToString());
-        Assert.Equal(new[] { "Auto", "Planner", "Modeller", "Plotter", "Render" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
+        Assert.Equal(new[] { "Planner", "Modeller", "Plotter", "Analyser", "Render", "Auto" }, ((JArray)auto["options"]!).Select(o => o["label"]!.ToString()));
         Assert.Equal("modeller", ForskRoles.Control(ForskRole.Modeller)["value"]!.ToString());
 
         var thread = new DocThread { Serial = 1, Override = ForskRole.Modeller };
@@ -154,9 +154,14 @@ public class RoleTests
     }
 
     [Fact]
-    public void EveryRegistryAction_HasARoleOrIsDaylightOrTheBridge()
+    public void EveryRegistryAction_HasARoleOrIsTheBridgeOrHelp()
     {
         var roleless = ForskRegistry.All.Where(a => ForskRoles.OfAction(a.Id) == ForskRole.None).Select(a => a.Id).OrderBy(i => i);
-        Assert.Equal(new[] { "bridge.start", "daylight.again", "daylight.hide", "daylight.room", "daylight.run", "daylight.show", "help.card" }, roleless);
+        Assert.Equal(new[] { "bridge.start", "help.card" }, roleless);
+        foreach (var id in new[] { "daylight.rooms", "daylight.run", "daylight.again", "daylight.hide", "daylight.show", "daylight.room" })
+            Assert.Equal(ForskRole.Analyser, ForskRoles.OfAction(id));
+        // A window is geometry. Listing rooms stays with the plan until area statistics land under Analyser.
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("daylight.window"));
+        Assert.Equal(ForskRole.Planner, ForskRoles.OfAction("rooms.list"));
     }
 }

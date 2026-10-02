@@ -145,8 +145,8 @@ namespace RhinoMCPPlugin.Forsk
             ["role.planner"] = "Planner",
             ["role.modeller"] = "Modeller",
             ["role.plotter"] = "Plotter",
+            ["role.analyser"] = "Analyser",
             ["role.render"] = "Render",
-            ["role.daylight"] = "Daylight",
             ["role.title"] = "Auto lets the router name the role for each answer. A pick stays until you choose Auto again.",
 
             // The bar.

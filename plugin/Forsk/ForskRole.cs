@@ -4,13 +4,17 @@ using Newtonsoft.Json.Linq;
 
 namespace RhinoMCPPlugin.Forsk
 {
-    /// <summary>The four voices of the one window. None is the router's General turn.</summary>
+    /// <summary>
+    /// The voices of the one window. None is the router's General turn.
+    /// More roles may come. Area statistics land under Analyser later in v3.
+    /// </summary>
     public enum ForskRole
     {
         None,
         Planner,
         Modeller,
         Plotter,
+        Analyser,
         Render
     }
 
@@ -18,15 +22,15 @@ namespace RhinoMCPPlugin.Forsk
     /// The role on an answer is the router's label for that turn, unless the
     /// user's override was set when the turn was sent. A role sharpens the
     /// suggestions and the tool order. It is not a mode: slot 1, the history
-    /// and the full tool list do not change with it. Daylight has no role of
-    /// its own; the router's label names it. No RhinoCommon.
+    /// and the full tool list do not change with it. Render names a turn and
+    /// has no tool pack. No RhinoCommon.
     /// </summary>
     public static class ForskRoles
     {
-        /// <summary>The roles a user can pick. Render names the turn. It has no tool pack, so the tool order stays the router's.</summary>
-        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter, ForskRole.Render };
+        /// <summary>Menu order. Render names the turn. It has no tool pack, so the tool order stays the router's. Auto follows these, as the clear.</summary>
+        public static readonly IReadOnlyList<ForskRole> Pickable = new[] { ForskRole.Planner, ForskRole.Modeller, ForskRole.Plotter, ForskRole.Analyser, ForskRole.Render };
 
-        /// <summary>The router's role: import is Planner, build and edit are Modeller, print and sheets are Plotter.</summary>
+        /// <summary>The router's role. Import is Planner, build and edit are Modeller, print and sheets are Plotter, daylight is Analyser.</summary>
         public static ForskRole Of(ForskIntent intent)
         {
             switch (intent)
@@ -40,12 +44,19 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskIntent.Print:
                 case ForskIntent.Sheets:
                     return ForskRole.Plotter;
+                case ForskIntent.Daylight:
+                    return ForskRole.Analyser;
                 default:
                     return ForskRole.None;
             }
         }
 
-        /// <summary>The role that knows an action, by the role table in V3_DESIGN.md. Daylight and the bridge have none.</summary>
+        /// <summary>
+        /// The role that knows an action. Daylight analysis is Analyser.
+        /// Adding a window stays Modeller: that is geometry. rooms.list stays
+        /// Planner. Area statistics land under Analyser later in v3, not yet.
+        /// The bridge and help have no role.
+        /// </summary>
         public static ForskRole OfAction(string actionId)
         {
             switch (actionId)
@@ -55,7 +66,6 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.scale":
                 case "file.check":
                 case "file.draw":
-                case "daylight.rooms":
                 case "rooms.list":
                     return ForskRole.Planner;
                 case "file.generate":
@@ -81,6 +91,13 @@ namespace RhinoMCPPlugin.Forsk
                 case "section.room":
                 case "section.remove":
                     return ForskRole.Plotter;
+                case "daylight.rooms":
+                case "daylight.run":
+                case "daylight.again":
+                case "daylight.hide":
+                case "daylight.show":
+                case "daylight.room":
+                    return ForskRole.Analyser;
                 default:
                     return ForskRole.None;
             }
@@ -91,8 +108,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (overrideRole != ForskRole.None) return Label(overrideRole);
             var role = Of(intent);
-            if (role != ForskRole.None) return Label(role);
-            return intent == ForskIntent.Daylight ? ForskText.Get("role.daylight") : null;
+            return role == ForskRole.None ? null : Label(role);
         }
 
         /// <summary>The mark on a pill's receipts: the role that knows that action.</summary>
@@ -115,12 +131,13 @@ namespace RhinoMCPPlugin.Forsk
             return ForskRole.None;
         }
 
-        /// <summary>The control in the view model: Auto, then each pickable role; the value is the override.</summary>
+        /// <summary>The control in the view model: the pickable roles in menu order, then Auto. The value is the override.</summary>
         public static JObject Control(ForskRole overrideRole)
         {
-            var options = new JArray { new JObject { ["id"] = "auto", ["label"] = Label(ForskRole.None) } };
+            var options = new JArray();
             foreach (var role in Pickable)
                 options.Add(new JObject { ["id"] = role.ToString().ToLowerInvariant(), ["label"] = Label(role) });
+            options.Add(new JObject { ["id"] = "auto", ["label"] = Label(ForskRole.None) });
             return new JObject
             {
                 ["value"] = overrideRole == ForskRole.None ? "auto" : overrideRole.ToString().ToLowerInvariant(),

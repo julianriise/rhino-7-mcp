@@ -122,15 +122,15 @@
 
   /*
    * The face in the header. An override wins. Otherwise the latest answer
-   * whose mark is a role, and Planner when the thread has none. Daylight
-   * is not a face.
+   * whose mark is a role, and Planner when the thread has none. A mark that
+   * is not a role is skipped.
    */
   Forsk.shownRole = function (model) {
     model = model || {};
-    var faces = { planner: 1, modeller: 1, plotter: 1, render: 1 };
+    var faces = { planner: 1, modeller: 1, plotter: 1, analyser: 1, render: 1 };
     var value = model.role && model.role.value;
     if (value && faces[value]) return value;
-    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Render: 'render' };
+    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Render: 'render' };
     var thread = model.thread || [];
     for (var i = thread.length - 1; i >= 0; i--) {
       var id = marks[thread[i].mark];
@@ -278,7 +278,7 @@
   /*
    * A face is inline SVG, painted at device pixels. The same drawing in an
    * img is a CSS-pixel bitmap, soft on Retina. Every copy renames its mask
-   * and gradient: four faces share one document, and a repeated face would
+   * and gradient: the faces share one document, and a repeated face would
    * collide. faceStamp touches no DOM, so it tests headless.
    */
   var avatarStamp = 0;
@@ -369,7 +369,7 @@
     if (!mark) return node;
     var wrap = el('div', 'marked');
     var meta = el('div', 'meta');
-    var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Render: 'render' }[mark];
+    var id = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Render: 'render' }[mark];
     var face = avatarNode(id, 'mini');
     if (face) meta.appendChild(face);
     meta.appendChild(el('span', 'role', mark));

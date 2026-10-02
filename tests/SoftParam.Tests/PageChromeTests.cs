@@ -68,7 +68,7 @@ public class PageChromeTests
             engine.Evaluate("Forsk.faceStamp('planner', 1).mask").ToString(),
             engine.Evaluate("Forsk.faceStamp('modeller', 1).mask").ToString());
 
-        foreach (var name in new[] { "planner", "modeller", "plotter", "render" })
+        foreach (var name in new[] { "planner", "modeller", "plotter", "analyser", "render" })
         {
             Assert.Contains("id=\"avatar-" + name + "\"", html);
             Assert.Contains("%%AVATAR_" + name.ToUpperInvariant() + "%%", html);
@@ -93,12 +93,17 @@ public class PageChromeTests
         string Eval(string js) => engine.Evaluate(js).ToString();
 
         Assert.Equal("render", Eval("Forsk.shownRole({role:{value:'render'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'analyser'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Analyser'}]})"));
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Daylight'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[]})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'planner'}})"));
         Assert.Equal("auto \u00b7 office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'auto'}})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm'})"));
         Assert.Equal("[\"planner\",\"render\",\"auto\"]", Eval("JSON.stringify(Forsk.roleMenu([{id:'auto',label:'Auto'},{id:'planner',label:'Planner'},{id:'render',label:'Render'}]).map(function(o){return o.id;}))"));
+        Assert.Equal(
+            "[\"planner\",\"modeller\",\"plotter\",\"analyser\",\"render\",\"auto\"]",
+            Eval("JSON.stringify(Forsk.roleMenu([{id:'auto',label:'Auto'},{id:'planner',label:'Planner'},{id:'modeller',label:'Modeller'},{id:'plotter',label:'Plotter'},{id:'analyser',label:'Analyser'},{id:'render',label:'Render'}]).map(function(o){return o.id;}))"));
     }
 
     [Fact]

@@ -96,9 +96,22 @@ public class ToolPackTests
         // Plotter's tools come first: layout_pack moves ahead of the bake tools it followed.
         var general = ForskToolPacks.For(ForskIntent.General).ToList();
         var plotter = ForskToolPacks.For(ForskIntent.General, ForskRole.Plotter).ToList();
+        Assert.Equal(general.Count, plotter.Count);
         Assert.True(general.IndexOf("layout_pack") > general.IndexOf("floor_from_layer"));
         Assert.True(plotter.IndexOf("layout_pack") < plotter.IndexOf("floor_from_layer"));
         Assert.True(plotter.IndexOf("get_document_summary") > plotter.IndexOf("print_profile"));
+
+        // Analyser puts daylight and rooms detection first. The count is the pack's: nothing added or removed.
+        var analyser = ForskToolPacks.For(ForskIntent.General, ForskRole.Analyser).ToList();
+        Assert.Equal(general.Count, analyser.Count);
+        Assert.Equal("rooms_detect", analyser[0]);
+        Assert.Equal(ForskToolPacks.DaylightTool, analyser[1]);
+        Assert.True(analyser.IndexOf("add_opening") > analyser.IndexOf(ForskToolPacks.DaylightTool));
+        var daylight = ForskToolPacks.For(ForskIntent.Daylight).ToList();
+        var daylightAsAnalyser = ForskToolPacks.For(ForskIntent.Daylight, ForskRole.Analyser).ToList();
+        Assert.Equal(daylight.Count, daylightAsAnalyser.Count);
+        Assert.Equal(new[] { ForskToolPacks.DaylightTool, "rooms_detect" }, daylightAsAnalyser.Take(2));
+        Assert.Contains("add_opening", daylightAsAnalyser);
     }
 
     /// <summary>The measurement, and the report when FORSK_PACK_REPORT names a path.</summary>

@@ -120,7 +120,13 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The tools a role knows. Planner imports, Modeller builds and edits, Plotter prints. Render has no pack, so that override does not reorder.</summary>
+        /// <summary>
+        /// The tools a role knows, used only to reorder a pack. Planner imports,
+        /// Modeller builds and edits, Plotter prints, Analyser runs daylight and
+        /// the rooms detection it needs. add_opening stays in the daylight pack
+        /// so a model with no windows can still cut one, and it stays Modeller's
+        /// tool. Render has no pack, so that override does not reorder.
+        /// </summary>
         static IEnumerable<string> RoleTools(ForskRole role)
         {
             switch (role)
@@ -128,6 +134,7 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskRole.Planner: return ImportPack.Concat(new[] { "rooms_detect", "rooms_from_layer" });
                 case ForskRole.Modeller: return BuildPack.Concat(EditPack);
                 case ForskRole.Plotter: return PrintPack.Concat(SheetsPack);
+                case ForskRole.Analyser: return new[] { DaylightTool, "rooms_detect" };
                 default: return new string[0];
             }
         }
