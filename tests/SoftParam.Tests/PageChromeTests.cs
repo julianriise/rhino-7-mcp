@@ -26,6 +26,7 @@ public class PageChromeTests
         Assert.Contains("id=\"role-menu\"", header);
         Assert.Contains("id=\"history\"", header);
         Assert.Contains("id=\"more\"", header);
+        Assert.Contains("aria-label=\"Settings\"", header);
         Assert.Contains("id=\"file\"", header);
         Assert.DoesNotContain("class=\"logo\"", header);
         Assert.DoesNotContain("<select", html);
@@ -33,6 +34,40 @@ public class PageChromeTests
         Assert.Contains("Ask Forsk", composer);
         Assert.Contains("id=\"add\"", composer);
         Assert.Contains("id=\"send\"", composer);
+    }
+
+    /// <summary>
+    /// The header trigger is a settings gear, inline, at the same size and
+    /// stroke as History. The three dots are gone. The red dot is an element
+    /// the page shows from the attention list.
+    /// </summary>
+    [Fact]
+    public void TheHeader_HasASettingsGear_AndNoThreeDots()
+    {
+        var html = Html();
+        var headerAt = html.IndexOf("<header", StringComparison.Ordinal);
+        var headerEnd = html.IndexOf("</header>", headerAt, StringComparison.Ordinal);
+        var header = html.Substring(headerAt, headerEnd - headerAt);
+        var buttonAt = header.IndexOf("id=\"more\"", StringComparison.Ordinal);
+        var buttonEnd = header.IndexOf("</button>", buttonAt, StringComparison.Ordinal);
+        var button = header.Substring(buttonAt, buttonEnd - buttonAt);
+
+        Assert.Contains("aria-label=\"Settings\"", button);
+        Assert.Contains("aria-haspopup=\"menu\"", button);
+        Assert.Contains("aria-controls=\"more-menu\"", button);
+        Assert.Contains("class=\"gear\"", button);
+        Assert.Contains("id=\"gear-dot\"", button);
+        Assert.Contains("class=\"notice\"", button);
+        Assert.Contains("width=\"16\" height=\"16\"", button);
+        Assert.Contains("stroke-width=\"1.7\"", button);
+        Assert.Contains("M19.4 15", button);
+        Assert.Contains("overflow=\"visible\"", button);
+        Assert.DoesNotContain("aria-label=\"More\"", header);
+        Assert.DoesNotContain("r=\"1.35\"", header);
+        Assert.DoesNotContain("cx=\"6\"", header);
+        Assert.DoesNotContain("cx=\"18\"", header);
+        Assert.DoesNotContain("<img", button);
+        Assert.DoesNotContain("data:image", button);
     }
 
     /// <summary>

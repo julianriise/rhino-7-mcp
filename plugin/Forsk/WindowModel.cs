@@ -280,10 +280,10 @@ namespace RhinoMCPPlugin.Forsk
 
     /// <summary>
     /// The page's whole model for one document: the file name, Target, the
-    /// status line, the thread, the pinned bar, and the settings menu. C# builds it from the
-    /// thread and the classifier's facts; the page draws it. An empty thread
-    /// shows one local sentence that names the file state; it is not stored,
-    /// so it never goes out of date.
+    /// status line, the thread, the pinned bar, the settings menu, and the
+    /// attention list. C# builds it from the thread and the classifier's facts;
+    /// the page draws it. An empty thread shows one local sentence that names
+    /// the file state; it is not stored, so it never goes out of date.
     /// </summary>
     public static class WindowView
     {
@@ -297,6 +297,7 @@ namespace RhinoMCPPlugin.Forsk
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
             model["role"] = ForskRoles.Control(thread.Override);
             model["settings"] = Settings(facts);
+            model["attention"] = Attention(facts);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             return model;
         }
@@ -312,6 +313,39 @@ namespace RhinoMCPPlugin.Forsk
                     menu.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label });
             }
             return menu;
+        }
+
+        /// <summary>
+        /// What this file still owes the user. Each row is an id, the label the
+        /// menu already uses, and whether it needs attention. A new case is one
+        /// row. The page dots the gear when any row needs it, and dots the menu
+        /// item with the same id. Saving the title block re-reads the file on
+        /// the next push, so a stored project name clears the row at once.
+        /// </summary>
+        static JArray Attention(FileFacts facts)
+        {
+            return new JArray
+            {
+                AttentionRow("meta.title", ProjectNameMissing(facts))
+            };
+        }
+
+        static JObject AttentionRow(string id, bool needs)
+        {
+            return new JObject
+            {
+                ["id"] = id,
+                ["label"] = ForskText.Label(id),
+                ["needs"] = needs
+            };
+        }
+
+        /// <summary>Project details count as filled once the project name is stored.</summary>
+        static bool ProjectNameMissing(FileFacts facts)
+        {
+            string name = null;
+            facts?.Meta?.TryGetValue("project", out name);
+            return string.IsNullOrWhiteSpace(name);
         }
     }
 

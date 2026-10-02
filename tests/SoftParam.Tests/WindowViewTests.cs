@@ -102,6 +102,33 @@ public class WindowViewTests
         Assert.DoesNotContain("file.print", Ids("house"));
     }
 
+    /// <summary>
+    /// Project details need attention until the project name is stored.
+    /// A client alone does not clear it. The next view after a save is this
+    /// same list with needs false.
+    /// </summary>
+    [Fact]
+    public void Attention_MarksAnEmptyProjectName_AndClearsWhenItIsStored()
+    {
+        JObject Row(FileFacts facts) => (JObject)WindowView.Build(new DocThread { Serial = 1 }, facts, "")["attention"]![0]!;
+
+        var empty = Row(Docs.Facts("empty"));
+        Assert.Equal("meta.title", empty["id"]!.ToString());
+        Assert.Equal("Title block", empty["label"]!.ToString());
+        Assert.True(empty["needs"]!.Value<bool>());
+
+        var clientOnly = Row(FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta["client"] = "Holmen")));
+        Assert.True(clientOnly["needs"]!.Value<bool>());
+
+        var blank = Row(FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta["project"] = "   ")));
+        Assert.True(blank["needs"]!.Value<bool>());
+
+        var named = Row(FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta["project"] = "Tilbygg Holmen")));
+        Assert.Equal("meta.title", named["id"]!.ToString());
+        Assert.Equal("Title block", named["label"]!.ToString());
+        Assert.False(named["needs"]!.Value<bool>());
+    }
+
     [Fact]
     public void TheHelpCard_IsOnlyInTheModelWhileOpen()
     {

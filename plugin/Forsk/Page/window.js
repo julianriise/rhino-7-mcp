@@ -445,16 +445,43 @@
     });
   }
 
+  function attentionOn(list, id) {
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i] || !list[i].needs) continue;
+      if (id == null || list[i].id === id) return true;
+    }
+    return false;
+  }
+
+  function renderGear(model) {
+    var on = attentionOn((model && model.attention) || [], null);
+    var dot = document.getElementById('gear-dot');
+    if (dot) dot.hidden = !on;
+    var gear = document.getElementById('more');
+    if (!gear) return;
+    var label = on ? 'Settings, needs attention' : 'Settings';
+    gear.setAttribute('aria-label', label);
+    gear.title = label;
+  }
+
   function renderSettings(model) {
+    renderGear(model);
     var menu = document.getElementById('more-menu');
     if (!menu.hidden) return;
     var box = document.getElementById('settings');
     while (box.firstChild) box.removeChild(box.firstChild);
     var items = (model && model.settings) || [];
+    var attention = (model && model.attention) || [];
     items.forEach(function (item) {
       var button = el('button', null, item.label);
       button.type = 'button';
       button.setAttribute('role', 'menuitem');
+      if (attentionOn(attention, item.id)) {
+        var dot = el('span', 'notice');
+        dot.setAttribute('aria-hidden', 'true');
+        button.appendChild(dot);
+        button.setAttribute('aria-label', item.label + ', needs attention');
+      }
       button.addEventListener('click', function () {
         closeMenus(false);
         sender.send({ kind: 'action', id: item.id });
