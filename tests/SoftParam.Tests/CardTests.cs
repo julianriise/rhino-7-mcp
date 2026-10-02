@@ -189,4 +189,55 @@ public class CardTests
         facts.Grade = "Grade: concept";
         Assert.Equal("Render: 2 of 2 · Grade: concept", ForskRegistry.Status(facts));
     }
+
+    /// <summary>A recorded move_wall envelope: four records, the north one moved, east and west followed.</summary>
+    static JObject MoveResult(JArray followed, params string[] records) => new JObject
+    {
+        ["status"] = "success",
+        ["result"] = new JObject
+        {
+            ["forsk_id"] = "w01",
+            ["wall"] = "the north wall",
+            ["followed"] = followed,
+            ["records"] = new JArray(records),
+            ["rebuilt"] = "Floor, roof and 1 room updated.",
+            ["message"] = "Moved the north wall of w01 500 mm north; the east and west walls followed. Floor, roof and 1 room updated."
+        }
+    };
+
+    static JArray EastAndWest() => new JArray
+    {
+        new JObject { ["forsk_id"] = "w04", ["wall"] = "the east wall", ["change_mm"] = 500 },
+        new JObject { ["forsk_id"] = "w03", ["wall"] = "the west wall", ["change_mm"] = -250 }
+    };
+
+    [Fact]
+    public void WallReview_ListsTheWallsThatFollowed_ThenWhatWasRebuilt()
+    {
+        var card = ForskCards.WallReview(MoveResult(EastAndWest(), "w01", "w03", "w04"))!;
+        Assert.Equal("wall.review", card.Kind);
+        Assert.Equal("What followed the wall", card.Question);
+        Assert.Equal(new[] { "The east wall (w04) · 500 mm longer", "The west wall (w03) · 250 mm shorter", "Floor, roof and 1 room updated." }, card.Rows);
+        Assert.Equal("model", card.Depends);
+        Assert.Equal(new[] { "done" }, card.Pills.Select(p => p.Id));
+    }
+
+    [Fact]
+    public void WallReview_IsAbsent_WhenOnlyTheWallChanged_OrTheEditFailed()
+    {
+        Assert.Null(ForskCards.WallReview(MoveResult(new JArray(), "w01")));
+        Assert.Null(ForskCards.WallReview(new JObject { ["status"] = "error", ["message"] = "Not moved." }));
+        Assert.Null(ForskCards.WallReview(null));
+        // Two records written with no named neighbour still changed more than the wall.
+        Assert.NotNull(ForskCards.WallReview(MoveResult(new JArray(), "w01", "w02")));
+    }
+
+    [Fact]
+    public void MoveReceipt_StaysTwoSentences_WithTheRecordInBold()
+    {
+        var receipt = ForskReceipt.From("move_wall", MoveResult(EastAndWest(), "w01", "w03", "w04"));
+        Assert.True(receipt.Ok);
+        Assert.Equal("w01", receipt.Subject);
+        Assert.Equal("Moved the north wall of w01 500 mm north; the east and west walls followed. Floor, roof and 1 room updated.", receipt.Text);
+    }
 }

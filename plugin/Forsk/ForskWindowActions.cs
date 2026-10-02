@@ -375,7 +375,7 @@ namespace RhinoMCPPlugin.Forsk
                 }),
                 Tool = (name, envelope) => Post(() =>
                 {
-                    thread.Add(ForskReceipt.From(name, envelope));
+                    AddReceipt(thread, name, envelope);
                     Render();
                 }),
                 DialogParent = this,
@@ -409,6 +409,15 @@ namespace RhinoMCPPlugin.Forsk
                     Finish(thread, kind, undo, serial, null, text);
                 });
             });
+        }
+
+        /// <summary>A tool's receipt, and under it the wall review when more than the wall changed.</summary>
+        void AddReceipt(DocThread thread, string tool, JObject envelope)
+        {
+            thread.Add(ForskReceipt.From(tool, envelope));
+            var review = ForskCards.WallReview(envelope);
+            var doc = RhinoDoc.ActiveDoc;
+            if (review != null) thread.AddCard(review, doc == null ? null : ReadFacts(doc));
         }
 
         // ------------------------------------------------------------ jobs
@@ -464,7 +473,7 @@ namespace RhinoMCPPlugin.Forsk
                 envelope = envelope ?? ForskTools.Fail("No result");
                 Post(() =>
                 {
-                    _thread.Add(ForskReceipt.From(name, envelope));
+                    _window.AddReceipt(_thread, name, envelope);
                     _window.Render();
                 });
                 return envelope;

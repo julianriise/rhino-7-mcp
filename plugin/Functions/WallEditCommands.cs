@@ -115,6 +115,9 @@ public partial class RhinoMCPFunctions
         var hostId = rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
         var heading = WallEdit.Heading(pick.Run, by);
         var with = carried.Count == 0 ? "" : carried.Count == 1 ? ", 1 opening with it" : ", " + carried.Count + " openings with it";
+        var also = new List<string>();
+        foreach (var f in moved.Followed) also.Add(f.Wall);
+        if (also.Count > 0) with += "; " + WallFollowPlan.Walls(also) + " followed";
         var moveResult = new JObject
         {
             ["host_id"] = hostId.ToString(),
@@ -129,6 +132,9 @@ public partial class RhinoMCPFunctions
             ["thickness"] = rebuilt?["thickness"],
             ["path_points"] = rebuilt?["path_points"],
             ["openings_moved"] = carried,
+            ["followed"] = FollowedJson(pick, moved.Followed),
+            ["records"] = RecordIds(pick, moved.Records.Keys),
+            ["rebuilt"] = followed,
             ["warnings"] = rebuilt?["warnings"] ?? new JArray(),
             ["ok"] = true,
             ["message"] = "Moved " + pick.Label + " of " + (string.IsNullOrEmpty(forskId) ? "the wall" : forskId) + " "
@@ -344,6 +350,25 @@ public partial class RhinoMCPFunctions
         }
         doc.Views.Redraw();
         return result;
+    }
+
+    /// <summary>The walls that followed, for the result and the review card: the record, the name, the change in length.</summary>
+    private static JArray FollowedJson(WallPick pick, IEnumerable<WallJoins.Followed> followed)
+    {
+        var list = new JArray();
+        foreach (var f in followed)
+        {
+            var record = f.Records.Count > 0 ? pick.Walls[f.Records[0]].Attributes?.GetUserString("forsk:id") : null;
+            list.Add(new JObject { ["forsk_id"] = record ?? "", ["wall"] = f.Wall, ["change_mm"] = f.ChangeMm });
+        }
+        return list;
+    }
+
+    private static JArray RecordIds(WallPick pick, IEnumerable<int> records)
+    {
+        var ids = new JArray();
+        foreach (var i in records) ids.Add(pick.Walls[i].Attributes?.GetUserString("forsk:id") ?? "");
+        return ids;
     }
 
     private static JObject AddedWall(WallEdit.Added added, Guid hostId, string forskId, double thickness, double height, bool joined, JToken pathPoints)

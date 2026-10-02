@@ -1017,13 +1017,19 @@ def test_responses():
         "thickness": 200,
         "path_points": 4,
         "openings_moved": [guid],
+        "followed": [
+            {"forsk_id": "w03", "wall": "the east wall", "change_mm": 500},
+            {"forsk_id": "w04", "wall": "the west wall", "change_mm": 500},
+        ],
+        "records": ["w01", "w03", "w04"],
+        "rebuilt": "Floor, roof and 1 room updated.",
         "host_openings": 2,
         "host_voids": 2,
         "max_frame_mm": 0,
         "markers": [],
         "warnings": [],
         "ok": True,
-        "message": "Moved the north wall of w01 500 mm north, 1 opening with it. Floor, roof and 1 room updated.",
+        "message": "Moved the north wall of w01 500 mm north, 1 opening with it; the east and west walls followed. Floor, roof and 1 room updated.",
     }
     if not validate("responses/move_wall_result.json", move_wall):
         all_passed = False
@@ -1212,6 +1218,12 @@ def test_invalid_examples():
         ("commands/add_opening.json", {"opening_kind": "door", "bogus": 1}, "add_opening unknown field"),
         ("commands/move_opening.json", {"bogus": 1}, "move_opening unknown field"),
         ("commands/move_wall.json", {"toward": "north", "distance_mm": 500}, "move_wall needs side or at"),
+        (
+            "responses/move_wall_result.json",
+            {"host_id": "x", "toward": "north", "distance_mm": 500, "faces_before": [0, 1], "faces_after": [0, 1],
+             "openings_moved": [], "ok": True, "message": "m", "followed": [{"forsk_id": "w03", "change_mm": 500}]},
+            "move_wall followed needs the wall's name",
+        ),
         ("commands/move_wall.json", {"side": "north", "at": [0, 0], "toward": "north", "distance_mm": 500}, "move_wall side and at"),
         ("commands/move_wall.json", {"side": "north", "toward": "up", "distance_mm": 500}, "move_wall unknown toward"),
         ("commands/move_wall.json", {"side": "north", "toward": "north", "distance_mm": 0}, "move_wall distance above 0"),

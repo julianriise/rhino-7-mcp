@@ -156,6 +156,40 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// After a wall edit that changed more than the wall: one row per wall
+        /// that followed, then what was rebuilt. Null when only the wall
+        /// changed, or the edit failed. Read from the tool's result.
+        /// </summary>
+        public static CardSpec WallReview(JObject envelope)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            var result = envelope["result"] as JObject;
+            var followed = result?["followed"] as JArray;
+            var records = result?["records"] as JArray;
+            if ((followed?.Count ?? 0) == 0 && (records?.Count ?? 0) <= 1) return null;
+            var card = new CardSpec
+            {
+                Kind = "wall.review",
+                Question = ForskText.Get("wall.review.ask"),
+                Rows = new List<string>(),
+                Depends = "model",
+                Pills = { new CardPill("done", ForskText.Get("word.done")) }
+            };
+            foreach (var item in followed ?? new JArray())
+            {
+                var wall = item["wall"]?.ToString() ?? "";
+                if (wall.Length > 0) wall = char.ToUpperInvariant(wall[0]) + wall.Substring(1);
+                var change = item["change_mm"]?.ToObject<double>() ?? 0;
+                var key = change > 0 ? "wall.review.longer" : change < 0 ? "wall.review.shorter" : "wall.review.row";
+                card.Rows.Add(ForskText.Format(key, "wall", wall, "id", item["forsk_id"]?.ToString() ?? "",
+                    "mm", Math.Abs(change).ToString("0", CultureInfo.InvariantCulture)));
+            }
+            var rebuilt = result?["rebuilt"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(rebuilt)) card.Rows.Add(rebuilt);
+            return card;
+        }
+
         /// <summary>A multi-page PDF on import: which page is the plan. The file goes in the card's data.</summary>
         public static CardSpec PdfPage(string pdfPath, int pages)
         {

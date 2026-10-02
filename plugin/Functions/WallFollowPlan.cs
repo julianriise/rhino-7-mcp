@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -36,6 +37,43 @@ public static class WallFollowPlan
         if (daylight)
             text += " Daylight is out of date, run it again.";
         return text;
+    }
+
+    /// <summary>
+    /// The walls that followed an edit, as one phrase: "the east and west
+    /// walls", "the north wall and the wall at (4000, 2000)". Side walls go
+    /// first, then the others in the order given. Empty when there are none.
+    /// </summary>
+    public static string Walls(IList<string> names)
+    {
+        var sides = new List<string>();
+        var others = new List<string>();
+        foreach (var name in names ?? new List<string>())
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var side = SideOf(name);
+            if (side != null) { if (!sides.Contains(side)) sides.Add(side); }
+            else if (!others.Contains(name)) others.Add(name);
+        }
+        var parts = new List<string>();
+        if (sides.Count == 1) parts.Add("the " + sides[0] + " wall");
+        else if (sides.Count > 1) parts.Add("the " + And(sides) + " walls");
+        parts.AddRange(others);
+        return And(parts);
+    }
+
+    static string SideOf(string name)
+    {
+        foreach (var side in new[] { "north", "south", "east", "west" })
+            if (name == "the " + side + " wall") return side;
+        return null;
+    }
+
+    static string And(IList<string> items)
+    {
+        if (items.Count == 0) return "";
+        if (items.Count == 1) return items[0];
+        return string.Join(", ", items.Take(items.Count - 1)) + " and " + items[items.Count - 1];
     }
 
     /// <summary>The same closed outline, vertices on each other's edges.</summary>

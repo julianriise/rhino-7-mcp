@@ -74,6 +74,10 @@ namespace RhinoMCPPlugin.Forsk
             // One-time cards: the question, then the pills.
             ["opening.type.ask"] = "Which {kind} type?",
             ["file.check.ask"] = "What the import was not sure about",
+            ["wall.review.ask"] = "What followed the wall",
+            ["wall.review.longer"] = "{wall} ({id}) · {mm} mm longer",
+            ["wall.review.shorter"] = "{wall} ({id}) · {mm} mm shorter",
+            ["wall.review.row"] = "{wall} ({id})",
             ["ink.set.ask"] = "Ink for the next Print. Sheets already drawn keep theirs until then.",
             ["ink.set.now"] = "Now: {ink}.",
             ["ink.default"] = "Default",

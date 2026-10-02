@@ -44,4 +44,15 @@ public class WallFollowPlanTests
         Assert.False(WallFollowPlan.Covers(free, roof, 500, 5));
         Assert.True(WallFollowPlan.Covers(wall, same, 0, 5));
     }
+
+    [Theory]
+    [InlineData("", new string[0])]
+    [InlineData("the north wall", new[] { "the north wall" })]
+    [InlineData("the east and west walls", new[] { "the east wall", "the west wall" })]
+    [InlineData("the east and west walls and the wall at (4000, 2000)", new[] { "the east wall", "the wall at (4000, 2000)", "the west wall" })]
+    [InlineData("the north, east and west walls", new[] { "the north wall", "the east wall", "the west wall", "the east wall" })]
+    public void Walls_NamesWhatFollowed_InOnePhrase(string phrase, string[] names)
+    {
+        Assert.Equal(phrase, WallFollowPlan.Walls(names));
+    }
 }

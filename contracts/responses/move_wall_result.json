@@ -17,6 +17,21 @@
     "thickness": { "type": ["number", "null"] },
     "path_points": { "type": ["integer", "null"] },
     "openings_moved": { "type": "array", "items": { "type": "string" }, "description": "Marker GUIDs of the openings that moved with the run." },
+    "followed": {
+      "type": "array",
+      "description": "The walls joined to the run that stretched or shortened with it (F2).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": { "type": "string", "description": "The record the wall stands in." },
+          "wall": { "type": "string", "description": "Its name before the move: the east wall, or the wall at (x, y)." },
+          "change_mm": { "type": "number", "description": "How much longer it got; shorter is below 0." }
+        },
+        "required": ["forsk_id", "wall", "change_mm"]
+      }
+    },
+    "records": { "type": "array", "items": { "type": "string" }, "description": "The forsk ids of the wall records written. More than one when records that share ends followed." },
+    "rebuilt": { "type": "string", "description": "What followed besides the walls: floor, roof, rooms." },
     "host_openings": { "type": "integer" },
     "host_voids": { "type": "integer" },
     "max_frame_mm": { "type": "number" },
