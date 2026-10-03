@@ -4,15 +4,16 @@ using Xunit;
 namespace SoftParam.Tests;
 
 /// <summary>
-/// v3 P3: the title block in Norwegian, with the sheet's number, and a
+/// v3 P3: the title block in English, with the sheet's number, and a
 /// revision only when one is set. The cell key stays English (forsk:cell,
 /// plan_smoke reads name == "scale"); only the printed caption changes.
+/// Bokmål captions stay available.
 /// </summary>
 public class TitleBlockTests
 {
     static TitleBlock.Fields Office(string revision = null) => new TitleBlock.Fields
     {
-        Drawing = "Plan 1. etg",
+        Drawing = "Ground floor plan",
         Number = SheetSet.Number("plan", 0),
         Scale = "1:200",
         Format = "A3",
@@ -24,11 +25,19 @@ public class TitleBlockTests
     };
 
     [Fact]
-    public void Captions_AreNorwegian_AndTheKeysStayEnglish()
+    public void Captions_AreEnglish_AndTheKeysStayEnglish()
     {
         var cells = TitleBlock.Cells(Office("B"));
         Assert.Equal(new[] { "drawing", "number", "scale", "sheet", "date", "revision", "project", "client", "address" },
             cells.Select(c => c.Key).ToArray());
+        Assert.Equal(new[] { "Drawing", "Drawing no.", "Scale", "Format", "Date", "Rev.", "Project", "Client", "Address" },
+            cells.Select(c => c.Caption).ToArray());
+    }
+
+    [Fact]
+    public void Captions_StayNorwegian_WhenAsked()
+    {
+        var cells = TitleBlock.Cells(Office("B"), true);
         Assert.Equal(new[] { "Tegning", "Tegningsnr.", "Målestokk", "Format", "Dato", "Rev.", "Prosjekt", "Byggherre", "Adresse" },
             cells.Select(c => c.Caption).ToArray());
     }

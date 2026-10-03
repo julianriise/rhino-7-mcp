@@ -91,7 +91,7 @@ public static class SheetScale
 
     /// <summary>
     /// The receipt's one clause for the sheets that print at another scale:
-    /// " Snitt A–A at 1:500 to fit." Empty when there are none.
+    /// " Section A–A at 1:500 to fit." Empty when there are none.
     /// </summary>
     public static string Clause(IList<string> titles, IList<int> scales)
     {

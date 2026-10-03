@@ -21,15 +21,16 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public static class Takeoff
 {
-    public const string Outer = "Yttervegger";
-    public const string Inner = "Innervegger";
-    public const string Existing = "Eksisterende";
-    public const string Slabs = "Dekker";
-    public const string Roofs = "Tak";
-    public const string Doors = "Dører";
-    public const string Windows = "Vinduer";
-    public const string Areas = "Arealer";
-    public const string Note = "Mengder er ca.-tall fra modellen. Veggareal er netto av åpninger, én side.";
+    public const string Outer = "Exterior walls";
+    public const string Inner = "Interior walls";
+    public const string Existing = "Existing";
+    public const string Slabs = "Slabs";
+    public const string Roofs = "Roof";
+    public const string Doors = "Doors";
+    public const string Windows = "Windows";
+    public const string Areas = "Areas";
+    public const string Note = "Quantities are approximate, from the model. Wall area is net of openings, one side.";
+    public const string NoteNb = "Mengder er ca.-tall fra modellen. Veggareal er netto av åpninger, én side.";
 
     /// <summary>One wall record: forsk:path rings (outer, then holes), forsk:thickness, forsk:height, X-EXIST or not.</summary>
     public sealed class Wall
@@ -76,31 +77,34 @@ public static class Takeoff
     }
 
     public static Result Compute(
-        IList<Wall> walls, IList<Schedules.Opening> openings, IList<Slab> slabs, IList<Slab> roofs, AreaStats.Result area, double tol)
+        IList<Wall> walls, IList<Schedules.Opening> openings, IList<Slab> slabs, IList<Slab> roofs, AreaStats.Result area, double tol, bool norwegian = false)
     {
         walls = walls ?? new Wall[0];
         openings = openings ?? new Schedules.Opening[0];
         var result = new Result();
         var built = WallRuns(walls.Where(w => !w.Existing).ToList(), openings, tol);
-        AddWalls(result, built.Where(r => r.Outer), Outer, "Yttervegg");
-        AddWalls(result, built.Where(r => !r.Outer), Inner, "Innervegg");
+        AddWalls(result, built.Where(r => r.Outer), Group(Outer, "Yttervegger", norwegian), SheetLang.Pick(norwegian, "Exterior wall", "Yttervegg"));
+        AddWalls(result, built.Where(r => !r.Outer), Group(Inner, "Innervegger", norwegian), SheetLang.Pick(norwegian, "Interior wall", "Innervegg"));
         var standing = WallRuns(walls.Where(w => w.Existing).ToList(), new Schedules.Opening[0], tol);
-        AddWalls(result, standing.Where(r => r.Outer), Existing, "Eksisterende yttervegg");
-        AddWalls(result, standing.Where(r => !r.Outer), Existing, "Eksisterende innervegg");
-        foreach (var slab in slabs ?? new Slab[0]) AddSlab(result, Slabs, "Dekke", slab);
-        foreach (var roof in roofs ?? new Slab[0]) AddSlab(result, Roofs, "Tak", roof);
-        AddOpenings(result, openings.Where(o => o.Record?.Kind == "door"), Doors);
-        AddOpenings(result, openings.Where(o => o.Record?.Kind == "window"), Windows);
-        AddAreas(result, area);
-        result.Summary = Summarize(result);
+        var existing = Group(Existing, "Eksisterende", norwegian);
+        AddWalls(result, standing.Where(r => r.Outer), existing, SheetLang.Pick(norwegian, "Existing exterior wall", "Eksisterende yttervegg"));
+        AddWalls(result, standing.Where(r => !r.Outer), existing, SheetLang.Pick(norwegian, "Existing interior wall", "Eksisterende innervegg"));
+        foreach (var slab in slabs ?? new Slab[0]) AddSlab(result, Group(Slabs, "Dekker", norwegian), SheetLang.Pick(norwegian, "Slab", "Dekke"), slab);
+        foreach (var roof in roofs ?? new Slab[0]) AddSlab(result, Group(Roofs, "Tak", norwegian), SheetLang.Pick(norwegian, "Roof", "Tak"), roof);
+        AddOpenings(result, openings.Where(o => o.Record?.Kind == "door"), Group(Doors, "Dører", norwegian), norwegian);
+        AddOpenings(result, openings.Where(o => o.Record?.Kind == "window"), Group(Windows, "Vinduer", norwegian), norwegian);
+        AddAreas(result, area, norwegian);
+        result.Summary = Summarize(result, norwegian);
         return result;
     }
 
+    static string Group(string english, string bokmal, bool norwegian) => norwegian ? bokmal : english;
+
     /// <summary>The card's row: "Yttervegg 200 mm · 23,2 m · 52,1 m² · 10,4 m³".</summary>
-    public static string Row(Line line)
+    public static string Row(Line line, bool norwegian = false)
     {
         var parts = new List<string> { line.Name };
-        if (line.Count.HasValue) parts.Add(line.Count.Value.ToString(CultureInfo.InvariantCulture) + " stk");
+        if (line.Count.HasValue) parts.Add(line.Count.Value.ToString(CultureInfo.InvariantCulture) + SheetLang.Pick(norwegian, " no.", " stk"));
         if (line.LengthM.HasValue) parts.Add(Number(line.LengthM.Value) + " m");
         if (line.AreaM2.HasValue) parts.Add(Number(line.AreaM2.Value) + " m²");
         if (line.VolumeM3.HasValue) parts.Add(Number(line.VolumeM3.Value) + " m³");
@@ -108,15 +112,19 @@ public static class Takeoff
     }
 
     /// <summary>The Mengdeliste on the lists' path: a heading row per group, then its lines, and the note.</summary>
-    public static Schedules.Table Table(Result result)
+    public static Schedules.Table Table(Result result, bool norwegian = false)
     {
         var table = new Schedules.Table
         {
             Kind = "takeoff",
-            Title = "Mengdeliste",
-            Heads = new[] { "Post", "Lengde (m)", "Areal (m²)", "Volum (m³)", "Antall" },
-            Right = new[] { false, true, true, true, true }
+            Title = SheetLang.Pick(norwegian, "Quantities", "Mengdeliste"),
+            Heads = norwegian
+                ? new[] { "Post", "Lengde (m)", "Areal (m²)", "Volum (m³)", "Antall" }
+                : new[] { "Item", "Length (m)", "Area (m²)", "Volume (m³)", "Count" },
+            Right = new[] { false, true, true, true, true },
+            ContinuedSuffix = norwegian ? " (forts.)" : " (cont.)"
         };
+        var existing = Group(Existing, "Eksisterende", norwegian);
         string group = null;
         var n = 0;
         foreach (var line in result?.Lines ?? new List<Line>())
@@ -130,14 +138,14 @@ public static class Takeoff
             table.Ids.Add("line-" + (++n).ToString(CultureInfo.InvariantCulture));
             table.Rows.Add(new[]
             {
-                line.Group == Existing ? line.Name : line.Label,
+                line.Group == existing ? line.Name : line.Label,
                 line.LengthM.HasValue ? Number(line.LengthM.Value) : "",
                 line.AreaM2.HasValue ? Number(line.AreaM2.Value) : "",
                 line.VolumeM3.HasValue ? Number(line.VolumeM3.Value) : "",
                 line.Count.HasValue ? line.Count.Value.ToString(CultureInfo.InvariantCulture) : ""
             });
         }
-        table.Note = table.Rows.Count == 0 ? null : Note;
+        table.Note = table.Rows.Count == 0 ? null : (norwegian ? NoteNb : Note);
         return Schedules.Fit(table, null);
     }
 
@@ -270,10 +278,10 @@ public static class Takeoff
         });
     }
 
-    static void AddOpenings(Result result, IEnumerable<Schedules.Opening> openings, string group)
+    static void AddOpenings(Result result, IEnumerable<Schedules.Opening> openings, string group, bool norwegian)
     {
         var bySize = openings
-            .GroupBy(o => Schedules.TypeText(o.Record) + " " + Mm(o.Width) + " × " + Mm(o.Head - o.Sill))
+            .GroupBy(o => Schedules.TypeText(o.Record, norwegian) + " " + Mm(o.Width) + " × " + Mm(o.Head - o.Sill))
             .OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var size in bySize)
             result.Lines.Add(new Line
@@ -287,36 +295,45 @@ public static class Takeoff
     }
 
     /// <summary>BTA, BRA and Netto per floor, as area_stats gives them. A figure it left out stays out.</summary>
-    static void AddAreas(Result result, AreaStats.Result area)
+    static void AddAreas(Result result, AreaStats.Result area, bool norwegian)
     {
         if (area == null) return;
+        var areas = Group(Areas, "Arealer", norwegian);
         foreach (var floor in area.Floors)
         {
             var level = string.IsNullOrWhiteSpace(floor.Key) ? "0" : floor.Key.Trim();
-            var name = AreaStats.FloorName(level, true);
+            var name = AreaStats.FloorName(level, norwegian);
             var gross = area.Gross?.Find(g => g != null && (string.IsNullOrWhiteSpace(g.Level) ? "0" : g.Level.Trim()) == level);
             void Add(string what, double mm2) =>
-                result.Lines.Add(new Line { Group = Areas, Label = name + " " + what, Name = name + " " + what, AreaM2 = mm2 / 1e6 });
-            if (gross?.BtaMm2 != null) Add("BTA", gross.BtaMm2.Value);
-            if (gross?.BraMm2 != null) Add("BRA", gross.BraMm2.Value);
-            Add("Netto", floor.AreaMm2);
+                result.Lines.Add(new Line { Group = areas, Label = name + " " + what, Name = name + " " + what, AreaM2 = mm2 / 1e6 });
+            if (gross?.BtaMm2 != null) Add(SheetLang.Pick(norwegian, "Gross area (BTA)", "BTA"), gross.BtaMm2.Value);
+            if (gross?.BraMm2 != null) Add(SheetLang.Pick(norwegian, "Usable area (BRA)", "BRA"), gross.BraMm2.Value);
+            Add(SheetLang.Pick(norwegian, "Net area", "Netto"), floor.AreaMm2);
         }
     }
 
     /// <summary>One line for the chat: the new walls, the slabs and roof, the doors and windows. Not the existing.</summary>
-    static string Summarize(Result result)
+    static string Summarize(Result result, bool norwegian)
     {
         var parts = new List<string>();
+        string Named(string english, string bokmal) => Group(english, bokmal, norwegian);
         double Sum(string group, Func<Line, double?> figure) => result.Lines.Where(l => l.Group == group).Sum(l => figure(l) ?? 0);
-        if (result.Lines.Any(l => l.Group == Outer)) parts.Add("yttervegger " + Number(Sum(Outer, l => l.LengthM)) + " m");
-        if (result.Lines.Any(l => l.Group == Inner)) parts.Add("innervegger " + Number(Sum(Inner, l => l.LengthM)) + " m");
-        if (result.Lines.Any(l => l.Group == Slabs)) parts.Add("dekker " + Number(Sum(Slabs, l => l.AreaM2)) + " m²");
-        if (result.Lines.Any(l => l.Group == Roofs)) parts.Add("tak " + Number(Sum(Roofs, l => l.AreaM2)) + " m²");
-        var doors = (int)Sum(Doors, l => l.Count);
-        var windows = (int)Sum(Windows, l => l.Count);
-        if (doors > 0) parts.Add(doors.ToString(CultureInfo.InvariantCulture) + (doors == 1 ? " dør" : " dører"));
-        if (windows > 0) parts.Add(windows.ToString(CultureInfo.InvariantCulture) + (windows == 1 ? " vindu" : " vinduer"));
-        return parts.Count == 0 ? "Ingen mengder: modellen har ingen vegger." : "Mengder, ca.: " + string.Join(", ", parts) + ".";
+        var outer = Named(Outer, "Yttervegger");
+        var inner = Named(Inner, "Innervegger");
+        var slabs = Named(Slabs, "Dekker");
+        var roofs = Named(Roofs, "Tak");
+        var doorsGroup = Named(Doors, "Dører");
+        var windowsGroup = Named(Windows, "Vinduer");
+        if (result.Lines.Any(l => l.Group == outer)) parts.Add(SheetLang.Pick(norwegian, "exterior walls ", "yttervegger ") + Number(Sum(outer, l => l.LengthM)) + " m");
+        if (result.Lines.Any(l => l.Group == inner)) parts.Add(SheetLang.Pick(norwegian, "interior walls ", "innervegger ") + Number(Sum(inner, l => l.LengthM)) + " m");
+        if (result.Lines.Any(l => l.Group == slabs)) parts.Add(SheetLang.Pick(norwegian, "slabs ", "dekker ") + Number(Sum(slabs, l => l.AreaM2)) + " m²");
+        if (result.Lines.Any(l => l.Group == roofs)) parts.Add(SheetLang.Pick(norwegian, "roof ", "tak ") + Number(Sum(roofs, l => l.AreaM2)) + " m²");
+        var doors = (int)Sum(doorsGroup, l => l.Count);
+        var windows = (int)Sum(windowsGroup, l => l.Count);
+        if (doors > 0) parts.Add(doors.ToString(CultureInfo.InvariantCulture) + (doors == 1 ? SheetLang.Pick(norwegian, " door", " dør") : SheetLang.Pick(norwegian, " doors", " dører")));
+        if (windows > 0) parts.Add(windows.ToString(CultureInfo.InvariantCulture) + (windows == 1 ? SheetLang.Pick(norwegian, " window", " vindu") : SheetLang.Pick(norwegian, " windows", " vinduer")));
+        if (parts.Count == 0) return SheetLang.Pick(norwegian, "No quantities: the model has no walls.", "Ingen mengder: modellen har ingen vegger.");
+        return SheetLang.Pick(norwegian, "Quantities, approx.: ", "Mengder, ca.: ") + string.Join(", ", parts) + ".";
     }
 
     static string Mm(double value)

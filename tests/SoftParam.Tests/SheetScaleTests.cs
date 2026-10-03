@@ -124,10 +124,10 @@ public class SheetScaleTests
     public void Clause_NamesABumpedSheet_InOneClause()
     {
         Assert.Equal("", SheetScale.Clause(new string[0], new int[0]));
-        Assert.Equal(" Snitt A–A at 1:500 to fit.", SheetScale.Clause(new[] { "Snitt A–A" }, new[] { 500 }));
-        Assert.Equal(" Snitt A–A and Snitt B–B at 1:500 to fit.",
-            SheetScale.Clause(new[] { "Snitt A–A", "Snitt B–B" }, new[] { 500, 500 }));
-        Assert.Equal(" Plan 1. etg at 1:200 and Snitt A–A at 1:500 to fit.",
-            SheetScale.Clause(new[] { "Plan 1. etg", "Snitt A–A" }, new[] { 200, 500 }));
+        Assert.Equal(" Section A–A at 1:500 to fit.", SheetScale.Clause(new[] { "Section A–A" }, new[] { 500 }));
+        Assert.Equal(" Section A–A and Section B–B at 1:500 to fit.",
+            SheetScale.Clause(new[] { "Section A–A", "Section B–B" }, new[] { 500, 500 }));
+        Assert.Equal(" Ground floor plan at 1:200 and Section A–A at 1:500 to fit.",
+            SheetScale.Clause(new[] { "Ground floor plan", "Section A–A" }, new[] { 200, 500 }));
     }
 }

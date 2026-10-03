@@ -425,7 +425,7 @@ public partial class RhinoMCPFunctions
                         "free_height", "tick", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
             }
             // Reads bottom to top, left of its line, like a vertical dimension's value.
-            var text = "Fri høyde " + free.Value.ToString(CultureInfo.InvariantCulture);
+            var text = Sections.ClearHeightText(free.Value);
             var at = new Point3d(foot.X - (PlanDims.TextGapMm + 0.5 * Sections.ValueMm) * scale, 0.5 * (foot.Y + head.Y), 0);
             if (AddSheetText(doc, layer, text, new Plane(at, Vector3d.YAxis, -Vector3d.XAxis),
                     valueHeight, scale, "free_height", extra, ref box, ref index, ref count))

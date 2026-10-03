@@ -590,7 +590,7 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
     against the model: one door row per door marker and one window row per
     window marker, under the mark (forsk:mark) the marker carries and the
     plan prints beside it, every mark once; one room row per tagged room,
-    with the name and the area its plan tag prints (the tag is ca. and the
+    with the name and the area its plan tag prints (the tag is approx. and the
     row's area)."""
     lists = schedule_rows(sheets)
 
@@ -633,7 +633,7 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
         name, area = (cells + ["", ""])[:2]
         if tags.get((rid, "name")) != name:
             wrong.append(f"{rid} {name!r} tag {tags.get((rid, 'name'))!r}")
-        elif (rid, "area") in tags and tags[(rid, "area")] != f"ca. {area}":
+        elif (rid, "area") in tags and tags[(rid, "area")] != f"approx. {area}":
             wrong.append(f"{rid} {area!r} tag {tags[(rid, 'area')]!r}")
     if len(rows("room")) != tagged:
         bad.append(f"room rows {len(rows('room'))} for {tagged} tagged rooms")

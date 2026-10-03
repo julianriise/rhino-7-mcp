@@ -208,7 +208,7 @@ namespace RhinoMCPPlugin.Forsk
             return kinds;
         }
 
-        /// <summary>A sheet as the cards name it: A-40-001 Fasade mot nord.</summary>
+        /// <summary>A sheet as the cards name it: A-40-001 North elevation.</summary>
         static string SheetLine(string id, FileFacts f)
         {
             return SheetSet.Number(id, 0) + " " + SheetSet.Title(id, 0, ListKinds(f));

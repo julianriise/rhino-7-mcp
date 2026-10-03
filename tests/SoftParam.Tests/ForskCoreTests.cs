@@ -122,8 +122,8 @@ public class ForskCoreTests
         // A set revision is named; a bumped sheet is one clause; the blank-page note keeps its clause.
         Assert.Equal("✓ Printed 7 sheets at 1:200 on A3, rev. B · Holmen.pdf",
             ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", " B ", "", ""));
-        Assert.Equal("✓ Printed 7 sheets at 1:200 on A3 (Snitt A–A at 1:500 to fit) · Holmen.pdf · Blank preview: page 3",
-            ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", null, " Snitt A–A at 1:500 to fit.", " · Blank preview: page 3"));
+        Assert.Equal("✓ Printed 7 sheets at 1:200 on A3 (Section A–A at 1:500 to fit) · Holmen.pdf · Blank preview: page 3",
+            ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", null, " Section A–A at 1:500 to fit.", " · Blank preview: page 3"));
         // One list sheet has no scale.
         Assert.Equal("✓ Printed 1 sheet on A3 · Holmen.pdf", ForskReceipt.PrintLine(1, 0, "/Users/jr/Desktop/Holmen.pdf", null, null, ""));
 

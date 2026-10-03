@@ -1109,7 +1109,7 @@ def main() -> int:
         page = (packed.get("pages") or [{}])[0]
         if page.get("north_arrow") is not True:
             failures.append("sheet north arrow missing")
-        if "ca." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
+        if "approx." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
             failures.append(f"sheet room tag={page.get('room_tag_text')!r}")
         if (page.get("roof_outline") or 0) < 1:
             failures.append(f"sheet roof outline={page.get('roof_outline')}")
@@ -1214,7 +1214,7 @@ def main() -> int:
         plan_smoke.check_pages_written(packed.get("pages") or [], pdf, "sheet", failures)
 
         # The doors PDF stays plan then schedules. The set is its own PDF:
-        # south facade, Mengdeliste, front sheet last so the Tegningsliste lists the others.
+        # south facade, Quantities, front sheet last so the Drawing list lists the others.
         set_packed = send_command(sock, "layout_pack", {
             "views": ["south", "takeoff", "front"], "replace": True,
         })
@@ -1234,8 +1234,8 @@ def main() -> int:
         )
         if front.get("number") != "A-00-001":
             failures.append(f"front sheet number {front.get('number')}")
-        if drawing_title != "Tegningsliste" or area_title != "Arealer":
-            failures.append(f"front lists {drawing_title!r} {area_title!r}, expected Tegningsliste and Arealer")
+        if drawing_title != "Drawing list" or area_title != "Areas":
+            failures.append(f"front lists {drawing_title!r} {area_title!r}, expected Drawing list and Areas")
         if facade.get("number") != "A-40-003":
             failures.append(f"facade number {facade.get('number')}")
         if ground is None:

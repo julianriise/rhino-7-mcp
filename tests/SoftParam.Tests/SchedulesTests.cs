@@ -228,10 +228,10 @@ public class SchedulesTests
         hinged.Record = outward;
 
         var table = Schedules.DoorTable(new[] { hinged, sliding });
-        Assert.Equal("Dørliste", table.Title);
+        Assert.Equal("Door schedule", table.Title);
         Assert.Equal(new[] { "D01", "D02" }, table.Ids);
-        Assert.Equal(new[] { "D01", "Skyvedør", "900 × 2100", "V", "Gang" }, table.Rows[0]);
-        Assert.Equal(new[] { "D02", "Slagdør", "900 × 2100", "H ut", "Kontor / Gang" }, table.Rows[1]);
+        Assert.Equal(new[] { "D01", "Sliding door", "900 × 2100", "L", "Gang" }, table.Rows[0]);
+        Assert.Equal(new[] { "D02", "Hinged door", "900 × 2100", "R out", "Kontor / Gang" }, table.Rows[1]);
         Assert.Null(table.Total);
     }
 
@@ -242,7 +242,7 @@ public class SchedulesTests
         window.Sill = 1300;
         window.Rooms = new[] { "Stue", null };
         var row = Schedules.WindowTable(new[] { window }).Rows.Single();
-        Assert.Equal(new[] { "V01", "Topphengslet", "1200 × 800", "1300", "Stue" }, row);
+        Assert.Equal(new[] { "V01", "Top-hung window", "1200 × 800", "1300", "Stue" }, row);
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class SchedulesTests
         for (var i = 0; i < table.Rows.Count; i++)
         {
             var room = rooms.Single(r => r.Id == table.Ids[i]);
-            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "ca. " + table.Rows[i][1]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "approx. " + table.Rows[i][1]);
             Assert.Equal(room.Name, table.Rows[i][0]);
         }
         Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Total);
@@ -286,7 +286,7 @@ public class SchedulesTests
     /// The office smoke's model: its 16 detected rooms on level 0, and BRA
     /// and BTA asked of its wall rings at 200 mm. Headless, those rings give
     /// no figure (the outline does not inset cleanly), so the floor shows
-    /// Netto and the note says BRA and BTA are missing.
+    /// net area and the note says gross and usable area are missing.
     /// </summary>
     static AreaStats.Result OfficeAreas()
     {
@@ -310,22 +310,22 @@ public class SchedulesTests
         var result = OfficeAreas();
         var table = Schedules.AreaTable(result);
         Assert.Equal("area", table.Kind);
-        Assert.Equal("Arealer", table.Title);
-        // One floor block: its heading, the BTA and BRA it has, its Netto.
+        Assert.Equal("Areas", table.Title);
+        // One floor block: its heading, the gross and usable area it has, its net area.
         var floor = result.Gross.Single();
         var block = table.Ids.TakeWhile(id => id != "uses").ToList();
         var gross = new[] { floor.BtaMm2 == null ? null : "bta-0", floor.BraMm2 == null ? null : "bra-0" }.Where(id => id != null);
         Assert.Equal(new[] { "floor-0" }.Concat(gross).Append("net-0"), block);
-        Assert.Equal(new[] { "1. etasje", "" }, table.Rows[0]);
-        Assert.Equal(new[] { "Netto", OpeningTypes.AreaText(result.Floors[0].AreaMm2) }, table.Rows[block.Count - 1]);
-        Assert.Equal(new[] { "Netto per bruk", "" }, table.Rows[block.Count]);
+        Assert.Equal(new[] { "Ground floor", "" }, table.Rows[0]);
+        Assert.Equal(new[] { "Net area", OpeningTypes.AreaText(result.Floors[0].AreaMm2) }, table.Rows[block.Count - 1]);
+        Assert.Equal(new[] { "Net area by use", "" }, table.Rows[block.Count]);
         var uses = table.Rows.Skip(block.Count + 1).ToList();
         Assert.Equal(result.Uses.Select(u => u.Key), uses.Select(r => r[0]));
         Assert.Equal(result.Uses.Select(u => OpeningTypes.AreaText(u.AreaMm2)), uses.Select(r => r[1]));
         var areas = result.Uses.Select(u => u.AreaMm2).ToList();
         Assert.Equal(areas.OrderByDescending(a => a), areas);
         Assert.StartsWith(Schedules.AreaNote, table.Note);
-        Assert.Equal(floor.BtaMm2 == null && floor.BraMm2 == null, table.Note.EndsWith("1. etasje: BRA og BTA mangler."));
+        Assert.Equal(floor.BtaMm2 == null && floor.BraMm2 == null, table.Note.EndsWith("Ground floor: gross area (BTA) and usable area (BRA) are missing."));
     }
 
     [Fact]
@@ -343,10 +343,10 @@ public class SchedulesTests
         };
         var table = Schedules.AreaTable(result);
         Assert.Equal(new[] { "floor-0", "bta-0", "bra-0", "net-0", "floor-1", "net-1", "uses", "use-Stue", "use-Kontor" }, table.Ids);
-        Assert.Equal(new[] { "BTA", "25,0 m²" }, table.Rows[1]);
-        Assert.Equal(new[] { "BRA", "22,0 m²" }, table.Rows[2]);
-        Assert.Equal(new[] { "Netto", "20,0 m²" }, table.Rows[3]);
-        Assert.Equal("Arealer er ca.-tall fra modellen, ikke målt etter NS 3940. 2. etasje: BRA og BTA mangler.", table.Note);
+        Assert.Equal(new[] { "Gross area (BTA)", "25,0 m²" }, table.Rows[1]);
+        Assert.Equal(new[] { "Usable area (BRA)", "22,0 m²" }, table.Rows[2]);
+        Assert.Equal(new[] { "Net area", "20,0 m²" }, table.Rows[3]);
+        Assert.Equal("Areas are approximate, from the model, not measured to NS 3940. 1st floor: gross area (BTA) and usable area (BRA) are missing.", table.Note);
         // With no rooms there is no table.
         Assert.Equal(0, Schedules.AreaTable(AreaStats.Compute(new AreaStats.Room[0])).Lines);
     }
@@ -356,33 +356,33 @@ public class SchedulesTests
     {
         var rows = new[]
         {
-            new Schedules.Drawing { Number = "A-00-001", Title = "Tegningsliste og arealer" },
-            new Schedules.Drawing { Number = "A-20-001", Title = "Plan 1. etg", Scale = 200 },
-            new Schedules.Drawing { Number = "A-40-001", Title = "Fasade mot nord", Scale = 200 },
-            new Schedules.Drawing { Number = "A-40-101", Title = "Snitt A–A", Scale = 500 },
-            new Schedules.Drawing { Number = "A-00-002", Title = "Dør-, vindus- og romliste" }
+            new Schedules.Drawing { Number = "A-00-001", Title = "Drawing list and areas" },
+            new Schedules.Drawing { Number = "A-20-001", Title = "Ground floor plan", Scale = 200 },
+            new Schedules.Drawing { Number = "A-40-001", Title = "North elevation", Scale = 200 },
+            new Schedules.Drawing { Number = "A-40-101", Title = "Section A–A", Scale = 500 },
+            new Schedules.Drawing { Number = "A-00-002", Title = "Door, window and room schedule" }
         };
         var table = Schedules.DrawingList(rows);
         Assert.Equal("drawings", table.Kind);
-        Assert.Equal("Tegningsliste", table.Title);
-        Assert.Equal(new[] { "Nr.", "Tegning", "Målestokk" }, table.Heads);
+        Assert.Equal("Drawing list", table.Title);
+        Assert.Equal(new[] { "No.", "Drawing", "Scale" }, table.Heads);
         Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-101", "A-00-002" }, table.Ids);
-        Assert.Equal(new[] { "A-20-001", "Plan 1. etg", "1:200" }, table.Rows[1]);
-        Assert.Equal(new[] { "A-40-101", "Snitt A–A", "1:500" }, table.Rows[3]);
+        Assert.Equal(new[] { "A-20-001", "Ground floor plan", "1:200" }, table.Rows[1]);
+        Assert.Equal(new[] { "A-40-101", "Section A–A", "1:500" }, table.Rows[3]);
         Assert.Equal("", table.Rows[4][2]);
     }
 
     [Fact]
     public void FrontSheet_FlowsOntoOneA3Page_ForTheOffice()
     {
-        var sheets = new List<Schedules.Drawing> { new Schedules.Drawing { Number = "A-00-001", Title = "Tegningsliste og arealer" } };
-        sheets.Add(new Schedules.Drawing { Number = "A-20-001", Title = "Plan 1. etg", Scale = 200 });
-        foreach (var (facade, i) in new[] { "nord", "øst", "sør", "vest" }.Select((f, i) => (f, i)))
-            sheets.Add(new Schedules.Drawing { Number = $"A-40-00{i + 1}", Title = "Fasade mot " + facade, Scale = 200 });
-        sheets.Add(new Schedules.Drawing { Number = "A-40-101", Title = "Snitt A–A", Scale = 200 });
-        sheets.Add(new Schedules.Drawing { Number = "A-40-102", Title = "Snitt B–B", Scale = 200 });
-        sheets.Add(new Schedules.Drawing { Number = "A-00-002", Title = "Dør-, vindus- og romliste (1/2)" });
-        sheets.Add(new Schedules.Drawing { Number = "A-00-003", Title = "Dør-, vindus- og romliste (2/2)" });
+        var sheets = new List<Schedules.Drawing> { new Schedules.Drawing { Number = "A-00-001", Title = "Drawing list and areas" } };
+        sheets.Add(new Schedules.Drawing { Number = "A-20-001", Title = "Ground floor plan", Scale = 200 });
+        foreach (var (facade, i) in new[] { "North", "East", "South", "West" }.Select((f, i) => (f, i)))
+            sheets.Add(new Schedules.Drawing { Number = $"A-40-00{i + 1}", Title = facade + " elevation", Scale = 200 });
+        sheets.Add(new Schedules.Drawing { Number = "A-40-101", Title = "Section A–A", Scale = 200 });
+        sheets.Add(new Schedules.Drawing { Number = "A-40-102", Title = "Section B–B", Scale = 200 });
+        sheets.Add(new Schedules.Drawing { Number = "A-00-002", Title = "Door, window and room schedule (1/2)" });
+        sheets.Add(new Schedules.Drawing { Number = "A-00-003", Title = "Door, window and room schedule (2/2)" });
         var tables = new[] { Schedules.DrawingList(sheets), Schedules.AreaTable(OfficeAreas()) };
         var blocks = Schedules.Flow(tables, 400, 254);
         AssertFlowed(tables, blocks, 400, 254);
@@ -427,7 +427,7 @@ public class SchedulesTests
 
         var glazed = Opening("door", 0, 0, "D01");
         glazed.Record = door;
-        Assert.Equal("Slagdør m/glass", Schedules.DoorTable(new[] { glazed }).Rows.Single()[1]);
+        Assert.Equal("Hinged door with glass", Schedules.DoorTable(new[] { glazed }).Rows.Single()[1]);
     }
 
     [Fact]
@@ -438,10 +438,10 @@ public class SchedulesTests
     }
 
     [Theory]
-    [InlineData(new[] { "door" }, "Dørliste")]
-    [InlineData(new[] { "door", "window" }, "Dør- og vindusliste")]
-    [InlineData(new[] { "window", "room" }, "Vindus- og romliste")]
-    [InlineData(new[] { "door", "window", "room" }, "Dør-, vindus- og romliste")]
+    [InlineData(new[] { "door" }, "Door schedule")]
+    [InlineData(new[] { "door", "window" }, "Door and window schedule")]
+    [InlineData(new[] { "window", "room" }, "Window and room schedule")]
+    [InlineData(new[] { "door", "window", "room" }, "Door, window and room schedule")]
     public void SheetTitle_NamesTheLists(string[] kinds, string title)
     {
         Assert.Equal(title, Schedules.SheetTitle(kinds));
@@ -464,7 +464,7 @@ public class SchedulesTests
             var mine = blocks.Where(b => b.Table == table).ToList();
             Assert.Equal(Enumerable.Range(0, table.Lines), mine.SelectMany(b => Enumerable.Range(b.First, b.Count)));
             Assert.False(mine[0].Continued);
-            Assert.All(mine.Skip(1), b => Assert.EndsWith("(forts.)", b.Title));
+            Assert.All(mine.Skip(1), b => Assert.EndsWith("(cont.)", b.Title));
         }
         foreach (var block in blocks)
         {
@@ -521,11 +521,11 @@ public class SchedulesTests
     [Fact]
     public void Fit_ColumnsHoldTheWidestTextAsMeasured()
     {
-        // Rhino measures Sidehengslet wider than the old 0.62 × height guess.
+        // A measured type name wider than the character estimate sets the column.
         var table = Rows("window", 1);
-        Schedules.Fit(table, text => text == "Sidehengslet" ? 17.9 : text.Length * 1.0);
+        Schedules.Fit(table, text => text == "Side-hung window" ? 17.9 : text.Length * 1.0);
         Assert.Equal(Math.Ceiling(17.9 + 2 * Schedules.PadMm), table.Widths[1]);
-        // No measure: the estimate still clears Sidehengslet's 17.9 mm.
+        // No measure: the estimate still clears that 17.9 mm.
         Schedules.Fit(table, null);
         Assert.True(table.Widths[1] >= 17.9 + 2 * Schedules.PadMm, $"type column {table.Widths[1]} mm");
     }

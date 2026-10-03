@@ -359,7 +359,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
-                    + "layout_pack, export_pdf, clear_layouts. Print writes the set: the front sheet (Tegningsliste and Arealer), the plan with its dimensions, the four facades, every stored section and the lists, numbered A-00-001, A-20-001, A-40-001 and on. "
+                    + "layout_pack, export_pdf, clear_layouts. Print writes the set: the front sheet (Drawing list and Areas), the plan with its dimensions, the four facades, every stored section and the lists, numbered A-00-001, A-20-001, A-40-001 and on. "
                     + "Print in a profile (grey, hatch) is print_profile first, then Print. "
                     + "The set is on the Choose sheets card; change it with print_pages; Print prints the set. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
@@ -376,7 +376,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }
             if (intent == ForskIntent.Area) return ForskArea.Bias;
             if (intent == ForskIntent.Takeoff)
-                return "Turn bias: Takeoff. Call takeoff. Answer in one line with the figure the user asked for, from its rows, and say ca. "
+                return "Turn bias: Takeoff. Call takeoff. Answer in one line with the figure the user asked for, from its rows, and say approx. "
                     + "The window shows every line on a card under the receipt: do not list them. No coordinates, no ids. Do not invent a figure.";
             if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)

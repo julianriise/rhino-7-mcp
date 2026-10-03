@@ -147,15 +147,17 @@ public static class SheetSet
     /// lists that have rows (all three when null): the lists sheet names
     /// them, and the front sheet holds the Arealtabell only with rooms.
     /// </summary>
-    public static string Title(string id, int level, IList<string> listKinds = null)
+    public static string Title(string id, int level, IList<string> listKinds = null, bool norwegian = false)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
         if (key == FrontId)
-            return listKinds == null || listKinds.Contains("room") ? "Tegningsliste og arealer" : "Tegningsliste";
-        if (key == TakeoffId) return "Mengdeliste";
+            return listKinds == null || listKinds.Contains("room")
+                ? SheetLang.Pick(norwegian, "Drawing list and areas", "Tegningsliste og arealer")
+                : SheetLang.Pick(norwegian, "Drawing list", "Tegningsliste");
+        if (key == TakeoffId) return SheetLang.Pick(norwegian, "Quantities", "Mengdeliste");
         if (key == SchedulesId)
-            return Schedules.SheetTitle(listKinds ?? ListKinds.ToList());
-        return OpeningTypes.ViewTitle(key, level);
+            return Schedules.SheetTitle(listKinds ?? ListKinds.ToList(), norwegian);
+        return OpeningTypes.ViewTitle(key, level, norwegian);
     }
 
     /// <summary>
@@ -198,20 +200,22 @@ public static class SheetSet
     }
 
     /// <summary>The set in one line: "Set: 7 sheets, facades off." The four facades off are "facades".</summary>
-    public static string Summary(IList<Sheet> set, int level = 0)
+    public static string Summary(IList<Sheet> set, int level = 0, bool norwegian = false)
     {
         set = set ?? new List<Sheet>();
         var on = set.Count(s => s.On);
-        // The Mengdeliste is off unless asked for: it is named only when it is on.
+        // Quantities is off unless asked for: it is named only when it is on.
         var off = set.Where(s => !s.On && s.Id != TakeoffId).Select(s => s.Id).ToList();
-        var takeoff = set.Any(s => s.On && s.Id == TakeoffId) ? ", with the Mengdeliste" : "";
+        var takeoff = set.Any(s => s.On && s.Id == TakeoffId)
+            ? SheetLang.Pick(norwegian, ", with Quantities", ", with the Mengdeliste")
+            : "";
         var named = new List<string>();
         if (Facades.All(off.Contains))
         {
             named.Add("facades");
             off.RemoveAll(id => Facades.Contains(id));
         }
-        named.AddRange(off.Select(id => Title(id, level)));
+        named.AddRange(off.Select(id => Title(id, level, null, norwegian)));
         var text = "Set: " + on.ToString(CultureInfo.InvariantCulture) + (on == 1 ? " sheet" : " sheets");
         if (named.Count == 0) return text + takeoff + ".";
         var list = named.Count == 1

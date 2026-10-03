@@ -64,7 +64,7 @@ public class SectionsTests
         // The floor mark of a slabless garage sits at the room floor, with the ground at the wall base.
         var levels = Sections.Levels(Sections.FloorTops(new double[0], new[] { 0.0 }), 0, 3000, 3000);
         Assert.Equal(new[] { "floor", "ground", "gesims,mone" }, levels.Select(l => l.Kind));
-        Assert.Equal("1. etg ±0", levels.First(l => l.Kind == "floor").Text);
+        Assert.Equal("Ground floor ±0", levels.First(l => l.Kind == "floor").Text);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class SectionsTests
         var levels = Sections.Levels(new[] { 0.0 }, -400, 3000, 3000);
         Assert.Equal(new[] { "ground", "floor", "gesims,mone" }, levels.Select(l => l.Kind));
         Assert.Equal(new[] { -400, 0, 3000 }, levels.Select(l => l.Value));
-        Assert.Equal(new[] { "Terreng -400", "1. etg ±0", "Gesims/møne +3000" }, levels.Select(l => l.Text));
+        Assert.Equal(new[] { "Ground -400", "Ground floor ±0", "Eaves/Ridge +3000" }, levels.Select(l => l.Text));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class SectionsTests
         var levels = Sections.Levels(new[] { 3200.4, 100.0, 100.5 }, null, 6000, 8200);
         Assert.Equal(new[] { "floor", "floor", "gesims", "mone" }, levels.Select(l => l.Kind));
         Assert.Equal(new[] { 0, 3100, 5900, 8100 }, levels.Select(l => l.Value));
-        Assert.Equal("2. etg +3100", levels[1].Text);
+        Assert.Equal("1st floor +3100", levels[1].Text);
     }
 
     [Fact]
@@ -248,8 +248,8 @@ public class SectionsTests
         Assert.False(Sections.TryLetter("section_ab", out _));
         Assert.False(Sections.TryLetter("plan", out _));
         Assert.Equal("section_c", Sections.View("C"));
-        Assert.Equal("Snitt A–A", Sections.Title("A"));
-        Assert.Equal("Snitt B–B", OpeningTypes.ViewTitle("section_b", 0));
+        Assert.Equal("Section A–A", Sections.Title("A"));
+        Assert.Equal("Section B–B", OpeningTypes.ViewTitle("section_b", 0));
         Assert.Equal("Forsk — Section A", Sections.PageName("A"));
     }
 

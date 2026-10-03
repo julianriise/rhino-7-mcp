@@ -207,7 +207,7 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
         if not record:
             reasons.append(f"{letter} page missing: {packed.get('message')}")
             continue
-        if page.get("view_title") != f"Snitt {letter}–{letter}":
+        if page.get("view_title") != f"Section {letter}–{letter}":
             reasons.append(f"{letter} title {page.get('view_title')!r}")
 
         # Poché per cut wall: the walls whose box the plane cuts, by forsk:id.

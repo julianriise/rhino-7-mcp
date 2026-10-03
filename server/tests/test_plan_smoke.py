@@ -87,7 +87,7 @@ def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.4, fre
     """A page record shaped like layout_pack's, boxes in paper mm."""
     if cells is None:
         cells = [
-            {"name": "drawing", "text": "Plan 1. etg"},
+            {"name": "drawing", "text": "Ground floor plan"},
             {"name": "scale", "text": f"1:{scale}"},
             {"name": "sheet", "text": "A3"},
         ]
@@ -141,16 +141,16 @@ def test_footer_fails_on_each_broken_rule(page, needle):
     assert any(needle in item for item in failures), failures
 
 
-def test_footer_reads_the_norwegian_title_block_by_its_english_keys():
-    # v3 P3: captions are Norwegian, forsk:cell stays the English key, and a
-    # revision that is not set has no cell at all.
+def test_footer_reads_the_title_block_by_its_english_keys():
+    # Captions are English. forsk:cell stays the English key, and a revision
+    # that is not set has no cell at all.
     cells = [
-        {"name": "drawing", "caption": "Tegning", "text": "Plan 1. etg"},
-        {"name": "number", "caption": "Tegningsnr.", "text": "A-20-001"},
-        {"name": "scale", "caption": "Målestokk", "text": "1:50"},
+        {"name": "drawing", "caption": "Drawing", "text": "Ground floor plan"},
+        {"name": "number", "caption": "Drawing no.", "text": "A-20-001"},
+        {"name": "scale", "caption": "Scale", "text": "1:50"},
         {"name": "sheet", "caption": "Format", "text": "A3"},
-        {"name": "date", "caption": "Dato", "text": "2026-10-03"},
-        {"name": "project", "caption": "Prosjekt", "text": "Holmen"},
+        {"name": "date", "caption": "Date", "text": "2026-10-03"},
+        {"name": "project", "caption": "Project", "text": "Holmen"},
     ]
     failures = []
     plan_smoke.check_footer(_footer_page(cells=cells), "sheet", failures)
@@ -208,7 +208,7 @@ def _schedule_case():
     ]
     plan_rows = [{"text": m, "attributes": {"forsk:role": "opening_mark"}} for m in ("D01", "D02", "V01")] + [
         {"text": "Kontor", "attributes": {"forsk:role": "room_tag", "forsk:tag": "name", "forsk:room_id": "rd-01"}},
-        {"text": "ca. 12,4 m²", "attributes": {"forsk:role": "room_tag", "forsk:tag": "area", "forsk:room_id": "rd-01"}},
+        {"text": "approx. 12,4 m²", "attributes": {"forsk:role": "room_tag", "forsk:tag": "area", "forsk:room_id": "rd-01"}},
     ]
     sheets = [{"view": "schedules", "schedules": {"lists": {
         "door": {"rows": [{"id": "D01", "cells": ["D01"]}, {"id": "D02", "cells": ["D02"]}]},
@@ -321,8 +321,8 @@ def _office_rooms_case():
         {"attributes": {"forsk:mark": "V01"}, "bounding_box": [[1800, -100, 900], [3000, 100, 2100]]},
     ]
     sheets = [{"schedules": {"lists": {
-        "door": {"rows": [{"id": "D01", "cells": ["D01", "Slagdør", "900 × 2100", "V inn", "Kontor / Gang"]}]},
-        "window": {"rows": [{"id": "V01", "cells": ["V01", "Sidehengslet", "1200 × 1200", "900", "Kontor"]}]},
+        "door": {"rows": [{"id": "D01", "cells": ["D01", "Hinged door", "900 × 2100", "L in", "Kontor / Gang"]}]},
+        "window": {"rows": [{"id": "V01", "cells": ["V01", "Side-hung window", "1200 × 1200", "900", "Kontor"]}]},
     }}}]
     return sheets, markers, rooms, rings
 
@@ -356,7 +356,7 @@ def _marks_case():
 
     rows = [
         text("room_tag", "Wet Room", (1000, 1000, 3000, 1300)),
-        text("room_tag", "ca. 1,4 m²", (1200, 700, 2800, 950)),
+        text("room_tag", "approx. 1,4 m²", (1200, 700, 2800, 950)),
         text("opening_mark", "D08", (1000, 200, 1300, 360), 1.25),
         text("opening_mark", "V01", (5000, 200, 5300, 360), 1.25),
     ]

@@ -358,8 +358,9 @@ public partial class RhinoMCPFunctions
             var role = obj.Attributes.GetUserString("forsk:role");
             if (role == "schedule_title")
             {
-                // The first block's title; a continued block adds (forts.).
-                if (!text.PlainText.EndsWith("(forts.)", StringComparison.Ordinal))
+                // The first block's title; a continued block adds (cont.) or (forts.).
+                if (!text.PlainText.EndsWith("(cont.)", StringComparison.Ordinal)
+                    && !text.PlainText.EndsWith("(forts.)", StringComparison.Ordinal))
                     list["title"] = text.PlainText;
                 continue;
             }

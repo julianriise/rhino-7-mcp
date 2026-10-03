@@ -150,7 +150,7 @@ namespace RhinoMCPPlugin.Forsk
             ["print.pages.ask"] = "Sheets in the set",
             ["print.pages.fit"] = "Scale picked to fit · A3",
             ["takeoff.ask"] = "Takeoff",
-            ["takeoff.note"] = "Every figure is ca., from the model. Wall area is net of openings, one side.",
+            ["takeoff.note"] = "Every figure is approx., from the model. Wall area is net of openings, one side.",
             ["sheet.section"] = "Section {letter}",
             ["print.clear.ask"] = "Clear the Forsk layouts and their drawings? The model stays.",
             ["sheets.clear.ask"] = "Clear the sheet cache on S-PLAN and S-ELEV? Print does not use it.",

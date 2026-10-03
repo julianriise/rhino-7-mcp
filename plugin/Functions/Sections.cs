@@ -102,7 +102,12 @@ public static class Sections
 
     public static string PageName(string letter) => "Forsk — Section " + letter;
     public static string LayerName(string letter) => "Section " + letter;
-    public static string Title(string letter) => "Snitt " + letter + "–" + letter;
+    public static string Title(string letter, bool norwegian = false) =>
+        SheetLang.Pick(norwegian, "Section ", "Snitt ") + letter + "–" + letter;
+
+    /// <summary>The clear-height label on a section: Clear height 2400. Bokmål keeps Fri høyde.</summary>
+    public static string ClearHeightText(int mm, bool norwegian = false) =>
+        SheetLang.Pick(norwegian, "Clear height ", "Fri høyde ") + mm.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The first letter A..Z no section uses.</summary>
     public static string NextLetter(IEnumerable<Def> defs)
@@ -393,7 +398,7 @@ public static class Sections
     /// above it. Floors within SameLevelMm are one; gesims and møne at one
     /// height share a mark. Lowest first.
     /// </summary>
-    public static List<Level> Levels(IEnumerable<double> floorTops, double? ground, double? gesims, double? mone)
+    public static List<Level> Levels(IEnumerable<double> floorTops, double? ground, double? gesims, double? mone, bool norwegian = false)
     {
         var floors = new List<double>();
         foreach (var z in (floorTops ?? new double[0]).OrderBy(z => z))
@@ -401,17 +406,24 @@ public static class Sections
         var zero = floors.Count > 0 ? floors[0] : 0.0;
         var levels = new List<Level>();
         for (var i = 0; i < floors.Count; i++)
-            levels.Add(Make("floor", floors[i], zero, (i + 1).ToString(CultureInfo.InvariantCulture) + ". etg"));
+            levels.Add(Make("floor", floors[i], zero, FloorMark(i, norwegian)));
         if (ground.HasValue)
-            levels.Add(Make("ground", ground.Value, zero, "Terreng"));
+            levels.Add(Make("ground", ground.Value, zero, SheetLang.Pick(norwegian, "Ground", "Terreng")));
         if (gesims.HasValue && mone.HasValue && Math.Abs(gesims.Value - mone.Value) <= SameLevelMm)
-            levels.Add(Make("gesims,mone", Math.Max(gesims.Value, mone.Value), zero, "Gesims/møne"));
+            levels.Add(Make("gesims,mone", Math.Max(gesims.Value, mone.Value), zero, SheetLang.Pick(norwegian, "Eaves/Ridge", "Gesims/møne")));
         else
         {
-            if (gesims.HasValue) levels.Add(Make("gesims", gesims.Value, zero, "Gesims"));
-            if (mone.HasValue) levels.Add(Make("mone", mone.Value, zero, "Møne"));
+            if (gesims.HasValue) levels.Add(Make("gesims", gesims.Value, zero, SheetLang.Pick(norwegian, "Eaves", "Gesims")));
+            if (mone.HasValue) levels.Add(Make("mone", mone.Value, zero, SheetLang.Pick(norwegian, "Ridge", "Møne")));
         }
         return levels.OrderBy(l => l.Z).ToList();
+    }
+
+    /// <summary>The lowest floor is Ground floor (1. etg). The next is 1st floor (2. etg).</summary>
+    static string FloorMark(int index, bool norwegian)
+    {
+        if (norwegian) return (index + 1).ToString(CultureInfo.InvariantCulture) + ". etg";
+        return AreaStats.FloorName(index.ToString(CultureInfo.InvariantCulture), false);
     }
 
     /// <summary>A solid of the model by its kind (floor, wall, roof) and its height range.</summary>
@@ -437,7 +449,7 @@ public static class Sections
     /// the floors of the rooms. Gesims and møne come from the roof's outline
     /// in (u, z): a section's cut loop, or a facade's roof as it is seen.
     /// </summary>
-    public static Heights ModelHeights(IEnumerable<Solid> solids, IEnumerable<double> roomFloors, IList<List<Pt>> roofUz)
+    public static Heights ModelHeights(IEnumerable<Solid> solids, IEnumerable<double> roomFloors, IList<List<Pt>> roofUz, bool norwegian = false)
     {
         var slabTops = new List<double>();
         double? ground = null;
@@ -458,7 +470,7 @@ public static class Sections
             gesims = g;
             mone = m;
         }
-        return new Heights { Ground = ground, Levels = Levels(FloorTops(slabTops, roomFloors), ground, gesims, mone) };
+        return new Heights { Ground = ground, Levels = Levels(FloorTops(slabTops, roomFloors), ground, gesims, mone, norwegian) };
     }
 
     /// <summary>How far a facade's ground line runs past the facade on each side, in model mm.</summary>

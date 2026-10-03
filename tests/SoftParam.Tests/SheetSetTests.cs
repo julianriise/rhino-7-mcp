@@ -66,17 +66,18 @@ public class SheetSetTests
     }
 
     [Fact]
-    public void Titles_AreTheSheetsOwnNorwegianTitles()
+    public void Titles_AreEnglish()
     {
-        Assert.Equal("Plan 1. etg", SheetSet.Title("plan", 0));
-        Assert.Equal("Fasade mot øst", SheetSet.Title("east", 0));
-        Assert.Equal("Snitt B–B", SheetSet.Title("section_b", 0));
-        Assert.Equal("Dør-, vindus- og romliste", SheetSet.Title("schedules", 0));
-        Assert.Equal("Dørliste", SheetSet.Title("schedules", 0, new[] { "door" }));
-        Assert.Equal("Tegningsliste og arealer", SheetSet.Title("front", 0));
-        // With no rooms there is no Arealtabell.
-        Assert.Equal("Tegningsliste", SheetSet.Title("front", 0, new[] { "door" }));
-        Assert.Equal("Mengdeliste", SheetSet.Title("takeoff", 0));
+        Assert.Equal("Ground floor plan", SheetSet.Title("plan", 0));
+        Assert.Equal("1st floor plan", SheetSet.Title("plan", 1));
+        Assert.Equal("East elevation", SheetSet.Title("east", 0));
+        Assert.Equal("Section B–B", SheetSet.Title("section_b", 0));
+        Assert.Equal("Door, window and room schedule", SheetSet.Title("schedules", 0));
+        Assert.Equal("Door schedule", SheetSet.Title("schedules", 0, new[] { "door" }));
+        Assert.Equal("Drawing list and areas", SheetSet.Title("front", 0));
+        // With no rooms there is no Areas table.
+        Assert.Equal("Drawing list", SheetSet.Title("front", 0, new[] { "door" }));
+        Assert.Equal("Quantities", SheetSet.Title("takeoff", 0));
     }
 
     [Fact]
@@ -197,9 +198,9 @@ public class SheetSetTests
         var noFacades = SheetSet.Apply(set, null, SheetSet.Facades.ToList(), null, out _);
         Assert.Equal("Set: 4 sheets, facades off.", SheetSet.Summary(noFacades));
         var oneOff = SheetSet.Apply(set, null, new[] { "section_a" }, null, out _);
-        Assert.Equal("Set: 7 sheets, Snitt A–A off.", SheetSet.Summary(oneOff));
-        // The Mengdeliste is off by default: named only when it is on.
-        Assert.Equal("Set: 9 sheets, with the Mengdeliste.", SheetSet.Summary(SheetSet.Apply(set, new[] { "takeoff" }, null, null, out _)));
+        Assert.Equal("Set: 7 sheets, Section A–A off.", SheetSet.Summary(oneOff));
+        // Quantities is off by default: named only when it is on.
+        Assert.Equal("Set: 9 sheets, with Quantities.", SheetSet.Summary(SheetSet.Apply(set, new[] { "takeoff" }, null, null, out _)));
     }
 
     [Fact]
@@ -210,5 +211,41 @@ public class SheetSetTests
         var before = new[] { "plan", "north", "east", "south", "west", "section_a", "schedules" };
         var after = new[] { "north", "east", "south", "west", "section_a", "schedules", "plan" };
         Assert.Equal(SheetSet.Order(before, set).Select(i => before[i]), SheetSet.Order(after, set).Select(i => after[i]));
+    }
+
+    /// <summary>Bokmål stays available. Production omits the flag and prints English.</summary>
+    [Fact]
+    public void Norwegian_StaysAvailable_WhenAsked()
+    {
+        Assert.Equal("Plan 1. etg", SheetSet.Title("plan", 0, null, true));
+        Assert.Equal("Fasade mot sør", OpeningTypes.ViewTitle("south", 0, true));
+        Assert.Equal("Snitt A–A", Sections.Title("A", true));
+        Assert.Equal("Tegningsliste og arealer", SheetSet.Title("front", 0, null, true));
+        Assert.Equal("Tegningsliste", SheetSet.Title("front", 0, new[] { "door" }, true));
+        Assert.Equal("Mengdeliste", SheetSet.Title("takeoff", 0, null, true));
+        Assert.Equal("Dørliste", Schedules.SheetTitle(new[] { "door" }, true));
+        Assert.Equal("Dør-, vindus- og romliste", Schedules.SheetTitle(new[] { "door", "window", "room" }, true));
+        Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12_400_000, true));
+        Assert.Equal("Fri høyde 2400", Sections.ClearHeightText(2400, true));
+        var levels = Sections.Levels(new[] { 0.0 }, -400, 3000, 3000, true);
+        Assert.Contains(levels, l => l.Text == "1. etg ±0");
+        Assert.Contains(levels, l => l.Text == "Terreng -400");
+        Assert.Contains(levels, l => l.Text == "Gesims/møne +3000");
+
+        var area = AreaStats.Compute(new[]
+        {
+            new AreaStats.Room { Id = "a", Name = "Stue", Level = "0", AreaMm2 = 20_000_000 }
+        });
+        var table = Schedules.AreaTable(area, true);
+        Assert.Equal("Arealer", table.Title);
+        Assert.Equal("1. etasje", table.Rows[0][0]);
+        Assert.StartsWith(Schedules.AreaNoteNb, table.Note);
+
+        var takeoff = Takeoff.Compute(
+            new[] { new Takeoff.Wall { Rings = WallJoinsTests.Garage(), ThicknessMm = 200, HeightMm = 3000 } },
+            null, null, null, null, 1.0, true);
+        Assert.Equal("Yttervegger", takeoff.Lines[0].Group);
+        Assert.Equal("Mengdeliste", Takeoff.Table(takeoff, true).Title);
+        Assert.Contains("(forts.)", Takeoff.Table(takeoff, true).ContinuedSuffix);
     }
 }

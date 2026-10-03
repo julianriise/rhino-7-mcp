@@ -395,7 +395,7 @@ public class OfficeRoomsTests
         {
             var row = table.Rows[table.Ids.IndexOf(room.Id)];
             Assert.Equal(room.Name, row[0]);
-            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "ca. " + row[1]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "approx. " + row[1]);
         }
         Assert.Equal(OpeningTypes.AreaText(found.Rooms.Sum(room => room.Area)), table.Total[1]);
     }

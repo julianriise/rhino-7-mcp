@@ -426,7 +426,7 @@ namespace RhinoMCPPlugin.Forsk
                     "Make rooms / find rooms: closed regions between the Forsk walls, closed at doors and split by space_divider, drawn on A-ROOM, then room markers. Outlines already on A-ROOM win. Reports rooms, total area, and regions left open with the reason.",
                     new JObject()),
                 Fn("area_stats",
-                    "Area statistics: net room area per floor, per use and for the whole model, the same figures as the plan tags and the Romliste. BRA and BTA per floor from the outer wall outline and its thickness, or the reason one is left out. Read only. No rooms: rooms_detect.",
+                    "Area statistics: net room area per floor, per use and for the whole model, the same figures as the plan tags and the Room schedule (Romliste). BRA and BTA per floor from the outer wall outline and its thickness, or the reason one is left out. Read only. No rooms: rooms_detect.",
                     new JObject()),
                 Fn("mark_as_existing",
                     "Move the selection onto X-EXIST and stamp forsk:kind=existing. Empty selection is refused.",
@@ -560,7 +560,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["revision"] = Str("Revision letter or number, such as B. An empty string removes the Rev. cell.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the front sheet with the Tegningsliste and the Arealtabell, the plan, the four facades, each stored section, the lists). The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the front sheet with the Drawing list and Areas, the plan, the four facades, each stored section, the lists). The schedules page holds the Door, Window and Room schedules from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),
@@ -632,10 +632,10 @@ namespace RhinoMCPPlugin.Forsk
                         ["letter"] = Str("A to Z. Omit for all.")
                     }),
                 Fn(TakeoffTool,
-                    "Takeoff (mengdeliste), read only: outer and inner walls per thickness (length m, area net of openings one side m², volume m³), walls on X-EXIST apart, each slab and roof (m², m³), doors and windows per type and size (count, m²), and BTA, BRA and net area per floor. Every figure is ca. Answer one line with the figure asked for; the window shows the whole list on a card.",
+                    "Takeoff (Quantities; also mengdeliste), read only: exterior and interior walls per thickness (length m, area net of openings one side m², volume m³), walls on X-EXIST apart, each slab and roof (m², m³), doors and windows per type and size (count, m²), and gross area (BTA), usable area (BRA) and net area per floor. Every figure is approx. Answer one line with the figure asked for; the window shows the whole list on a card. Norwegian questions such as hvor mye yttervegg are this tool.",
                     new JObject()),
                 Fn(PrintPagesTool,
-                    "The set Print writes (the Choose sheets card): which sheets are on and their order. Sheets are front (Tegningsliste og arealer), plan, north, east, south, west (the facades), section_<letter>, schedules (the lists), takeoff (the Mengdeliste, off unless asked for). Pass only what the user changed. drop the facades is off north, east, south, west; put section A before the plan is order section_a, plan (the others keep their places). reset forgets the user's set. Print prints the set.",
+                    "The set Print writes (the Choose sheets card): which sheets are on and their order. Sheets are front (Drawing list and areas), plan, north, east, south, west (the elevations), section_<letter>, schedules (the Door, Window and Room schedules), takeoff (Quantities, off unless asked for). Pass only what the user changed. drop the facades is off north, east, south, west; put section A before the plan is order section_a, plan (the others keep their places). reset forgets the user's set. Print prints the set. Norwegian names (tegning, fasade, snitt, mengdeliste) mean the same sheets.",
                     new JObject
                     {
                         ["on"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch on." },

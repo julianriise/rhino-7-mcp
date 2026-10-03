@@ -32,7 +32,7 @@ public class FacadeTests
         // A cross section cuts the roof 4 m wide; the south facade sees it 8 m wide.
         var section = Sections.ModelHeights(Garage, new[] { 0.0 }, new List<List<Pt>> { Rect(0, 4000, 3000, 3200) });
         var facade = Sections.ModelHeights(Garage, new[] { 0.0 }, new List<List<Pt>> { Rect(-4000, 4000, 3000, 3200) });
-        Assert.Equal(new[] { "ground Terreng -400", "floor 1. etg ±0", "gesims,mone Gesims/møne +3200" }, Texts(section));
+        Assert.Equal(new[] { "ground Ground -400", "floor Ground floor ±0", "gesims,mone Eaves/Ridge +3200" }, Texts(section));
         Assert.Equal(Texts(section), Texts(facade));
         Assert.Equal(-400, facade.Ground!.Value);
     }
@@ -43,7 +43,7 @@ public class FacadeTests
         var walls = new[] { new Sections.Solid { Kind = "wall", MinZ = 0, MaxZ = 2800 } };
         var heights = Sections.ModelHeights(walls, new[] { 0.0 }, null);
         Assert.Equal(0, heights.Ground!.Value);
-        Assert.Equal(new[] { "floor 1. etg ±0", "ground Terreng ±0" }, Texts(heights));
+        Assert.Equal(new[] { "floor Ground floor ±0", "ground Ground ±0" }, Texts(heights));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class FacadeTests
     {
         var gable = new List<List<Pt>> { new List<Pt> { new Pt(0, 3000), new Pt(4000, 5000), new Pt(8000, 3000) } };
         var heights = Sections.ModelHeights(Garage.Take(2), new[] { 0.0 }, gable);
-        Assert.Equal(new[] { "ground Terreng -400", "floor 1. etg ±0", "gesims Gesims +3000", "mone Møne +5000" }, Texts(heights));
+        Assert.Equal(new[] { "ground Ground -400", "floor Ground floor ±0", "gesims Eaves +3000", "mone Ridge +5000" }, Texts(heights));
     }
 
     [Fact]

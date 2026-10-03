@@ -178,7 +178,7 @@ public partial class RhinoMCPFunctions
         return new JObject
         {
             ["message"] = result.Summary,
-            ["rows"] = new JArray(result.Lines.Select(Takeoff.Row).ToArray())
+            ["rows"] = new JArray(result.Lines.Select(line => Takeoff.Row(line)).ToArray())
         };
     }
 

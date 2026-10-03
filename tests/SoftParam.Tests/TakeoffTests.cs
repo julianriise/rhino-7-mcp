@@ -32,16 +32,16 @@ public class TakeoffTests
     {
         var door = Opening("door", 4000, 100, 900, 0, 2100, "D01");
         var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, new[] { door }, null, null, null, Tol);
-        var outer = Line(result, "Yttervegger", "200 mm");
+        var outer = Line(result, "Exterior walls", "200 mm");
         Assert.Equal(23.2, outer.LengthM!.Value, 1);
         // One side, net of the door.
         Assert.Equal(23.2 * 3.0 - 0.9 * 2.1, outer.AreaM2!.Value, 1);
         Assert.Equal((23.2 * 3.0 - 0.9 * 2.1) * 0.2, outer.VolumeM3!.Value, 1);
-        Assert.DoesNotContain(result.Lines, l => l.Group == "Innervegger");
+        Assert.DoesNotContain(result.Lines, l => l.Group == "Interior walls");
         // Σ length × thickness is the walls' footprint, 8 × 4 less 7,6 × 3,6.
         var footprint = (8.0 * 4.0) - (7.6 * 3.6);
         Assert.InRange(outer.LengthM.Value * 0.2, footprint * 0.99, footprint * 1.01);
-        Assert.Equal("Yttervegg 200 mm · 23,2 m · 67,7 m² · 13,5 m³", Takeoff.Row(outer));
+        Assert.Equal("Exterior wall 200 mm · 23,2 m · 67,7 m² · 13,5 m³", Takeoff.Row(outer));
     }
 
     [Fact]
@@ -54,11 +54,12 @@ public class TakeoffTests
             WallJoinsTests.Rect(4050, 200, 7800, 3800)
         };
         var result = Takeoff.Compute(new[] { Wall(rings) }, null, null, null, null, Tol);
-        Assert.Equal(23.2, Line(result, "Yttervegger", "200 mm").LengthM!.Value, 1);
-        var inner = Line(result, "Innervegger", "100 mm");
+        Assert.Equal(23.2, Line(result, "Exterior walls", "200 mm").LengthM!.Value, 1);
+        var inner = Line(result, "Interior walls", "100 mm");
         Assert.Equal(3.6, inner.LengthM!.Value, 1);
         var footprint = 8.0 * 4.0 - 3.75 * 3.6 * 2;
-        var sum = result.Lines.Where(l => l.Group.EndsWith("vegger")).Sum(l => l.LengthM!.Value * (l.Label == "200 mm" ? 0.2 : 0.1));
+        var sum = result.Lines.Where(l => l.Group == Takeoff.Outer || l.Group == Takeoff.Inner)
+            .Sum(l => l.LengthM!.Value * (l.Label == "200 mm" ? 0.2 : 0.1));
         Assert.InRange(sum, footprint * 0.99, footprint * 1.01);
     }
 
@@ -73,7 +74,7 @@ public class TakeoffTests
 
     static void AssertSameLines(IEnumerable<Takeoff.Line> a, IEnumerable<Takeoff.Line> b)
     {
-        Assert.Equal(a.Select(Takeoff.Row), b.Select(Takeoff.Row));
+        Assert.Equal(a.Select(line => Takeoff.Row(line)), b.Select(line => Takeoff.Row(line)));
     }
 
     [Fact]
@@ -116,10 +117,10 @@ public class TakeoffTests
             Wall(WallJoinsTests.Garage()),
             Wall(new List<List<Pt>> { shed }, existing: true)
         }, null, null, null, null, Tol);
-        Assert.Equal(23.2, Line(result, "Yttervegger", "200 mm").LengthM!.Value, 1);
-        var existing = result.Lines.Where(l => l.Group == "Eksisterende").ToList();
+        Assert.Equal(23.2, Line(result, "Exterior walls", "200 mm").LengthM!.Value, 1);
+        var existing = result.Lines.Where(l => l.Group == "Existing").ToList();
         Assert.Equal(4.0, Assert.Single(existing).LengthM!.Value, 1);
-        Assert.DoesNotContain("Eksisterende", result.Summary);
+        Assert.DoesNotContain("Existing", result.Summary);
         Assert.Contains("23,2 m", result.Summary);
     }
 
@@ -135,8 +136,8 @@ public class TakeoffTests
             Opening("window", 6000, 3900, 1200, 900, 2100, "V03")
         };
         var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, openings, null, null, null, Tol);
-        var doors = result.Lines.Where(l => l.Group == "Dører").ToList();
-        var windows = result.Lines.Where(l => l.Group == "Vinduer").ToList();
+        var doors = result.Lines.Where(l => l.Group == "Doors").ToList();
+        var windows = result.Lines.Where(l => l.Group == "Windows").ToList();
         Assert.Equal(Schedules.DoorTable(openings.Where(o => o.Record.Kind == "door").ToList()).Rows.Count, doors.Sum(l => l.Count!.Value));
         Assert.Equal(Schedules.WindowTable(openings.Where(o => o.Record.Kind == "window").ToList()).Rows.Count, windows.Sum(l => l.Count!.Value));
         // One row per type and size.
@@ -151,10 +152,10 @@ public class TakeoffTests
         var slabs = new[] { new Takeoff.Slab { AreaMm2 = 32_000_000, ThicknessMm = 400 } };
         var roofs = new[] { new Takeoff.Slab { AreaMm2 = 34_000_000, ThicknessMm = 200 } };
         var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, null, slabs, roofs, null, Tol);
-        var slab = Line(result, "Dekker", "400 mm");
+        var slab = Line(result, "Slabs", "400 mm");
         Assert.Equal(32.0, slab.AreaM2!.Value, 1);
         Assert.Equal(12.8, slab.VolumeM3!.Value, 1);
-        Assert.Equal("Tak 200 mm · 34,0 m² · 6,8 m³", Takeoff.Row(Line(result, "Tak", "200 mm")));
+        Assert.Equal("Roof 200 mm · 34,0 m² · 6,8 m³", Takeoff.Row(Line(result, "Roof", "200 mm")));
     }
 
     [Fact]
@@ -164,9 +165,9 @@ public class TakeoffTests
         AreaStats.ApplyGross(area, new[] { new AreaStats.Wall { Level = "0", ThicknessMm = 200, Rings = WallJoinsTests.Garage() } }, Tol);
         var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, null, null, null, area, Tol);
         var gross = area.Gross.Single();
-        Assert.Equal(gross.BtaMm2!.Value / 1e6, Line(result, "Arealer", "1. etasje BTA").AreaM2!.Value, 3);
-        Assert.Equal(gross.BraMm2!.Value / 1e6, Line(result, "Arealer", "1. etasje BRA").AreaM2!.Value, 3);
-        Assert.Equal(area.Floors[0].AreaMm2 / 1e6, Line(result, "Arealer", "1. etasje Netto").AreaM2!.Value, 3);
+        Assert.Equal(gross.BtaMm2!.Value / 1e6, Line(result, "Areas", "Ground floor Gross area (BTA)").AreaM2!.Value, 3);
+        Assert.Equal(gross.BraMm2!.Value / 1e6, Line(result, "Areas", "Ground floor Usable area (BRA)").AreaM2!.Value, 3);
+        Assert.Equal(area.Floors[0].AreaMm2 / 1e6, Line(result, "Areas", "Ground floor Net area").AreaM2!.Value, 3);
     }
 
     [Fact]
@@ -175,10 +176,10 @@ public class TakeoffTests
         var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, new[] { Opening("door", 4000, 100, 900, 0, 2100, "D01") }, null, null, null, Tol);
         var table = Takeoff.Table(result);
         Assert.Equal("takeoff", table.Kind);
-        Assert.Equal("Mengdeliste", table.Title);
-        Assert.Equal(new[] { "Post", "Lengde (m)", "Areal (m²)", "Volum (m³)", "Antall" }, table.Heads);
-        Assert.Equal(new[] { "Yttervegger", "", "", "", "" }, table.Rows[0]);
+        Assert.Equal("Quantities", table.Title);
+        Assert.Equal(new[] { "Item", "Length (m)", "Area (m²)", "Volume (m³)", "Count" }, table.Heads);
+        Assert.Equal(new[] { "Exterior walls", "", "", "", "" }, table.Rows[0]);
         Assert.Equal(new[] { "200 mm", "23,2", "67,7", "13,5", "" }, table.Rows[1]);
-        Assert.StartsWith("Mengder er ca.-tall fra modellen", table.Note);
+        Assert.StartsWith("Quantities are approximate, from the model", table.Note);
     }
 }

@@ -5,13 +5,27 @@ using System.Linq;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
+/// Sheet language. English is the default for everything printed and for the
+/// print, Choose sheets and takeoff receipts. Pass norwegian for the bokmål
+/// strings; they stay. The chat turn does not switch a sheet: a Norwegian
+/// question is still understood, and the sheet stays English unless a caller
+/// asks for bokmål.
+/// </summary>
+public static class SheetLang
+{
+    public static string Pick(bool norwegian, string english, string bokmal) =>
+        norwegian ? bokmal : english;
+}
+
+/// <summary>
 /// v3 P3: the sheet's title block. One flat row of cells along the footer
-/// band, each a Norwegian caption over its value: Tegning, Tegningsnr.,
-/// Målestokk, Format, Dato, Rev. (only when set), Prosjekt, Byggherre,
-/// Adresse. A cell's key is English and stays the forsk:cell stamp the
-/// smokes read; only the printed caption is Norwegian. An empty value drops
-/// its cell, never a dash. Also which footer parts a sheet gets. Pure, no
-/// Rhino document, so it tests headless. Sizes are paper millimetres.
+/// band, each a caption over its value. English is the default: Drawing,
+/// Drawing no., Scale, Format, Date, Rev. (only when set), Project, Client,
+/// Address. Pass norwegian for Tegning, Tegningsnr., Målestokk, Format, Dato,
+/// Rev., Prosjekt, Byggherre, Adresse. A cell's key is English either way and
+/// stays the forsk:cell stamp the smokes read. An empty value drops its cell,
+/// never a dash. Also which footer parts a sheet gets. Pure, no Rhino
+/// document, so it tests headless. Sizes are paper millimetres.
 /// </summary>
 public static class TitleBlock
 {
@@ -46,8 +60,8 @@ public static class TitleBlock
         public double Mm;
     }
 
-    /// <summary>The cells in order, those without a value left out.</summary>
-    public static List<Cell> Cells(Fields fields)
+    /// <summary>The cells in order, those without a value left out. English captions unless norwegian.</summary>
+    public static List<Cell> Cells(Fields fields, bool norwegian = false)
     {
         var cells = new List<Cell>();
         if (fields == null) return cells;
@@ -57,15 +71,15 @@ public static class TitleBlock
             if (string.IsNullOrEmpty(text) || text == "—" || text == "-") return;
             cells.Add(new Cell { Key = key, Caption = caption, Value = text, Mm = mm });
         }
-        Add("drawing", "Tegning", fields.Drawing, HeadMm);
-        Add("number", "Tegningsnr.", fields.Number, HeadMm);
-        Add("scale", "Målestokk", fields.Scale, ValueMm);
+        Add("drawing", SheetLang.Pick(norwegian, "Drawing", "Tegning"), fields.Drawing, HeadMm);
+        Add("number", SheetLang.Pick(norwegian, "Drawing no.", "Tegningsnr."), fields.Number, HeadMm);
+        Add("scale", SheetLang.Pick(norwegian, "Scale", "Målestokk"), fields.Scale, ValueMm);
         Add("sheet", "Format", fields.Format, ValueMm);
-        Add("date", "Dato", fields.Date, ValueMm);
+        Add("date", SheetLang.Pick(norwegian, "Date", "Dato"), fields.Date, ValueMm);
         Add("revision", "Rev.", fields.Revision, ValueMm);
-        Add("project", "Prosjekt", fields.Project, ValueMm);
-        Add("client", "Byggherre", fields.Client, ValueMm);
-        Add("address", "Adresse", fields.Address, ValueMm);
+        Add("project", SheetLang.Pick(norwegian, "Project", "Prosjekt"), fields.Project, ValueMm);
+        Add("client", SheetLang.Pick(norwegian, "Client", "Byggherre"), fields.Client, ValueMm);
+        Add("address", SheetLang.Pick(norwegian, "Address", "Adresse"), fields.Address, ValueMm);
         return cells;
     }
 

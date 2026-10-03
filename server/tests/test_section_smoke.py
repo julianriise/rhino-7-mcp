@@ -82,7 +82,7 @@ def fake_rhino(model=None):
             for letter in "AB":
                 pages.append({
                     "view": f"section_{letter.lower()}", "page": f"Forsk — Section {letter}", "scale": 50,
-                    "view_title": f"Snitt {letter}–{letter}", "section": {"cut_walls": CUT[letter]},
+                    "view_title": f"Section {letter}–{letter}", "section": {"cut_walls": CUT[letter]},
                 })
             return {"pages": pages, "message": "Laid out 3 page(s)."}
         if cmd == "get_objects":

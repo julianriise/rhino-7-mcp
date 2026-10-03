@@ -963,7 +963,7 @@ def main() -> int:
             if page.get("north_arrow") is not True:
                 failures.append(f"{label} north arrow missing")
             tag = str(page.get("room_tag_text") or "")
-            if "ca." not in tag or "m²" not in tag:
+            if "approx." not in tag or "m²" not in tag:
                 failures.append(f"{label} room tag={tag!r}")
             if (page.get("roof_outline") or 0) < 1:
                 failures.append(f"{label} roof={page.get('roof_outline')}")

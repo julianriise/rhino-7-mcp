@@ -716,10 +716,10 @@ public static class OpeningTypes
         };
     }
 
-    /// <summary>Room tag area line: ca. 12,4 m².</summary>
-    public static string RoomTag(double areaMm2)
+    /// <summary>Room tag area line: approx. 12,4 m². Bokmål keeps ca.</summary>
+    public static string RoomTag(double areaMm2, bool norwegian = false)
     {
-        return "ca. " + AreaText(areaMm2);
+        return SheetLang.Pick(norwegian, "approx. ", "ca. ") + AreaText(areaMm2);
     }
 
     /// <summary>
@@ -732,20 +732,24 @@ public static class OpeningTypes
         return m2.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',') + " m²";
     }
 
-    /// <summary>Drawing title for the title block. The scale has its own cell.</summary>
-    public static string ViewTitle(string view, int level)
+    /// <summary>Drawing title for the title block. The scale has its own cell. English unless norwegian.</summary>
+    public static string ViewTitle(string view, int level, bool norwegian = false)
     {
         var key = string.IsNullOrWhiteSpace(view) ? "" : view.Trim().ToLowerInvariant();
         if (key == "plan")
         {
-            var etg = (level < 0 ? 0 : level) + 1;
-            return "Plan " + etg.ToString(CultureInfo.InvariantCulture) + ". etg";
+            if (norwegian)
+            {
+                var etg = (level < 0 ? 0 : level) + 1;
+                return "Plan " + etg.ToString(CultureInfo.InvariantCulture) + ". etg";
+            }
+            return AreaStats.FloorName(level.ToString(CultureInfo.InvariantCulture), false) + " plan";
         }
-        if (key == "north") return "Fasade mot nord";
-        if (key == "east") return "Fasade mot øst";
-        if (key == "south") return "Fasade mot sør";
-        if (key == "west") return "Fasade mot vest";
-        if (Sections.TryLetter(key, out var letter)) return Sections.Title(letter);
+        if (key == "north") return SheetLang.Pick(norwegian, "North elevation", "Fasade mot nord");
+        if (key == "east") return SheetLang.Pick(norwegian, "East elevation", "Fasade mot øst");
+        if (key == "south") return SheetLang.Pick(norwegian, "South elevation", "Fasade mot sør");
+        if (key == "west") return SheetLang.Pick(norwegian, "West elevation", "Fasade mot vest");
+        if (Sections.TryLetter(key, out var letter)) return Sections.Title(letter, norwegian);
         return "";
     }
 

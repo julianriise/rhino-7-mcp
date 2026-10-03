@@ -304,14 +304,15 @@ public class PlanSymbolTests
     [Fact]
     public void RoomTag_AndViewTitle()
     {
-        Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12400000));
-        Assert.Equal("ca. 20,2 m²", OpeningTypes.RoomTag(20160000));
-        Assert.Equal("Plan 1. etg", OpeningTypes.ViewTitle("plan", 0));
-        Assert.Equal("Plan 2. etg", OpeningTypes.ViewTitle("plan", 1));
-        Assert.Equal("Fasade mot sør", OpeningTypes.ViewTitle("south", 0));
-        Assert.Equal("Fasade mot nord", OpeningTypes.ViewTitle("north", 0));
-        Assert.Equal("Fasade mot øst", OpeningTypes.ViewTitle("east", 0));
-        Assert.Equal("Fasade mot vest", OpeningTypes.ViewTitle("west", 0));
+        Assert.Equal("approx. 12,4 m²", OpeningTypes.RoomTag(12400000));
+        Assert.Equal("approx. 20,2 m²", OpeningTypes.RoomTag(20160000));
+        Assert.Equal("Ground floor plan", OpeningTypes.ViewTitle("plan", 0));
+        Assert.Equal("1st floor plan", OpeningTypes.ViewTitle("plan", 1));
+        Assert.Equal("2nd floor plan", OpeningTypes.ViewTitle("plan", 2));
+        Assert.Equal("South elevation", OpeningTypes.ViewTitle("south", 0));
+        Assert.Equal("North elevation", OpeningTypes.ViewTitle("north", 0));
+        Assert.Equal("East elevation", OpeningTypes.ViewTitle("east", 0));
+        Assert.Equal("West elevation", OpeningTypes.ViewTitle("west", 0));
     }
 
     [Theory]

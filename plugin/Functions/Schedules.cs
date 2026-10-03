@@ -67,6 +67,8 @@ public static class Schedules
         public string[] Total;
         /// <summary>One line printed under the table, after its last row. Null for none.</summary>
         public string Note;
+        /// <summary>Added to the title of a block that continues a table: " (cont.)", or " (forts.)" in bokmål.</summary>
+        public string ContinuedSuffix = " (cont.)";
         /// <summary>The note's printed width (Fit sets it): its column is at least this wide.</summary>
         public double NoteWidth;
 
@@ -125,7 +127,7 @@ public static class Schedules
 
         public string Title
         {
-            get { return Continued ? Table.Title + " (forts.)" : Table.Title; }
+            get { return Continued ? Table.Title + (Table.ContinuedSuffix ?? " (cont.)") : Table.Title; }
         }
 
         /// <summary>Title, head row, the body lines, and the note's line when it is here.</summary>
@@ -380,54 +382,58 @@ public static class Schedules
         return order;
     }
 
-    /// <summary>Dørliste: mark, type, width × height, hand and swing, the rooms either side.</summary>
-    public static Table DoorTable(IList<Opening> doors)
+    /// <summary>Door schedule: mark, type, width × height, hand and swing, the rooms either side.</summary>
+    public static Table DoorTable(IList<Opening> doors, bool norwegian = false)
     {
         var table = new Table
         {
             Kind = "door",
-            Title = "Dørliste",
-            Heads = new[] { "Nr.", "Type", "B × H (mm)", "Slag", "Rom" },
+            Title = SheetLang.Pick(norwegian, "Door schedule", "Dørliste"),
+            Heads = norwegian
+                ? new[] { "Nr.", "Type", "B × H (mm)", "Slag", "Rom" }
+                : new[] { "No.", "Type", "W × H (mm)", "Hand", "Room" },
             Right = new[] { false, false, true, false, false }
         };
         foreach (var door in ByMark(doors))
         {
             table.Ids.Add(door.Mark);
-            table.Rows.Add(new[] { door.Mark, TypeText(door.Record), Size(door), Hand(door.Record), RoomText(door.Rooms) });
+            table.Rows.Add(new[] { door.Mark, TypeText(door.Record, norwegian), Size(door), Hand(door.Record, norwegian), RoomText(door.Rooms) });
         }
-        return Fit(table, null);
+        return Fit(Speak(table, norwegian), null);
     }
 
-    /// <summary>Vindusliste: mark, type, width × height, sill height, the room it lights.</summary>
-    public static Table WindowTable(IList<Opening> windows)
+    /// <summary>Window schedule: mark, type, width × height, sill height, the room it lights.</summary>
+    public static Table WindowTable(IList<Opening> windows, bool norwegian = false)
     {
         var table = new Table
         {
             Kind = "window",
-            Title = "Vindusliste",
-            Heads = new[] { "Nr.", "Type", "B × H (mm)", "Brystning (mm)", "Rom" },
+            Title = SheetLang.Pick(norwegian, "Window schedule", "Vindusliste"),
+            Heads = norwegian
+                ? new[] { "Nr.", "Type", "B × H (mm)", "Brystning (mm)", "Rom" }
+                : new[] { "No.", "Type", "W × H (mm)", "Sill (mm)", "Room" },
             Right = new[] { false, false, true, true, false }
         };
         foreach (var window in ByMark(windows))
         {
             table.Ids.Add(window.Mark);
-            table.Rows.Add(new[] { window.Mark, TypeText(window.Record), Size(window), Mm(window.Sill), RoomText(window.Rooms) });
+            table.Rows.Add(new[] { window.Mark, TypeText(window.Record, norwegian), Size(window), Mm(window.Sill), RoomText(window.Rooms) });
         }
-        return Fit(table, null);
+        return Fit(Speak(table, norwegian), null);
     }
 
     /// <summary>
-    /// Romliste: each tagged room's name and area as its plan tag prints them,
-    /// in room id order, then the sum of the rooms' areas. BRA and BTA are in
-    /// the Arealtabell on the front sheet, once.
+    /// Room schedule: each tagged room's name and area as its plan tag prints
+    /// them, in room id order, then the sum of the rooms' areas. Gross and
+    /// usable area are in the Areas table on the front sheet, once.
     /// </summary>
-    public static Table RoomTable(IList<Room> rooms)
+    public static Table RoomTable(IList<Room> rooms, bool norwegian = false)
     {
         var table = new Table
         {
             Kind = "room",
-            Title = "Romliste",
-            Heads = new[] { "Rom", "Areal" },
+            Title = SheetLang.Pick(norwegian, "Room schedule", "Romliste"),
+            Heads = norwegian ? new[] { "Rom", "Areal" } : new[] { "Room", "Area" },
             Right = new[] { false, true }
         };
         var sorted = new List<Room>(rooms);
@@ -441,10 +447,11 @@ public static class Schedules
         }
         if (sorted.Count > 0)
             table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
-        return Fit(table, null);
+        return Fit(Speak(table, norwegian), null);
     }
 
-    public const string AreaNote = "Arealer er ca.-tall fra modellen, ikke målt etter NS 3940.";
+    public const string AreaNote = "Areas are approximate, from the model, not measured to NS 3940.";
+    public const string AreaNoteNb = "Arealer er ca.-tall fra modellen, ikke målt etter NS 3940.";
 
     /// <summary>
     /// Arealtabell for the front sheet, from area_stats' own result (no second
@@ -454,16 +461,16 @@ public static class Schedules
     /// the table says so. Every figure is an estimate, and the note says
     /// that too. No rooms: no lines.
     /// </summary>
-    public static Table AreaTable(AreaStats.Result result)
+    public static Table AreaTable(AreaStats.Result result, bool norwegian = false)
     {
         var table = new Table
         {
             Kind = "area",
-            Title = "Arealer",
-            Heads = new[] { "", "Areal" },
+            Title = SheetLang.Pick(norwegian, "Areas", "Arealer"),
+            Heads = norwegian ? new[] { "", "Areal" } : new[] { "", "Area" },
             Right = new[] { false, true }
         };
-        if (result == null || result.Floors.Count == 0) return Fit(table, null);
+        if (result == null || result.Floors.Count == 0) return Fit(Speak(table, norwegian), null);
         var missing = new List<string>();
         void Row(string id, string label, string value)
         {
@@ -473,19 +480,21 @@ public static class Schedules
         foreach (var floor in result.Floors)
         {
             var level = string.IsNullOrWhiteSpace(floor.Key) ? "0" : floor.Key.Trim();
-            var name = AreaStats.FloorName(level, true);
+            var name = AreaStats.FloorName(level, norwegian);
             Row("floor-" + level, name, "");
             var gross = result.Gross?.Find(g => g != null && (string.IsNullOrWhiteSpace(g.Level) ? "0" : g.Level.Trim()) == level);
-            if (gross?.BtaMm2 != null) Row("bta-" + level, "BTA", OpeningTypes.AreaText(gross.BtaMm2.Value));
-            if (gross?.BraMm2 != null) Row("bra-" + level, "BRA", OpeningTypes.AreaText(gross.BraMm2.Value));
+            if (gross?.BtaMm2 != null) Row("bta-" + level, SheetLang.Pick(norwegian, "Gross area (BTA)", "BTA"), OpeningTypes.AreaText(gross.BtaMm2.Value));
+            if (gross?.BraMm2 != null) Row("bra-" + level, SheetLang.Pick(norwegian, "Usable area (BRA)", "BRA"), OpeningTypes.AreaText(gross.BraMm2.Value));
             if (gross?.BtaMm2 == null && gross?.BraMm2 == null) missing.Add(name);
-            Row("net-" + level, "Netto", OpeningTypes.AreaText(floor.AreaMm2));
+            Row("net-" + level, SheetLang.Pick(norwegian, "Net area", "Netto"), OpeningTypes.AreaText(floor.AreaMm2));
         }
-        Row("uses", "Netto per bruk", "");
+        Row("uses", SheetLang.Pick(norwegian, "Net area by use", "Netto per bruk"), "");
         foreach (var use in result.Uses)
             Row("use-" + use.Key, use.Key, OpeningTypes.AreaText(use.AreaMm2));
-        table.Note = AreaNote + (missing.Count == 0 ? "" : " " + string.Join(", ", missing) + ": BRA og BTA mangler.");
-        return Fit(table, null);
+        var gap = missing.Count == 0 ? "" : " " + string.Join(", ", missing)
+            + SheetLang.Pick(norwegian, ": gross area (BTA) and usable area (BRA) are missing.", ": BRA og BTA mangler.");
+        table.Note = (norwegian ? AreaNoteNb : AreaNote) + gap;
+        return Fit(Speak(table, norwegian), null);
     }
 
     /// <summary>One sheet on the Tegningsliste. Scale 0: the sheet has none (the lists).</summary>
@@ -497,13 +506,15 @@ public static class Schedules
     }
 
     /// <summary>Tegningsliste: each sheet that prints, in set order: its number, its title, its scale.</summary>
-    public static Table DrawingList(IList<Drawing> sheets)
+    public static Table DrawingList(IList<Drawing> sheets, bool norwegian = false)
     {
         var table = new Table
         {
             Kind = "drawings",
-            Title = "Tegningsliste",
-            Heads = new[] { "Nr.", "Tegning", "Målestokk" },
+            Title = SheetLang.Pick(norwegian, "Drawing list", "Tegningsliste"),
+            Heads = norwegian
+                ? new[] { "Nr.", "Tegning", "Målestokk" }
+                : new[] { "No.", "Drawing", "Scale" },
             Right = new[] { false, false, false }
         };
         foreach (var sheet in sheets ?? new Drawing[0])
@@ -516,21 +527,42 @@ public static class Schedules
                 sheet.Scale > 0 ? "1:" + sheet.Scale.ToString(CultureInfo.InvariantCulture) : ""
             });
         }
-        return Fit(table, null);
+        return Fit(Speak(table, norwegian), null);
     }
 
-    /// <summary>Sheet title for the lists shown: Dørliste; Dør- og vindusliste; Dør-, vindus- og romliste.</summary>
-    public static string SheetTitle(IList<string> kinds)
+    /// <summary>Sheet title for the lists shown: Door schedule; Door and window schedule; Door, window and room schedule.</summary>
+    public static string SheetTitle(IList<string> kinds, bool norwegian = false)
     {
-        var stems = new List<string>();
-        if (kinds.Contains("door")) stems.Add("Dør");
-        if (kinds.Contains("window")) stems.Add("vindus");
-        if (kinds.Contains("room")) stems.Add("rom");
-        if (stems.Count == 0) return "";
-        stems[0] = char.ToUpperInvariant(stems[0][0]) + stems[0].Substring(1);
-        if (stems.Count == 1) return stems[0] + "liste";
-        var head = string.Join("-, ", stems.GetRange(0, stems.Count - 1).ToArray());
-        return head + "- og " + stems[stems.Count - 1] + "liste";
+        var door = kinds.Contains("door");
+        var window = kinds.Contains("window");
+        var room = kinds.Contains("room");
+        if (norwegian)
+        {
+            var stems = new List<string>();
+            if (door) stems.Add("Dør");
+            if (window) stems.Add("vindus");
+            if (room) stems.Add("rom");
+            if (stems.Count == 0) return "";
+            stems[0] = char.ToUpperInvariant(stems[0][0]) + stems[0].Substring(1);
+            if (stems.Count == 1) return stems[0] + "liste";
+            var head = string.Join("-, ", stems.GetRange(0, stems.Count - 1).ToArray());
+            return head + "- og " + stems[stems.Count - 1] + "liste";
+        }
+        var names = new List<string>();
+        if (door) names.Add("door");
+        if (window) names.Add("window");
+        if (room) names.Add("room");
+        if (names.Count == 0) return "";
+        names[0] = char.ToUpperInvariant(names[0][0]) + names[0].Substring(1);
+        if (names.Count == 1) return names[0] + " schedule";
+        if (names.Count == 2) return names[0] + " and " + names[1] + " schedule";
+        return names[0] + ", " + names[1] + " and " + names[2] + " schedule";
+    }
+
+    static Table Speak(Table table, bool norwegian)
+    {
+        table.ContinuedSuffix = norwegian ? " (forts.)" : " (cont.)";
+        return table;
     }
 
     /// <summary>
@@ -641,12 +673,17 @@ public static class Schedules
         return TryNumber(opening.Mark, Prefix(opening.Record?.Kind), out var n) ? n : int.MaxValue;
     }
 
-    /// <summary>The type as the lists print it: Slagdør, Slagdør m/glass.</summary>
-    public static string TypeText(OpeningTypes.Record record)
+    /// <summary>The type as the lists print it: Hinged door, Hinged door with glass. Bokmål keeps Slagdør, Slagdør m/glass.</summary>
+    public static string TypeText(OpeningTypes.Record record, bool norwegian = false)
     {
-        var label = record?.Def?.ScheduleLabel ?? "";
         var door = string.Equals(record?.Kind, "door", StringComparison.OrdinalIgnoreCase);
-        return door && record.Glazed ? label + " m/glass" : label;
+        if (norwegian)
+        {
+            var label = record?.Def?.ScheduleLabel ?? "";
+            return door && record.Glazed ? label + " m/glass" : label;
+        }
+        var name = record?.Def?.Label ?? "";
+        return door && record != null && record.Glazed ? name + " with glass" : name;
     }
 
     static string Size(Opening opening)
@@ -659,14 +696,18 @@ public static class Schedules
         return Math.Round(value, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Hand as V (venstre) or H (høyre), swing as inn or ut: V inn.</summary>
-    static string Hand(OpeningTypes.Record record)
+    /// <summary>Hand as L or R, swing as in or out. Bokmål keeps V/H and inn/ut.</summary>
+    static string Hand(OpeningTypes.Record record, bool norwegian)
     {
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(record?.Hand))
-            parts.Add(string.Equals(record.Hand, "R", StringComparison.OrdinalIgnoreCase) ? "H" : "V");
+            parts.Add(string.Equals(record.Hand, "R", StringComparison.OrdinalIgnoreCase)
+                ? SheetLang.Pick(norwegian, "R", "H")
+                : SheetLang.Pick(norwegian, "L", "V"));
         if (!string.IsNullOrEmpty(record?.Swing))
-            parts.Add(string.Equals(record.Swing, "out", StringComparison.OrdinalIgnoreCase) ? "ut" : "inn");
+            parts.Add(string.Equals(record.Swing, "out", StringComparison.OrdinalIgnoreCase)
+                ? SheetLang.Pick(norwegian, "out", "ut")
+                : SheetLang.Pick(norwegian, "in", "inn"));
         return parts.Count == 0 ? "–" : string.Join(" ", parts.ToArray());
     }
 
