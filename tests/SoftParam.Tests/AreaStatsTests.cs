@@ -175,6 +175,44 @@ public class AreaStatsTests
     }
 
     [Fact]
+    public void ARingWithACourtyard_LeavesTheVoidOutOfBraAndBta()
+    {
+        // 10 m by 8 m outside, a 4 m by 3 m open court, walls 200 mm.
+        // BTA is the outer face minus the void. BRA insets the outer face and outs the court.
+        var outer = Rect(0, 0, 10000, 8000);
+        var court = Rect(3000, 2500, 7000, 5500);
+        Assert.True(AreaStats.TryEnvelope(outer, new[] { court }, 200, out var bta, out var bra, out var reason), reason);
+        Assert.Equal(68_000_000, bta, 1);
+        Assert.Equal(58_000_000, bra, 1);
+        Assert.Equal("68,0 m²", OpeningTypes.AreaText(bta));
+        Assert.Equal("58,0 m²", OpeningTypes.AreaText(bra));
+
+        var result = AreaStats.Compute(new[] { Room("a", "Stue", "0", 40_000_000) });
+        AreaStats.ApplyGross(result, new[] { Wall("0", 200, outer, court) }, 1);
+        Assert.Null(result.Gross.Single().Note);
+        Assert.Equal(68_000_000, result.Gross.Single().BtaMm2.Value, 1);
+        Assert.Equal(58_000_000, result.Gross.Single().BraMm2.Value, 1);
+
+        // The same court as its own wall ring, inside the outer band. The band's hole is the rooms.
+        var band = AreaStats.Compute(new[] { Room("a", "Stue", "0", 40_000_000) });
+        AreaStats.ApplyGross(band, new[]
+        {
+            Wall("0", 200, outer, Rect(200, 200, 9800, 7800)),
+            Wall("0", 200, Rect(2800, 2300, 7200, 5700), court)
+        }, 1);
+        Assert.Null(band.Gross.Single().Note);
+        Assert.Equal(68_000_000, band.Gross.Single().BtaMm2.Value, 1);
+        Assert.Equal(58_000_000, band.Gross.Single().BraMm2.Value, 1);
+
+        // A hole that is the inner face is the rooms. It stays in the floor area.
+        var rooms = AreaStats.Compute(new[] { Room("a", "Stue", "0", 40_000_000) });
+        AreaStats.ApplyGross(rooms, new[] { Wall("0", 200, outer, Rect(200, 200, 9800, 7800)) }, 1);
+        Assert.Null(rooms.Gross.Single().Note);
+        Assert.Equal(80_000_000, rooms.Gross.Single().BtaMm2.Value, 1);
+        Assert.Equal(9_600.0 * 7_600.0, rooms.Gross.Single().BraMm2.Value, 1);
+    }
+
+    [Fact]
     public void Envelope_LeavesTheFigureOut_WhenItCannotBeDerived()
     {
         var ring = Rect(0, 0, 10000, 8000);
@@ -239,13 +277,17 @@ public class AreaStatsTests
         Assert.Contains("Read only", description);
     }
 
-    static AreaStats.Wall Wall(string level, double thickness, List<RoomDetect.Pt> outer)
+    static AreaStats.Wall Wall(string level, double thickness, List<RoomDetect.Pt> outer, params List<RoomDetect.Pt>[] holes)
     {
+        var rings = new List<List<RoomDetect.Pt>> { outer };
+        if (holes != null)
+            foreach (var hole in holes)
+                rings.Add(hole);
         return new AreaStats.Wall
         {
             Level = level,
             ThicknessMm = thickness,
-            Rings = new List<List<RoomDetect.Pt>> { outer }
+            Rings = rings
         };
     }
 

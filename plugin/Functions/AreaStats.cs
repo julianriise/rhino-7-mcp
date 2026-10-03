@@ -14,7 +14,10 @@ namespace RhinoMCPPlugin.Functions;
 /// BRA and BTA, when asked, come from the outer face of the outer walls
 /// (the wall record's outer loop, the same ring the floor slab is extruded
 /// from) inset by that floor's wall thickness. Inner walls stay inside BRA.
-/// A figure that cannot be derived is left out, with one reason. Pure, no Rhino document.
+/// A closed courtyard is a hole in that ring, or the hole of a wall ring
+/// inside it, and it is not floor. The hole that is the inner face of the
+/// outer walls is the rooms, and it stays. A figure that cannot be derived
+/// is left out, with one reason. Pure, no Rhino document.
 /// </summary>
 public static class AreaStats
 {
@@ -214,6 +217,16 @@ public static class AreaStats
     /// </summary>
     public static bool TryEnvelope(IList<Pt> outer, double thicknessMm, out double btaMm2, out double braMm2, out string reason)
     {
+        return TryEnvelope(outer, null, thicknessMm, out btaMm2, out braMm2, out reason);
+    }
+
+    /// <summary>
+    /// The same, minus enclosed open voids. Each void is a courtyard: BTA loses
+    /// its area, and BRA loses it outset by the wall thickness. The caller
+    /// leaves out a hole that is only the inner face of the outer walls.
+    /// </summary>
+    public static bool TryEnvelope(IList<Pt> outer, IEnumerable<IList<Pt>> voids, double thicknessMm, out double btaMm2, out double braMm2, out string reason)
+    {
         btaMm2 = 0;
         braMm2 = 0;
         reason = null;
@@ -242,6 +255,12 @@ public static class AreaStats
             return false;
         }
         braMm2 = Math.Abs(RoomDetect.Area(inset));
+        if (!SubtractVoids(ring, thicknessMm, voids, ref btaMm2, ref braMm2, out reason))
+        {
+            btaMm2 = 0;
+            braMm2 = 0;
+            return false;
+        }
         var collapsed = braMm2 <= 1;
         var grew = braMm2 >= btaMm2 - 1;
         if (collapsed || grew)
@@ -249,6 +268,52 @@ public static class AreaStats
             btaMm2 = 0;
             braMm2 = 0;
             reason = collapsed ? "the walls are thicker than the outline" : "the wall outline does not inset cleanly";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Courtyard voids come off both figures. A missing or outside void fails the whole envelope.</summary>
+    static bool SubtractVoids(List<Pt> outer, double thickness, IEnumerable<IList<Pt>> voids, ref double bta, ref double bra, out string reason)
+    {
+        reason = null;
+        if (voids == null) return true;
+        foreach (var raw in voids)
+        {
+            var hole = Clean(raw);
+            if (hole == null)
+            {
+                reason = "the courtyard outline is missing";
+                return false;
+            }
+            if (RoomDetect.Area(hole) < 0) hole.Reverse();
+            foreach (var p in hole)
+            {
+                if (RoomDetect.Contains(outer, p)) continue;
+                reason = "the courtyard is not inside the outline";
+                return false;
+            }
+            var open = Math.Abs(RoomDetect.Area(hole));
+            if (open < 1)
+            {
+                reason = "the courtyard outline has no area";
+                return false;
+            }
+            // Clockwise, so the inset walks outward and the void grows by the wall thickness.
+            hole.Reverse();
+            if (!TryInset(hole, thickness, out var expanded, out reason)) return false;
+            var grown = Math.Abs(RoomDetect.Area(expanded));
+            if (grown <= open + 1)
+            {
+                reason = "the wall outline does not inset cleanly";
+                return false;
+            }
+            bta -= open;
+            bra -= grown;
+        }
+        if (bta <= 1)
+        {
+            reason = "the courtyard is larger than the outline";
             return false;
         }
         return true;
@@ -295,17 +360,18 @@ public static class AreaStats
             }
             var records = new List<List<List<Pt>>>();
             foreach (var wall in levelWalls) records.Add(wall.Rings);
-            var outlines = WallJoins.Outlines(records, tol <= 0 ? 1 : tol);
-            if (outlines == null || outlines.Count == 0)
+            var shapes = Shapes(records, tol <= 0 ? 1 : tol);
+            if (shapes.Count == 0)
             {
                 gross.Note = "no wall outline on this floor";
                 continue;
             }
             double bra = 0, bta = 0;
             string reason = null;
-            foreach (var outline in outlines)
+            foreach (var shape in shapes)
             {
-                if (!TryEnvelope(outline, thickness, out var oneBta, out var oneBra, out reason)) break;
+                if (EnclosedBy(shape, shapes)) continue;
+                if (!TryEnvelope(shape[0], Courtyards(shape, shapes, thickness), thickness, out var oneBta, out var oneBra, out reason)) break;
                 bra += oneBra;
                 bta += oneBta;
             }
@@ -374,6 +440,76 @@ public static class AreaStats
             ["more"] = Math.Max(0, (result?.Rooms.Count ?? 0) - SummaryRooms),
             ["omitted"] = omitted
         };
+    }
+
+    /// <summary>Each cluster as outer loop then holes. A union that does not read as one piece keeps the records.</summary>
+    static List<List<List<Pt>>> Shapes(List<List<List<Pt>>> records, double tol)
+    {
+        var shapes = new List<List<List<Pt>>>();
+        foreach (var cluster in WallJoins.Clusters(records, tol))
+        {
+            var shape = WallJoins.Shape(records, cluster, tol);
+            if (shape != null && shape.Count > 0 && shape[0] != null && shape[0].Count >= 3)
+            {
+                shapes.Add(shape);
+                continue;
+            }
+            foreach (var i in cluster)
+                if (records[i] != null && records[i].Count > 0 && records[i][0] != null && records[i][0].Count >= 3)
+                    shapes.Add(records[i]);
+        }
+        return shapes;
+    }
+
+    /// <summary>A wall ring inside a larger outline. Its holes are the open court, not a second building.</summary>
+    static bool EnclosedBy(List<List<Pt>> shape, List<List<List<Pt>>> shapes)
+    {
+        var ring = shape[0];
+        foreach (var other in shapes)
+        {
+            if (other == shape) continue;
+            var outer = other[0];
+            if (Math.Abs(RoomDetect.Area(outer)) > Math.Abs(RoomDetect.Area(ring)) && RoomDetect.Contains(outer, ring[0]))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Open voids of this outline. The hole that matches the inner face is the
+    /// rooms. A smaller hole, and the hole of a ring inside this outline, is a courtyard.
+    /// </summary>
+    static List<List<Pt>> Courtyards(List<List<Pt>> shape, List<List<List<Pt>>> shapes, double thickness)
+    {
+        var voids = new List<List<Pt>>();
+        for (var i = 1; i < shape.Count; i++)
+            if (shape[i] != null && shape[i].Count >= 3 && !IsInnerFace(shape[0], shape[i], thickness))
+                voids.Add(shape[i]);
+        foreach (var other in shapes)
+        {
+            if (other == shape || !EnclosedBy(other, shapes)) continue;
+            if (!RoomDetect.Contains(shape[0], other[0][0])) continue;
+            for (var i = 1; i < other.Count; i++)
+                if (other[i] != null && other[i].Count >= 3)
+                    voids.Add(other[i]);
+        }
+        return voids;
+    }
+
+    /// <summary>The inner face of the outer walls: the hole a uniform band leaves, within one wall-band of area.</summary>
+    static bool IsInnerFace(List<Pt> outer, List<Pt> hole, double thickness)
+    {
+        if (!TryInset(outer, thickness, out var inset, out _)) return false;
+        var slop = Math.Max(Perimeter(outer) * thickness, 1);
+        return Math.Abs(Math.Abs(RoomDetect.Area(inset)) - Math.Abs(RoomDetect.Area(hole))) <= slop;
+    }
+
+    static double Perimeter(List<Pt> ring)
+    {
+        var sum = 0.0;
+        for (var i = 0; i < ring.Count; i++)
+            sum += Len(Sub(ring[(i + 1) % ring.Count], ring[i]));
+        return sum;
     }
 
     static bool OneThickness(List<Wall> walls, double tol, out double thickness, out string why)

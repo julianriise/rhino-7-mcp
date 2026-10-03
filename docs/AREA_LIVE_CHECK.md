@@ -27,7 +27,7 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 - Per use maps soverom/bedroom to Soverom, bad/wc/bath/bathroom/toalett to Bad, kjøkken/kitchen to Kjøkken, stue/living to Stue, bod/storage to Bod, gang/entré/hall to Gang, and anything else, including "Rom", to Annet.
 - The first matching word wins, so "Stue/kjøkken" is Stue. An explicit use is kept as given.
 - BRA and BTA come from the outer face of the wall-union outline (`forsk:path`), not from the floor slab, which is extruded from that same ring and has no thickness of its own.
-- BTA is the area of that outer loop. BRA insets it by the floor's one wall thickness, so inner walls stay inside. Room holes are not subtracted, and a closed courtyard would be counted.
+- BTA is the area of that outer loop, minus a closed courtyard. BRA insets the outer face by the floor's one wall thickness and outs the courtyard by the same, so inner walls stay inside. The hole that is the inner face of the outer walls is the rooms, and it is not subtracted.
 - When the walls on a floor do not share one thickness, the thickness is missing, or the inset fails, both BRA and BTA for that floor are left out with one reason. No partial figure is printed.
 - "print the room schedule" stays Print, "romliste" stays Sheets, and "how big is the daylight" stays Daylight.
 - "the area is wrong", "problem med arealene", and "how do I find the area" stay Support.
