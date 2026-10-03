@@ -175,6 +175,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "export.dwg":
                     Export(thread, null, "dwg");
                     return;
+                case "export.ifc":
+                    Export(thread, null, "ifc");
+                    return;
                 case "dims.add":
                     Job(thread, action.Id, label, sink => sink.Tool("plan_dims", new JObject { ["action"] = "add" }));
                     return;
@@ -361,7 +364,9 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.pages":
                     var pagesArgs = ForskCards.PagesArgs(pill.Id, values, order);
-                    if (pill.Id == "export")
+                    if (pill.Id == "export_ifc")
+                        Export(thread, pill.Label, "ifc");
+                    else if (pill.Id == "export")
                         Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
                         {
                             sink.Tool("print_pages", pagesArgs);
@@ -874,8 +879,10 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>R3: the set as files, one per sheet. The folder dialog is parented to this window.</summary>
         void Export(DocThread thread, string userText, string format, string mark = null)
         {
-            Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
-                sink.Line(ForskPrint.Export(sink.Step, this, format)), userText: userText, mark: mark);
+            var id = format == "ifc" ? "export.ifc" : "export.dwg";
+            Job(thread, id, ForskText.Label(id), sink =>
+                sink.Line(format == "ifc" ? ForskPrint.ExportIfc(sink.Step, this) : ForskPrint.Export(sink.Step, this, format)),
+                userText: userText, mark: mark);
         }
 
         /// <summary>

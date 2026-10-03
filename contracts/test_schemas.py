@@ -372,6 +372,7 @@ def test_new_commands():
         ("commands/plan_dims.json", {"action": "remove", "ids": ["U02"]}),
         ("commands/plan_dims.json", {"action": "remove"}),
         ("commands/plan_dims.json", {"action": "list"}),
+        ("commands/export_ifc.json", {"path": "/tmp/forsk-ifc-garage.ifc"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -937,6 +938,14 @@ def test_responses():
     if not validate("responses/section_result.json", {"removed": ["A"], "sections": [], "message": "Removed section A."}):
         all_passed = False
 
+    print("  export_ifc_result:")
+    ifc_written = {
+        "path": "/tmp/forsk-ifc-garage.ifc", "walls": 4, "doors": 1, "windows": 1, "slabs": 1, "roofs": 1,
+        "spaces": 1, "message": "✓ Exported IFC · 4 walls, 1 door, 1 window, 1 space · forsk-ifc-garage.ifc",
+    }
+    if not validate("responses/export_ifc_result.json", ifc_written):
+        all_passed = False
+
     print("  plan_dims_result:")
     dims_added = {
         "dims": [{"id": "U01", "walls": 2, "openings": 0}], "count": 1, "id": "U01",
@@ -1414,6 +1423,8 @@ def test_invalid_examples():
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),
         ("commands/export_sheets.json", {}, "export_sheets missing folder"),
         ("commands/plan_dims.json", {}, "plan_dims missing action"),
+        ("commands/export_ifc.json", {}, "export_ifc missing path"),
+        ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),
         ("commands/plan_dims.json", {"action": "move"}, "plan_dims unknown action"),
         ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}]}, "plan_dims one ref"),
         ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01", "opening": "o"}, {"wall": "w02"}]}, "plan_dims ref with two keys"),

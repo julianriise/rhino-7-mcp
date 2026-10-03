@@ -168,6 +168,9 @@ public class SheetExportWindowTests
     [InlineData("export the sheets as dxf", "dxf")]
     [InlineData("eksporter dwg", "dwg")]
     [InlineData("eksporter dxf", "dxf")]
+    [InlineData("export ifc", "ifc")]
+    [InlineData("eksporter IFC", "ifc")]
+    [InlineData("send the model as ifc", "ifc")]
     [InlineData("import plan.dxf", null)]
     [InlineData("open the dwg", null)]
     [InlineData("print", null)]
@@ -195,5 +198,6 @@ public class SheetExportWindowTests
     {
         var card = ForskCards.Pages(Docs.Facts("house"));
         Assert.Contains(card.Pills, p => p.Id == "export" && p.Label == "Export DWG");
+        Assert.Contains(card.Pills, p => p.Id == "export_ifc" && p.Label == "Export IFC");
     }
 }

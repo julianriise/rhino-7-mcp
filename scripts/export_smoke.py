@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""R3 smoke: export the garage's sheet set as DXF and as DWG, then check it.
+"""R3/R4 smoke: export the garage's sheet set as DXF and as DWG, and the
+model as IFC, then check them.
 
 Run after the garage smoke has built the garage (forsk scripts/smoke_garage.sh
-calls it). Writes /tmp/forsk-export-garage/Garage DXF/ and .../Garage DWG/,
-checks the plan DXF with dxf_check.py (ezdxf) and every DWG's header.
-Stdout at most 25 lines; exit 0 when everything passes.
+calls it). Writes /tmp/forsk-export-garage/Garage DXF/, .../Garage DWG/ and
+.../Garage.ifc; checks the plan DXF with dxf_check.py (ezdxf), every DWG's
+header, and the IFC with ifc_check.py (ifcopenshell), which also proves the
+IFC library loads in Rhino. Stdout at most 25 lines; exit 0 when all pass.
 
 Usage:
   RHINO_MCP_TIMEOUT=300 python3 scripts/export_smoke.py
-Install first: python -m pip install ezdxf
+Install first: python -m pip install ezdxf ifcopenshell
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import sys
 from pathlib import Path
 
 import dxf_check
+import ifc_check
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
@@ -34,7 +37,7 @@ def plan_file(names: list[str]) -> str | None:
     return next((n for n in names if PLAN_NUMBER in n), None)
 
 
-def run(send, root: Path) -> tuple[list[str], bool]:
+def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bool]:
     """send(cmd, params) -> result. Returns the report lines and whether all passed."""
     lines: list[str] = []
     ok = True
@@ -66,6 +69,24 @@ def run(send, root: Path) -> tuple[list[str], bool]:
                 ok = False
                 lines.append(f"FAIL {name}: " + "; ".join(problems))
         lines.append(f"  {folder}/")
+
+    path = root / "Garage.ifc"
+    if path.exists():
+        path.unlink()
+    result = send("export_ifc", {"path": str(path)})
+    lines.append(
+        f"ifc: {result.get('walls', 0)} walls, {result.get('doors', 0)} doors, "
+        f"{result.get('windows', 0)} windows, {result.get('spaces', 0)} spaces"
+    )
+    if not result.get("path") or not path.is_file():
+        lines.append(f"FAIL ifc: {result.get('message')}")
+        ok = False
+    else:
+        problems = check_ifc(path)
+        for problem in problems[:5]:
+            lines.append(f"FAIL ifc: {problem}")
+        ok = ok and not problems
+        lines.append(f"  {path}")
     return lines[:24], ok
 
 

@@ -14,6 +14,8 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- PlanImport reads forsk.plan_import.v0 with the plugin's JSON library. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- R4: IfcExport writes and reads IFC4 with the plugin's library. -->
+    <PackageReference Include="GeometryGymIFC_Core" Version="26.9.23" />
     <!-- Runs the Forsk window's page script headless: keyboard contract and channel queue. -->
     <PackageReference Include="Jint" Version="4.16.4" />
   </ItemGroup>
@@ -33,6 +35,7 @@
     <Compile Include="..\..\plugin\Functions\AreaStats.cs" Link="AreaStats.cs" />
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
     <Compile Include="..\..\plugin\Functions\UserDims.cs" Link="UserDims.cs" />
+    <Compile Include="..\..\plugin\Functions\IfcExport.cs" Link="IfcExport.cs" />
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\SheetSet.cs" Link="SheetSet.cs" />
     <Compile Include="..\..\plugin\Functions\SheetFlat.cs" Link="SheetFlat.cs" />

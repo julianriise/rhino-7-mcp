@@ -26,6 +26,8 @@
          published 7.x stable after that; still net48 / Rhino 7, not the R8 line. -->
     <PackageReference Include="Grasshopper" Version="7.34.23267.11001" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- v3 R4: IFC4 STEP from plain C# (MIT, netstandard2.0, no dependencies). -->
+    <PackageReference Include="GeometryGymIFC_Core" Version="26.9.23" />
     <PackageReference Include="RhinoCommon" Version="7.34.23267.11001" ExcludeAssets="runtime" />
     <!-- Lets the net48 plugin build on a machine without a full .NET Framework
          developer pack (e.g. macOS) — provides the net48 reference assemblies. -->

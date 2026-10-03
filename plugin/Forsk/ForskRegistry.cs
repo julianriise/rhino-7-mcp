@@ -185,6 +185,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("dims.list", Runs.Card, "group.print", f => f.Dims.Count > 0),
             // R3: the set as DWG, one file per sheet. Also a pill on Choose sheets, and the bar's next step after a Print.
             new ForskAction("export.dwg", Runs.Run, "group.print", f => f.HasWalls),
+            // R4: the model as IFC4, one file.
+            new ForskAction("export.ifc", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
             new ForskAction("takeoff", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),

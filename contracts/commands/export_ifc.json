@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_ifc.json",
+  "title": "ExportIfc Command",
+  "description": "Write the model as IFC4 from Forsk's records: walls (standard walls with a material layer set), doors and windows in their openings, slabs, the flat roof and the rooms as spaces. No save dialog. The document does not change.",
+  "type": "object",
+  "properties": {
+    "path": { "type": "string", "minLength": 1, "description": "Absolute path ending in .ifc." }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}

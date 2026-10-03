@@ -4419,3 +4419,32 @@ class TestPlanDimsTool:
         assert plan_dims(ctx=None, action="add", refs=[{"wall": "w01"}])["success"] is False
         assert plan_dims(ctx=None, action="add", refs=[{"wall": "w01", "opening": "o"}, {"wall": "w2"}])["success"] is False
         mock_get_conn.assert_not_called()
+
+
+class TestExportIfcTool:
+    @patch("rhinomcp.tools.export_ifc.get_rhino_connection")
+    def test_sends_the_path(self, mock_get_conn):
+        from rhinomcp.tools.export_ifc import export_ifc
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "/tmp/g.ifc", "walls": 4, "doors": 1, "windows": 1, "slabs": 1, "roofs": 1, "spaces": 1,
+            "message": "✓ Exported IFC · 4 walls, 1 door, 1 window, 1 space · g.ifc",
+        }
+        mock_get_conn.return_value = mock_conn
+        result = export_ifc(ctx=None, path="/tmp/g.ifc")
+        mock_conn.send_command.assert_called_once_with("export_ifc", {"path": "/tmp/g.ifc"})
+        assert result["success"] is True
+
+    @patch("rhinomcp.tools.export_ifc.get_rhino_connection")
+    def test_refuses_a_bad_path_and_reports_a_refuse(self, mock_get_conn):
+        from rhinomcp.tools.export_ifc import export_ifc
+
+        assert export_ifc(ctx=None, path="g.ifc")["success"] is False
+        assert export_ifc(ctx=None, path="/tmp/g.step")["success"] is False
+        mock_get_conn.assert_not_called()
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"path": "", "walls": 0, "doors": 0, "windows": 0, "slabs": 0,
+                                               "roofs": 0, "spaces": 0, "message": "Nothing to lay out. Bake walls first."}
+        mock_get_conn.return_value = mock_conn
+        assert export_ifc(ctx=None, path="/tmp/g.ifc")["success"] is False

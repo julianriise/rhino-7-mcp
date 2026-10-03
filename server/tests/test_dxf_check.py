@@ -92,6 +92,9 @@ class FakeRhino:
 
     def __call__(self, cmd, params):
         self.calls.append((cmd, params))
+        if cmd == "export_ifc":
+            Path(params["path"]).write_text("ISO-10303-21;")
+            return {"path": params["path"], "walls": 4, "doors": 4, "windows": 1, "spaces": 1, "message": "ok"}
         folder = Path(params["folder"])
         folder.mkdir(parents=True, exist_ok=True)
         files = []
@@ -112,10 +115,24 @@ def test_the_export_step_passes_on_a_right_set(tmp_path):
         return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1027" + b"\0" * 10))]
 
     rhino = FakeRhino(files)
-    lines, ok = export_smoke.run(rhino, tmp_path)
+    checked = []
+    lines, ok = export_smoke.run(rhino, tmp_path, check_ifc=lambda p: checked.append(p) or [])
     assert ok, lines
-    assert [c[1]["format"] for c in rhino.calls] == ["dxf", "dwg"]
+    assert [c[0] for c in rhino.calls] == ["export_sheets", "export_sheets", "export_ifc"]
+    assert [c[1]["format"] for c in rhino.calls[:2]] == ["dxf", "dwg"]
+    assert checked == [tmp_path / "Garage.ifc"]
     assert len(lines) <= 25
+
+
+def test_the_export_step_fails_on_a_bad_ifc(tmp_path):
+    def files(fmt):
+        if fmt == "dxf":
+            return [("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p))]
+        return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1027"))]
+
+    lines, ok = export_smoke.run(FakeRhino(files), tmp_path, check_ifc=lambda p: ["IfcWall 3, want 4 or more"])
+    assert not ok
+    assert "FAIL ifc: IfcWall 3, want 4 or more" in lines
 
 
 def test_the_export_step_fails_on_a_dxf_without_poche(tmp_path):
@@ -124,6 +141,6 @@ def test_the_export_step_fails_on_a_dxf_without_poche(tmp_path):
             return [("Garage A-20-001 Plan.dxf", lambda p: plan_doc(hatch=False).saveas(p))]
         return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1027"))]
 
-    lines, ok = export_smoke.run(FakeRhino(files), tmp_path)
+    lines, ok = export_smoke.run(FakeRhino(files), tmp_path, check_ifc=lambda p: [])
     assert not ok
     assert any("HATCH" in line for line in lines)

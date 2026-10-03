@@ -74,6 +74,7 @@ namespace RhinoMCPPlugin.Forsk
             "export_pdf",
             "export_sheets",
             "plan_dims",
+            "export_ifc",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -88,6 +89,7 @@ namespace RhinoMCPPlugin.Forsk
             "layout_pack",
             "export_pdf",
             "export_sheets",
+            "export_ifc",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -609,6 +611,9 @@ namespace RhinoMCPPlugin.Forsk
                             ["description"] = "add: [{\"wall\": \"w03\"}, {\"opening\": \"...\"}]. Omit to use the picked walls and openings."
                         }
                     }),
+                Fn("export_ifc",
+                    "Write the model as IFC4: walls, doors and windows in their openings, slabs, the roof and the rooms as spaces. In this panel, omit path: a save dialog supplies it. Use for export ifc, eksporter ifc.",
+                    new JObject { ["path"] = Str("Omit in the panel. The save dialog sets an absolute .ifc path.") }),
                 Fn("export_sheets",
                     "Write the sheet set as DWG or DXF, one file per sheet, in paper mm at 1:1 with named layers and lineweights. It lays the set out first, as Print does. In this panel, omit folder: a folder dialog supplies it. Use for export dwg, send dwg, eksporter dxf.",
                     new JObject

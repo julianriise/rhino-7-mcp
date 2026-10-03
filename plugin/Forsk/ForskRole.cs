@@ -93,6 +93,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.one":
                 case "print.pages":
                 case "export.dwg":
+                case "export.ifc":
                 case "dims.add":
                 case "dims.list":
                 case "takeoff":

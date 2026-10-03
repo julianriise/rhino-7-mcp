@@ -120,6 +120,7 @@ namespace RhinoMCPPlugin.Forsk
             ["print.one"] = "Print one sheet",
             ["print.pages"] = "Choose sheets",
             ["export.dwg"] = "Export DWG",
+            ["export.ifc"] = "Export IFC",
             ["dims.add"] = "Add dimensions",
             ["dims.list"] = "Your dimensions",
             ["dims.list.ask"] = "Dimensions you added. Untick one and Save to remove it.",

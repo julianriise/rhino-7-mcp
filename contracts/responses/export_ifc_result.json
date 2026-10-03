@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_ifc_result.json",
+  "title": "ExportIfcResult",
+  "description": "The file written and what went in it, or a refuse with path empty and a message.",
+  "type": "object",
+  "properties": {
+    "path": { "type": "string" },
+    "walls": { "type": "integer", "minimum": 0 },
+    "doors": { "type": "integer", "minimum": 0 },
+    "windows": { "type": "integer", "minimum": 0 },
+    "slabs": { "type": "integer", "minimum": 0 },
+    "roofs": { "type": "integer", "minimum": 0 },
+    "spaces": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["path", "walls", "doors", "windows", "slabs", "roofs", "spaces", "message"]
+}

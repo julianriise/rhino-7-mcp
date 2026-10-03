@@ -241,7 +241,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 
@@ -311,5 +311,16 @@ public class RegistryTests
     {
         Assert.Contains(ForskRegistry.Card(Docs.Facts("house, two user dimensions")).Actions, a => a.Id == "dims.list");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "dims.list");
+    }
+
+    /// <summary>R4: Export IFC sits next to Export DWG on the card, for a file with walls.</summary>
+    [Fact]
+    public void ExportIfc_IsOnTheCard_NextToExportDwg()
+    {
+        var ids = ForskRegistry.Card(Docs.Facts("house")).Actions.Select(a => a.Id).ToList();
+        Assert.Equal(ids.IndexOf("export.dwg") + 1, ids.IndexOf("export.ifc"));
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("empty")).Actions, a => a.Id == "export.ifc");
+        Assert.Equal("Export IFC", ForskRegistry.Find("export.ifc").Label);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("export.ifc"));
     }
 }

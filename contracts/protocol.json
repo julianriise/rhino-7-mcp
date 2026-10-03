@@ -79,6 +79,7 @@
             "export_pdf",
             "export_sheets",
             "plan_dims",
+            "export_ifc",
             "clear_layouts",
             "section_add",
             "section_pick",

@@ -790,6 +790,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
             }
+            if (name == "export_ifc" && string.IsNullOrWhiteSpace(args?["path"]?.ToString()))
+            {
+                var line = ForskPrint.ExportIfc(null, parent);
+                return line.StartsWith(ForskReceipt.Done, StringComparison.Ordinal)
+                    ? new JObject { ["status"] = "success", ["result"] = new JObject { ["message"] = line } }
+                    : ForskTools.Fail(line);
+            }
             if (name == "export_sheets")
             {
                 // The model names no folder: the user picks one, and the files go in "<project> DWG" inside it.
@@ -1303,6 +1310,62 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 || count == 0 || !message.StartsWith("Exported", StringComparison.Ordinal))
                 return label + " · error · " + ForskTools.Clip(string.IsNullOrWhiteSpace(message) ? "Export failed." : message);
             return ForskReceipt.ExportLine(count, format, result?["folder"]?.ToString() ?? folder);
+        }
+
+        /// <summary>R4: the model as IFC. A save dialog parented to the window, then export_ifc. One line back.</summary>
+        public static string ExportIfc(Action<string> progress, Window parent)
+        {
+            Report(progress, "Choose where to save the IFC.");
+            string path = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try
+                    {
+                        var dialog = new Eto.Forms.SaveFileDialog { Title = "Export IFC", FileName = IfcFileName(), CheckFileExists = false };
+                        dialog.Filters.Add(new FileFilter("IFC", ".ifc"));
+                        TrySetDesktop(dialog);
+                        if (dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) == DialogResult.Ok)
+                            path = AbsoluteWith(dialog.FileName, dialog.Directory, ".ifc");
+                    }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            if (string.IsNullOrEmpty(path))
+                return "Export IFC · cancelled";
+            Report(progress, "Writing the IFC.");
+            var envelope = Call("export_ifc", new JObject { ["path"] = path });
+            var result = envelope?["result"] as JObject;
+            var message = result?["message"]?.ToString() ?? envelope?["message"]?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(result?["path"]?.ToString()))
+                return "Export IFC · error · " + ForskTools.Clip(string.IsNullOrWhiteSpace(message) ? "Export failed." : message);
+            return message;
+        }
+
+        static string IfcFileName()
+        {
+            var stem = Sanitize(StoredMeta("project"));
+            return (stem.Length == 0 ? "forsk" : stem) + ".ifc";
+        }
+
+        /// <summary>The dialog's name made absolute in its folder, with the extension.</summary>
+        static string AbsoluteWith(string fileName, Uri directory, string extension)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return null;
+            var path = fileName.Trim();
+            if (!Path.IsPathRooted(path))
+            {
+                string dir = null;
+                try { if (directory != null && directory.IsAbsoluteUri) dir = directory.LocalPath; }
+                catch { dir = null; }
+                if (string.IsNullOrEmpty(dir)) dir = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                path = Path.Combine(dir ?? "", Path.GetFileName(path));
+            }
+            if (!path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) path += extension;
+            try { return Path.GetFullPath(path); }
+            catch { return null; }
         }
 
         static string PickFolderFromBackground(Window parent, string title)
