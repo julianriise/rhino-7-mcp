@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
@@ -570,7 +571,7 @@ namespace RhinoMCPPlugin.Forsk
                             ["items"] = PageEnum("A page to lay out."),
                             ["description"] = "Omit for the set."
                         },
-                        ["scale"] = Num("The set's scale, 100 means 1:100. Kept for the next Print. 0 clears it so the set fits again. Omit to keep the kept scale or, with none, take the first of 1:100, 1:200, 1:500 every sheet fits."),
+                        ["scale"] = Num("The set's scale denominator, one of " + SheetScale.Denominators + ". One scale for every sheet: with none kept, the largest scale (smallest denominator) at which every sheet fits. A named scale is kept, and the whole set steps up the list if a sheet does not fit. A number off the list snaps to the next coarser listed step. 0 clears it so the set fits again. Omit to keep the kept scale."),
                         ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
                         ["include_existing"] = Bool("Include X-EXIST in the greyscale drawing. Default true."),
                         ["schedule_kinds"] = new JObject
@@ -641,7 +642,8 @@ namespace RhinoMCPPlugin.Forsk
                         ["on"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch on." },
                         ["off"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch off." },
                         ["order"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids in the order they should print, from where the first of them stands." },
-                        ["reset"] = Bool("Forget the user's set: Forsk infers it again.")
+                        ["reset"] = Bool("Forget the user's set and the asked scale: Forsk infers the set and fits the scale again."),
+                        ["scale"] = Num("The scale denominator for the whole set, one of " + SheetScale.Denominators + ". Off the list snaps to the next coarser step. 0 fits again. Omit to leave the kept scale.")
                     }),
                 Fn("print_profile",
                     "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, grey lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",

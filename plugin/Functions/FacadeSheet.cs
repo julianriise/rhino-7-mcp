@@ -10,13 +10,14 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// v3 P4: a facade at section quality. Over the elevation's own lines (the
-/// silhouette on the profile's silhouette tier, the rest beyond) it draws a
-/// heavy ground line across the facade and 1 m past each side, and the level
-/// marks right of the facade: the ground, ±0 at the ground floor's top,
-/// gesims and møne. The heights come from Sections.ModelHeights, the rule
-/// the section sheet prints, so a facade and a section never disagree. No
-/// elevation dims and no opening chevrons (F5.0 SHOULD, later).
+/// v3 P4: a facade at section quality. The elevation's own lines are drawn
+/// by the hidden-line pass onto facade role layers (outline, line, opening).
+/// Over them this draws a heavy ground line, the only cut-weight stroke,
+/// across the facade and 1 m past each side, and thin level marks right of
+/// the facade: the ground, ±0 at the ground floor's top, eaves and ridge.
+/// The heights come from Sections.ModelHeights, the rule the section sheet
+/// prints, so a facade and a section never disagree. No elevation dims and
+/// no opening chevrons (F5.0 SHOULD, later).
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -62,6 +63,8 @@ public partial class RhinoMCPFunctions
 
         var left = box.Min.X;
         var right = box.Max.X;
+        var groundLayer = EnsureFacadeLayer(doc, layer, FacadeLines.Ground) ?? layer;
+        var levelLayer = EnsureFacadeLayer(doc, layer, FacadeLines.Level) ?? layer;
         if (heights.Ground.HasValue)
         {
             var y = SheetY(heights.Ground.Value);
@@ -69,7 +72,7 @@ public partial class RhinoMCPFunctions
             using (var ground = new LineCurve(new Point3d(x0, y, 0), new Point3d(x1, y, 0)))
             {
                 var extra = new SymbolStamp { Extra = new Dictionary<string, string>(stamp) { ["forsk:z"] = Mm(heights.Ground.Value) } };
-                if (AddStroke(doc, layer, ground, Sections.GroundPen(PrintProfiles.Active), scale, false, pattern, tol,
+                if (AddStroke(doc, groundLayer, ground, Sections.GroundPen(PrintProfiles.Active), scale, false, pattern, tol,
                         "ground_line", null, null, null, ref box, ref index, ref count, extra) > 0)
                     stats.GroundZ = heights.Ground.Value;
             }
@@ -87,10 +90,10 @@ public partial class RhinoMCPFunctions
                 ["forsk:level_value"] = mark.Level.Value.ToString(CultureInfo.InvariantCulture)
             };
             using (var line = new LineCurve(Sheet(mark.LineA), Sheet(mark.LineB)))
-                AddStroke(doc, layer, line, Sections.LevelPen(PrintProfiles.Active), scale, false, pattern, tol,
+                AddStroke(doc, levelLayer, line, Sections.LevelPen(PrintProfiles.Active), scale, false, pattern, tol,
                     "level", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
-            AddSolidTriangle(doc, layer, mark.Triangle, pattern, tol, "level", extra, ref box, ref index, ref count);
-            if (!AddSheetText(doc, layer, mark.Level.Text, new Plane(Sheet(mark.TextAt), Vector3d.XAxis, Vector3d.YAxis),
+            AddSolidTriangle(doc, levelLayer, mark.Triangle, pattern, tol, "level", extra, ref box, ref index, ref count);
+            if (!AddSheetText(doc, levelLayer, mark.Level.Text, new Plane(Sheet(mark.TextAt), Vector3d.XAxis, Vector3d.YAxis),
                     valueHeight, scale, "level", extra, ref box, ref index, ref count))
             {
                 stats.LevelsDropped++;

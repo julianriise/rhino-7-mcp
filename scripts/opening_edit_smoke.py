@@ -946,7 +946,7 @@ def main() -> int:
             pages = packed.get("pages") or []
             page = pages[0] if pages else {}
             if not scale:
-                # Default: the set takes the first ladder step (1:100, 1:200, 1:500) every sheet fits.
+                # Default: one scale, the largest listed step every sheet fits.
                 plan_smoke.check_fit(page, label, failures)
             if scale == 200 and page.get("scale") != 200:
                 failures.append(f"{label} scale={page.get('scale')}")

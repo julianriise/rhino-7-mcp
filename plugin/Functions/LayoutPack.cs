@@ -1645,36 +1645,45 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// The scale asked for: the scale parameter, stored for the next Print,
-    /// or the one stored before. scale 0 clears it, so the set fits again.
-    /// Null: the set takes its scale from the ladder.
+    /// The scale asked for: the scale parameter, snapped onto the list and
+    /// stored for the next Print, or the one stored before. scale 0 clears
+    /// it, so the set fits again. Null: the set takes the largest listed
+    /// scale at which every sheet fits.
     /// </summary>
     private static int? ReadAskedScale(RhinoDoc doc, JObject parameters)
     {
         var token = parameters?["scale"];
         if (token != null && token.Type != JTokenType.Null)
-        {
-            var value = token.ToObject<int>();
-            if (value < 0)
-                throw new InvalidOperationException("Scale must be a positive number.");
-            if (value == 0)
-            {
-                doc.Strings.Delete(LayoutMetaSection, PrintScaleEntry);
-                return null;
-            }
-            doc.Strings.SetString(LayoutMetaSection, PrintScaleEntry, value.ToString(CultureInfo.InvariantCulture));
-            return value;
-        }
+            return StoreAskedScale(doc, token.ToObject<int>());
         return StoredPrintScale(doc);
     }
 
-    /// <summary>The scale kept from an earlier ask, or null.</summary>
+    /// <summary>Stores a listed denominator. 0 clears. Returns the stored scale, or null when cleared.</summary>
+    private static int? StoreAskedScale(RhinoDoc doc, int value)
+    {
+        if (value < 0)
+            throw new InvalidOperationException("Scale must be a positive number.");
+        if (doc == null) return null;
+        if (value == 0)
+        {
+            doc.Strings.Delete(LayoutMetaSection, PrintScaleEntry);
+            return null;
+        }
+        var listed = SheetScale.Listed(value);
+        doc.Strings.SetString(LayoutMetaSection, PrintScaleEntry, listed.ToString(CultureInfo.InvariantCulture));
+        return listed;
+    }
+
+    /// <summary>The scale kept from an earlier ask, snapped onto the list, or null.</summary>
     private static int? StoredPrintScale(RhinoDoc doc)
     {
         var stored = doc.Strings.GetValue(LayoutMetaSection, PrintScaleEntry);
-        return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kept) && kept >= 1
-            ? kept
-            : (int?)null;
+        if (!int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kept) || kept < 1)
+            return null;
+        var listed = SheetScale.Listed(kept);
+        if (listed != kept)
+            doc.Strings.SetString(LayoutMetaSection, PrintScaleEntry, listed.ToString(CultureInfo.InvariantCulture));
+        return listed;
     }
 
     /// <summary>
@@ -2652,7 +2661,8 @@ public partial class RhinoMCPFunctions
             var layer = doc.Layers[i];
             if (layer == null || layer.IsDeleted) continue;
             var show = layer.Index == drawLayer.Index
-                || (parent != null && layer.Index == parent.Index);
+                || (parent != null && layer.Index == parent.Index)
+                || layer.ParentLayerId == drawLayer.Id;
             layer.SetPerViewportVisible(viewportId, show);
             doc.Layers.Modify(layer, layer.Index, true);
         }

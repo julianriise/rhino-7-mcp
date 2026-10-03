@@ -72,17 +72,17 @@ PAPER_TEXT_MM = 2.5
 GLYPH_BOX = (0.9, 1.5)
 
 
-# SheetScale.Ladder: a set prints at 1:100, 1:200 or 1:500; 1:50 only when asked.
-LADDER = (50, 100, 200, 500)
-FIRST_STEP = 100
+# SheetScale.Ladder: one scale for the set, the largest of this list at which
+# every sheet fits. This helper is one drawing only. need 0 fits 1:5.
+# An empty C# set stays at SheetScale.FirstStep (100); that is not this walk.
+LADDER = (5, 10, 20, 25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 500, 750, 1000)
 FILL_SHARE = 0.9
 
 
 def ladder_step(need: float) -> int:
-    """The first of 1:100, 1:200, 1:500 a drawing that needs 1:need fits,
-    1:500 when none does. Mirrors SheetScale.Pick for one drawing."""
+    """The finest listed step a drawing that needs 1:need fits, else the last."""
     for step in LADDER:
-        if step >= FIRST_STEP and (need or 0) <= step + 1e-9:
+        if (need or 0) <= step + 1e-9:
             return step
     return LADDER[-1]
 
@@ -258,19 +258,19 @@ def check_symbols_on_wall(rows, scale, failures) -> None:
 
 
 def check_fit(page, label, failures) -> None:
-    """With no scale asked, the plan prints at a step of the ladder it fits:
-    at least its own first step (1:N with N >= need). A larger step came
-    from another sheet of the set. At the plan's own step the fill floor
-    holds: it fills more than the step below would have needed, so the
-    plan would not have fitted there."""
+    """With no scale asked, the plan prints at a listed step it fits:
+    at least its own step (1:N with N >= need). A coarser step came from
+    another sheet of the set. At the plan's own step the fill floor holds:
+    it fills more than the step below would have needed, so the plan would
+    not have fitted there."""
     need = float(page.get("fit_need") or 0)
     scale = int(page.get("scale") or 0)
     fill = float(page.get("fill") or 0)
     want = ladder_step(need)
     print(f"    {label} plan fit 1:{scale} fill {fill:.2f}")
-    below = max((s for s in LADDER if FIRST_STEP <= s < want), default=0)
+    below = max((s for s in LADDER if s < want), default=0)
     floor = FILL_SHARE * below / scale if scale and below else 0.0
-    ok = page.get("fitted") is True and scale in LADDER[1:] and scale >= want
+    ok = page.get("fitted") is True and scale in LADDER and scale >= want
     if ok and scale == want and fill <= floor:
         ok = False
     if not ok:

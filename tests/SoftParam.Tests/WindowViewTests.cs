@@ -6,7 +6,7 @@ namespace SoftParam.Tests;
 
 /// <summary>
 /// D1: the view model the window draws, on the F1.1 fixtures. The pinned bar
-/// replaces the chips: slot 1 from the file, two contextual slots, then "?".
+/// replaces the chips: slot 1 from the file, two contextual slots, then "⋯".
 /// </summary>
 public class WindowViewTests
 {
@@ -24,7 +24,7 @@ public class WindowViewTests
         Assert.Single(thread);
         Assert.Equal("This file is empty.", thread[0]["text"]!.ToString());
         Assert.Equal(new[] { "file.import", "file.draw" }, Slots(view));
-        Assert.Equal("?", view["bar"]!["help"]!["label"]!.ToString());
+        Assert.Equal("\u22ef", view["bar"]!["help"]!["label"]!.ToString());
         Assert.Equal("", view["status"]!.ToString());
     }
 

@@ -90,6 +90,56 @@ public class FacadeTests
     }
 
     [Fact]
+    public void FacadeLayers_OnlyTheGroundLineIsHeavy()
+    {
+        foreach (var profile in PrintProfiles.All)
+        {
+            var ground = FacadeLines.Pen(FacadeLines.Ground, profile);
+            var outline = FacadeLines.Pen(FacadeLines.Outline, profile);
+            var line = FacadeLines.Pen(FacadeLines.Line, profile);
+            var opening = FacadeLines.Pen(FacadeLines.Opening, profile);
+            var level = FacadeLines.Pen(FacadeLines.Level, profile);
+            Assert.Equal(profile.Cut, ground);
+            Assert.Equal(profile.Silhouette, outline);
+            Assert.Equal(profile.Beyond, line);
+            Assert.Equal(profile.Thin, opening);
+            Assert.Equal(profile.Thin, level);
+            Assert.True(ground.Mm > outline.Mm, profile.Name);
+            Assert.True(outline.Mm > line.Mm, profile.Name);
+            Assert.True(line.Mm > opening.Mm, profile.Name);
+        }
+        Assert.Equal(FacadeLines.Opening, FacadeLines.LayerFor("opening", true));
+        Assert.Equal(FacadeLines.Opening, FacadeLines.LayerFor("window", true));
+        Assert.Equal(FacadeLines.Opening, FacadeLines.LayerFor("door", false));
+        Assert.Equal(FacadeLines.Outline, FacadeLines.LayerFor("wall", true));
+        Assert.Equal(FacadeLines.Line, FacadeLines.LayerFor("wall", false));
+        Assert.Equal(FacadeLines.Line, FacadeLines.LayerFor("roof", false));
+
+        Assert.True(PrintInk.TryResolve("S-DRAW::South::facade-ground", FacadeLines.Ground, out var groundInk));
+        Assert.Equal(0.50, groundInk.WeightMm);
+        Assert.True(PrintInk.TryResolve("S-DRAW::South::facade-outline", FacadeLines.Outline, out var outlineInk));
+        Assert.Equal(0.35, outlineInk.WeightMm);
+        Assert.True(PrintInk.TryResolve("S-DRAW::South::facade-line", FacadeLines.Line, out var lineInk));
+        Assert.Equal(0.18, lineInk.WeightMm);
+        Assert.True(PrintInk.TryResolve("S-DRAW::South::facade-opening", FacadeLines.Opening, out var openingInk));
+        Assert.Equal(0.13, openingInk.WeightMm);
+        Assert.True(PrintInk.TryResolve("S-DRAW::South::facade-level", FacadeLines.Level, out var levelInk));
+        Assert.Equal(0.13, levelInk.WeightMm);
+        Assert.True(PrintInk.TryResolve("S-DRAW::Plan", "Plan", out var plan));
+        Assert.Equal(0.18, plan.WeightMm);
+
+        var make = File.ReadAllText(Path.Combine(FunctionsDir(), "Make2dView.cs"));
+        Assert.Contains("FacadeLines.LayerFor(", make);
+        Assert.Contains("FacadeLines.Pen(", make);
+        var facade = File.ReadAllText(Path.Combine(FunctionsDir(), "FacadeSheet.cs"));
+        Assert.Contains("FacadeLines.Ground", facade);
+        Assert.Contains("FacadeLines.Level", facade);
+        var section = File.ReadAllText(Path.Combine(FunctionsDir(), "SectionSheet.cs"));
+        Assert.Contains("Sections.GroundPen(", section);
+        Assert.DoesNotContain("FacadeLines", section);
+    }
+
+    [Fact]
     public void TheFacadeAndTheSectionSheet_ReadTheSameHeightsHelper()
     {
         var section = File.ReadAllText(Path.Combine(FunctionsDir(), "SectionSheet.cs"));

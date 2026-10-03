@@ -137,22 +137,26 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        public const string ScaleKey = "scale";
+
         /// <summary>
-        /// Choose sheets: one tick per sheet of the set, in set order, each
-        /// row movable. The note gives the scale once. Print saves and
-        /// prints, Save saves, Reset forgets the user's set. Null without walls.
+        /// Choose sheets: a scale for the whole set, then one tick per sheet
+        /// in set order, each row movable. The note gives the scale once.
+        /// Print saves and prints, Save saves, Reset forgets the user's set
+        /// and the asked scale. Null without walls.
         /// </summary>
         public static CardSpec Pages(FileFacts f)
         {
             if (f?.HasWalls != true) return null;
+            var shown = f.PrintScale > 0 ? SheetScale.Listed(f.PrintScale) : 0;
             var card = new CardSpec
             {
                 Kind = "print.pages",
                 Question = ForskText.Get("print.pages.ask"),
                 Fields = new List<CardField>(),
                 Depends = "model",
-                Note = f.PrintScale > 0
-                    ? "1:" + f.PrintScale.ToString(CultureInfo.InvariantCulture) + " · A3"
+                Note = shown > 0
+                    ? "1:" + shown.ToString(CultureInfo.InvariantCulture) + " · A3"
                     : ForskText.Get("print.pages.fit"),
                 Pills =
                 {
@@ -161,14 +165,30 @@ namespace RhinoMCPPlugin.Forsk
                     new CardPill("reset", ForskText.Get("word.reset"))
                 }
             };
+            card.Fields.Add(new CardField
+            {
+                Key = ScaleKey,
+                Label = ForskText.Get("print.pages.scale"),
+                Options = ScaleOptions(),
+                Value = shown > 0 ? "1:" + shown.ToString(CultureInfo.InvariantCulture) : "Fit"
+            });
             foreach (var sheet in Set(f))
                 card.Fields.Add(new CardField { Key = sheet.Id, Label = SheetLine(sheet.Id, f), Check = true, Order = true, Value = sheet.On ? "1" : "0" });
             return card;
         }
 
+        static List<string> ScaleOptions()
+        {
+            var options = new List<string> { "Fit" };
+            foreach (var step in SheetScale.Ladder)
+                options.Add("1:" + step.ToString(CultureInfo.InvariantCulture));
+            return options;
+        }
+
         /// <summary>
         /// The print_pages call a Choose sheets answer makes: Reset forgets the
-        /// set; Print and Save write the ticks and the rows' posted order.
+        /// set; Print and Save write the ticks, the rows' posted order, and the
+        /// scale (0 fits again). The scale field is not a sheet id.
         /// </summary>
         public static JObject PagesArgs(string pill, JObject values, JArray order)
         {
@@ -176,9 +196,15 @@ namespace RhinoMCPPlugin.Forsk
             var on = new JArray();
             var off = new JArray();
             foreach (var pair in values ?? new JObject())
+            {
+                if (pair.Key == ScaleKey) continue;
                 (pair.Value?.ToString() == "0" ? off : on).Add(pair.Key);
+            }
             var args = new JObject { ["on"] = on, ["off"] = off };
-            if (order != null && order.Count > 0) args["order"] = new JArray(order.Select(t => t.ToString()));
+            if (order != null && order.Count > 0)
+                args["order"] = new JArray(order.Select(t => t.ToString()).Where(id => id != ScaleKey));
+            if (values?["scale"] != null)
+                args["scale"] = SheetScale.Parse(values["scale"].ToString());
             return args;
         }
 

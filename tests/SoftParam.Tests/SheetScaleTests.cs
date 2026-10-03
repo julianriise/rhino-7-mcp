@@ -4,9 +4,9 @@ using Xunit;
 namespace SoftParam.Tests;
 
 /// <summary>
-/// v3 P2: one scale for the set, from a fixed ladder (1:100, 1:200, 1:500;
-/// 1:50 only when asked). Spans are the baked drawings' boxes in model mm,
-/// the detail is A3 less margins and the footer reserve (400 × 264 mm).
+/// One scale for the set, from the standard list (1:5 through 1:1000).
+/// Spans are the baked drawings' boxes in model mm, the detail is A3 less
+/// margins and the footer reserve (400 × 264 mm).
 /// </summary>
 public class SheetScaleTests
 {
@@ -21,43 +21,57 @@ public class SheetScaleTests
     static readonly SheetScale.Span OfficeSection = new SheetScale.Span(23000, 5200);
 
     [Fact]
-    public void TheLadder_IsFiftyOnRequest_ThenOneTwoFiveHundred()
+    public void TheLadder_IsTheStandardList_FinestFirst()
     {
-        Assert.Equal(new[] { 50, 100, 200, 500 }, SheetScale.Ladder);
+        Assert.Equal(new[]
+        {
+            5, 10, 20, 25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 500, 750, 1000
+        }, SheetScale.Ladder);
+        Assert.Equal(50, SheetScale.Listed(30));
+        Assert.Equal(75, SheetScale.Listed(75));
+        Assert.Equal(100, SheetScale.Listed(80));
+        Assert.Equal(1000, SheetScale.Listed(2000));
+        Assert.Equal(0, SheetScale.Parse("Fit"));
+        Assert.Equal(200, SheetScale.Parse("1:200"));
     }
 
     [Fact]
-    public void Garage_PrintsAt100()
+    public void Garage_PrintsAt50()
     {
         var picked = SheetScale.Pick(new[] { GaragePlan, GarageFacade, GarageFacade }, Detail, null);
-        Assert.Equal(100, picked.Scale);
-        Assert.All(picked.Scales, s => Assert.Equal(100, s));
+        Assert.Equal(50, picked.Scale);
+        Assert.All(picked.Scales, s => Assert.Equal(50, s));
         Assert.Empty(picked.Bumped);
+        // The facade alone fits 1:25. The plan needs 1:50, and the set keeps one scale.
+        Assert.Equal(25, SheetScale.Pick(new[] { GarageFacade }, Detail, null).Scale);
     }
 
     [Fact]
-    public void Office_PrintsAt200_EverySheet_NotTheOldFit125()
+    public void Office_PrintsAt125_EverySheet()
     {
         var picked = SheetScale.Pick(new[] { OfficePlan, OfficeFacade, OfficeFacade, OfficeSection }, Detail, null);
-        Assert.Equal(200, picked.Scale);
+        Assert.Equal(125, picked.Scale);
         // The facades alone would fit 1:100; the set keeps one scale.
-        Assert.All(picked.Scales, s => Assert.Equal(200, s));
+        Assert.Equal(100, SheetScale.Pick(new[] { OfficeFacade }, Detail, null).Scale);
+        Assert.All(picked.Scales, s => Assert.Equal(125, s));
     }
 
     [Fact]
-    public void OneSectionTooLong_PutsTheWholeSetAt500_UnlessAScaleWasAsked()
+    public void OneSectionTooLong_PutsTheWholeSetAt250()
     {
         var longSection = new SheetScale.Span(80000, 6000);
         var spans = new[] { OfficePlan, OfficeFacade, longSection };
 
         var fitted = SheetScale.Pick(spans, Detail, null);
-        Assert.Equal(500, fitted.Scale);
-        Assert.All(fitted.Scales, s => Assert.Equal(500, s));
+        Assert.Equal(250, fitted.Scale);
+        Assert.All(fitted.Scales, s => Assert.Equal(250, s));
+        Assert.Empty(fitted.Bumped);
 
+        // Asked 1:200 does not fit the section, so the whole set steps to 1:250.
         var asked = SheetScale.Pick(spans, Detail, 200);
-        Assert.Equal(200, asked.Scale);
-        Assert.Equal(new[] { 200, 200, 500 }, asked.Scales);
-        Assert.Equal(new[] { 2 }, asked.Bumped);
+        Assert.Equal(250, asked.Scale);
+        Assert.Equal(new[] { 250, 250, 250 }, asked.Scales);
+        Assert.Empty(asked.Bumped);
     }
 
     [Fact]
@@ -69,25 +83,38 @@ public class SheetScaleTests
     }
 
     [Fact]
-    public void AnAskedScaleOffTheLadder_StandsWhereItFits_AndBumpsOntoTheLadder()
+    public void Asked200_OnTheOffice_Stays200()
     {
-        var picked = SheetScale.Pick(new[] { GaragePlan, OfficePlan }, Detail, 75);
-        Assert.Equal(75, picked.Scale);
-        Assert.Equal(new[] { 75, 200 }, picked.Scales);
+        var picked = SheetScale.Pick(new[] { OfficePlan, OfficeFacade, OfficeSection }, Detail, 200);
+        Assert.Equal(200, picked.Scale);
+        Assert.All(picked.Scales, s => Assert.Equal(200, s));
+    }
+
+    [Fact]
+    public void AnAskedScaleOffTheList_Snaps_ThenTheWholeSetStepsUp()
+    {
+        var picked = SheetScale.Pick(new[] { GaragePlan, OfficePlan }, Detail, 30);
+        Assert.Equal(125, picked.Scale);
+        Assert.Equal(new[] { 125, 125 }, picked.Scales);
+        // 1:75 is on the list and still does not fit the office.
+        var named = SheetScale.Pick(new[] { GaragePlan, OfficePlan }, Detail, 75);
+        Assert.Equal(125, named.Scale);
+        Assert.All(named.Scales, s => Assert.Equal(125, s));
     }
 
     [Fact]
     public void TooBigForEveryStep_StaysOnTheLastStep()
     {
         var picked = SheetScale.Pick(new[] { new SheetScale.Span(400000, 1000) }, Detail, null);
-        Assert.Equal(500, picked.Scale);
-        Assert.False(SheetScale.Fits(new SheetScale.Span(400000, 1000), Detail, 500));
+        Assert.Equal(1000, picked.Scale);
+        Assert.False(SheetScale.Fits(new SheetScale.Span(400000, 1000), Detail, 1000));
     }
 
     [Fact]
     public void NoDrawing_IsTheFirstStep()
     {
         Assert.Equal(100, SheetScale.Pick(new SheetScale.Span[0], Detail, null).Scale);
+        Assert.Equal(50, SheetScale.Pick(new SheetScale.Span[0], Detail, 50).Scale);
     }
 
     [Fact]
@@ -102,22 +129,22 @@ public class SheetScaleTests
     [Fact]
     public void PlanAndFacadeInOnePack_ReportTheSamePageScale()
     {
-        // The pack's scale plan: every drawing sheet takes the set's scale.
         var picked = SheetScale.Pick(new[] { OfficePlan, OfficeFacade }, Detail, null);
         Assert.Equal(picked.Scales[0], picked.Scales[1]);
+        Assert.Equal(125, picked.Scale);
     }
 
     [Fact]
     public void Again_AfterTagsGrewAtTheNewScale_OnlyStepsUp()
     {
-        // Baked at 1:100 the plan needed 1:200; baked at 1:200 its tags grew past it.
         var first = SheetScale.Pick(new[] { OfficePlan }, Detail, null);
+        Assert.Equal(125, first.Scale);
         var grown = new SheetScale.Span(73000, 30000);
         var second = SheetScale.Pick(new[] { grown }, Detail, null, first.Scales);
-        Assert.Equal(500, second.Scale);
+        Assert.Equal(250, second.Scale);
         // A smaller box never steps back down.
         var third = SheetScale.Pick(new[] { GaragePlan }, Detail, null, second.Scales);
-        Assert.Equal(500, third.Scale);
+        Assert.Equal(250, third.Scale);
     }
 
     [Fact]

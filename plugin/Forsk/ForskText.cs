@@ -148,6 +148,7 @@ namespace RhinoMCPPlugin.Forsk
             ["meta.revision"] = "Rev.",
             ["print.one.ask"] = "Which sheet?",
             ["print.pages.ask"] = "Sheets in the set",
+            ["print.pages.scale"] = "Scale",
             ["print.pages.fit"] = "Scale picked to fit · A3",
             ["takeoff.ask"] = "Takeoff",
             ["takeoff.note"] = "Every figure is approx., from the model. Wall area is net of openings, one side.",
@@ -301,7 +302,7 @@ namespace RhinoMCPPlugin.Forsk
 
             // The bar.
             ["bar.because"] = "Suggested because",
-            ["bar.help"] = "?",
+            ["bar.help"] = "\u22ef",
             ["bar.refused"] = "{label} is no longer available here: the file changed.",
 
             // "What can I do here?" groups, in card order.

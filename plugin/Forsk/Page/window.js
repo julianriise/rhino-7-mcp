@@ -177,6 +177,11 @@
     return next;
   };
 
+  /* Sheet rows only. A scale select on the same card is not a sheet id. */
+  Forsk.orderKeys = function (fields) {
+    return (fields || []).filter(function (f) { return f.order; }).map(function (f) { return f.key; });
+  };
+
   /* A card answer: the pill, the values, and the rows' order when the card's rows move. No DOM. */
   Forsk.cardAction = function (item, pillId, values, order) {
     var action = { kind: 'card', card: item.id, pill: pillId };
@@ -381,7 +386,7 @@
       box.appendChild(list);
     }
     var inputs = [];
-    var order = (item.fields || []).map(function (f) { return f.key; });
+    var order = Forsk.orderKeys(item.fields);
     var wraps = {};
     function moveRow(key, delta) {
       var next = Forsk.moveKey(order, key, delta);
@@ -686,6 +691,25 @@
     box.appendChild(h);
   }
 
+  /* Horizontal three dots, 16×16, same weight as the header icons. */
+  function moreMark() {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('aria-hidden', 'true');
+    [5, 12, 19].forEach(function (cx) {
+      var dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', String(cx));
+      dot.setAttribute('cy', '12');
+      dot.setAttribute('r', '1.25');
+      dot.setAttribute('fill', 'currentColor');
+      svg.appendChild(dot);
+    });
+    return svg;
+  }
+
   function renderBar(bar) {
     var nav = document.getElementById('bar');
     while (nav.firstChild) nav.removeChild(nav.firstChild);
@@ -699,10 +723,11 @@
       slots.appendChild(button);
     });
     if (bar.help) {
-      var help = el('button', 'help-button' + (model && model.help ? ' open' : ''), bar.help.label);
+      var help = el('button', 'help-button' + (model && model.help ? ' open' : ''));
       help.type = 'button';
       help.title = bar.help.title + '  ' + bar.help.key;
       help.setAttribute('aria-label', bar.help.title);
+      help.appendChild(moreMark());
       help.addEventListener('click', function () { sender.send({ kind: 'help' }); });
       slots.appendChild(help);
     }

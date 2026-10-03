@@ -70,7 +70,14 @@ public static class PrintInk
         ["S-ELEV-E"] = new Spec(40, 40, 40, 0.18),
         ["S-ELEV-S"] = new Spec(40, 40, 40, 0.18),
         ["S-ELEV-W"] = new Spec(40, 40, 40, 0.18),
-        ["cross-sections"] = new Spec(90, 90, 90, 0.13)
+        ["cross-sections"] = new Spec(90, 90, 90, 0.13),
+        // Facade roles, the default profile's millimetres. A short name matches
+        // before an S-DRAW:: child falls back to the parent, so these widths win.
+        [FacadeLines.Ground] = new Spec(0, 0, 0, 0.50),
+        [FacadeLines.Outline] = new Spec(0, 0, 0, 0.35),
+        [FacadeLines.Line] = new Spec(0, 0, 0, 0.18),
+        [FacadeLines.Opening] = new Spec(0, 0, 0, 0.13),
+        [FacadeLines.Level] = new Spec(0, 0, 0, 0.13)
     };
 
     public static IEnumerable<string> Names => ByName.Keys;
@@ -98,4 +105,45 @@ public static class PrintInk
 
     /// <summary>A sheet curve, hatch, or title prints its own pen.</summary>
     public static ObjectInk ForSheet(byte r, byte g, byte b) => new ObjectInk("object", r, g, b);
+}
+
+/// <summary>
+/// Which facade line prints on which layer, and how heavy that layer is.
+/// Only the ground line is the cut pen. The building outline is the silhouette
+/// pen. Windows and doors are thin even when the hidden-line drawing calls
+/// them a silhouette. Other elevation lines are beyond. Level marks are thin.
+/// Section cut edges are not classified here.
+/// </summary>
+public static class FacadeLines
+{
+    public const string Ground = "facade-ground";
+    public const string Outline = "facade-outline";
+    public const string Line = "facade-line";
+    public const string Opening = "facade-opening";
+    public const string Level = "facade-level";
+
+    public static bool IsOpening(string sourceKind)
+    {
+        return string.Equals(sourceKind, "opening", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sourceKind, "window", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sourceKind, "door", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The role layer for one elevation edge. <paramref name="sourceKind"/> is the forsk kind of the solid the edge came from.</summary>
+    public static string LayerFor(string sourceKind, bool sceneSilhouette)
+    {
+        if (IsOpening(sourceKind)) return Opening;
+        if (sceneSilhouette) return Outline;
+        return Line;
+    }
+
+    /// <summary>The pen that role prints with, for this profile. Unknown roles are elevation lines.</summary>
+    public static PrintPen Pen(string layer, PrintProfile profile)
+    {
+        profile = profile ?? PrintProfiles.Default;
+        if (layer == Ground) return profile.Cut;
+        if (layer == Outline) return profile.Silhouette;
+        if (layer == Opening || layer == Level) return profile.Thin;
+        return profile.Beyond;
+    }
 }

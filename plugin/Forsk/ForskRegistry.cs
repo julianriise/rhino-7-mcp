@@ -46,7 +46,7 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
-    /// <summary>The pinned bar: slot 1, up to two contextual slots, then "?". One reason line under it.</summary>
+    /// <summary>The pinned bar: slot 1, up to two contextual slots, then "⋯". One reason line under it.</summary>
     public sealed class BarView
     {
         public ForskAction Slot1;

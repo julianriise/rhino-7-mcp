@@ -48,7 +48,7 @@ public class FileClassifierTests
         Assert.Equal(FileKind.Empty, f.Kind);
         Assert.Equal(new[] { "Import a plan", "Draw a wall" }, Bar(f));
         Assert.Equal("Nothing is in this file yet.", ForskRegistry.Bar(f).Reason);
-        Assert.Equal("?", ForskRegistry.Bar(f).ToJson()["help"]!["label"]!.ToString());
+        Assert.Equal("\u22ef", ForskRegistry.Bar(f).ToJson()["help"]!["label"]!.ToString());
     }
 
     [Fact]

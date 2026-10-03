@@ -177,8 +177,9 @@ nav.bar { padding: 4px 16px 0; }
 .help-button {
   flex: none; margin-left: auto; width: 30px; height: 30px; padding: 0; border-radius: 50%;
   border: 0; background: var(--card); color: var(--ink); box-shadow: var(--shadow);
-  font: 600 13px/30px -apple-system, system-ui, sans-serif; cursor: pointer;
+  display: grid; place-items: center; cursor: pointer;
 }
+.help-button svg { display: block; }
 .help-button.open { background: var(--brand); color: #FFFFFF; box-shadow: none; }
 .reason { color: var(--meta); font-size: 12px; margin: 6px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reason b { font-weight: 600; color: var(--ink); }

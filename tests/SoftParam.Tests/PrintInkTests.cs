@@ -14,7 +14,8 @@ public class PrintInkTests
     {
         "A-WALL", "A-FLOR", "A-ROOF", "A-OPEN", "A-ROOM", "A-STRU", "A-ANNO",
         "A-ANALYSE", "X-EXIST", "X-PLAN", "S-DRAW", "S-PLAN",
-        "S-ELEV-N", "S-ELEV-E", "S-ELEV-S", "S-ELEV-W", "cross-sections"
+        "S-ELEV-N", "S-ELEV-E", "S-ELEV-S", "S-ELEV-W", "cross-sections",
+        "facade-ground", "facade-outline", "facade-line", "facade-opening", "facade-level"
     };
 
     [Fact]

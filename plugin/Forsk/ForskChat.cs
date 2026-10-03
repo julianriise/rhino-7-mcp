@@ -746,7 +746,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print || intent == ForskIntent.Sheets)
             {
                 text += " When the user states a project, client, or address, call set_project_meta. "
-                    + "The set prints at one scale, 1:100, 1:200 or 1:500, picked to fit. Print at 1:50 (or any scale) is layout_pack scale 50, kept for the next Print; fit the scale again is layout_pack scale 0. "
+                    + "The set prints at one scale, the largest of " + SheetScale.LadderText + " at which every sheet fits A3. Naming one of those (layout_pack scale 200 means 1:200) keeps it for the next Print, and the whole set steps up the list if a sheet does not fit. Fit the scale again is layout_pack scale 0. "
                     + "For a PDF, call layout_pack if the pages are not already there, then export_pdf with path omitted. "
                     + "The panel opens a save dialog. Do not invent a path and do not ask the user to type one. "
                     + "Clear layouts is clear_layouts. Clear drawings is clear_drawings.";

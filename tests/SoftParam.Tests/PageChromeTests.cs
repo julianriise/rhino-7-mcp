@@ -140,6 +140,7 @@ public class PageChromeTests
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({check:true, value:'0'}))"));
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({value:'1'}))"));
         // Choose sheets: ↑ on row 2 moves it first, and the pill posts that order with the values.
+        Assert.Equal("[\"front\",\"plan\"]", Eval("JSON.stringify(Forsk.orderKeys([{key:'scale',options:['Fit']},{key:'front',order:true},{key:'plan',order:true}]))"));
         Assert.Equal("[\"b\",\"a\",\"c\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'b', -1))"));
         Assert.Equal("[\"a\",\"c\",\"b\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'b', 1))"));
         Assert.Equal("[\"a\",\"b\",\"c\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'a', -1))"));

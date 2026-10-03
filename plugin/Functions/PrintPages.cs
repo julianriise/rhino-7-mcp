@@ -24,6 +24,7 @@ public partial class RhinoMCPFunctions
         if (ReadBoolParam(parameters, "reset", false))
         {
             doc.Strings.Delete(SheetSet.MetaSection, SheetSet.MetaEntry);
+            doc.Strings.Delete(LayoutMetaSection, PrintScaleEntry);
             set = PrintSet(doc);
         }
         else
@@ -35,6 +36,9 @@ public partial class RhinoMCPFunctions
             if (set.Count == 0)
                 throw new InvalidOperationException(NothingToLayOutMessage);
             doc.Strings.SetString(SheetSet.MetaSection, SheetSet.MetaEntry, SheetSet.Write(set));
+            var scale = parameters?["scale"];
+            if (scale != null && scale.Type != JTokenType.Null)
+                StoreAskedScale(doc, scale.ToObject<int>());
         }
         var sheets = new JArray();
         foreach (var sheet in set)

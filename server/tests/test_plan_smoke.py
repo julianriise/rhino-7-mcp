@@ -31,10 +31,11 @@ def test_office_rooms_are_open_rings():
 
 @pytest.mark.parametrize(
     "need,scale",
-    [(34.55, 100), (100, 100), (100.01, 200), (137, 200), (200, 200), (230, 500), (900, 500), (0, 100)],
+    [(34.55, 50), (100, 100), (100.01, 125), (137, 150), (200, 200), (230, 250), (900, 1000), (0, 5)],
 )
 def test_ladder_step_matches_sheet_scale(need, scale):
-    # SheetScale.Pick for one drawing: 1:100, 1:200, 1:500; 1:50 only when asked.
+    # One drawing: the finest listed step that fits. need 0 fits 1:5.
+    # An empty C# set stays at FirstStep 100; this helper is not that default.
     assert plan_smoke.ladder_step(need) == scale
 
 
@@ -61,13 +62,13 @@ def test_a_fresh_count_ignores_the_plan_cut():
 
 def test_check_fit_fails_off_the_ladder_or_when_the_plan_does_not_fit():
     failures = []
-    plan_smoke.check_fit(_fit_page(125, 118.4), "office fit", failures)
+    plan_smoke.check_fit(_fit_page(80, 118.4), "office fit", failures)
     plan_smoke.check_fit(_fit_page(100, 118.4), "office fit", failures)
     plan_smoke.check_fit(_fit_page(200, 118.4, fitted=False), "office fit", failures)
     assert failures == [
-        "office fit plan fit 1:125 want 1:200 need 118.4 fill 0.85",
-        "office fit plan fit 1:100 want 1:200 need 118.4 fill 1.07",
-        "office fit plan fit 1:200 want 1:200 need 118.4 fill 0.53",
+        "office fit plan fit 1:80 want 1:125 need 118.4 fill 1.33",
+        "office fit plan fit 1:100 want 1:125 need 118.4 fill 1.07",
+        "office fit plan fit 1:200 want 1:125 need 118.4 fill 0.53",
     ]
 
 
@@ -77,10 +78,10 @@ def test_check_fit_checks_the_fill_floor_only_at_the_step_the_plan_chose():
     plan_smoke.check_fit(_fit_page(500, 118.4), "office fit", failures)
     assert failures == []
     # At the step the plan chose, its fill must be over the step below's share.
-    page = _fit_page(200, 118.4)
+    page = _fit_page(125, 118.4)
     page["fill"] = 0.40
     plan_smoke.check_fit(page, "office fit", failures)
-    assert failures == ["office fit plan fit 1:200 want 1:200 need 118.4 fill 0.40"]
+    assert failures == ["office fit plan fit 1:125 want 1:125 need 118.4 fill 0.40"]
 
 
 def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.4, free=0):

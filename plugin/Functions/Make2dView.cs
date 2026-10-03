@@ -1328,6 +1328,8 @@ public partial class RhinoMCPFunctions
         public Curve Curve;
         public double Weight;
         public Color Color;
+        /// <summary>A facade role layer. Null keeps the view layer (plan and section).</summary>
+        public string Role;
     }
 
     private const string DrawParentName = "S-DRAW";
@@ -1382,6 +1384,7 @@ public partial class RhinoMCPFunctions
         }
 
         var geometries = new List<GeometryBase>();
+        var drawKinds = new List<string>();
         var clusterMembers = new Dictionary<Guid, List<RhinoObject>>();
         var wallSolids = WallClusterSolids(doc, sources, out result.WallNote, clusterMembers);
         foreach (var obj in sources)
@@ -1390,7 +1393,9 @@ public partial class RhinoMCPFunctions
             if (plan
                 && string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
                 continue;
+            var kind = GetForskKind(obj) ?? "";
             AppendSource(obj, wallSolids, geometries);
+            while (drawKinds.Count < geometries.Count) drawKinds.Add(kind);
         }
         if (geometries.Count == 0)
         {
@@ -1408,6 +1413,7 @@ public partial class RhinoMCPFunctions
         try
         {
             var draw = geometries;
+            var kinds = drawKinds;
             if (clip.HasValue)
             {
                 // Document clipping keeps the side the normal points at.
@@ -1421,12 +1427,18 @@ public partial class RhinoMCPFunctions
                 var hldPlane = clip.Value;
                 hldPlane.Flip();
                 sectioned = new List<GeometryBase>();
-                foreach (var geom in geometries)
+                var sectionedKinds = new List<string>();
+                for (var i = 0; i < geometries.Count; i++)
                 {
-                    foreach (var piece in KeepSectionSide(geom, hldPlane, tolerance))
+                    var kind = i < drawKinds.Count ? drawKinds[i] : "";
+                    foreach (var piece in KeepSectionSide(geometries[i], hldPlane, tolerance))
+                    {
                         sectioned.Add(piece);
+                        sectionedKinds.Add(kind);
+                    }
                 }
                 draw = sectioned;
+                kinds = sectionedKinds;
             }
 
             var bbox = BoundingBox.Empty;
@@ -1454,8 +1466,11 @@ public partial class RhinoMCPFunctions
                 else
                 {
                     hldParams.SetViewport(viewport);
-                    foreach (var geom in draw)
-                        hldParams.AddGeometry(geom, Transform.Identity, null);
+                    for (var i = 0; i < draw.Count; i++)
+                    {
+                        var tag = i < kinds.Count && kinds[i].Length > 0 ? (object)kinds[i] : null;
+                        hldParams.AddGeometry(draw[i], Transform.Identity, tag);
+                    }
                     hld = HiddenLineDrawing.Compute(hldParams, true);
                     if (hld == null)
                         fail = "Hidden line drawing failed.";
@@ -1472,15 +1487,29 @@ public partial class RhinoMCPFunctions
                             if (!KeepGreyscaleSegment(seg)) continue;
                             var dup = seg.CurveGeometry?.DuplicateCurve();
                             if (dup == null) continue;
-                            var sectionCut = IsSectionCut(seg);
-                            var pen = seg.IsSceneSilhouette || sectionCut
-                                ? PrintProfiles.Active.Silhouette
-                                : PrintProfiles.Active.Beyond;
+                            // A facade: openings stay thin even when IsSceneSilhouette.
+                            // Plan and section keep the silhouette pen on a scene silhouette or a section cut.
+                            string role = null;
+                            PrintPen pen;
+                            if (section == null && !plan)
+                            {
+                                var kind = seg.ParentCurve?.SourceObject?.Tag as string;
+                                role = FacadeLines.LayerFor(kind, seg.IsSceneSilhouette);
+                                pen = FacadeLines.Pen(role, PrintProfiles.Active);
+                            }
+                            else
+                            {
+                                var sectionCut = IsSectionCut(seg);
+                                pen = seg.IsSceneSilhouette || sectionCut
+                                    ? PrintProfiles.Active.Silhouette
+                                    : PrintProfiles.Active.Beyond;
+                            }
                             visible.Add(new WeightedCurve
                             {
                                 Curve = dup,
                                 Weight = pen.Mm,
-                                Color = pen.Color
+                                Color = pen.Color,
+                                Role = role
                             });
                         }
                     }
@@ -1630,10 +1659,13 @@ public partial class RhinoMCPFunctions
                     continue;
                 }
                 box.Union(curve.GetBoundingBox(true));
+                var target = layer;
+                if (!string.IsNullOrEmpty(item.Role))
+                    target = EnsureFacadeLayer(doc, layer, item.Role) ?? layer;
                 var stableId = FormatStableId("d", index);
                 var attr = new ObjectAttributes
                 {
-                    LayerIndex = layer.Index,
+                    LayerIndex = target.Index,
                     Name = stableId,
                     Space = ActiveSpace.ModelSpace,
                     ViewportId = Guid.Empty,
@@ -1781,6 +1813,50 @@ public partial class RhinoMCPFunctions
         return child;
     }
 
+    /// <summary>
+    /// A child of the view layer for one facade role. Its plot weight is that
+    /// role's pen, not the view layer's hairline. The next print's ink stamp
+    /// runs before this bake, so the weight is set here from the active profile.
+    /// </summary>
+    private Layer EnsureFacadeLayer(RhinoDoc doc, Layer viewLayer, string role)
+    {
+        if (doc == null || viewLayer == null || string.IsNullOrEmpty(role)) return null;
+        Layer child = null;
+        var kids = viewLayer.GetChildren();
+        if (kids != null)
+        {
+            foreach (var kid in kids)
+            {
+                if (kid == null || kid.IsDeleted) continue;
+                if (!kid.Name.Equals(role, StringComparison.OrdinalIgnoreCase)) continue;
+                child = kid;
+                break;
+            }
+        }
+        if (child == null)
+        {
+            var created = new Layer
+            {
+                Name = role,
+                Color = Color.Black,
+                IsVisible = true,
+                ParentLayerId = viewLayer.Id
+            };
+            var childIndex = doc.Layers.Add(created);
+            if (childIndex < 0) return null;
+            child = doc.Layers.FindIndex(childIndex);
+        }
+        if (child == null) return null;
+        var pen = FacadeLines.Pen(role, PrintProfiles.Active);
+        child.Color = pen.Color;
+        child.PlotColor = pen.Color;
+        child.PlotWeight = pen.Mm;
+        child.IsVisible = true;
+        doc.Layers.Modify(child, child.Index, true);
+        HideDrawLayerInModel(doc, child);
+        return child;
+    }
+
     private static void StyleDrawLayer(RhinoDoc doc, Layer layer, double plotMm)
     {
         if (doc == null || layer == null) return;
@@ -1824,8 +1900,16 @@ public partial class RhinoMCPFunctions
     private static void DeletePrintDrawings(RhinoDoc doc, Layer layer)
     {
         if (doc == null || layer == null) return;
+        var layers = new List<Layer> { layer };
+        var kids = layer.GetChildren();
+        if (kids != null)
+        {
+            foreach (var kid in kids)
+                if (kid != null && !kid.IsDeleted) layers.Add(kid);
+        }
         var doomed = new List<Guid>();
-        CollectLayerDrawings(doc.Objects, layer, doomed);
+        foreach (var one in layers)
+            CollectLayerDrawings(doc.Objects, one, doomed);
         var pages = doc.Views.GetPageViews();
         if (pages != null)
         {
@@ -1841,7 +1925,8 @@ public partial class RhinoMCPFunctions
                     ActiveObjects = true
                 };
                 settings.ViewportFilter = viewport;
-                CollectLayerDrawings(doc.Objects.GetObjectList(settings), layer, doomed);
+                foreach (var one in layers)
+                    CollectLayerDrawings(doc.Objects.GetObjectList(settings), one, doomed);
             }
         }
         foreach (var id in doomed)
