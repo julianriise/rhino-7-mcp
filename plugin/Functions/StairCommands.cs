@@ -67,8 +67,9 @@ public partial class RhinoMCPFunctions
         if (doc == null) throw new InvalidOperationException("No active document.");
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         var obj = ResolveStairs(doc, parameters, false)[0];
-        var spec = ReadStairSpec(obj) ?? throw new InvalidOperationException("This stair's record does not read. Delete it and add it again.");
-        var before = Stairs.Plan(spec, StairAutoRise(doc));
+        // As built: a flip turns about the footprint the solid has now.
+        if (!TryStairAsBuilt(obj, out var spec, out var before))
+            throw new InvalidOperationException("This stair's record does not read. Delete it and add it again.");
         var width = ReadSize(parameters, "width");
         if (width.HasValue) spec = Stairs.Resized(spec, width.Value);
         spec.RiserMax = ReadSize(parameters, "riser_max") ?? spec.RiserMax;
