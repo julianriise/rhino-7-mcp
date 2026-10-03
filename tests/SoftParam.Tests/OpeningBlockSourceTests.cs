@@ -97,7 +97,7 @@ public class OpeningBlockSourceTests
         // selected frame resolved and then move threw "Opening marker not found."
         var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
         var start = blocks.IndexOf("bool ReplaceOpeningMarker", StringComparison.Ordinal);
-        var end = blocks.IndexOf("private Guid AddOpeningBlock", StringComparison.Ordinal);
+        var end = blocks.IndexOf("bool DeleteOpeningMarker", StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start, "replace helper is present");
         var body = blocks.Substring(start, end - start);
         Assert.True(
@@ -116,6 +116,45 @@ public class OpeningBlockSourceTests
             Assert.DoesNotContain("Objects.Replace(item.Marker.Id", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Objects.Replace(id, copy)", source, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void AHiddenMarkerIsShownBeforeDelete()
+    {
+        // Objects.Delete(Guid, quiet) misses an object-hidden marker, so
+        // deleting selected windows threw "Opening marker not found."
+        var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
+        var start = blocks.IndexOf("bool DeleteOpeningMarker", StringComparison.Ordinal);
+        var end = blocks.IndexOf("private Guid AddOpeningBlock", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "delete helper is present");
+        var body = blocks.Substring(start, end - start);
+        var show = body.IndexOf("Objects.Show", StringComparison.Ordinal);
+        var delete = body.IndexOf("Objects.Delete", StringComparison.Ordinal);
+        var hide = body.IndexOf("if (!deleted) HideOpeningMarker(doc, id)", StringComparison.Ordinal);
+        Assert.True(show >= 0 && show < delete && delete < hide, "show, delete, and hide again when delete fails");
+
+        var openings = File.ReadAllText(Path.Combine(FunctionsDir(), "FacadeOpenings.cs"));
+        var trackStart = openings.IndexOf("bool TrackDelete", StringComparison.Ordinal);
+        var trackEnd = openings.IndexOf("void UndeletePieces", StringComparison.Ordinal);
+        Assert.True(trackStart >= 0 && trackEnd > trackStart, "TrackDelete is present");
+        var track = openings.Substring(trackStart, trackEnd - trackStart);
+        Assert.Contains("opening_marker", track, StringComparison.Ordinal);
+        Assert.True(
+            track.IndexOf("DeleteOpeningMarker", StringComparison.Ordinal) >= 0
+            && track.IndexOf("DeleteOpeningMarker", StringComparison.Ordinal) < track.IndexOf("Objects.Delete", StringComparison.Ordinal),
+            "a hidden marker is shown before delete; a frame or wall still uses Delete");
+        Assert.Contains("DeleteOpeningMarker(doc, markerId)", openings, StringComparison.Ordinal);
+        Assert.DoesNotContain("Objects.Delete(markerId", openings, StringComparison.Ordinal);
+
+        var clear = File.ReadAllText(Path.Combine(FunctionsDir(), "ClearGenerated.cs"));
+        var loopStart = clear.IndexOf("foreach (var id in matched)", StringComparison.Ordinal);
+        Assert.True(loopStart >= 0, "clear loop is present");
+        var loop = clear.Substring(loopStart);
+        Assert.Contains("opening_marker", loop, StringComparison.Ordinal);
+        Assert.True(
+            loop.IndexOf("DeleteOpeningMarker", StringComparison.Ordinal) >= 0
+            && loop.IndexOf("DeleteOpeningMarker", StringComparison.Ordinal) < loop.IndexOf("Objects.Delete", StringComparison.Ordinal),
+            "clear_generated shows a hidden marker before deleting it");
     }
 
     static string FunctionsDir()

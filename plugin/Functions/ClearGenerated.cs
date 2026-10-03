@@ -67,7 +67,11 @@ public partial class RhinoMCPFunctions
         {
             foreach (var id in matched)
             {
-                if (doc.Objects.Delete(id, true))
+                var obj = doc.Objects.FindId(id);
+                var gone = string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)
+                    ? DeleteOpeningMarker(doc, id)
+                    : doc.Objects.Delete(id, true);
+                if (gone)
                     deleted.Add(id.ToString());
             }
             if (deleted.Count > 0)

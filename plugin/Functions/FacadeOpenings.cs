@@ -164,7 +164,7 @@ public partial class RhinoMCPFunctions
         {
             DeleteOpeningBlocks(doc, markerId);
             if (doc.Objects.FindId(markerId) != null)
-                doc.Objects.Delete(markerId, true);
+                DeleteOpeningMarker(doc, markerId);
             throw;
         }
 
@@ -1605,7 +1605,11 @@ public partial class RhinoMCPFunctions
         var def = OpeningBlockDefIndex(obj);
         var piece = new RemovedPiece { Object = obj, DefinitionIndex = -1 };
         bag.Add(piece);
-        if (!doc.Objects.Delete(obj.Id, true)) return false;
+        // A marker is object-hidden. Delete(Guid) misses it, the same miss as Replace.
+        var deleted = string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)
+            ? DeleteOpeningMarker(doc, obj.Id)
+            : doc.Objects.Delete(obj.Id, true);
+        if (!deleted) return false;
         // A shared definition is still in use. Undo restores it only when this was the last instance.
         if (DeleteOpeningDefinitionIfUnused(doc, def))
             piece.DefinitionIndex = def;

@@ -164,6 +164,25 @@ public partial class RhinoMCPFunctions
         return replaced;
     }
 
+    /// <summary>
+    /// Delete an opening marker. Markers are object-hidden, and
+    /// Objects.Delete(Guid, quiet) misses a hidden object the same way
+    /// Replace does, so deleting a selected frame threw "Opening marker not found."
+    /// Show it, delete, and hide it again when the delete fails.
+    /// </summary>
+    private static bool DeleteOpeningMarker(RhinoDoc doc, Guid id)
+    {
+        if (doc == null || id == Guid.Empty) return false;
+        var obj = doc.Objects.FindId(id);
+        if (obj == null) return false;
+        if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (obj.IsHidden) doc.Objects.Show(id, true);
+        var deleted = doc.Objects.Delete(id, true);
+        if (!deleted) HideOpeningMarker(doc, id);
+        return deleted;
+    }
+
     private Guid AddOpeningBlock(
         RhinoDoc doc,
         Guid markerId,
