@@ -239,4 +239,26 @@ public class PageChromeTests
         Assert.Contains(".answer li > span { color: var(--ink); }", css);
         Assert.Contains("padding: 0 0 0 1.2em", css);
     }
+
+    /// <summary>
+    /// An empty composer used to wash the send button white. It stays brand
+    /// blue. Disabled is only the cursor and a slight opacity.
+    /// </summary>
+    [Fact]
+    public void TheSendButton_StaysBrandWhenEmpty()
+    {
+        var html = Html();
+        var at = html.IndexOf(".send:disabled", StringComparison.Ordinal);
+        var end = html.IndexOf('}', at);
+        var rule = html.Substring(at, end - at);
+
+        Assert.Contains("background: var(--brand)", rule);
+        Assert.Contains("color: #FFFFFF", rule);
+        Assert.Contains("opacity: 0.85", rule);
+        Assert.Contains("cursor: default", rule);
+        Assert.DoesNotContain("rgba(255, 255, 255", rule);
+        Assert.DoesNotContain("var(--ink)", rule);
+        Assert.Contains("id=\"send\"", html);
+        Assert.Contains("class=\"send\"", html);
+    }
 }

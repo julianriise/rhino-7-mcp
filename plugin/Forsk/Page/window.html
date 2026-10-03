@@ -222,9 +222,10 @@ textarea::placeholder { color: var(--faint); }
   -webkit-appearance: none; appearance: none;
 }
 .send:disabled {
-  background-color: var(--brand);
-  background-image: linear-gradient(rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.82));
-  color: var(--ink); cursor: default;
+  background: var(--brand);
+  color: #FFFFFF;
+  opacity: 0.85;
+  cursor: default;
 }
 @media (prefers-reduced-motion: reduce) {
   .step::after { animation: none; display: none; }
