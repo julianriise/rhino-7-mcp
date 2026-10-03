@@ -48,7 +48,7 @@ def layout_pack(
       elevations, every stored section, and schedules. schedules is its own
       A3 page with the door, window and room lists (dørliste, vindusliste,
       romliste) from the model; every door and window gets a stable mark
-      (D01, V01) shown on the plan and on its row. Export draws the lists
+      (D01, W01) shown on the plan and on its row. Export draws the lists
       again from the model.
     - scale: Requested denominator, 100 means 1:100. Rounded up to a
       standard step if the drawing does not fit the detail. Omit to fit:

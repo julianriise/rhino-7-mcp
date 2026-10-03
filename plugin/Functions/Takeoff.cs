@@ -139,9 +139,9 @@ public static class Takeoff
             table.Rows.Add(new[]
             {
                 line.Group == existing ? line.Name : line.Label,
-                line.LengthM.HasValue ? Number(line.LengthM.Value) : "",
-                line.AreaM2.HasValue ? Number(line.AreaM2.Value) : "",
-                line.VolumeM3.HasValue ? Number(line.VolumeM3.Value) : "",
+                line.LengthM.HasValue ? Number(line.LengthM.Value, norwegian) : "",
+                line.AreaM2.HasValue ? Number(line.AreaM2.Value, norwegian) : "",
+                line.VolumeM3.HasValue ? Number(line.VolumeM3.Value, norwegian) : "",
                 line.Count.HasValue ? line.Count.Value.ToString(CultureInfo.InvariantCulture) : ""
             });
         }
@@ -149,10 +149,14 @@ public static class Takeoff
         return Schedules.Fit(table, null);
     }
 
-    /// <summary>One decimal, Norwegian comma: 23,2.</summary>
-    public static string Number(double value)
+    /// <summary>One decimal as the chat prints it, with a comma: 23,2.</summary>
+    public static string Number(double value) => Number(value, true);
+
+    /// <summary>One decimal. English sheets use a point (32.0); Bokmål keeps the comma.</summary>
+    public static string Number(double value, bool norwegian)
     {
-        return Math.Round(value, 1, MidpointRounding.AwayFromZero).ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',');
+        var text = Math.Round(value, 1, MidpointRounding.AwayFromZero).ToString("0.0", CultureInfo.InvariantCulture);
+        return norwegian ? text.Replace('.', ',') : text;
     }
 
     /// <summary>Every run of every cluster of these walls, with its openings taken out.</summary>

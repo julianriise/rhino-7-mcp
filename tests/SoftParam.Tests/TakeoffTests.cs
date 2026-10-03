@@ -179,7 +179,7 @@ public class TakeoffTests
         Assert.Equal("Quantities", table.Title);
         Assert.Equal(new[] { "Item", "Length (m)", "Area (m²)", "Volume (m³)", "Count" }, table.Heads);
         Assert.Equal(new[] { "Exterior walls", "", "", "", "" }, table.Rows[0]);
-        Assert.Equal(new[] { "200 mm", "23,2", "67,7", "13,5", "" }, table.Rows[1]);
+        Assert.Equal(new[] { "200 mm", "23.2", "67.7", "13.5", "" }, table.Rows[1]);
         Assert.StartsWith("Quantities are approximate, from the model", table.Note);
     }
 }

@@ -256,9 +256,9 @@ public static class PlanImport
             var ring = new List<Pt>();
             foreach (var p in token["boundary"] as JArray ?? new JArray())
                 if (TryPt(p, flip, out var at)) ring.Add(at);
-            // Rom is the converter's word for no name. The text read off the plan comes second.
+            // Room, and the converter's older Rom, mean no name. The text read off the plan comes second.
             var label = token["label"]?.ToString();
-            if (string.IsNullOrWhiteSpace(label) || label == RoomDetect.DefaultRoomName)
+            if (string.IsNullOrWhiteSpace(label) || label == RoomDetect.DefaultRoomName || label == RoomDetect.DefaultRoomNameNb)
                 label = token["ocr_text"]?.Type == JTokenType.String ? token["ocr_text"].ToString() : null;
             plan.Rooms.Add(new Room { Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(), Ring = ring });
         }

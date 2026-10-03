@@ -727,9 +727,10 @@ public static class Sections
     /// Level marks right of the building, in drawing mm: a line at each
     /// level from LevelGapMm past the building's right edge, a triangle with
     /// its tip on the line, the value above the line. ys maps a model height
-    /// to drawing Y; width measures a value's paper width. A value that
-    /// would touch the one below steps right past it. Two values on the same
-    /// level (1. etg and terreng both at ±0) stack, the next above the first.
+    /// to drawing Y; width measures a value's paper width. Two values within
+    /// one text row (Ground -400 and Ground floor ±0 at 1:200, or both at ±0)
+    /// stack, the next above the first. A value farther away that still
+    /// touches steps right past it.
     /// </summary>
     public static List<LevelMark> PlaceLevels(
         IList<Level> levels, Func<double, double> ys, double right, int scale, Func<string, double> width)
@@ -753,8 +754,8 @@ public static class Sections
                 box = new Box(column, row, column + w, row + text);
                 var hit = placed.Where(p => Schedules.Overlaps(box, p, 0.4 * scale)).ToList();
                 if (hit.Count == 0) break;
-                // Same level line: lift the text. A near level keeps the sideways step.
-                if (hit.Any(p => Math.Abs(p.MinY - row) <= 0.01))
+                // Within one text row the labels stack. Farther apart, step right.
+                if (hit.Any(p => Math.Abs(p.MinY - row) <= text + 2 * gap))
                     row = hit.Max(p => p.MaxY) + gap;
                 else
                     column = hit.Max(p => p.MaxX) + 2 * gap;

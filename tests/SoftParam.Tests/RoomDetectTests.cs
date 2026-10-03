@@ -274,7 +274,8 @@ public class RoomDetectTests
     public void Label_ACupboardDoesNotNameABigRoom()
     {
         var corridor = new[] { Label("Brannskap", 250, 100, 100) };
-        Assert.Equal("Rom", RoomDetect.PickLabel(corridor, 92.6 * M2, new Pt(0, 0)));
+        Assert.Equal("Room", RoomDetect.PickLabel(corridor, 92.6 * M2, new Pt(0, 0)));
+        Assert.Equal("Rom", RoomDetect.PickLabel(corridor, 92.6 * M2, new Pt(0, 0), true));
         Assert.Equal("Brannskap", RoomDetect.PickLabel(corridor, 1.5 * M2, new Pt(0, 0)));
     }
 
@@ -293,9 +294,10 @@ public class RoomDetectTests
     }
 
     [Fact]
-    public void Label_NoneInside_IsRom()
+    public void Label_NoneInside_IsRoom()
     {
-        Assert.Equal("Rom", RoomDetect.PickLabel(new RoomDetect.Label[0], 12.6 * M2, new Pt(0, 0)));
+        Assert.Equal("Room", RoomDetect.PickLabel(new RoomDetect.Label[0], 12.6 * M2, new Pt(0, 0)));
+        Assert.Equal("Rom", RoomDetect.PickLabel(new RoomDetect.Label[0], 12.6 * M2, new Pt(0, 0), true));
     }
 
     [Fact]

@@ -321,8 +321,13 @@ public static class RoomDetect
             || (TryInside(new List<List<Pt>> { earlier }, out var at) && Contains(room.Ring, at));
     }
 
-    /// <summary>Name for a room with no label inside it.</summary>
-    public const string DefaultRoomName = "Rom";
+    /// <summary>Name for a room with no label inside it. Bokmål is <see cref="DefaultRoomNameNb"/>.</summary>
+    public const string DefaultRoomName = "Room";
+    /// <summary>Bokmål auto name, when norwegian is asked.</summary>
+    public const string DefaultRoomNameNb = "Rom";
+
+    public static string UnnamedRoom(bool norwegian = false) =>
+        norwegian ? DefaultRoomNameNb : DefaultRoomName;
     /// <summary>Fixture labels (a cupboard, a drain) name a room only up to this size.</summary>
     public const double FixtureRoomMaxMm2 = 20000000.0;
 
@@ -351,13 +356,13 @@ public static class RoomDetect
     /// name depends on the ring alone. rooms_detect names each room here once
     /// and stamps it on the marker; the plan tag shows that stamp.
     /// </summary>
-    public static string Name(IList<Label> labels, List<Pt> ring)
+    public static string Name(IList<Label> labels, List<Pt> ring, bool norwegian = false)
     {
         var inside = new List<Label>();
         foreach (var label in labels)
             if (Contains(ring, label.At)) inside.Add(label);
         TryInside(new List<List<Pt>> { ring }, out var at);
-        return PickLabel(inside, Math.Abs(Area(ring)), at);
+        return PickLabel(inside, Math.Abs(Area(ring)), at, norwegian);
     }
 
     /// <summary>
@@ -488,9 +493,9 @@ public static class RoomDetect
     /// <summary>
     /// The rule <see cref="Name"/> applies to the labels inside a room. Fixture
     /// labels do not name a room over 20 m². Of the rest the tallest text wins,
-    /// then the one nearest the room's inside point. No label left: Rom.
+    /// then the one nearest the room's inside point. No label left: Room.
     /// </summary>
-    public static string PickLabel(IList<Label> labels, double areaMm2, Pt inside)
+    public static string PickLabel(IList<Label> labels, double areaMm2, Pt inside, bool norwegian = false)
     {
         string best = null;
         var bestHeight = 0.0;
@@ -508,7 +513,7 @@ public static class RoomDetect
             bestHeight = label.Height;
             bestDist = dist;
         }
-        return best ?? DefaultRoomName;
+        return best ?? UnnamedRoom(norwegian);
     }
 
     public static double Area(IList<Pt> ring)

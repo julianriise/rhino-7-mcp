@@ -2,7 +2,7 @@
 
 The rooms are what RoomDetect gives on that DXF (OfficeRoomsTests pins the
 same names): id, name, and inside point. The checks must pass them and catch
-the two ways F2.5 went wrong before: every room read as Rom, and a name taken
+the two ways F2.5 went wrong before: every room read as Room, and a name taken
 from another room.
 """
 
@@ -28,7 +28,7 @@ ROOMS = [
     ("rd-05", "WC", 27258, 20439),
     ("rd-06", "WC", 27258, 19100),
     ("rd-07", "Bøttekott", 27258, 17645),
-    ("rd-08", "Rom", 28920, 23240),
+    ("rd-08", "Room", 28920, 23240),
     ("rd-09", "Fax/kopi/printer", 29435, 15566),
     ("rd-10", "Open Office", 31535, 5552),
     ("rd-11", "Hall", 8881, 15572),
@@ -64,12 +64,12 @@ def test_detected_names_pass(rings, capsys):
     failures = []
     plan_smoke.check_room_names(rooms(), rings, failures)
     assert failures == []
-    assert "room names 16 from DXF labels 15 Rom 1 wrong 0" in capsys.readouterr().out
+    assert "room names 16 from DXF labels 15 Room 1 wrong 0" in capsys.readouterr().out
 
 
 def test_every_room_rom_fails(rings):
     failures = []
-    plan_smoke.check_room_names([dict(room, name="Rom") for room in rooms()], rings, failures)
+    plan_smoke.check_room_names([dict(room, name="Room") for room in rooms()], rings, failures)
     assert failures and failures[0].startswith("office room names wrong 15")
 
 

@@ -186,7 +186,7 @@ public class OfficeRoomsTests
         var named = found.Rooms.Select((room, i) => ids[i] + "=" + RoomDetect.Name(labels, room.Ring));
         Assert.Equal(
             "rd-01=Kontor rd-02=Konferanserom rd-03=Wet Room rd-04=Data/arkiv rd-05=WC rd-06=Hall "
-            + "rd-07=Open Office rd-08=Rom rd-09=Fax/kopi/printer rd-10=Bøttekott rd-11=WC rd-12=WC "
+            + "rd-07=Open Office rd-08=Room rd-09=Fax/kopi/printer rd-10=Bøttekott rd-11=WC rd-12=WC "
             + "rd-13=Kontor rd-14=Kontor rd-15=Kontorplasser rd-16=Konferanserom",
             string.Join(" ", named));
         Assert.True(RoomDetect.Contains(found.Rooms[Array.IndexOf(ids, "rd-10")].Ring, raw.Points[0]));
@@ -236,7 +236,7 @@ public class OfficeRoomsTests
             Assert.Single(found.Rooms, room => RoomDetect.Contains(room.Ring, label.At));
 
         // Each room is named by its label, except the corridor half whose only
-        // label is Brannskap: a cupboard does not name a 92.6 m² room, so Rom.
+        // label is Brannskap: a cupboard does not name a 92.6 m² room, so Room.
         var names = new List<string>();
         foreach (var room in found.Rooms)
         {
@@ -250,7 +250,7 @@ public class OfficeRoomsTests
         Assert.Equal(new[]
         {
             "Bøttekott", "Data/arkiv", "Fax/kopi/printer", "Hall", "Konferanserom", "Konferanserom",
-            "Kontor", "Kontor", "Kontor", "Kontorplasser", "Open Office", "Rom", "WC", "WC", "WC", "Wet Room"
+            "Kontor", "Kontor", "Kontor", "Kontorplasser", "Open Office", "Room", "WC", "WC", "WC", "Wet Room"
         }, names.ToArray());
     }
 
@@ -297,7 +297,7 @@ public class OfficeRoomsTests
             Assert.Equal(row.Reported.At.Y, row.At.Y, 6);
             Assert.Null(row.Untagged);
         }
-        Assert.Equal(new[] { "Fax/kopi/printer", "Rom" }, rows
+        Assert.Equal(new[] { "Fax/kopi/printer", "Room" }, rows
             .Where(row => row.Reported.Id == "rd-08" || row.Reported.Id == "rd-09")
             .Select(row => row.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
 
@@ -369,14 +369,14 @@ public class OfficeRoomsTests
         Assert.Equal(14, doors.Count);
         Assert.Equal(63, windows.Count);
         Assert.Equal(Enumerable.Range(1, 14).Select(n => Schedules.Format("D", n)), Schedules.DoorTable(doors).Ids);
-        Assert.Equal(Enumerable.Range(1, 63).Select(n => Schedules.Format("V", n)), Schedules.WindowTable(windows).Ids);
+        Assert.Equal(Enumerable.Range(1, 63).Select(n => Schedules.Format(Schedules.WindowPrefix, n)), Schedules.WindowTable(windows).Ids);
 
         // The smoke deletes two windows and adds one back: 62 rows, no mark moves or repeats.
-        var kept = windows.Where(w => w.Mark != "V10" && w.Mark != "V20").ToList();
+        var kept = windows.Where(w => w.Mark != "W10" && w.Mark != "W20").ToList();
         kept.Add(new Schedules.Opening { Id = "new", Record = windows[0].Record, X = 0, Y = 0, Width = 1200, Sill = 900, Head = 2100 });
         var again = Schedules.AssignMarks(kept.Concat(doors).ToList(), next);
         for (var i = 0; i < kept.Count - 1; i++) Assert.Equal(kept[i].Mark, again[i]);
-        Assert.Equal("V64", again[kept.Count - 1]);
+        Assert.Equal("W64", again[kept.Count - 1]);
         Assert.Equal(62, again.Take(kept.Count).Distinct().Count());
 
         // Rooms: every detected room once, named and sized as its plan tag.
@@ -395,9 +395,9 @@ public class OfficeRoomsTests
         {
             var row = table.Rows[table.Ids.IndexOf(room.Id)];
             Assert.Equal(room.Name, row[0]);
-            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "approx. " + row[1]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "≈ " + row[1]);
         }
-        Assert.Equal(OpeningTypes.AreaText(found.Rooms.Sum(room => room.Area)), table.Total[1]);
+        Assert.Equal(OpeningTypes.AreaText(found.Rooms.Sum(room => room.Area), false), table.Total[1]);
     }
 
     /// <summary>
@@ -453,7 +453,7 @@ public class OfficeRoomsTests
             .First();
         var halves = found.Rooms.Where(room => RoomDetect.Contains(corridor, room.Inside)).ToList();
         Assert.Equal(2, halves.Count);
-        Assert.Equal(new[] { "Fax/kopi/printer", "Rom" },
+        Assert.Equal(new[] { "Fax/kopi/printer", "Room" },
             halves.Select(room => RoomDetect.Name(labels, room.Ring)).OrderBy(n => n, StringComparer.Ordinal).ToArray());
 
         // Without the divider it is one room, and the printer label names it.

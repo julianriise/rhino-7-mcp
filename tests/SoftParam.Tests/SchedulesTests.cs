@@ -42,7 +42,7 @@ public class SchedulesTests
         };
         var marks = Schedules.AssignMarks(openings, null);
         // Top row first (y 4000), left to right; then the bottom row.
-        Assert.Equal(new[] { "D03", "V01", "D01", "V02", "D02" }, marks);
+        Assert.Equal(new[] { "D03", "W01", "D01", "W02", "D02" }, marks);
     }
 
     [Fact]
@@ -52,25 +52,25 @@ public class SchedulesTests
         var openings = Enumerable.Range(0, 5).Select(i => Opening("window", i * 2000, 0)).ToList();
         var first = Schedules.AssignMarks(openings, next);
         for (var i = 0; i < openings.Count; i++) openings[i].Mark = first[i];
-        Assert.Equal(new[] { "V01", "V02", "V03", "V04", "V05" }, first);
-        Assert.Equal(6, next["V"]);
+        Assert.Equal(new[] { "W01", "W02", "W03", "W04", "W05" }, first);
+        Assert.Equal(6, next["W"]);
 
-        // Delete V02 and V05, then add a window at the far left of the row.
+        // Delete W02 and W05, then add a window at the far left of the row.
         openings.RemoveAt(4);
         openings.RemoveAt(1);
         openings.Add(Opening("window", -3000, 0));
-        Assert.Equal(new[] { "V01", "V03", "V04", "V06" }, Schedules.AssignMarks(openings, next));
-        Assert.Equal(7, next["V"]);
+        Assert.Equal(new[] { "W01", "W03", "W04", "W06" }, Schedules.AssignMarks(openings, next));
+        Assert.Equal(7, next["W"]);
     }
 
     [Fact]
     public void Marks_AFreshBake_StartsAtOne()
     {
         // clear_generated took every window; the stored counter does not carry over.
-        var next = new Dictionary<string, int> { ["V"] = 64, ["D"] = 15 };
+        var next = new Dictionary<string, int> { ["W"] = 64, ["D"] = 15 };
         var marks = Schedules.AssignMarks(new[] { Opening("window", 0, 0), Opening("window", 1000, 0) }, next);
-        Assert.Equal(new[] { "V01", "V02" }, marks);
-        Assert.Equal(3, next["V"]);
+        Assert.Equal(new[] { "W01", "W02" }, marks);
+        Assert.Equal(3, next["W"]);
         Assert.False(next.ContainsKey("D"));
     }
 
@@ -82,9 +82,12 @@ public class SchedulesTests
             Opening("door", 0, 0, "D04"),
             Opening("door", 1000, 0, "D04"),   // a copied marker
             Opening("door", 2000, 0, "V01"),   // a window mark on a door
-            Opening("window", 3000, 0, "V7")   // kept, written as V07
+            Opening("window", 3000, 0, "W7"),  // kept, written as W07
+            Opening("window", 4000, 0, "V01")  // a Norwegian mark is foreign in English
         };
-        Assert.Equal(new[] { "D04", "D05", "D06", "V07" }, Schedules.AssignMarks(openings, null));
+        Assert.Equal(new[] { "D04", "D05", "D06", "W07", "W08" }, Schedules.AssignMarks(openings, null));
+        Assert.Equal(new[] { "V07" }, Schedules.AssignMarks(new[] { Opening("window", 0, 0, "V7") }, null, true));
+        Assert.Equal("D01", Schedules.AssignMarks(new[] { Opening("door", 0, 0) }, null, true)[0]);
     }
 
     [Fact]
@@ -258,10 +261,10 @@ public class SchedulesTests
         for (var i = 0; i < table.Rows.Count; i++)
         {
             var room = rooms.Single(r => r.Id == table.Ids[i]);
-            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "approx. " + table.Rows[i][1]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "≈ " + table.Rows[i][1]);
             Assert.Equal(room.Name, table.Rows[i][0]);
         }
-        Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Total);
+        Assert.Equal(new[] { "Sum", "32.6 m²" }, table.Total);
         Assert.Equal(3, table.Lines);
     }
 
@@ -274,7 +277,7 @@ public class SchedulesTests
             new Schedules.Room { Id = "rd-01", Name = "Kontor", AreaMm2 = 12400000 }
         };
         var table = Schedules.RoomTable(rooms);
-        Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Line(2));
+        Assert.Equal(new[] { "Sum", "32.6 m²" }, table.Line(2));
         Assert.Equal("total", table.LineId(2));
         // BRA and BTA live once, in the Arealtabell on the front sheet.
         Assert.Equal(3, table.Lines);
@@ -317,11 +320,11 @@ public class SchedulesTests
         var gross = new[] { floor.BtaMm2 == null ? null : "bta-0", floor.BraMm2 == null ? null : "bra-0" }.Where(id => id != null);
         Assert.Equal(new[] { "floor-0" }.Concat(gross).Append("net-0"), block);
         Assert.Equal(new[] { "Ground floor", "" }, table.Rows[0]);
-        Assert.Equal(new[] { "Net area", OpeningTypes.AreaText(result.Floors[0].AreaMm2) }, table.Rows[block.Count - 1]);
+        Assert.Equal(new[] { "Net area", OpeningTypes.AreaText(result.Floors[0].AreaMm2, false) }, table.Rows[block.Count - 1]);
         Assert.Equal(new[] { "Net area by use", "" }, table.Rows[block.Count]);
         var uses = table.Rows.Skip(block.Count + 1).ToList();
-        Assert.Equal(result.Uses.Select(u => u.Key), uses.Select(r => r[0]));
-        Assert.Equal(result.Uses.Select(u => OpeningTypes.AreaText(u.AreaMm2)), uses.Select(r => r[1]));
+        Assert.Equal(result.Uses.Select(u => AreaStats.UseLabel(u.Key)), uses.Select(r => r[0]));
+        Assert.Equal(result.Uses.Select(u => OpeningTypes.AreaText(u.AreaMm2, false)), uses.Select(r => r[1]));
         var areas = result.Uses.Select(u => u.AreaMm2).ToList();
         Assert.Equal(areas.OrderByDescending(a => a), areas);
         Assert.StartsWith(Schedules.AreaNote, table.Note);
@@ -343,9 +346,9 @@ public class SchedulesTests
         };
         var table = Schedules.AreaTable(result);
         Assert.Equal(new[] { "floor-0", "bta-0", "bra-0", "net-0", "floor-1", "net-1", "uses", "use-Stue", "use-Kontor" }, table.Ids);
-        Assert.Equal(new[] { "Gross area (BTA)", "25,0 m²" }, table.Rows[1]);
-        Assert.Equal(new[] { "Usable area (BRA)", "22,0 m²" }, table.Rows[2]);
-        Assert.Equal(new[] { "Net area", "20,0 m²" }, table.Rows[3]);
+        Assert.Equal(new[] { "Gross area (BTA)", "25.0 m²" }, table.Rows[1]);
+        Assert.Equal(new[] { "Usable area (BRA)", "22.0 m²" }, table.Rows[2]);
+        Assert.Equal(new[] { "Net area", "20.0 m²" }, table.Rows[3]);
         Assert.Equal("Areas are approximate, from the model, not measured to NS 3940. 1st floor: gross area (BTA) and usable area (BRA) are missing.", table.Note);
         // With no rooms there is no table.
         Assert.Equal(0, Schedules.AreaTable(AreaStats.Compute(new AreaStats.Room[0])).Lines);

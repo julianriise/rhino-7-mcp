@@ -716,20 +716,25 @@ public static class OpeningTypes
         };
     }
 
-    /// <summary>Room tag area line: approx. 12,4 m². Bokmål keeps ca.</summary>
+    /// <summary>Room tag area line: ≈ 12.4 m². Bokmål keeps ca. and the comma. ≈ is shorter than ca., so the line still fits.</summary>
     public static string RoomTag(double areaMm2, bool norwegian = false)
     {
-        return SheetLang.Pick(norwegian, "approx. ", "ca. ") + AreaText(areaMm2);
+        return SheetLang.Pick(norwegian, "≈ ", "ca. ") + AreaText(areaMm2, norwegian);
     }
 
     /// <summary>
-    /// An area as the sheet prints it, one decimal, Norwegian comma: 12,4 m².
-    /// The room tag and the room schedule both print this.
+    /// An area as the chat prints it, one decimal and a comma: 12,4 m².
+    /// Sheets pass <paramref name="norwegian"/> and use a point unless asked.
     /// </summary>
-    public static string AreaText(double areaMm2)
+    public static string AreaText(double areaMm2) => AreaText(areaMm2, true);
+
+    /// <summary>One decimal. English sheets use a point (12.4 m²); Bokmål keeps the comma.</summary>
+    public static string AreaText(double areaMm2, bool norwegian)
     {
         var m2 = Math.Round(areaMm2 / 1000000.0, 1, MidpointRounding.AwayFromZero);
-        return m2.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',') + " m²";
+        var text = m2.ToString("0.0", CultureInfo.InvariantCulture);
+        if (norwegian) text = text.Replace('.', ',');
+        return text + " m²";
     }
 
     /// <summary>Drawing title for the title block. The scale has its own cell. English unless norwegian.</summary>

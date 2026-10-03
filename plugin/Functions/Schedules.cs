@@ -7,7 +7,7 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// Door, window and room schedules (F5.1) from the model's own records: the
 /// opening markers and the room markers the plan tags show. Each door and
-/// window carries a stable mark (D01, V01) that the plan prints beside it and
+/// window carries a stable mark (D01, W01; V01 in bokmål) that the plan prints beside it and
 /// the schedule prints on its row. Pure, no Rhino document, so it tests
 /// headless. Sizes are paper millimetres.
 /// </summary>
@@ -15,7 +15,9 @@ public static class Schedules
 {
     public const string MarkKey = "forsk:mark";
     public const string DoorPrefix = "D";
-    public const string WindowPrefix = "V";
+    public const string WindowPrefix = "W";
+    /// <summary>Bokmål window mark. Door stays D in both languages.</summary>
+    public const string WindowPrefixNb = "V";
 
     public const double TextMm = 2.0;
     public const double TitleMm = 3.5;
@@ -137,9 +139,10 @@ public static class Schedules
         }
     }
 
-    public static string Prefix(string kind)
+    public static string Prefix(string kind, bool norwegian = false)
     {
-        return string.Equals(kind, "window", StringComparison.OrdinalIgnoreCase) ? WindowPrefix : DoorPrefix;
+        if (!string.Equals(kind, "window", StringComparison.OrdinalIgnoreCase)) return DoorPrefix;
+        return norwegian ? WindowPrefixNb : WindowPrefix;
     }
 
     public static string Format(string prefix, int number)
@@ -165,11 +168,13 @@ public static class Schedules
     /// it survives edits, rebuilds, and other openings coming and going. A
     /// missing, foreign or repeated mark (a copied marker) takes the next free
     /// number, in reading order: top of the plan first, then left to right.
-    /// Doors are D01…, windows V01…. next holds the next free number per
-    /// prefix from the last run and is updated, so a deleted mark is not given
-    /// to a new opening. With no mark of a prefix left, numbering starts at 01.
+    /// Doors are D01… in both languages. Windows are W01…, or V01… when
+    /// norwegian. A stored V mark is foreign on an English sheet and is
+    /// replaced. next holds the next free number per prefix from the last run
+    /// and is updated, so a deleted mark is not given to a new opening. With
+    /// no mark of a prefix left, numbering starts at 01.
     /// </summary>
-    public static string[] AssignMarks(IList<Opening> openings, IDictionary<string, int> next)
+    public static string[] AssignMarks(IList<Opening> openings, IDictionary<string, int> next, bool norwegian = false)
     {
         var marks = new string[openings.Count];
         var order = ReadingOrder(openings);
@@ -177,7 +182,7 @@ public static class Schedules
         var free = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var i in order)
         {
-            var prefix = Prefix(openings[i].Record?.Kind);
+            var prefix = Prefix(openings[i].Record?.Kind, norwegian);
             if (!TryNumber(openings[i].Mark, prefix, out var number)) continue;
             var mark = Format(prefix, number);
             if (!used.Add(mark)) continue;
@@ -188,7 +193,7 @@ public static class Schedules
         foreach (var i in order)
         {
             if (marks[i] != null) continue;
-            var prefix = Prefix(openings[i].Record?.Kind);
+            var prefix = Prefix(openings[i].Record?.Kind, norwegian);
             if (!free.ContainsKey(prefix)) free[prefix] = 1;
             string mark;
             do mark = Format(prefix, free[prefix]++);
@@ -414,7 +419,7 @@ public static class Schedules
                 : new[] { "No.", "Type", "W × H (mm)", "Sill (mm)", "Room" },
             Right = new[] { false, false, true, true, false }
         };
-        foreach (var window in ByMark(windows))
+        foreach (var window in ByMark(windows, norwegian))
         {
             table.Ids.Add(window.Mark);
             table.Rows.Add(new[] { window.Mark, TypeText(window.Record, norwegian), Size(window), Mm(window.Sill), RoomText(window.Rooms) });
@@ -442,11 +447,11 @@ public static class Schedules
         foreach (var room in sorted)
         {
             table.Ids.Add(room.Id);
-            table.Rows.Add(new[] { room.Name, OpeningTypes.AreaText(room.AreaMm2) });
+            table.Rows.Add(new[] { room.Name, OpeningTypes.AreaText(room.AreaMm2, norwegian) });
             total += room.AreaMm2;
         }
         if (sorted.Count > 0)
-            table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
+            table.Total = new[] { "Sum", OpeningTypes.AreaText(total, norwegian) };
         return Fit(Speak(table, norwegian), null);
     }
 
@@ -483,14 +488,14 @@ public static class Schedules
             var name = AreaStats.FloorName(level, norwegian);
             Row("floor-" + level, name, "");
             var gross = result.Gross?.Find(g => g != null && (string.IsNullOrWhiteSpace(g.Level) ? "0" : g.Level.Trim()) == level);
-            if (gross?.BtaMm2 != null) Row("bta-" + level, SheetLang.Pick(norwegian, "Gross area (BTA)", "BTA"), OpeningTypes.AreaText(gross.BtaMm2.Value));
-            if (gross?.BraMm2 != null) Row("bra-" + level, SheetLang.Pick(norwegian, "Usable area (BRA)", "BRA"), OpeningTypes.AreaText(gross.BraMm2.Value));
+            if (gross?.BtaMm2 != null) Row("bta-" + level, SheetLang.Pick(norwegian, "Gross area (BTA)", "BTA"), OpeningTypes.AreaText(gross.BtaMm2.Value, norwegian));
+            if (gross?.BraMm2 != null) Row("bra-" + level, SheetLang.Pick(norwegian, "Usable area (BRA)", "BRA"), OpeningTypes.AreaText(gross.BraMm2.Value, norwegian));
             if (gross?.BtaMm2 == null && gross?.BraMm2 == null) missing.Add(name);
-            Row("net-" + level, SheetLang.Pick(norwegian, "Net area", "Netto"), OpeningTypes.AreaText(floor.AreaMm2));
+            Row("net-" + level, SheetLang.Pick(norwegian, "Net area", "Netto"), OpeningTypes.AreaText(floor.AreaMm2, norwegian));
         }
         Row("uses", SheetLang.Pick(norwegian, "Net area by use", "Netto per bruk"), "");
         foreach (var use in result.Uses)
-            Row("use-" + use.Key, use.Key, OpeningTypes.AreaText(use.AreaMm2));
+            Row("use-" + use.Key, AreaStats.UseLabel(use.Key, norwegian), OpeningTypes.AreaText(use.AreaMm2, norwegian));
         var gap = missing.Count == 0 ? "" : " " + string.Join(", ", missing)
             + SheetLang.Pick(norwegian, ": gross area (BTA) and usable area (BRA) are missing.", ": BRA og BTA mangler.");
         table.Note = (norwegian ? AreaNoteNb : AreaNote) + gap;
@@ -656,21 +661,21 @@ public static class Schedules
         return pages;
     }
 
-    static List<Opening> ByMark(IList<Opening> openings)
+    static List<Opening> ByMark(IList<Opening> openings, bool norwegian = false)
     {
         var sorted = new List<Opening>(openings);
         sorted.Sort((a, b) =>
         {
-            var na = MarkNumber(a);
-            var nb = MarkNumber(b);
+            var na = MarkNumber(a, norwegian);
+            var nb = MarkNumber(b, norwegian);
             return na != nb ? na.CompareTo(nb) : string.CompareOrdinal(a.Mark, b.Mark);
         });
         return sorted;
     }
 
-    static int MarkNumber(Opening opening)
+    static int MarkNumber(Opening opening, bool norwegian)
     {
-        return TryNumber(opening.Mark, Prefix(opening.Record?.Kind), out var n) ? n : int.MaxValue;
+        return TryNumber(opening.Mark, Prefix(opening.Record?.Kind, norwegian), out var n) ? n : int.MaxValue;
     }
 
     /// <summary>The type as the lists print it: Hinged door, Hinged door with glass. Bokmål keeps Slagdør, Slagdør m/glass.</summary>

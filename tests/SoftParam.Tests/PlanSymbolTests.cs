@@ -304,8 +304,9 @@ public class PlanSymbolTests
     [Fact]
     public void RoomTag_AndViewTitle()
     {
-        Assert.Equal("approx. 12,4 m²", OpeningTypes.RoomTag(12400000));
-        Assert.Equal("approx. 20,2 m²", OpeningTypes.RoomTag(20160000));
+        Assert.Equal("≈ 12.4 m²", OpeningTypes.RoomTag(12400000));
+        Assert.Equal("≈ 20.2 m²", OpeningTypes.RoomTag(20160000));
+        Assert.True(OpeningTypes.RoomTag(27400000).Length <= ("ca. " + OpeningTypes.AreaText(27400000)).Length);
         Assert.Equal("Ground floor plan", OpeningTypes.ViewTitle("plan", 0));
         Assert.Equal("1st floor plan", OpeningTypes.ViewTitle("plan", 1));
         Assert.Equal("2nd floor plan", OpeningTypes.ViewTitle("plan", 2));

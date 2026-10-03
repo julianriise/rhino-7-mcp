@@ -24,7 +24,7 @@ public partial class RhinoMCPFunctions
         // Every room marker ends in exactly one of three counts: Rooms (tagged:
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
         // RoomsNoOutline (no outline to read). Of the
-        // tagged rooms, RoomAreasDropped show the name alone (the ca. X m² line
+        // tagged rooms, RoomAreasDropped show the name alone (the ≈ X m² line
         // did not fit), RoomsLeader have their tag outside the room on a
         // leader (the name did not fit), and RoomsOverflow are those whose name
         // runs past the room edge (no clear spot for a leader either).

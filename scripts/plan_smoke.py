@@ -386,11 +386,11 @@ def dxf_text(value: str) -> str:
     return re.sub(r"\\U\+([0-9A-Fa-f]{4})", lambda m: chr(int(m.group(1), 16)), value or "")
 
 
-DEFAULT_ROOM_NAME = "Rom"  # RoomDetect.DefaultRoomName
+DEFAULT_ROOM_NAME = "Room"  # RoomDetect.DefaultRoomName
 
 
 def check_room_names(rooms, dxf_rings, failures) -> None:
-    """The names rooms_detect returned, against the DXF: each is Rom or a label
+    """The names rooms_detect returned, against the DXF: each is Room or a label
     that lies in the DXF room holding it, and each labelled DXF room gives one
     of its labels to a room inside it. Which label wins is RoomDetect.Name's
     rule, tested headless on this DXF (OfficeRoomsTests), not redone here."""
@@ -408,7 +408,7 @@ def check_room_names(rooms, dxf_rings, failures) -> None:
         if not any(name in texts for name in inside):
             bad.append(f"DXF room {texts[0]!r} names no room")
     rom = sum(1 for room in rooms if room.get("name") == DEFAULT_ROOM_NAME)
-    print(f"    room names {len(rooms)} from DXF labels {len(rooms) - rom} Rom {rom} wrong {len(bad)}")
+    print(f"    room names {len(rooms)} from DXF labels {len(rooms) - rom} Room {rom} wrong {len(bad)}")
     if bad:
         failures.append(f"office room names wrong {len(bad)}: {'; '.join(bad[:2])}")
 
@@ -590,7 +590,7 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
     against the model: one door row per door marker and one window row per
     window marker, under the mark (forsk:mark) the marker carries and the
     plan prints beside it, every mark once; one room row per tagged room,
-    with the name and the area its plan tag prints (the tag is approx. and the
+    with the name and the area its plan tag prints (the tag is ≈ and the
     row's area)."""
     lists = schedule_rows(sheets)
 
@@ -633,7 +633,7 @@ def check_schedules(sheets, plan_rows, markers, page, label, failures) -> None:
         name, area = (cells + ["", ""])[:2]
         if tags.get((rid, "name")) != name:
             wrong.append(f"{rid} {name!r} tag {tags.get((rid, 'name'))!r}")
-        elif (rid, "area") in tags and tags[(rid, "area")] != f"approx. {area}":
+        elif (rid, "area") in tags and tags[(rid, "area")] != f"≈ {area}":
             wrong.append(f"{rid} {area!r} tag {tags[(rid, 'area')]!r}")
     if len(rows("room")) != tagged:
         bad.append(f"room rows {len(rows('room'))} for {tagged} tagged rooms")

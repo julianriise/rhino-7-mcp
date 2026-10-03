@@ -190,7 +190,7 @@ public class SectionsTests
     }
 
     [Fact]
-    public void Close_level_values_step_sideways()
+    public void Close_level_values_stack()
     {
         var levels = Sections.Levels(new[] { 0.0 }, -100, 3000, 3000);
         var marks = Sections.PlaceLevels(levels, z => z, 8000, 100, text => 0.6 * Sections.ValueMm * text.Length);
@@ -198,9 +198,23 @@ public class SectionsTests
         for (var i = 0; i < marks.Count; i++)
             for (var j = i + 1; j < marks.Count; j++)
                 Assert.False(Schedules.Overlaps(marks[i].TextBox, marks[j].TextBox, 0));
-        // Terreng -100 and 1. etg ±0 are 1 mm apart on paper: the second steps right.
-        Assert.True(marks[1].TextBox.MinX > marks[0].TextBox.MaxX);
+        // Ground -100 and Ground floor ±0 are 1 mm apart on paper: the second stacks.
+        Assert.Equal(marks[0].TextBox.MinX, marks[1].TextBox.MinX, 6);
+        Assert.True(marks[1].TextBox.MinY >= marks[0].TextBox.MaxY);
         Assert.Equal(marks[0].TextBox.MinX, marks[2].TextBox.MinX, 6);
+        Assert.All(marks, m => Assert.Equal(m.Level.Z, m.Y, 6));
+    }
+
+    [Fact]
+    public void Ground_and_floor_400_apart_stack_at_office_scale()
+    {
+        // Office section A at 1:200: Ground -400 and Ground floor ±0 share one text row.
+        var levels = Sections.Levels(new[] { 0.0 }, -400, null, null);
+        var marks = Sections.PlaceLevels(levels, z => z, 8000, 200, text => 0.6 * Sections.ValueMm * text.Length);
+        Assert.Equal(new[] { "Ground -400", "Ground floor ±0" }, marks.Select(m => m.Level.Text));
+        Assert.Equal(marks[0].TextBox.MinX, marks[1].TextBox.MinX, 6);
+        Assert.True(marks[1].TextBox.MinY >= marks[0].TextBox.MaxY);
+        Assert.False(Schedules.Overlaps(marks[0].TextBox, marks[1].TextBox, 0));
         Assert.All(marks, m => Assert.Equal(m.Level.Z, m.Y, 6));
     }
 

@@ -1109,7 +1109,7 @@ def main() -> int:
         page = (packed.get("pages") or [{}])[0]
         if page.get("north_arrow") is not True:
             failures.append("sheet north arrow missing")
-        if "approx." not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
+        if "≈" not in str(page.get("room_tag_text") or "") or "m²" not in str(page.get("room_tag_text") or ""):
             failures.append(f"sheet room tag={page.get('room_tag_text')!r}")
         if (page.get("roof_outline") or 0) < 1:
             failures.append(f"sheet roof outline={page.get('roof_outline')}")

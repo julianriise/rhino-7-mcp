@@ -226,6 +226,14 @@ public class SheetSetTests
         Assert.Equal("Dørliste", Schedules.SheetTitle(new[] { "door" }, true));
         Assert.Equal("Dør-, vindus- og romliste", Schedules.SheetTitle(new[] { "door", "window", "room" }, true));
         Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12_400_000, true));
+        Assert.Equal("≈ 27.4 m²", OpeningTypes.RoomTag(27_400_000));
+        Assert.Equal("Rom", RoomDetect.UnnamedRoom(true));
+        Assert.Equal("Room", RoomDetect.UnnamedRoom());
+        Assert.True(OpeningTypes.TryRead("window", null, null, null, out var window, out _));
+        Assert.True(OpeningTypes.TryRead("door", null, null, null, out var door, out _));
+        Assert.Equal("V01", Schedules.AssignMarks(new[] { new Schedules.Opening { Record = window } }, null, true)[0]);
+        Assert.Equal("W01", Schedules.AssignMarks(new[] { new Schedules.Opening { Record = window } }, null)[0]);
+        Assert.Equal("D01", Schedules.AssignMarks(new[] { new Schedules.Opening { Record = door } }, null, true)[0]);
         Assert.Equal("Fri høyde 2400", Sections.ClearHeightText(2400, true));
         var levels = Sections.Levels(new[] { 0.0 }, -400, 3000, 3000, true);
         Assert.Contains(levels, l => l.Text == "1. etg ±0");
@@ -240,12 +248,30 @@ public class SheetSetTests
         Assert.Equal("Arealer", table.Title);
         Assert.Equal("1. etasje", table.Rows[0][0]);
         Assert.StartsWith(Schedules.AreaNoteNb, table.Note);
+        var uses = AreaStats.Compute(new[]
+        {
+            new AreaStats.Room { Id = "a", Name = "Stue", Level = "0", AreaMm2 = 20_000_000 },
+            new AreaStats.Room { Id = "b", Name = "Fax", Level = "0", AreaMm2 = 5_000_000 }
+        });
+        Assert.Contains(Schedules.AreaTable(uses).Rows, row => row[0] == "Other");
+        Assert.Contains(Schedules.AreaTable(uses, true).Rows, row => row[0] == "Annet");
+        Assert.Contains(".", Schedules.AreaTable(uses).Rows.First(row => row[0] == "Net area")[1]);
+        Assert.Contains(",", Schedules.AreaTable(uses, true).Rows.First(row => row[0] == "Netto")[1]);
+        Assert.Equal("Rom", AreaStats.Compute(new[]
+        {
+            new AreaStats.Room { Id = "c", Name = " ", Level = "0", AreaMm2 = 1_000_000 }
+        }, true).Rooms[0].Name);
 
         var takeoff = Takeoff.Compute(
             new[] { new Takeoff.Wall { Rings = WallJoinsTests.Garage(), ThicknessMm = 200, HeightMm = 3000 } },
             null, null, null, null, 1.0, true);
         Assert.Equal("Yttervegger", takeoff.Lines[0].Group);
         Assert.Equal("Mengdeliste", Takeoff.Table(takeoff, true).Title);
+        Assert.Contains(",", Takeoff.Table(takeoff, true).Rows[1][1]);
         Assert.Contains("(forts.)", Takeoff.Table(takeoff, true).ContinuedSuffix);
+        var english = Takeoff.Table(Takeoff.Compute(
+            new[] { new Takeoff.Wall { Rings = WallJoinsTests.Garage(), ThicknessMm = 200, HeightMm = 3000 } },
+            null, null, null, null, 1.0));
+        Assert.Equal("23.2", english.Rows[1][1]);
     }
 }

@@ -139,7 +139,17 @@ public static class AreaStats
         return found ?? OtherUse;
     }
 
-    public static Result Compute(IList<Room> rooms)
+    /// <summary>
+    /// The Areas table's label for a use key. The key stays Annet so the rows
+    /// still group; English prints Other. Every other use is printed as stored.
+    /// </summary>
+    public static string UseLabel(string key, bool norwegian = false)
+    {
+        if (!norwegian && string.Equals(key, OtherUse, StringComparison.Ordinal)) return "Other";
+        return key ?? "";
+    }
+
+    public static Result Compute(IList<Room> rooms, bool norwegian = false)
     {
         var result = new Result();
         if (rooms != null)
@@ -150,7 +160,7 @@ public static class AreaStats
                 var line = new RoomLine
                 {
                     Id = room.Id ?? "",
-                    Name = string.IsNullOrWhiteSpace(room.Name) ? "Rom" : room.Name.Trim(),
+                    Name = string.IsNullOrWhiteSpace(room.Name) ? RoomDetect.UnnamedRoom(norwegian) : room.Name.Trim(),
                     Level = string.IsNullOrWhiteSpace(room.Level) ? "0" : room.Level.Trim(),
                     Use = string.IsNullOrWhiteSpace(room.Use) ? UseOf(room.Name) : room.Use.Trim(),
                     AreaMm2 = room.AreaMm2
