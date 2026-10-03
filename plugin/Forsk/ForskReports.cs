@@ -88,14 +88,16 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// The editable report. Null for a question or any other sentence.
-        /// The file name is not a field: the save adds it. The description is
-        /// the user's own sentence, or empty. Receipts are not copied in.
+        /// The file name is not a field. The description is the user's own
+        /// sentence. replyEmail is the remembered address; an empty or invalid
+        /// one leaves the email field blank so the card never asks in silence.
         /// </summary>
-        public static CardSpec Card(string text, string file)
+        public static CardSpec Card(string text, string file, string replyEmail = null)
         {
             var kind = Of(text);
             if (kind == ReportKind.None) return null;
             var said = (text ?? "").Trim();
+            var email = ForskSupport.EmailOk(replyEmail) ? replyEmail.Trim() : "";
             return new CardSpec
             {
                 Kind = "support.report",
@@ -121,6 +123,12 @@ namespace RhinoMCPPlugin.Forsk
                         Value = said,
                         Long = true
                     },
+                    new CardField
+                    {
+                        Key = "email",
+                        Label = ForskText.Get("support.email"),
+                        Value = email
+                    },
                     new CardField { Key = "attach", Label = ForskText.Get("support.attach"), Value = "1", Check = true }
                 },
                 Data = new JObject { ["file"] = file ?? "" },
@@ -130,6 +138,31 @@ namespace RhinoMCPPlugin.Forsk
                     new CardPill("cancel", ForskText.Get("word.cancel"))
                 }
             };
+        }
+
+        /// <summary>Puts a blank email field in front of the debug tick when a card has none.</summary>
+        public static bool EnsureEmailField(JObject card)
+        {
+            if (card == null) return false;
+            var fields = card["fields"] as JArray;
+            if (fields == null)
+            {
+                fields = new JArray();
+                card["fields"] = fields;
+            }
+            foreach (var field in fields)
+                if (field["key"]?.ToString() == "email") return false;
+            var email = new JObject
+            {
+                ["key"] = "email",
+                ["label"] = ForskText.Get("support.email"),
+                ["value"] = ""
+            };
+            var at = fields.Count;
+            for (var i = 0; i < fields.Count; i++)
+                if (fields[i]["key"]?.ToString() == "attach") { at = i; break; }
+            fields.Insert(at, email);
+            return true;
         }
 
         /// <summary>The checkbox defaults to ticked. "0" and "false" leave the debug report off.</summary>

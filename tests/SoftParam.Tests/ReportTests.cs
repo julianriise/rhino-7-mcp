@@ -62,7 +62,9 @@ public class ReportTests
         var bug = ForskReports.Card("this is broken", "office.3dm");
         Assert.Equal("support.report", bug.Kind);
         Assert.Equal("Send this report?", bug.Question);
-        Assert.Equal(new[] { "type", "description", "attach" }, bug.Fields.Select(f => f.Key));
+        Assert.Equal(new[] { "type", "description", "email", "attach" }, bug.Fields.Select(f => f.Key));
+        Assert.Equal("", Field(bug, "email"));
+        Assert.Equal("Email", bug.Fields.Single(f => f.Key == "email").Label);
         Assert.DoesNotContain(bug.Fields, f => f.Key == "file" || f.Key == "happened" || f.Key == "expected" || f.Key == "steps");
         var type = bug.Fields.Single(f => f.Key == "type");
         Assert.Equal("Bug", type.Value);

@@ -254,6 +254,7 @@ namespace RhinoMCPPlugin.Forsk
             ["support.question"] = "Question",
             ["support.feature"] = "Feature request",
             ["support.description"] = "Description",
+            ["support.email"] = "Email",
             ["support.attach"] = "Attach debug report",
             ["support.sent"] = "Sent. Reference {id} — we'll reply by email.",
             ["support.sent.nb"] = "Sendt. Referanse {id} — vi svarer på e-post.",

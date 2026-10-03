@@ -286,6 +286,21 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             if (pillId != "cancel" && pillId != "done" && Refuse(thread)) return;
+            // A missing reply address keeps the card open and shows the field. Send does not close it in silence.
+            if (kind == "support.report" && pillId == "send" && card["state"]?.ToString() == "open")
+            {
+                KeepTyped(card, values);
+                var description = Typed(card, "description");
+                var sample = string.IsNullOrWhiteSpace(description) ? thread.LastUserText() : description;
+                var note = ForskSupport.Hold(Typed(card, "type"), description, Typed(card, "email"), ForskPrefill.Language(sample));
+                if (note != null)
+                {
+                    ForskReports.EnsureEmailField(card);
+                    card["note"] = note;
+                    Render();
+                    return;
+                }
+            }
             var pill = thread.Answer(cardId, pillId);
             if (pill == null)
             {
@@ -378,7 +393,7 @@ namespace RhinoMCPPlugin.Forsk
             // A question is an answer. From any other role, a bug or a feature request is the card alone.
             if (ForskIntentRouter.Classify(text) == ForskIntent.Support)
             {
-                var report = ForskReports.Card(text, FileName(doc));
+                var report = ReportCard(text, doc);
                 if (report != null)
                 {
                     thread.Add("user", text);
@@ -474,12 +489,36 @@ namespace RhinoMCPPlugin.Forsk
                     thread.History.AddRange(history);
                     if (ForskReports.EndsWithReport(thread.Override, text))
                     {
-                        var report = ForskReports.Card(text, FileName(RhinoDoc.ActiveDoc));
+                        var report = ReportCard(text, RhinoDoc.ActiveDoc);
                         if (report != null) thread.AddCard(report, null);
                     }
                     Finish(thread, kind, undo, serial, null, text);
                 });
             });
+        }
+
+        /// <summary>The report card, with the remembered reply address filled in when there is one.</summary>
+        static CardSpec ReportCard(string text, RhinoDoc doc)
+        {
+            return ForskReports.Card(text, FileName(doc), ForskReplyEmail.Read(ForskReplyEmail.DefaultPath));
+        }
+
+        /// <summary>Keep what was typed across a render. The page rebuilds the inputs from the card.</summary>
+        static void KeepTyped(JObject card, JObject values)
+        {
+            foreach (var field in card["fields"] as JArray ?? new JArray())
+            {
+                var key = field["key"]?.ToString();
+                if (string.IsNullOrEmpty(key) || values == null || values[key] == null) continue;
+                field["value"] = values[key].ToString();
+            }
+        }
+
+        static string Typed(JObject card, string key)
+        {
+            foreach (var field in card["fields"] as JArray ?? new JArray())
+                if (field["key"]?.ToString() == key) return field["value"]?.ToString() ?? "";
+            return "";
         }
 
         /// <summary>The report card, sent. The debug report rides along when the box is ticked.</summary>
@@ -498,6 +537,8 @@ namespace RhinoMCPPlugin.Forsk
             // The card does not show the file. The report still names it.
             if (card["data"]?["file"] != null) fields["file"] = card["data"]["file"].ToString();
             else fields["file"] = FileName(doc);
+            if (ForskSupport.EmailOk(fields["email"]?.ToString()))
+                ForskReplyEmail.Remember(ForskReplyEmail.DefaultPath, fields["email"].ToString());
             string debug = null;
             var attach = values != null && values["attach"] != null ? values["attach"].ToString() : "1";
             if (ForskReports.WantsDebug(attach))

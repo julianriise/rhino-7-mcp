@@ -165,6 +165,13 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
+        /// <summary>The sentence that keeps the card open, or null when the report can be sent.</summary>
+        public static string Hold(string typeLabel, string message, string replyEmail, string language)
+        {
+            var built = Build(typeLabel, message, replyEmail, null, null, null, null);
+            return built.Ok ? null : Sentence(built.Error, language);
+        }
+
         /// <summary>The POST never came back. The report is kept.</summary>
         public static Outcome Network(string language)
         {
