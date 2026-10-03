@@ -171,6 +171,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("daylight.window", Runs.Ask, "group.openings", f => f.HasWalls && f.HasRooms && !f.HasWindows && f.Map == MapState.None),
             new ForskAction("daylight.rooms", Runs.Run, "group.rooms", f => f.HasWalls && !f.HasRooms && f.Map == MapState.None),
             new ForskAction("rooms.list", Runs.Card, "group.rooms", f => f.HasRooms),
+            new ForskAction("area.stats", Runs.Run, "group.rooms", f => f.HasRooms),
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),

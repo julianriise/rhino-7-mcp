@@ -22,6 +22,9 @@ public class RoleTests
     [InlineData("clear daylight", ForskIntent.Daylight, "Analyser")]
     [InlineData("is this room dark", ForskIntent.Daylight, "Analyser")]
     [InlineData("dagslys", ForskIntent.Daylight, "Analyser")]
+    [InlineData("how big is the flat", ForskIntent.Area, "Analyser")]
+    [InlineData("areal per etasje", ForskIntent.Area, "Analyser")]
+    [InlineData("BRA", ForskIntent.Area, "Analyser")]
     [InlineData("how do I print", ForskIntent.Support, "Support")]
     [InlineData("how do I set the scale", ForskIntent.Support, "Support")]
     [InlineData("what does daylight do", ForskIntent.Support, "Support")]
@@ -203,9 +206,9 @@ public class RoleTests
     {
         var roleless = ForskRegistry.All.Where(a => ForskRoles.OfAction(a.Id) == ForskRole.None).Select(a => a.Id).OrderBy(i => i);
         Assert.Equal(new[] { "bridge.start", "help.card" }, roleless);
-        foreach (var id in new[] { "daylight.rooms", "daylight.run", "daylight.again", "daylight.hide", "daylight.show", "daylight.room" })
+        foreach (var id in new[] { "daylight.rooms", "daylight.run", "daylight.again", "daylight.hide", "daylight.show", "daylight.room", "area.stats" })
             Assert.Equal(ForskRole.Analyser, ForskRoles.OfAction(id));
-        // A window is geometry. Listing rooms stays with the plan until area statistics land under Analyser.
+        // A window is geometry. Listing rooms stays with the plan. Area statistics are Analyser.
         Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("daylight.window"));
         Assert.Equal(ForskRole.Planner, ForskRoles.OfAction("rooms.list"));
     }

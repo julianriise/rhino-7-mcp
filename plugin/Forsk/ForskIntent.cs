@@ -12,6 +12,7 @@ namespace RhinoMCPPlugin.Forsk
         Sheets,
         Print,
         Daylight,
+        Area,
         Dxf,
         Import,
         Support,
@@ -43,7 +44,7 @@ namespace RhinoMCPPlugin.Forsk
     /// <summary>
     /// One-turn tool bias from the message. A clear question, bug report, or
     /// feature request is Support, ahead of the others, so "how do I print" is
-    /// not Print. Then PDF or image import, print, daylight, sheets (sections
+    /// not Print. Then PDF or image import, print, daylight, area, sheets (sections
     /// too), DXF, import, edit, build. An opening selection is edit when those
     /// words are absent. A miss, or a lone "bug" or "wrong" sitting on another
     /// intent, is General: the full tool pack, not Support's short list.
@@ -87,6 +88,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsPlanFile(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
+            if (IsArea(t)) return ForskIntent.Area;
             if (IsSheets(t)) return ForskIntent.Sheets;
             if (IsDxf(t)) return ForskIntent.Dxf;
             if (IsImport(t)) return ForskIntent.Import;
@@ -99,6 +101,8 @@ namespace RhinoMCPPlugin.Forsk
         static string Normalize(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return "";
+            // "m²" stays the word m2, so an area question can match it.
+            text = text.Replace('²', '2');
             var sb = new StringBuilder(text.Length);
             var space = true;
             foreach (var raw in text.ToLowerInvariant())
@@ -192,6 +196,36 @@ namespace RhinoMCPPlugin.Forsk
             var asks = HasWord(t, "is") || HasWord(t, "er");
             var room = HasWord(t, "room") || HasWord(t, "rooms") || HasWord(t, "rom") || HasWord(t, "rommet");
             return asks && room;
+        }
+
+        /// <summary>
+        /// Area statistics: areal, m², kvm, BRA, BTA, how big, hvor stor.
+        /// "print the room schedule" is print, checked first, and "romliste" is sheets.
+        /// "bra" the adjective ("ser bra", "er bra") is not a figure.
+        /// "the area is wrong" stays a bug report: a lone wrong, bug or feil is not this task.
+        /// </summary>
+        static bool IsArea(string t)
+        {
+            if (BugWeak(t)) return false;
+            if (t.Contains("how big") || t.Contains("hvor stor")) return true;
+            if (HasWord(t, "area") || HasWord(t, "areas") || HasStem(t, "areal")) return true;
+            if (HasWord(t, "kvm") || HasWord(t, "kvadratmeter") || HasWord(t, "kvadratmetre") || HasWord(t, "m2")) return true;
+            if (HasWord(t, "bruksareal") || HasWord(t, "bruttoareal") || HasWord(t, "bta")) return true;
+            if (!HasWord(t, "bra")) return false;
+            return !t.Contains("er bra") && !t.Contains("ser bra") && !t.Contains("veldig bra")
+                && !t.Contains("helt bra") && !t.Contains("ganske bra");
+        }
+
+        /// <summary>A word that starts with stem: areal, arealet, arealene.</summary>
+        static bool HasStem(string text, string stem)
+        {
+            var i = 0;
+            while ((i = text.IndexOf(stem, i, StringComparison.Ordinal)) >= 0)
+            {
+                if (i == 0 || text[i - 1] == ' ') return true;
+                i += stem.Length;
+            }
+            return false;
         }
 
         static bool IsSheets(string t)
@@ -360,6 +394,19 @@ namespace RhinoMCPPlugin.Forsk
             }
             return false;
         }
+    }
+
+    /// <summary>
+    /// Area statistics from the panel's chat. The bias is the one line the turn
+    /// gets: totals first, the tool's figures, and Make rooms when there are none.
+    /// </summary>
+    public static class ForskArea
+    {
+        public const string Bias = "Turn bias: Area. area_stats reads the rooms. "
+            + "Lead with the totals, then at most 8 rooms, largest first, then +N more. "
+            + "Use the tool's m² figures. No coordinates, no ids. "
+            + "Pass on BRA and BTA when the tool gives them, and the reason when it leaves one out. Do not invent a figure. "
+            + "No rooms: offer rooms_detect, which finds them from the walls.";
     }
 
     /// <summary>

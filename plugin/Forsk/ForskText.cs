@@ -77,6 +77,7 @@ namespace RhinoMCPPlugin.Forsk
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
+            ["area.stats"] = "Area statistics",
 
             // One-time cards: the question, then the pills.
             ["opening.type.ask"] = "Which {kind} type?",

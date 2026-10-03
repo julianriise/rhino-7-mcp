@@ -355,6 +355,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "No rooms: offer rooms_detect, which finds them from the walls. "
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
             }
+            if (intent == ForskIntent.Area) return ForskArea.Bias;
             if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)
             {
@@ -737,6 +738,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print) return "Print";
             if (intent == ForskIntent.Build) return "Build";
             if (intent == ForskIntent.Daylight) return "Daylight";
+            if (intent == ForskIntent.Area) return "Area";
             if (intent == ForskIntent.Support) return "Support";
             if (intent == ForskIntent.Dxf) return "Import DXF";
             if (intent == ForskIntent.Import) return "Import";

@@ -260,6 +260,52 @@ public class AreaStatsTests
         };
     }
 
+    [Theory]
+    [InlineData("how big is the flat?", ForskIntent.Area)]
+    [InlineData("areal per etasje", ForskIntent.Area)]
+    [InlineData("BRA?", ForskIntent.Area)]
+    [InlineData("hvor stor er leiligheten", ForskIntent.Area)]
+    [InlineData("what is the BTA", ForskIntent.Area)]
+    [InlineData("bruksareal", ForskIntent.Area)]
+    [InlineData("kvm", ForskIntent.Area)]
+    [InlineData("the flat is 64 m²", ForskIntent.Area)]
+    [InlineData("kvadratmeter", ForskIntent.Area)]
+    [InlineData("print the room schedule", ForskIntent.Print)]
+    [InlineData("romliste", ForskIntent.Sheets)]
+    [InlineData("run daylight", ForskIntent.Daylight)]
+    [InlineData("how big is the daylight", ForskIntent.Daylight)]
+    [InlineData("the area is wrong", ForskIntent.Support)]
+    [InlineData("problem med arealene", ForskIntent.Support)]
+    [InlineData("how do I find the area", ForskIntent.Support)]
+    [InlineData("det ser bra ut", ForskIntent.General)]
+    [InlineData("add a door schedule", ForskIntent.Sheets)]
+    public void Router_SendsAreaQuestionsToAnalyser_AndLeavesTheOthers(string said, ForskIntent intent)
+    {
+        Assert.Equal(intent, ForskIntentRouter.Classify(said));
+        if (intent == ForskIntent.Area)
+            Assert.Equal("Analyser", ForskRoles.Mark(intent, ForskRole.None));
+    }
+
+    [Fact]
+    public void AreaBias_AsksForTotalsFirst_AndNotForAGuess()
+    {
+        var bias = ForskArea.Bias;
+        Assert.Contains("Turn bias: Area.", bias);
+        Assert.Contains("at most 8 rooms", bias);
+        Assert.Contains("No coordinates", bias);
+        Assert.Contains("rooms_detect", bias);
+        Assert.Contains("Do not invent a figure", bias);
+    }
+
+    [Theory]
+    [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
+    public void AreaStats_IsNeverSlot1(string name)
+    {
+        var bar = ForskRegistry.Bar(Docs.Facts(name));
+        Assert.NotEqual("area.stats", bar.Slot1.Id);
+        Assert.DoesNotContain(bar.Slots, a => a.Id == "area.stats");
+    }
+
     static AreaStats.Room Room(string id, string name, string level, double areaMm2, string use = null)
     {
         return new AreaStats.Room { Id = id, Name = name, Level = level, AreaMm2 = areaMm2, Use = use };

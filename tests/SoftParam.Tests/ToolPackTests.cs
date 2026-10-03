@@ -24,7 +24,8 @@ public class ToolPackTests
         ["import_plan"] = ForskIntent.Import,
         ["edit"] = ForskIntent.Edit,
         ["support"] = ForskIntent.Support,
-        ["general"] = ForskIntent.General
+        ["general"] = ForskIntent.General,
+        ["area"] = ForskIntent.Area
     };
 
     static IEnumerable<JObject> Recorded()
@@ -113,17 +114,25 @@ public class ToolPackTests
         Assert.True(plotter.IndexOf("layout_pack") < plotter.IndexOf("floor_from_layer"));
         Assert.True(plotter.IndexOf("get_document_summary") > plotter.IndexOf("print_profile"));
 
-        // Analyser puts daylight and rooms detection first. The count is the pack's: nothing added or removed.
+        // Analyser puts its tools first. area_stats joins daylight and rooms detection. The count is the pack's: nothing added or removed.
         var analyser = ForskToolPacks.For(ForskIntent.General, ForskRole.Analyser).ToList();
         Assert.Equal(general.Count, analyser.Count);
         Assert.Equal("rooms_detect", analyser[0]);
         Assert.Equal(ForskToolPacks.DaylightTool, analyser[1]);
+        Assert.Equal("area_stats", analyser[2]);
         Assert.True(analyser.IndexOf("add_opening") > analyser.IndexOf(ForskToolPacks.DaylightTool));
         var daylight = ForskToolPacks.For(ForskIntent.Daylight).ToList();
         var daylightAsAnalyser = ForskToolPacks.For(ForskIntent.Daylight, ForskRole.Analyser).ToList();
         Assert.Equal(daylight.Count, daylightAsAnalyser.Count);
-        Assert.Equal(new[] { ForskToolPacks.DaylightTool, "rooms_detect" }, daylightAsAnalyser.Take(2));
+        Assert.Equal(new[] { ForskToolPacks.DaylightTool, "rooms_detect", "area_stats" }, daylightAsAnalyser.Take(3));
         Assert.Contains("add_opening", daylightAsAnalyser);
+        Assert.Contains("area_stats", daylight);
+        var area = ForskToolPacks.For(ForskIntent.Area).ToList();
+        Assert.Contains("area_stats", area);
+        Assert.Contains("rooms_detect", area);
+        Assert.DoesNotContain("move_wall", area);
+        Assert.Equal(area.Count, ForskToolPacks.For(ForskIntent.Area, ForskRole.Analyser).Count);
+        Assert.Equal(new[] { "area_stats", "rooms_detect" }, ForskToolPacks.For(ForskIntent.Area, ForskRole.Analyser).Take(2));
 
         // Support reads the model and the selection, then the debug report. It adds nothing to another pack and edits nothing.
         var support = ForskToolPacks.For(ForskIntent.Support).ToList();

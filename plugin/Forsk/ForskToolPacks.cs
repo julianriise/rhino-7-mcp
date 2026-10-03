@@ -85,8 +85,11 @@ namespace RhinoMCPPlugin.Forsk
             "print_profile"
         };
 
-        /// <summary>No rooms: rooms_detect. No windows: add_opening.</summary>
-        static readonly string[] DaylightPack = { DaylightTool, "rooms_detect", "add_opening" };
+        /// <summary>No rooms: rooms_detect. No windows: add_opening. area_stats is read only.</summary>
+        static readonly string[] DaylightPack = { DaylightTool, "rooms_detect", "add_opening", "area_stats" };
+
+        /// <summary>The figures. rooms_detect when the file has no rooms yet.</summary>
+        static readonly string[] AreaPack = { "area_stats", "rooms_detect" };
 
         /// <summary>A picked file can be a DXF, so the plan import carries dxf_import too.</summary>
         static readonly string[] ImportPack = { ImportTool, ScaleTool, ForskDxf.Tool };
@@ -145,6 +148,7 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskIntent.Sheets: return SheetsPack;
                 case ForskIntent.Print: return PrintPack;
                 case ForskIntent.Daylight: return DaylightPack;
+                case ForskIntent.Area: return AreaPack;
                 case ForskIntent.Dxf: return DxfPack;
                 case ForskIntent.Import: return ImportPack;
                 default: return new string[0];
@@ -153,12 +157,12 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// The tools a role knows, used only to reorder a pack. Planner imports,
-        /// Modeller builds and edits, Plotter prints, Analyser runs daylight and
-        /// the rooms detection it needs. add_opening stays in the daylight pack
-        /// so a model with no windows can still cut one, and it stays Modeller's
-        /// tool. Support's reads come first; the reorder adds nothing, so the
-        /// debug report stays on a Support turn. Render has no pack, so that
-        /// override does not reorder.
+        /// Modeller builds and edits, Plotter prints, Analyser runs daylight,
+        /// area statistics and the rooms detection both need. add_opening stays
+        /// in the daylight pack so a model with no windows can still cut one,
+        /// and it stays Modeller's tool. Nothing is removed. Support's reads
+        /// come first; the reorder adds nothing, so the debug report stays on a
+        /// Support turn. Render has no pack, so that override does not reorder.
         /// </summary>
         static IEnumerable<string> RoleTools(ForskRole role)
         {
@@ -167,7 +171,7 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskRole.Planner: return ImportPack.Concat(new[] { "rooms_detect", "rooms_from_layer" });
                 case ForskRole.Modeller: return BuildPack.Concat(EditPack);
                 case ForskRole.Plotter: return PrintPack.Concat(SheetsPack);
-                case ForskRole.Analyser: return new[] { DaylightTool, "rooms_detect" };
+                case ForskRole.Analyser: return new[] { "area_stats", DaylightTool, "rooms_detect" };
                 case ForskRole.Support: return SupportPack;
                 default: return new string[0];
             }

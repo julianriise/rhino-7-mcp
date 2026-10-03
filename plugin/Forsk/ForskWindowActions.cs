@@ -177,6 +177,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "daylight.rooms":
                     Job(thread, action.Id, label, sink => Daylight(sink, DaylightAction.MakeRooms));
                     return;
+                case "area.stats":
+                    Job(thread, action.Id, label, sink => sink.Tool("area_stats", new JObject()));
+                    return;
                 case "daylight.run":
                 case "daylight.again":
                     Job(thread, action.Id, label, sink => Daylight(sink, DaylightAction.Run));
