@@ -68,7 +68,10 @@ public partial class RhinoMCPFunctions
                 Sill = obj.Attributes.GetUserString("forsk:sill"),
                 Head = obj.Attributes.GetUserString("forsk:head"),
                 Part = obj.Attributes.GetUserString("forsk:part"),
-                Group = GroupKey(obj)
+                Group = GroupKey(obj),
+                Risers = obj.Attributes.GetUserString(Stairs.RisersKey),
+                RiserMax = obj.Attributes.GetUserString(Stairs.RiserMaxKey),
+                Going = obj.Attributes.GetUserString(Stairs.GoingKey)
             };
             rows.Add(row);
             if (wallRings != null && !row.Existing) walls.Add((row, wallRings));

@@ -47,7 +47,7 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        static void ActivateTop(RhinoDoc doc)
+        internal static void ActivateTop(RhinoDoc doc)
         {
             RhinoView top = null;
             foreach (var view in doc.Views)

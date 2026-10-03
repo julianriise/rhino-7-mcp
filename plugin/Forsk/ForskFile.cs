@@ -47,6 +47,8 @@ namespace RhinoMCPPlugin.Forsk
         PlanCurve,
         /// <summary>Closed curves or solids that are not on a Forsk layer and not generated.</summary>
         Loose,
+        /// <summary>R5: Forsk stairs.</summary>
+        Stair,
         Other
     }
 
@@ -104,6 +106,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool HasRooms;
         public bool HasWindows;
         public bool HasDoors;
+        /// <summary>R5: a Forsk stair is in the model.</summary>
+        public bool HasStairs;
         public bool HasSheetCache;
         public MapState Map;
         public List<string> Review;
@@ -153,7 +157,7 @@ namespace RhinoMCPPlugin.Forsk
         static readonly HashSet<string> ForskLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "wall", "door", "window", "room", "plan", "label", "space_divider",
-            "A-WALL", "A-FLOR", "A-ROOF", "A-OPEN", "A-ROOM", "A-ANALYSE", "A-ANNO",
+            "A-WALL", "A-FLOR", "A-ROOF", "A-OPEN", "A-ROOM", "A-ANALYSE", "A-ANNO", "A-STAIR",
             "X-PLAN", "X-EXIST"
         };
 
@@ -211,6 +215,7 @@ namespace RhinoMCPPlugin.Forsk
                     }
                     else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "window")) facts.HasWindows = true;
                     else if (Is(row.Kind, "opening_marker") && Is(row.OpeningKind, "door")) facts.HasDoors = true;
+                    else if (Is(row.Kind, "stair")) facts.HasStairs = true;
                     else if (Is(row.Kind, "analysis"))
                     {
                         mapAny = true;
@@ -306,6 +311,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (Is(row.Kind, "wall")) return Picked.Wall;
                 if (Is(row.Kind, "opening_marker") || Is(row.Kind, "opening")) return Picked.Opening;
                 if (Is(row.Kind, "room") || Is(row.Kind, "room_plate")) return Picked.Room;
+                if (Is(row.Kind, "stair")) return Picked.Stair;
                 return Picked.Other;
             }
             if (row.Existing || Is(row.ImportKind, "underlay")) return Picked.Other;

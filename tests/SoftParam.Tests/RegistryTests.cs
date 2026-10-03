@@ -241,7 +241,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "stair.add", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 

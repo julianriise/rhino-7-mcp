@@ -33,6 +33,10 @@ static class Row
     public static ChipRow Window(bool selected = false) =>
         new ChipRow { Id = Id(), Generated = true, Kind = "opening_marker", OpeningKind = "window", Layer = "A-OPEN", Visible = false, Selected = selected, Stamp = "V01" };
 
+    /// <summary>R5: a stair solid with its record.</summary>
+    public static ChipRow Stair(bool selected = false, string id = "S01") =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "stair", Layer = "A-STAIR", Visible = true, Selected = selected, Solid = true, Closed = true, Stamp = id, ForskId = id, Width = "900", Risers = "16", RiserMax = "180", Going = "260" };
+
     public static ChipRow Room(bool selected = false, string name = "Stue") =>
         new ChipRow { Id = Id(), Generated = true, Kind = "room", Layer = "A-ROOM", Visible = true, Selected = selected, Curve = true, Closed = true, Stamp = name, Name = name };
 
@@ -106,6 +110,8 @@ static class Docs
         ("house, wall selected, no key", () => Of(House(wallSelected: true)).With(d => d.KeyPresent = false)),
         ("house, room selected", () => Of(House(roomSelected: true))),
         ("house, room selected, a wall without a path", () => Of(House(roomSelected: true).Append(Row.Wall(stamp: "w02", path: false)).ToArray())),
+        ("house, stair selected", () => Of(House().Append(Row.Stair(selected: true)).ToArray())),
+        ("house, two stairs selected", () => Of(House().Append(Row.Stair(selected: true)).Append(Row.Stair(selected: true, id: "S02")).ToArray())),
         ("house, box selected", () => Of(House().Append(Row.Box(selected: true)).ToArray())),
         ("house, two walls selected", () => Of(House().Append(Row.Wall(selected: true, stamp: "w02")).Append(Row.Wall(selected: true, stamp: "w03")).ToArray())),
         ("house, two walls and a window selected", () => Of(House().Append(Row.Wall(selected: true, stamp: "w02")).Append(Row.Wall(selected: true, stamp: "w03")).Append(Row.Window(selected: true)).ToArray())),

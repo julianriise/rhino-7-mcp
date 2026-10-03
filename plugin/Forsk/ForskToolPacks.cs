@@ -60,7 +60,10 @@ namespace RhinoMCPPlugin.Forsk
             "delete_wall",
             "add_wall",
             "split_walls",
-            "room_push_pull"
+            "room_push_pull",
+            "add_stair",
+            "edit_stair",
+            "delete_stair"
         };
 
         static readonly string[] SheetsPack =
@@ -523,6 +526,36 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Room GUID. Omit to use the one selected room.")
                     },
                     "side", "distance_mm"),
+                Fn("add_stair",
+                    "Add a straight stair: one closed sawtooth solid you can walk, on A-STAIR. Risers = ceil(rise / riser_max), all equal, so the last lands on the upper floor; treads = risers - 1; run = treads x going. Place it with from and to (the foot of the first riser on the stair's centre line, then a point it climbs toward); or along_wall for the one picked wall (its room side, from the end nearer at); or give nothing (the longest room wall that holds the run). rise omitted is auto: the walls' height plus the floor slab, and it follows the walls. A size outside the comfort rule still builds and the receipt says so.",
+                    new JObject
+                    {
+                        ["from"] = Pair("Foot of the first riser [x, y] in mm. With to."),
+                        ["to"] = Pair("A point the stair climbs toward [x, y] in mm. With from."),
+                        ["along_wall"] = Bool("Run along the one picked wall's room side."),
+                        ["at"] = Pair("The stair starts at the wall end nearer this point [x, y]."),
+                        ["width"] = Num("mm, default 900."),
+                        ["riser_max"] = Num("Highest step in mm, default 180. Steps 170 high is 170."),
+                        ["going"] = Num("Tread depth in mm, default 260."),
+                        ["rise"] = Num("Total rise in mm. Omit for auto.")
+                    }),
+                Fn("edit_stair",
+                    "Change the picked stair, or the only one, and rebuild it in place: width (it grows away from the wall it stands against), riser_max (steps 170 high), going (going 280), rise in mm or auto to follow the walls again, flip (the same footprint climbed the other way). The steps re-plan, all equal.",
+                    new JObject
+                    {
+                        ["id"] = Str("Stair GUID or S01. Omit for the picked stair, else the only one."),
+                        ["width"] = Num("mm."),
+                        ["riser_max"] = Num("Highest step, mm."),
+                        ["going"] = Num("Tread depth, mm."),
+                        ["rise"] = new JObject { ["type"] = new JArray("number", "string"), ["description"] = "Total rise in mm, or \"auto\" to follow the walls again." },
+                        ["flip"] = Bool("true: climb the other way.")
+                    }),
+                Fn("delete_stair",
+                    "Delete the picked stairs, or the only one.",
+                    new JObject
+                    {
+                        ["id"] = Str("Stair GUID or S01. Omit for the picked stairs.")
+                    }),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
                     new JObject

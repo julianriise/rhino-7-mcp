@@ -43,6 +43,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "door": return Text("pick.doors", nb, "n", Count(things.Count));
                 case "window": return Text("pick.windows", nb, "n", Count(things.Count));
                 case "opening": return Text("pick.openings", nb, "n", Count(things.Count));
+                case "stair": return Text("pick.stairs", nb, "n", Count(things.Count));
                 default: return Text("pick.objects", nb, "n", Count(things.Count));
             }
         }
@@ -146,6 +147,8 @@ namespace RhinoMCPPlugin.Forsk
                     var top = Mm(row.Head);
                     if (!width.HasValue || !top.HasValue) return head;
                     return head + " · " + Count((int)Math.Round(width.Value)) + " × " + Count((int)Math.Round(top.Value - sill));
+                case "stair":
+                    return global::RhinoMCPPlugin.Functions.Stairs.PickLine(row.Risers, nb);
                 default:
                     return Text("pick.object", nb);
             }
@@ -189,6 +192,7 @@ namespace RhinoMCPPlugin.Forsk
             var kind = (row.Kind ?? "").ToLowerInvariant();
             if (kind == "wall") return "wall";
             if (kind == "room" || kind == "room_plate") return "room";
+            if (kind == "stair") return "stair";
             if (kind == "opening" || kind == "opening_marker")
             {
                 var opening = (row.OpeningKind ?? "").ToLowerInvariant();

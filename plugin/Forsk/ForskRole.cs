@@ -88,6 +88,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "opening.delete":
                 case "opening.add_door":
                 case "daylight.window":
+                case "stair.add":
+                case "stair.edit":
+                case "stair.delete":
                     return ForskRole.Modeller;
                 case "file.print":
                 case "print.one":

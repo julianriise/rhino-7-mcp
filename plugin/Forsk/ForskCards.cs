@@ -63,6 +63,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "rooms.list": return Rooms(f);
                 case "section.remove": return RemoveSection(f);
                 case "dims.list": return DimsList(f);
+                case "stair.edit": return EditStair(f);
                 default: return null;
             }
         }
@@ -95,6 +96,69 @@ namespace RhinoMCPPlugin.Forsk
                 card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
+        }
+
+        /// <summary>
+        /// R5: the picked stair's sizes as fields (width, step height at most,
+        /// going), with Save, Flip and Cancel. Null unless one stair is picked.
+        /// </summary>
+        public static CardSpec EditStair(FileFacts f)
+        {
+            if (f == null || f.Picked != Picked.Stair || f.Selected.Count != 1) return null;
+            var row = f.Selected[0];
+            CardField Size(string key, string raw, double fallback) => new CardField
+            {
+                Key = key,
+                Label = ForskText.Get("stair." + key),
+                Value = Stairs.Mm(StairMm(raw) ?? fallback),
+                Unit = "mm"
+            };
+            return new CardSpec
+            {
+                Kind = "stair.edit",
+                Question = ForskText.Get("stair.edit.ask"),
+                Depends = "selection",
+                Fields = new List<CardField>
+                {
+                    Size("width", row.Width, Stairs.WidthDefault),
+                    Size("riser_max", row.RiserMax, Stairs.RiserMaxDefault),
+                    Size("going", row.Going, Stairs.GoingDefault)
+                },
+                Pills =
+                {
+                    new CardPill("save", ForskText.Get("word.save")),
+                    new CardPill("flip", ForskText.Get("stair.flip")),
+                    new CardPill("cancel", ForskText.Get("word.cancel"))
+                }
+            };
+        }
+
+        /// <summary>
+        /// The edit_stair arguments for a Save or a Flip: only the sizes typed
+        /// different from the card's own values. Null when nothing changed.
+        /// </summary>
+        public static JObject StairArgs(string pillId, JObject values, JArray fields)
+        {
+            if (pillId == "flip") return new JObject { ["flip"] = true };
+            if (pillId != "save") return null;
+            var args = new JObject();
+            foreach (var field in fields ?? new JArray())
+            {
+                var key = field?["key"]?.ToString();
+                if (string.IsNullOrEmpty(key)) continue;
+                var typed = StairMm(values?[key]?.ToString());
+                var was = StairMm(field["value"]?.ToString());
+                if (typed.HasValue && (!was.HasValue || Math.Abs(typed.Value - was.Value) >= 0.5)) args[key] = typed.Value;
+            }
+            return args.Count == 0 ? null : args;
+        }
+
+        static double? StairMm(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var text = raw.Trim().Replace(',', '.');
+            if (text.EndsWith("mm", StringComparison.OrdinalIgnoreCase)) text = text.Substring(0, text.Length - 2).Trim();
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0 ? v : (double?)null;
         }
 
         /// <summary>

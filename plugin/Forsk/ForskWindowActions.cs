@@ -237,6 +237,16 @@ namespace RhinoMCPPlugin.Forsk
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;
+                case "stair.add":
+                    // One wall picked: along its room side. Else the foot and the way up in the view.
+                    if (facts.Picked == Picked.Wall)
+                        Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
+                    else
+                        StairPick(thread, label);
+                    return;
+                case "stair.delete":
+                    Job(thread, action.Id, label, sink => sink.Tool("delete_stair", new JObject()));
+                    return;
                 case "edit.undo":
                     Undo(thread, action, doc);
                     return;
@@ -398,6 +408,18 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "sheets.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_drawings", new JObject()), userText: pill.Label);
+                    break;
+                case "stair.edit":
+                    var stairArgs = ForskCards.StairArgs(pill.Id, values, card["fields"] as JArray);
+                    foreach (var field in card["fields"] as JArray ?? new JArray())
+                    {
+                        var key = field["key"]?.ToString();
+                        if (!string.IsNullOrEmpty(key) && values?[key] != null) field["value"] = values[key].ToString();
+                    }
+                    if (stairArgs == null)
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line(ForskText.Get("stair.same")), userText: pill.Label);
+                    else
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("edit_stair", stairArgs), userText: pill.Label);
                     break;
                 case "section.remove":
                     var sectionArgs = pill.Id == "all" ? new JObject() : new JObject { ["letter"] = pill.Id };
@@ -1076,6 +1098,33 @@ namespace RhinoMCPPlugin.Forsk
             thread.Add(ForskReceipt.From("section_pick", envelope));
             // ForskSection kept its own single record.
             Finish(thread, "section.add", null, doc?.RuntimeSerialNumber ?? 0, null, userText);
+            TakeKeyboard();
+        }
+
+        /// <summary>R5: the foot of the stair, then the way up, in the view; add_stair in one record. Esc adds nothing.</summary>
+        void StairPick(DocThread thread, string userText)
+        {
+            if (Refuse(thread)) return;
+            var doc = RhinoDoc.ActiveDoc;
+            thread.Add("user", userText);
+            thread.BeginReply(ForskRoles.MarkForAction("stair.add"));
+            thread.Add("line", ForskText.Get("prompt.stair"));
+            Render();
+            HandToRhino();
+            _busy = true;
+            _jobChanges = 0;
+            JObject envelope;
+            try
+            {
+                envelope = ForskStair.RunOnUi(true);
+            }
+            finally
+            {
+                _busy = false;
+            }
+            thread.Add(ForskReceipt.From("add_stair", envelope));
+            // ForskStair kept its own single record.
+            Finish(thread, "stair.add", null, doc?.RuntimeSerialNumber ?? 0, null, userText);
             TakeKeyboard();
         }
 

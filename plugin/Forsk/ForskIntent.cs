@@ -98,7 +98,7 @@ namespace RhinoMCPPlugin.Forsk
             if (IsImport(t)) return ForskIntent.Import;
             if (IsEdit(t)) return ForskIntent.Edit;
             if (IsBuild(t)) return ForskIntent.Build;
-            if (picked == Picked.Opening) return ForskIntent.Edit;
+            if (picked == Picked.Opening || picked == Picked.Stair) return ForskIntent.Edit;
             return null;
         }
 
@@ -425,6 +425,7 @@ namespace RhinoMCPPlugin.Forsk
 
         static bool IsEdit(string t)
         {
+            if (IsStairEdit(t)) return true;
             if (IsSizeEdit(t)) return true;
             if (t.Contains("move opening") || t.Contains("add opening") || t.Contains("delete opening"))
                 return true;
@@ -476,6 +477,30 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "høy") || HasWord(t, "høyde");
             return !height && (HasWord(t, "add") || HasWord(t, "draw") || HasWord(t, "make")
                 || HasWord(t, "tegn") || HasWord(t, "lag") || HasWord(t, "legg"));
+        }
+
+        /// <summary>
+        /// R5: a stair named (stair, trapp, trappa), or its step sizes with a
+        /// number: "steps 170 high", "going 280", "opptrinn 170".
+        /// </summary>
+        static bool IsStairEdit(string t)
+        {
+            if (HasWord(t, "stair") || HasWord(t, "stairs") || HasWord(t, "staircase") || HasWord(t, "stairway")
+                || HasWord(t, "trapp") || HasWord(t, "trappa") || HasWord(t, "trappen") || HasWord(t, "trapper")
+                || HasWord(t, "trappene") || HasWord(t, "trappeløp"))
+                return true;
+            return NumberAfter(t, "steps") || NumberAfter(t, "step") || NumberAfter(t, "going")
+                || NumberAfter(t, "riser") || NumberAfter(t, "risers") || NumberAfter(t, "tread")
+                || NumberAfter(t, "trinn") || NumberAfter(t, "opptrinn") || NumberAfter(t, "inntrinn");
+        }
+
+        /// <summary>The word, then a number as the next word.</summary>
+        static bool NumberAfter(string t, string word)
+        {
+            var words = t.Split(' ');
+            for (var i = 0; i + 1 < words.Length; i++)
+                if (words[i] == word && words[i + 1].Length > 0 && char.IsDigit(words[i + 1][0])) return true;
+            return false;
         }
 
         /// <summary>F2: push or pull one side of a room. "Push the north side of this room 500 mm out", "skyv nordsiden av rommet ut".</summary>
@@ -731,6 +756,10 @@ namespace RhinoMCPPlugin.Forsk
         public string Part;
         /// <summary>Rhino group indexes, sorted and comma-separated. Empty when the object is in none.</summary>
         public string Group;
+        /// <summary>R5: a stair's risers, its riser max and its going, mm, as its record holds them.</summary>
+        public string Risers;
+        public string RiserMax;
+        public string Going;
 
         /// <summary>This row as a selected thing. The source row's Selected flag stays as read.</summary>
         public ChipRow SelectedCopy()

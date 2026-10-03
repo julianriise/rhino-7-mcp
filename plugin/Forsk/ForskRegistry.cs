@@ -164,6 +164,11 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("exist.mark", Runs.Run, "group.model", f => f.Picked == Picked.Loose),
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),
+            // R5: a stair. Nothing picked: two points in the view. One wall picked: along it.
+            new ForskAction("stair.add", Runs.Run, "group.model", f => f.HasWalls
+                && (f.Picked == Picked.None || f.Picked == Picked.Wall && f.PickedCount == 1)),
+            new ForskAction("stair.edit", Runs.Card, "group.model", f => f.Picked == Picked.Stair && f.PickedCount == 1),
+            new ForskAction("stair.delete", Runs.Run, "group.model", f => f.Picked == Picked.Stair),
             new ForskAction("opening.move", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
             new ForskAction("opening.resize", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
             // One kind of opening picked: those. Nothing picked: all of a kind (the card's pills say which).
@@ -262,6 +267,8 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Other) yield return Find("dims.add");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");
+            if (f.Picked == Picked.Stair) yield return Find("stair.edit");
+            if (f.Picked == Picked.Stair) yield return Find("stair.delete");
             if (f.Picked == Picked.Wall) yield return Find("wall.move");
             // One straight run: Drag wall is the next suggestion, so the bar shows it.
             // A whole record is not one run, and the bar stays Move, then Add a door.

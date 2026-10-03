@@ -113,6 +113,9 @@ namespace RhinoMCPPlugin.Forsk
             ["wall.delete.ask"] = "Which wall run goes? A click selects the whole wall record.",
             ["wall.delete.inner"] = "For an inner wall, say it: “delete the wall at 4000, 2500”.",
             ["exist.mark"] = "Treat this as the existing house?",
+            ["stair.add"] = "Add stair",
+            ["stair.edit"] = "Edit stair",
+            ["stair.delete"] = "Delete stair",
             ["edit.undo"] = "Undo",
             ["ink.set"] = "Ink",
             ["meta.title"] = "Title block",
@@ -133,6 +136,12 @@ namespace RhinoMCPPlugin.Forsk
 
             // One-time cards: the question, then the pills.
             ["opening.type.ask"] = "Which {kind} type?",
+            ["stair.edit.ask"] = "Stair sizes. The steps stay equal: their count follows the height.",
+            ["stair.width"] = "Width",
+            ["stair.riser_max"] = "Step height, at most",
+            ["stair.going"] = "Going",
+            ["stair.flip"] = "Flip",
+            ["stair.same"] = "Nothing changed: the sizes are the same.",
             ["opening.type.all.ask"] = "Change all windows or all doors to:",
             ["opening.type.all.door"] = "Change all doors to:",
             ["opening.type.all.window"] = "Change all windows to:",
@@ -233,6 +242,8 @@ namespace RhinoMCPPlugin.Forsk
             ["pick.mix.window.nb"] = "1 vindu",
             ["pick.mix.opening"] = "1 opening",
             ["pick.mix.opening.nb"] = "1 åpning",
+            ["pick.stairs"] = "{n} stairs",
+            ["pick.stairs.nb"] = "{n} trapper",
             ["pick.objects"] = "{n} objects",
             ["pick.objects.nb"] = "{n} objekter",
 
@@ -241,6 +252,7 @@ namespace RhinoMCPPlugin.Forsk
             ["prompt.scale.length"] = "Real length between the two points",
             ["prompt.scale.set"] = "Set scale",
             ["prompt.section"] = "Pick the start of the section in the viewport, then its end. Esc cancels.",
+            ["prompt.stair"] = "Pick the foot of the stair in the viewport, then the way up. Esc cancels.",
             ["prompt.draw"] = "Draw the wall in the viewport, on the wall layer. Enter finishes, Esc cancels.",
 
             // Lines in the thread.
@@ -391,6 +403,9 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.add_wall"] = "Wall",
             ["tool.split_walls"] = "Wall",
             ["tool.room_push_pull"] = "Room",
+            ["tool.add_stair"] = "Stair",
+            ["tool.edit_stair"] = "Stair",
+            ["tool.delete_stair"] = "Stair",
             ["receipt.ok"] = "done",
         };
 
