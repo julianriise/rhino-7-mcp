@@ -559,7 +559,7 @@ namespace RhinoMCPPlugin.Forsk
                             ["items"] = PageEnum("A page to lay out."),
                             ["description"] = "Omit for the set."
                         },
-                        ["scale"] = Num("Requested scale denominator. 100 means 1:100."),
+                        ["scale"] = Num("The set's scale, 100 means 1:100. Kept for the next Print. 0 clears it so the set fits again. Omit to keep the kept scale or, with none, take the first of 1:100, 1:200, 1:500 every sheet fits."),
                         ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
                         ["include_existing"] = Bool("Include X-EXIST in the greyscale drawing. Default true."),
                         ["schedule_kinds"] = new JObject

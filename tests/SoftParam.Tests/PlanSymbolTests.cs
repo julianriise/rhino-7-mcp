@@ -259,23 +259,6 @@ public class PlanSymbolTests
         });
     }
 
-    [Theory]
-    [InlineData(34.55, 35)]
-    [InlineData(4.2, 5)]
-    [InlineData(50, 50)]
-    [InlineData(50.01, 60)]
-    [InlineData(100, 100)]
-    [InlineData(100.01, 125)]
-    [InlineData(116.1, 125)]
-    [InlineData(137, 150)]
-    [InlineData(500, 500)]
-    [InlineData(500.01, 550)]
-    [InlineData(0, 0)]
-    public void RoundScaleUp_StandardSteps(double need, int scale)
-    {
-        Assert.Equal(scale, OpeningTypes.RoundScaleUp(need));
-    }
-
     [Fact]
     public void ClampAlong_KeepsClearOfCornerWall()
     {

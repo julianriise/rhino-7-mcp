@@ -31,10 +31,48 @@ def test_office_rooms_are_open_rings():
 
 @pytest.mark.parametrize(
     "need,scale",
-    [(34.55, 35), (50, 50), (50.01, 60), (100, 100), (100.01, 125), (137, 150), (500.01, 550), (0, 0)],
+    [(34.55, 100), (100, 100), (100.01, 200), (137, 200), (200, 200), (230, 500), (900, 500), (0, 100)],
 )
-def test_round_scale_up_matches_plugin_steps(need, scale):
-    assert plan_smoke.round_scale_up(need) == scale
+def test_ladder_step_matches_sheet_scale(need, scale):
+    # SheetScale.Pick for one drawing: 1:100, 1:200, 1:500; 1:50 only when asked.
+    assert plan_smoke.ladder_step(need) == scale
+
+
+def _fit_page(scale, need, fitted=True):
+    return {"scale": scale, "fit_need": need, "fill": round(need * 0.9 / scale, 3), "fitted": fitted}
+
+
+def test_check_fit_takes_the_first_ladder_step_the_plan_fits(capsys):
+    failures = []
+    plan_smoke.check_fit(_fit_page(200, 118.4), "office fit", failures)
+    plan_smoke.check_fit(_fit_page(100, 31.0), "sheet", failures)
+    assert failures == []
+    # The office's fill at 1:200 is under the old 0.6 floor and still passes.
+    assert capsys.readouterr().out == "    office fit plan fit 1:200 fill 0.53\n    sheet plan fit 1:100 fill 0.28\n"
+
+
+def test_check_fit_fails_off_the_ladder_or_when_the_plan_does_not_fit():
+    failures = []
+    plan_smoke.check_fit(_fit_page(125, 118.4), "office fit", failures)
+    plan_smoke.check_fit(_fit_page(100, 118.4), "office fit", failures)
+    plan_smoke.check_fit(_fit_page(200, 118.4, fitted=False), "office fit", failures)
+    assert failures == [
+        "office fit plan fit 1:125 want 1:200 need 118.4 fill 0.85",
+        "office fit plan fit 1:100 want 1:200 need 118.4 fill 1.07",
+        "office fit plan fit 1:200 want 1:200 need 118.4 fill 0.53",
+    ]
+
+
+def test_check_fit_checks_the_fill_floor_only_at_the_step_the_plan_chose():
+    # Another sheet put the set at 1:500: the plan's low fill is not a fault.
+    failures = []
+    plan_smoke.check_fit(_fit_page(500, 118.4), "office fit", failures)
+    assert failures == []
+    # At the step the plan chose, its fill must be over the step below's share.
+    page = _fit_page(200, 118.4)
+    page["fill"] = 0.40
+    plan_smoke.check_fit(page, "office fit", failures)
+    assert failures == ["office fit plan fit 1:200 want 1:200 need 118.4 fill 0.40"]
 
 
 def _footer_page(scale=50, meters=2, length=40.0, cells=None, arrow_x1=17.4, free=0):

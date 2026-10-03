@@ -57,6 +57,7 @@ public partial class RhinoMCPFunctions
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
+    private const string PrintScaleEntry = "print_scale";
     private const string NoSheetOnMessage = "Every sheet in the set is off. Turn one on with Choose sheets.";
     private const string PdfWriteFailedMessage = "PDF write failed.";
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
@@ -176,17 +177,9 @@ public partial class RhinoMCPFunctions
         if (!paper.Trim().Equals("A3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(UnknownPaperMessage);
 
-        // No scale: the plan fits the detail. Elevations keep 1:100.
-        var requestedScale = 100;
-        var fitPlan = true;
-        var scaleToken = parameters?["scale"];
-        if (scaleToken != null && scaleToken.Type != JTokenType.Null)
-        {
-            fitPlan = false;
-            requestedScale = scaleToken.ToObject<int>();
-            if (requestedScale < 1)
-                throw new InvalidOperationException("Scale must be a positive number.");
-        }
+        // One scale for the set: asked (and kept for the next Print), or picked from the ladder.
+        var asked = ReadAskedScale(doc, parameters);
+        var requestedScale = asked ?? SheetScale.FirstStep;
 
         var views = ReadLayoutViews(doc, parameters, out var offViews);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
@@ -229,13 +222,12 @@ public partial class RhinoMCPFunctions
         var detailH = A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
 
         var pages = new JArray();
-        var applied = new List<int>();
         var drawingNotes = new List<string>();
         string cutNote = null;
         var planCutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
         var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
-        // Sections print at the plan's scale when the plan is in this pack.
-        var planScale = 0;
+        var detailSpan = new SheetScale.Span(detailW, detailH);
+        var sheets = new List<PackSheet>();
         foreach (var viewName in views)
         {
             if (!TryGetLayoutView(viewName, out var spec))
@@ -243,42 +235,42 @@ public partial class RhinoMCPFunctions
             var section = Sections.TryLetter(spec.View, out var sectionLetter);
             if (section && !TryGetSectionView(doc, spec.View, out _, out _))
                 throw new InvalidOperationException("No section " + sectionLetter + ". section_add stores it first.");
-
             if (replace)
                 RemoveLayoutPages(doc, spec.View, false);
-
-            Plane? clip = null;
             var plan = string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
-            if (plan)
-                clip = planClip;
-            var strokeScale = 0;
-            double fitNeed = 0;
-            if (plan)
-                strokeScale = FitLayoutScale(requestedScale, ViewSpan(bbox, spec.View), detailW, detailH, fitPlan);
-            else if (section)
-                strokeScale = planScale > 0 ? planScale : requestedScale;
-            // A section with the plan keeps the plan's scale unless it does
-            // not fit; alone, it fits like the plan.
-            var fitBase = plan || planScale <= 0 ? requestedScale : planScale;
-            var fitAll = plan ? fitPlan : (planScale <= 0 && fitPlan);
-            var drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, strokeScale);
-            if (plan || section)
+            var sheet = new PackSheet { Spec = spec, Plan = plan, Section = section, Clip = plan ? planClip : (Plane?)null };
+            // Tags, marks and dimensions are drawn at a stroke scale; a facade has none.
+            sheet.Stroke = plan || section ? requestedScale : 0;
+            sheet.Drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, sheet.Clip, sheet.Stroke);
+            sheets.Add(sheet);
+        }
+
+        // Tags, marks and dimensions keep their paper size, so a drawing grows
+        // with its scale: bake again at the scale picked until it holds. A
+        // drawing never steps back down, so this cannot swing between steps.
+        var picked = SheetScale.Pick(sheets.Select(PackSpan).ToList(), detailSpan, asked);
+        for (var round = 0; round < 4; round++)
+        {
+            var again = false;
+            for (var i = 0; i < sheets.Count; i++)
             {
-                // Tags, marks and dimensions keep their paper size, so the
-                // drawing grows with the scale: bake again at the scale the
-                // last bake needs until it holds. After the first round the
-                // scale only goes up, so it cannot swing between two steps.
-                for (var round = 0; round < 4; round++)
-                {
-                    if (!drawn.Box.IsValid) break;
-                    var fitted = FitLayoutScale(fitBase, ViewSpan(drawn.Box, spec.View), detailW, detailH, fitAll);
-                    if (fitted == strokeScale || (round > 0 && fitted < strokeScale)) break;
-                    drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, clip, fitted);
-                    strokeScale = fitted;
-                }
-                fitNeed = LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH);
-                if (plan) planScale = strokeScale;
+                var sheet = sheets[i];
+                if (sheet.Stroke == 0 || picked.Scales[i] == sheet.Stroke || !sheet.Drawn.Box.IsValid) continue;
+                sheet.Stroke = picked.Scales[i];
+                sheet.Drawn = BakeGreyscaleDrawing(doc, sheet.Spec.View, includeExisting, sheet.Clip, sheet.Stroke);
+                again = true;
             }
+            if (!again) break;
+            picked = SheetScale.Pick(sheets.Select(PackSpan).ToList(), detailSpan, asked, picked.Scales);
+        }
+
+        for (var i = 0; i < sheets.Count; i++)
+        {
+            var sheet = sheets[i];
+            var spec = sheet.Spec;
+            var plan = sheet.Plan;
+            var section = sheet.Section;
+            var drawn = sheet.Drawn;
             if (!string.IsNullOrEmpty(drawn.Error) || drawn.Count < 1 || !drawn.Box.IsValid)
             {
                 var why = string.IsNullOrEmpty(drawn.Error)
@@ -290,12 +282,10 @@ public partial class RhinoMCPFunctions
                 spec.View + " " + drawn.Count.ToString(CultureInfo.InvariantCulture)
                 + (string.IsNullOrEmpty(drawn.WallNote) ? "" : " (" + drawn.WallNote + ")"));
 
-            // Plan strokes and tags were drawn at strokeScale. The detail, the
-            // title block, and the view title use that same value.
-            var scale = plan || section
-                ? strokeScale
-                : FitLayoutScale(requestedScale, ViewSpan(drawn.Box, spec.View), detailW, detailH, false);
-            applied.Add(scale);
+            // Strokes and tags were drawn at this scale. The detail, the title
+            // block and the scale bar use that same value.
+            var scale = picked.Scales[i];
+            var fitNeed = SheetScale.Need(PackSpan(sheet), detailSpan);
 
             var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
             if (page == null)
@@ -356,8 +346,9 @@ public partial class RhinoMCPFunctions
                 pageRecord["symbol_dashed"] = drawn.SymbolDashed;
                 pageRecord["roof_outline"] = drawn.RoofOutline;
                 pageRecord["fit_need"] = Math.Round(fitNeed, 2);
-                pageRecord["fitted"] = fitPlan || scale != requestedScale;
-                pageRecord["fill"] = Math.Round(LayoutFitNeed(ViewSpan(drawn.Box, spec.View), detailW, detailH) * 0.9 / scale, 3);
+                // Picked from the ladder, not asked.
+                pageRecord["fitted"] = !asked.HasValue;
+                pageRecord["fill"] = Math.Round(fitNeed * SheetScale.FillShare / scale, 3);
                 pageRecord["opening_marks"] = drawn.Marks;
                 pageRecord["marks_on_tags"] = new JArray(drawn.MarksOnTags ?? new List<string>());
                 pageRecord["room_tags"] = drawn.RoomTags;
@@ -427,6 +418,7 @@ public partial class RhinoMCPFunctions
             }
             pages.Add(pageRecord);
         }
+        var sheetCount = sheets.Count;
         var scheduleNote = "";
         if (withSchedules)
         {
@@ -440,21 +432,18 @@ public partial class RhinoMCPFunctions
                 var added = AddSchedulesPages(doc, scheduleKinds, scheduleTables, pages.Count + 1);
                 foreach (var record in added)
                     pages.Add(record);
+                sheetCount++;
                 scheduleNote = " Schedules: " + ScheduleCounts(scheduleTables)
                     + (added.Count > 1 ? " on " + added.Count.ToString(CultureInfo.InvariantCulture) + " pages." : ".");
             }
         }
 
         doc.Views.Redraw();
-        var reported = applied.Count > 0 ? applied[0] : requestedScale;
-        var sameScale = true;
-        foreach (var scale in applied)
-        {
-            if (scale != reported) sameScale = false;
-        }
-        var at = sameScale
-            ? "at 1:" + reported.ToString(CultureInfo.InvariantCulture)
-            : "with per-page scales";
+        var reported = sheets.Count > 0 ? picked.Scale : requestedScale;
+        var bumped = picked.Bumped;
+        var bumpNote = SheetScale.Clause(
+            bumped.Select(i => SheetSet.Title(sheets[i].Spec.View, wallLevel)).ToList(),
+            bumped.Select(i => picked.Scales[i]).ToList());
         var curveNote = drawingNotes.Count == 0
             ? ""
             : " Greyscale drawing: " + string.Join(", ", drawingNotes.ToArray()) + ".";
@@ -463,8 +452,12 @@ public partial class RhinoMCPFunctions
         {
             ["pages"] = pages,
             ["count"] = pages.Count,
+            ["sheets"] = sheetCount,
             ["scale"] = reported,
-            ["message"] = $"Laid out {pages.Count} page(s) on A3 {at}.{curveNote}{cutNote}{scheduleNote}"
+            ["asked"] = asked.HasValue,
+            // "on A3 at 1:N." then the drawing notes: smoke_compare reads "at 1:N. Greyscale drawing: plan".
+            ["message"] = SheetCountText(sheetCount) + " on A3 at 1:" + reported.ToString(CultureInfo.InvariantCulture) + "."
+                + curveNote + cutNote + bumpNote + scheduleNote
         };
     }
 
@@ -1595,56 +1588,56 @@ public partial class RhinoMCPFunctions
         return bbox;
     }
 
-    private static double ViewSpanWidth(BoundingBox bbox, string view)
+    /// <summary>A drawing sheet of one pack: its view, how it is cut, and its last bake.</summary>
+    private sealed class PackSheet
     {
-        // S-DRAW packs are flattened into XY and the detail looks down.
-        return bbox.Max.X - bbox.Min.X;
+        public LayoutViewSpec Spec;
+        public bool Plan;
+        public bool Section;
+        public Plane? Clip;
+        /// <summary>The scale its tags and marks were baked at; 0 for a drawing with none.</summary>
+        public int Stroke;
+        public GreyscaleDrawing Drawn;
     }
 
-    private static double ViewSpanHeight(BoundingBox bbox, string view)
+    /// <summary>The baked drawing's box. S-DRAW packs are flattened into XY and the detail looks down.</summary>
+    private static SheetScale.Span PackSpan(PackSheet sheet)
     {
-        return bbox.Max.Y - bbox.Min.Y;
+        var box = sheet.Drawn.Box;
+        return box.IsValid ? new SheetScale.Span(box.Max.X - box.Min.X, box.Max.Y - box.Min.Y) : new SheetScale.Span(0, 0);
     }
 
-    private readonly struct Span
+    /// <summary>"1 sheet", "7 sheets".</summary>
+    private static string SheetCountText(int count)
     {
-        public Span(double width, double height)
+        return count.ToString(CultureInfo.InvariantCulture) + (count == 1 ? " sheet" : " sheets");
+    }
+
+    /// <summary>
+    /// The scale asked for: the scale parameter, stored for the next Print,
+    /// or the one stored before. scale 0 clears it, so the set fits again.
+    /// Null: the set takes its scale from the ladder.
+    /// </summary>
+    private static int? ReadAskedScale(RhinoDoc doc, JObject parameters)
+    {
+        var token = parameters?["scale"];
+        if (token != null && token.Type != JTokenType.Null)
         {
-            Width = width;
-            Height = height;
+            var value = token.ToObject<int>();
+            if (value < 0)
+                throw new InvalidOperationException("Scale must be a positive number.");
+            if (value == 0)
+            {
+                doc.Strings.Delete(LayoutMetaSection, PrintScaleEntry);
+                return null;
+            }
+            doc.Strings.SetString(LayoutMetaSection, PrintScaleEntry, value.ToString(CultureInfo.InvariantCulture));
+            return value;
         }
-
-        public double Width { get; }
-        public double Height { get; }
-    }
-
-    private static Span ViewSpan(BoundingBox bbox, string view)
-    {
-        return new Span(ViewSpanWidth(bbox, view), ViewSpanHeight(bbox, view));
-    }
-
-    /// <summary>
-    /// 1:requested when the clay fits the detail. Otherwise double until it fits.
-    /// </summary>
-    /// <summary>Scale denominator that fills 90% of the detail on the tighter side.</summary>
-    private static double LayoutFitNeed(Span span, double paperW, double paperH)
-    {
-        if (span.Width <= 0 || span.Height <= 0 || paperW <= 0 || paperH <= 0) return 0;
-        return Math.Max(span.Width / (paperW * 0.9), span.Height / (paperH * 0.9));
-    }
-
-    /// <summary>
-    /// fit: the largest standard scale that fits. Otherwise the requested
-    /// scale, rounded up to a standard step only when it does not fit.
-    /// </summary>
-    private static int FitLayoutScale(int requested, Span span, double paperW, double paperH, bool fit)
-    {
-        var scale = requested < 1 ? 100 : requested;
-        if (span.Width <= 0 || span.Height <= 0 || paperW <= 0 || paperH <= 0)
-            return scale;
-        var need = LayoutFitNeed(span, paperW, paperH);
-        if (fit) return Math.Max(1, OpeningTypes.RoundScaleUp(need));
-        return need <= scale ? scale : OpeningTypes.RoundScaleUp(need);
+        var stored = doc.Strings.GetValue(LayoutMetaSection, PrintScaleEntry);
+        return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kept) && kept >= 1
+            ? kept
+            : (int?)null;
     }
 
     private DetailViewObject AddClayDetail(

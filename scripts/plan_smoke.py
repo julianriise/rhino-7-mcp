@@ -64,13 +64,19 @@ PAPER_TEXT_MM = 2.5
 GLYPH_BOX = (0.9, 1.5)
 
 
-def round_scale_up(need: float) -> int:
-    """Standard denominator at or above need: step 5 to 50, 10 to 100,
-    25 to 500, then 50. Mirrors OpeningTypes.RoundScaleUp."""
-    if not need or need <= 0:
-        return 0
-    step = 5 if need <= 50 else 10 if need <= 100 else 25 if need <= 500 else 50
-    return int(math.ceil(need / step - 1e-9) * step)
+# SheetScale.Ladder: a set prints at 1:100, 1:200 or 1:500; 1:50 only when asked.
+LADDER = (50, 100, 200, 500)
+FIRST_STEP = 100
+FILL_SHARE = 0.9
+
+
+def ladder_step(need: float) -> int:
+    """The first of 1:100, 1:200, 1:500 a drawing that needs 1:need fits,
+    1:500 when none does. Mirrors SheetScale.Pick for one drawing."""
+    for step in LADDER:
+        if step >= FIRST_STEP and (need or 0) <= step + 1e-9:
+            return step
+    return LADDER[-1]
 
 
 def _number(attr, key):
@@ -243,18 +249,23 @@ def check_symbols_on_wall(rows, scale, failures) -> None:
         print(f"    symbols on wall {len(boxes)}")
 
 
-FILL_MIN = 0.6
-
-
 def check_fit(page, label, failures) -> None:
-    """A fitted plan takes the largest standard scale that fits and fills
-    at least 60% of the detail on its tighter axis."""
+    """With no scale asked, the plan prints at a step of the ladder it fits:
+    at least its own first step (1:N with N >= need). A larger step came
+    from another sheet of the set. At the plan's own step the fill floor
+    holds: it fills more than the step below would have needed, so the
+    plan would not have fitted there."""
     need = float(page.get("fit_need") or 0)
     scale = int(page.get("scale") or 0)
     fill = float(page.get("fill") or 0)
-    want = round_scale_up(need)
+    want = ladder_step(need)
     print(f"    {label} plan fit 1:{scale} fill {fill:.2f}")
-    if page.get("fitted") is not True or scale != want or fill < FILL_MIN:
+    below = max((s for s in LADDER if FIRST_STEP <= s < want), default=0)
+    floor = FILL_SHARE * below / scale if scale and below else 0.0
+    ok = page.get("fitted") is True and scale in LADDER[1:] and scale >= want
+    if ok and scale == want and fill <= floor:
+        ok = False
+    if not ok:
         failures.append(
             f"{label} plan fit 1:{scale} want 1:{want} need {need:.1f} fill {fill:.2f}"
         )

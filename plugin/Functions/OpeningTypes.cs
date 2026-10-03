@@ -430,19 +430,6 @@ public static class OpeningTypes
         return 2.5 * scale;
     }
 
-    /// <summary>
-    /// Smallest standard scale denominator at or above <paramref name="need"/>:
-    /// step 5 up to 50, 10 up to 100, 25 up to 500, then 50. 34.55 → 35,
-    /// 137 → 150. Rounding up keeps the drawing inside the detail.
-    /// </summary>
-    public static int RoundScaleUp(double need)
-    {
-        if (double.IsNaN(need) || double.IsInfinity(need) || need <= 0) return 0;
-        var step = need <= 50 ? 5.0 : need <= 100 ? 10.0 : need <= 500 ? 25.0 : 50.0;
-        // Float noise just above a step (125.0000000001) stays on it.
-        return (int)(Math.Ceiling(need / step - 1e-9) * step);
-    }
-
     public static readonly int[] ScaleBarLengthsM = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
     public const double ScaleBarMinMm = 40.0;
     public const double ScaleBarMaxMm = 80.0;
