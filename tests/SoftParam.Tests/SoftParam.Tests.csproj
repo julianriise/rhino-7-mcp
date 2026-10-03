@@ -42,6 +42,7 @@
     <Compile Include="..\..\plugin\Functions\SheetScale.cs" Link="SheetScale.cs" />
     <Compile Include="..\..\plugin\Functions\TitleBlock.cs" Link="TitleBlock.cs" />
     <Compile Include="..\..\plugin\Functions\Takeoff.cs" Link="Takeoff.cs" />
+    <Compile Include="..\..\plugin\Functions\Stairs.cs" Link="Stairs.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />
     <Compile Include="..\..\plugin\Forsk\FieldInk.cs" Link="FieldInk.cs" />

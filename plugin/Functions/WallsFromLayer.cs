@@ -161,6 +161,14 @@ public partial class RhinoMCPFunctions
         if (applyDefaultMaterials && ids.Count > 0)
             TryApplyDefaultMaterial(doc, targetLayer.Name, "plaster", warnings, result);
 
+        // R5: a stair whose rise is auto follows the new wall height.
+        var stairs = ids.Count > 0 ? ReplanAutoStairs(doc) : null;
+        if (stairs != null)
+        {
+            result["stairs"] = stairs;
+            result["message"] = message + " " + stairs;
+        }
+
         BakePace.Redraw(doc);
         return result;
     }

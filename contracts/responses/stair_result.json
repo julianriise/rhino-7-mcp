@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stair_result.json",
+  "title": "StairResult",
+  "description": "add_stair and edit_stair: the stair as planned.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "forsk_id": { "type": "string", "pattern": "^S[0-9]{2,}$" },
+    "risers": { "type": "integer", "minimum": 2 },
+    "riser": { "type": "number", "description": "rise / risers, exact." },
+    "going": { "type": "number" },
+    "width": { "type": "number" },
+    "rise": { "type": "number" },
+    "rise_auto": { "type": "boolean" },
+    "run": { "type": "number", "description": "(risers - 1) x going." },
+    "rule": { "type": "number", "description": "2R + G." },
+    "comfort": { "type": "string", "description": "Empty within the guidance, else one clause such as steep: 2R+G = 668." },
+    "message": { "type": "string" }
+  },
+  "required": ["id", "forsk_id", "risers", "riser", "going", "width", "rise", "rise_auto", "run", "message"]
+}

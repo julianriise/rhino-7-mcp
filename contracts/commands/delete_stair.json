@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_stair.json",
+  "title": "DeleteStair Command",
+  "description": "Delete a stair's solid and record. Id omitted removes every picked stair, else the only one.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "description": "The stair's GUID or its forsk:id (S01)." }
+  },
+  "additionalProperties": false
+}

@@ -373,6 +373,16 @@ def test_new_commands():
         ("commands/plan_dims.json", {"action": "remove"}),
         ("commands/plan_dims.json", {"action": "list"}),
         ("commands/export_ifc.json", {"path": "/tmp/forsk-ifc-garage.ifc"}),
+        ("commands/add_stair.json", {}),
+        ("commands/add_stair.json", {"from": [1000, 650], "to": [5000, 650], "width": 1000, "riser_max": 170, "going": 280}),
+        ("commands/add_stair.json", {"along_wall": True, "at": [7000, 300], "rise": "auto"}),
+        ("commands/add_stair.json", {"wall_id": GUID, "side": "north", "rise": 2750}),
+        ("commands/edit_stair.json", {"width": 1000}),
+        ("commands/edit_stair.json", {"id": "S01", "riser_max": 170}),
+        ("commands/edit_stair.json", {"id": GUID, "going": 280, "rise": "auto"}),
+        ("commands/edit_stair.json", {"flip": True}),
+        ("commands/delete_stair.json", {}),
+        ("commands/delete_stair.json", {"id": "S02"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -938,6 +948,17 @@ def test_responses():
     if not validate("responses/section_result.json", {"removed": ["A"], "sections": [], "message": "Removed section A."}):
         all_passed = False
 
+    print("  stair_result:")
+    stair = {
+        "id": "12345678-1234-1234-1234-123456789012", "forsk_id": "S01",
+        "risers": 16, "riser": 171.875, "going": 260, "width": 900, "rise": 2750, "rise_auto": True,
+        "run": 3900, "rule": 603.75, "comfort": "", "message": "Added a straight stair along the north wall, 16 steps of 172.",
+    }
+    if not validate("responses/stair_result.json", stair):
+        all_passed = False
+    if not validate("responses/delete_stair_result.json", {"deleted": [stair["id"]], "count": 1, "message": "Removed the stair."}):
+        all_passed = False
+
     print("  export_ifc_result:")
     ifc_written = {
         "path": "/tmp/forsk-ifc-garage.ifc", "walls": 4, "doors": 1, "windows": 1, "slabs": 1, "roofs": 1,
@@ -1424,6 +1445,14 @@ def test_invalid_examples():
         ("commands/export_sheets.json", {}, "export_sheets missing folder"),
         ("commands/plan_dims.json", {}, "plan_dims missing action"),
         ("commands/export_ifc.json", {}, "export_ifc missing path"),
+        ("commands/add_stair.json", {"from": [0, 0]}, "add_stair from only one point"),
+        ("commands/add_stair.json", {"riser_max": 50}, "add_stair riser too low"),
+        ("commands/add_stair.json", {"rise": "high"}, "add_stair rise word"),
+        ("commands/add_stair.json", {"shape": "l"}, "add_stair unknown shape field"),
+        ("commands/edit_stair.json", {}, "edit_stair nothing to change"),
+        ("commands/edit_stair.json", {"id": "S01"}, "edit_stair id only"),
+        ("commands/edit_stair.json", {"going": 80}, "edit_stair going too short"),
+        ("commands/delete_stair.json", {"all": True}, "delete_stair unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),
         ("commands/plan_dims.json", {"action": "move"}, "plan_dims unknown action"),
         ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}]}, "plan_dims one ref"),

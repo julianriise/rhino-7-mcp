@@ -4448,3 +4448,73 @@ class TestExportIfcTool:
                                                "roofs": 0, "spaces": 0, "message": "Nothing to lay out. Bake walls first."}
         mock_get_conn.return_value = mock_conn
         assert export_ifc(ctx=None, path="/tmp/g.ifc")["success"] is False
+
+
+class TestStairTools:
+    @patch("rhinomcp.tools.add_stair.get_rhino_connection")
+    def test_add_sends_the_two_points_and_sizes(self, mock_get_conn):
+        from rhinomcp.tools.add_stair import add_stair
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"id": "g", "forsk_id": "S01", "risers": 16, "message": "Added a straight stair, 16 steps of 180."}
+        mock_get_conn.return_value = mock_conn
+        result = add_stair(ctx=None, from_point=[1000, 650], to_point=[5000, 650], width=1000, rise="auto")
+        mock_conn.send_command.assert_called_once_with(
+            "add_stair", {"from": [1000, 650], "to": [5000, 650], "width": 1000, "rise": "auto"})
+        assert result["success"] is True
+        assert result["risers"] == 16
+
+    @patch("rhinomcp.tools.add_stair.get_rhino_connection")
+    def test_add_with_nothing_lets_the_plugin_place_it(self, mock_get_conn):
+        from rhinomcp.tools.add_stair import add_stair
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"message": "ok"}
+        mock_get_conn.return_value = mock_conn
+        add_stair(ctx=None)
+        mock_conn.send_command.assert_called_once_with("add_stair", {})
+        add_stair(ctx=None, along_wall=True, at=[7000, 300])
+        mock_conn.send_command.assert_called_with("add_stair", {"along_wall": True, "at": [7000, 300]})
+
+    @patch("rhinomcp.tools.add_stair.get_rhino_connection")
+    def test_add_refuses_bad_input_before_rhino(self, mock_get_conn):
+        from rhinomcp.tools.add_stair import add_stair
+
+        assert add_stair(ctx=None, from_point=[0, 0])["success"] is False
+        assert add_stair(ctx=None, rise="high")["success"] is False
+        assert add_stair(ctx=None, width=-5)["success"] is False
+        assert add_stair(ctx=None, side="up")["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.edit_stair.get_rhino_connection")
+    def test_edit_sends_only_what_changes(self, mock_get_conn):
+        from rhinomcp.tools.edit_stair import edit_stair
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"message": "Flipped the stair, 16 steps of 180."}
+        mock_get_conn.return_value = mock_conn
+        assert edit_stair(ctx=None, flip=True)["success"] is True
+        mock_conn.send_command.assert_called_once_with("edit_stair", {"flip": True})
+        edit_stair(ctx=None, id="S01", riser_max=170, rise="auto")
+        mock_conn.send_command.assert_called_with("edit_stair", {"riser_max": 170, "rise": "auto", "id": "S01"})
+
+    @patch("rhinomcp.tools.edit_stair.get_rhino_connection")
+    def test_edit_with_nothing_to_change_is_refused(self, mock_get_conn):
+        from rhinomcp.tools.edit_stair import edit_stair
+
+        assert edit_stair(ctx=None)["success"] is False
+        assert edit_stair(ctx=None, id="S01")["success"] is False
+        assert edit_stair(ctx=None, going=0)["success"] is False
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.delete_stair.get_rhino_connection")
+    def test_delete(self, mock_get_conn):
+        from rhinomcp.tools.delete_stair import delete_stair
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"deleted": ["g"], "count": 1, "message": "Removed the stair."}
+        mock_get_conn.return_value = mock_conn
+        assert delete_stair(ctx=None)["message"] == "Removed the stair."
+        mock_conn.send_command.assert_called_once_with("delete_stair", {})
+        delete_stair(ctx=None, id="S02")
+        mock_conn.send_command.assert_called_with("delete_stair", {"id": "S02"})
