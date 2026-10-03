@@ -415,4 +415,19 @@ public class CardTests
         Assert.Equal("w01", receipt.Subject);
         Assert.Equal("Moved the north wall of w01 500 mm north; the east and west walls followed. Floor, roof and 1 room updated.", receipt.Text);
     }
+
+    /// <summary>R2: one tick per stored dimension; Save keeps the ticked ones, Remove all drops them all.</summary>
+    [Fact]
+    public void TheDimensionsList_HasARowPerDimension()
+    {
+        var card = ForskCards.For("dims.list", Docs.Facts("house, two user dimensions"));
+        Assert.Equal("dims.list", card.Kind);
+        Assert.Equal(new[] { "U01", "U02" }, card.Fields.Select(f => f.Key));
+        Assert.Equal(new[] { "U01 · 2 walls, 1 opening", "U02 · 2 walls" }, card.Fields.Select(f => f.Label));
+        Assert.All(card.Fields, f => Assert.True(f.Check && f.Value == "1"));
+        Assert.Equal(new[] { "save", "remove_all", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "Save", "Remove all", "Cancel" }, card.Pills.Select(p => p.Label));
+        Assert.Null(ForskCards.For("dims.list", Docs.Facts("house")));
+        Assert.Equal(new JArray("U02"), ForskCards.DimsRemoved(new JObject { ["U01"] = "1", ["U02"] = "0" }));
+    }
 }

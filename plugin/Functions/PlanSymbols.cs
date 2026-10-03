@@ -55,6 +55,11 @@ public partial class RhinoMCPFunctions
         public int DimsCollisions;
         public int DimOpenings;
         public int DimOpeningsShown;
+        // R2: the user's dimensions drawn, those that dropped (a wall they
+        // measured is gone), and picked openings left off (a crossing host).
+        public int DimsUser;
+        public int DimsUserDropped;
+        public int DimsUserSkipped;
         // F5.3: the sections whose marker A–A is on the plan, and those whose
         // marker found no spot clear of everything (drawn at its first spot).
         public List<string> SectionMarkers;

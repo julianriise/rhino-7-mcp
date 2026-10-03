@@ -342,8 +342,12 @@ namespace RhinoMCPPlugin.Forsk
         static bool IsDimensions(string t)
         {
             var words = HasWord(t, "dimension") || HasWord(t, "dimensions") || HasWord(t, "dims")
-                || HasWord(t, "målsett") || HasWord(t, "målsetting") || HasWord(t, "målkjede") || HasWord(t, "målkjeder");
+                || HasWord(t, "målsett") || HasWord(t, "målsetting") || HasWord(t, "målkjede") || HasWord(t, "målkjeder")
+                || HasWord(t, "målene") || HasWord(t, "målet");
             if (!words) return false;
+            // R2: adding or removing a dimension is the plan's, even at a door or a window.
+            if (HasWord(t, "add") || HasWord(t, "remove") || HasWord(t, "delete") || HasWord(t, "fjern")
+                || HasWord(t, "legg") || HasWord(t, "slett")) return true;
             foreach (var opening in new[] { "window", "windows", "door", "doors", "opening", "vindu", "vinduet", "dør", "døra", "døren", "åpning" })
                 if (HasWord(t, opening)) return false;
             return true;

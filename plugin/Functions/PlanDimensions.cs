@@ -63,6 +63,7 @@ public partial class RhinoMCPFunctions
                 Ring = room.Ring.Select(p => ToDrawing(p, worldToHld, delta)).Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList()
             });
         }
+        AddUserDims(doc, scene, worldToHld, delta, tol, ref stats);
         var widths = new Dictionary<string, double>(StringComparer.Ordinal);
         scene.Measure = text =>
         {
@@ -119,13 +120,53 @@ public partial class RhinoMCPFunctions
                 stats.DimTexts++;
             }
             stats.Dims++;
-            if (chain.Kind == "room") stats.DimsRoom++;
+            if (chain.Kind == "user") stats.DimsUser++;
+            else if (chain.Kind == "room") stats.DimsRoom++;
             else stats.DimsExterior++;
         }
         stats.DimsCollisions += result.Collisions;
         stats.DimOpenings = result.Openings;
         stats.DimOpeningsShown = result.OpeningsShown;
         return added;
+    }
+
+    /// <summary>
+    /// R2: the stored user dimensions, each resolved from the walls (by
+    /// forsk:id) and the openings drawn (by the marker's forsk:id or its
+    /// object id) as they are now, in drawing mm. One that drops is counted.
+    /// </summary>
+    private static void AddUserDims(RhinoDoc doc, PlanDims.Scene scene, Transform worldToHld, Vector3d delta, double tol, ref PlanStats stats)
+    {
+        var dims = UserDims.Read(doc.Strings.GetValue(UserDims.Section, UserDims.Entry));
+        if (dims.Count == 0) return;
+        var walls = new Dictionary<string, List<List<RoomDetect.Pt>>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj) || !string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)) continue;
+            var id = obj.Attributes.GetUserString("forsk:id");
+            var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            if (string.IsNullOrEmpty(id) || rings == null) continue;
+            walls[id] = rings.Select(ring => ring.Select(p => ToDrawing(new Point3d(p.X, p.Y, 0), worldToHld, delta))
+                .Select(p => new RoomDetect.Pt(p.X, p.Y)).ToList()).ToList();
+        }
+        var openings = new Dictionary<string, UserDims.OpeningAt>(StringComparer.OrdinalIgnoreCase);
+        foreach (var opening in scene.Openings)
+        {
+            var at = new UserDims.OpeningAt { Centre = opening.Centre, Along = opening.Along };
+            openings[opening.Id] = at;
+            if (Guid.TryParse(opening.Id, out var guid))
+            {
+                var forskId = doc.Objects.FindId(guid)?.Attributes?.GetUserString("forsk:id");
+                if (!string.IsNullOrEmpty(forskId)) openings[forskId] = at;
+            }
+        }
+        foreach (var dim in dims)
+        {
+            var chain = UserDims.Resolve(dim, walls, openings, Math.Max(tol, 1.0), out var gone);
+            stats.DimsUserSkipped += gone.Skipped;
+            if (chain == null) stats.DimsUserDropped++;
+            else scene.User.Add(chain);
+        }
     }
 
     /// <summary>

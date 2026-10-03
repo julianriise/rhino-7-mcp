@@ -62,6 +62,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
                 case "section.remove": return RemoveSection(f);
+                case "dims.list": return DimsList(f);
                 default: return null;
             }
         }
@@ -94,6 +95,46 @@ namespace RhinoMCPPlugin.Forsk
                 card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
+        }
+
+        /// <summary>
+        /// R2: one tick per user dimension ("U01 · 2 walls, 1 window"). Save
+        /// removes the unticked ones, Remove all removes every one. Null when there are none.
+        /// </summary>
+        public static CardSpec DimsList(FileFacts f)
+        {
+            if (f?.Dims == null || f.Dims.Count == 0) return null;
+            var card = new CardSpec
+            {
+                Kind = "dims.list",
+                Question = ForskText.Get("dims.list.ask"),
+                Fields = new List<CardField>(),
+                Depends = "model",
+                Pills =
+                {
+                    new CardPill("save", ForskText.Get("word.save")),
+                    new CardPill("remove_all", ForskText.Get("word.remove_all")),
+                    new CardPill("cancel", ForskText.Get("word.cancel"))
+                }
+            };
+            foreach (var dim in f.Dims)
+            {
+                var walls = dim.Refs.Count(r => r.Wall != null);
+                var openings = dim.Refs.Count(r => r.Opening != null);
+                var what = walls + (walls == 1 ? " wall" : " walls")
+                    + (openings == 0 ? "" : ", " + openings + (openings == 1 ? " opening" : " openings"));
+                card.Fields.Add(new CardField { Key = dim.Id, Label = dim.Id + " · " + what, Check = true, Value = "1" });
+            }
+            return card;
+        }
+
+        /// <summary>The dimensions a Save on the list removes: the unticked rows.</summary>
+        public static JArray DimsRemoved(JObject values)
+        {
+            var ids = new JArray();
+            foreach (var pair in values ?? new JObject())
+                if (pair.Value?.ToString() == "0") ids.Add(pair.Key);
+            return ids;
         }
 
         /// <summary>The import's review rows as stored on the underlay. Absent when none were stored.</summary>

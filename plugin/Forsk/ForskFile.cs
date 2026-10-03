@@ -82,6 +82,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool UndoNewest;
         /// <summary>The last action was a whole-set Print, on this document, and nothing changed since.</summary>
         public bool JustPrinted;
+        /// <summary>R2: the stored user dimensions (forsk/user_dims JSON), or null.</summary>
+        public string UserDims;
     }
 
     /// <summary>The classifier's answer. One pure read of the rows; no RhinoCommon.</summary>
@@ -128,6 +130,11 @@ namespace RhinoMCPPlugin.Forsk
         public string Ink = "default";
         public Picked Picked;
         public int PickedCount;
+        /// <summary>R2: of the things picked, the Forsk walls and the doors and windows.</summary>
+        public int PickedWalls;
+        public int PickedOpenings;
+        /// <summary>R2: the user's own dimensions, as stored.</summary>
+        public List<global::RhinoMCPPlugin.Functions.UserDims.Dim> Dims = new List<global::RhinoMCPPlugin.Functions.UserDims.Dim>();
         /// <summary>The things picked, one row each (ForskPick.Things). The pick line reads them.</summary>
         public List<ChipRow> Selected = new List<ChipRow>();
         /// <summary>door or window when every picked opening is that kind, else null.</summary>
@@ -225,7 +232,8 @@ namespace RhinoMCPPlugin.Forsk
             facts.Kind = Kind(facts, rows.Count);
             facts.SheetsStale = facts.Layouts > 0
                 && !string.IsNullOrEmpty(input.StoredFingerprint)
-                && input.StoredFingerprint != SheetFingerprint.Of(rows);
+                && input.StoredFingerprint != SheetFingerprint.Of(rows, input.UserDims);
+            facts.Dims = global::RhinoMCPPlugin.Functions.UserDims.Read(input.UserDims);
             ReadSelection(rows, facts);
             facts.SelectionKey = string.Join(",", rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
             facts.ModelKey = ModelKey(rows);
@@ -275,7 +283,12 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var picked = PickOf(row);
                 kinds.Add(picked);
-                if (picked == Picked.Opening) openingKinds.Add(row.OpeningKind ?? "");
+                if (picked == Picked.Wall) facts.PickedWalls++;
+                if (picked == Picked.Opening)
+                {
+                    facts.PickedOpenings++;
+                    openingKinds.Add(row.OpeningKind ?? "");
+                }
             }
             if (facts.PickedCount == 0) facts.Picked = Picked.None;
             else facts.Picked = kinds.Count == 1 ? kinds.First() : Picked.Other;
@@ -357,6 +370,12 @@ namespace RhinoMCPPlugin.Forsk
     {
         public static string Of(IEnumerable<ChipRow> rows)
         {
+            return Of(rows, null);
+        }
+
+        /// <summary>R2: the user's dimensions are part of what a sheet was drawn from.</summary>
+        public static string Of(IEnumerable<ChipRow> rows, string userDims)
+        {
             var parts = new List<string>();
             foreach (var row in rows ?? Enumerable.Empty<ChipRow>())
             {
@@ -366,6 +385,7 @@ namespace RhinoMCPPlugin.Forsk
                 parts.Add((row.Id ?? "") + ":" + (row.Stamp ?? ""));
             }
             parts.Sort(StringComparer.Ordinal);
+            if (!string.IsNullOrWhiteSpace(userDims)) parts.Add("user_dims:" + userDims.Trim());
             using (var sha = SHA1.Create())
             {
                 var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", parts)));

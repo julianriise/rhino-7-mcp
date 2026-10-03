@@ -73,6 +73,7 @@ namespace RhinoMCPPlugin.Forsk
             "layout_pack",
             "export_pdf",
             "export_sheets",
+            "plan_dims",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -594,6 +595,19 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["path"] = Str("Omit in the panel. The save dialog sets an absolute .pdf path."),
                         ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page, in set order.")
+                    }),
+                Fn("plan_dims",
+                    "The user's own plan dimensions, drawn at the next Print. add: across two or more parallel walls, with a stop at both faces of each wall and at each picked door or window in a wall along it; omit refs to use what is picked. remove: ids such as U02, or omit ids for all (remove the dimensions, fjern målene). list: what is stored.",
+                    new JObject
+                    {
+                        ["action"] = new JObject { ["type"] = "string", ["enum"] = new JArray("add", "remove", "list") },
+                        ["ids"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "remove: U01, U02. Omit for all." },
+                        ["refs"] = new JObject
+                        {
+                            ["type"] = "array",
+                            ["items"] = new JObject { ["type"] = "object" },
+                            ["description"] = "add: [{\"wall\": \"w03\"}, {\"opening\": \"...\"}]. Omit to use the picked walls and openings."
+                        }
                     }),
                 Fn("export_sheets",
                     "Write the sheet set as DWG or DXF, one file per sheet, in paper mm at 1:1 with named layers and lineweights. It lays the set out first, as Print does. In this panel, omit folder: a folder dialog supplies it. Use for export dwg, send dwg, eksporter dxf.",

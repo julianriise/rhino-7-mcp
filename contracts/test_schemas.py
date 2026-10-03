@@ -367,6 +367,11 @@ def test_new_commands():
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "layout": "plan"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DWG"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DXF", "format": "dxf"}),
+        ("commands/plan_dims.json", {"action": "add"}),
+        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}, {"wall": "w02"}, {"opening": "o-1"}]}),
+        ("commands/plan_dims.json", {"action": "remove", "ids": ["U02"]}),
+        ("commands/plan_dims.json", {"action": "remove"}),
+        ("commands/plan_dims.json", {"action": "list"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -932,6 +937,17 @@ def test_responses():
     if not validate("responses/section_result.json", {"removed": ["A"], "sections": [], "message": "Removed section A."}):
         all_passed = False
 
+    print("  plan_dims_result:")
+    dims_added = {
+        "dims": [{"id": "U01", "walls": 2, "openings": 0}], "count": 1, "id": "U01",
+        "total": 4000, "values": [200, 3600, 200], "skipped": 0,
+        "message": "✓ Dimension across 2 walls added · it prints on the plan.",
+    }
+    if not validate("responses/plan_dims_result.json", dims_added):
+        all_passed = False
+    if not validate("responses/plan_dims_result.json", {"dims": [], "count": 0, "message": "No dimensions of your own yet."}):
+        all_passed = False
+
     print("  export_sheets_result:")
     sheets_result = {
         "folder": "/tmp/forsk-export-garage/Garage DWG", "format": "dwg", "count": 2,
@@ -1397,6 +1413,11 @@ def test_invalid_examples():
         ("commands/export_pdf.json", {"path": ""}, "export_pdf empty path"),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),
         ("commands/export_sheets.json", {}, "export_sheets missing folder"),
+        ("commands/plan_dims.json", {}, "plan_dims missing action"),
+        ("commands/plan_dims.json", {"action": "move"}, "plan_dims unknown action"),
+        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}]}, "plan_dims one ref"),
+        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01", "opening": "o"}, {"wall": "w02"}]}, "plan_dims ref with two keys"),
+        ("commands/plan_dims.json", {"action": "remove", "ids": ["w01"]}, "plan_dims id not U.."),
         ("commands/export_sheets.json", {"folder": "/tmp/x", "format": "pdf"}, "export_sheets format not dwg or dxf"),
         ("commands/export_sheets.json", {"folder": "/tmp/x", "path": "/tmp/x.dwg"}, "export_sheets unknown field"),
         ("commands/clear_layouts.json", {"views": ["section"]}, "clear_layouts unknown view"),
@@ -1513,6 +1534,8 @@ KEEPS_VIEW = {
     "section_clear", "select_objects", "modify_object", "modify_objects",
     "update_object_attributes", "mark_as_existing", "create_layer", "get_or_set_current_layer",
     "set_layer_material", "set_project_meta", "section_add", "print_profile",
+    # Writes the forsk/user_dims document string only.
+    "plan_dims",
 }
 
 

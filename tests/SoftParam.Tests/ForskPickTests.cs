@@ -96,4 +96,28 @@ public class ForskPickTests
         Assert.Equal("veggen i nord", ForskPick.InSentence("the north wall", true));
         Assert.Equal("veggen ved (4000, 2000)", ForskPick.InSentence("the wall at (4000, 2000)", true));
     }
+
+    /// <summary>R2: walls and openings picked together are named by kind, not "3 objects".</summary>
+    [Theory]
+    [InlineData(false, "2 walls, 1 window", "1 wall, 2 doors, 1 window")]
+    [InlineData(true, "2 vegger, 1 vindu", "1 vegg, 2 dører, 1 vindu")]
+    public void WallsAndOpenings_AreNamedByKind(bool nb, string two, string four)
+    {
+        Assert.Equal(two, ForskPick.Line(new[] { Wall(id: "w01"), Wall(id: "w02"), Opening("window", "V01", "1200", "900", "2100") }, nb));
+        Assert.Equal(four, ForskPick.Line(new[]
+        {
+            Opening("door", "D01", "900", "0", "2100", id: "b1"), Wall(id: "w01"),
+            Opening("window", "V01", "1200", "900", "2100", id: "b2"), Opening("door", "D02", "900", "0", "2100", id: "b3")
+        }, nb));
+    }
+
+    [Fact]
+    public void TheFacts_CountWallsAndOpeningsPicked()
+    {
+        var rows = new List<ChipRow> { Wall(id: "w01"), Wall(id: "w02"), Opening("window", "V01", "1200", "900", "2100") };
+        var facts = FileClassifier.Read(new DocInput { Rows = rows });
+        Assert.Equal(Picked.Other, facts.Picked);
+        Assert.Equal(2, facts.PickedWalls);
+        Assert.Equal(1, facts.PickedOpenings);
+    }
 }

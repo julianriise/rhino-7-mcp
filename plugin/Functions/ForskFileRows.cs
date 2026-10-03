@@ -123,6 +123,7 @@ public partial class RhinoMCPFunctions
         var input = new DocInput { Rows = ChipRows(doc) };
         if (doc == null) return input;
         input.StoredFingerprint = doc.Strings.GetValue(LayoutMetaSection, SheetFingerprintKey);
+        input.UserDims = doc.Strings.GetValue(UserDims.Section, UserDims.Entry);
         input.Layouts = MatchingForskPages(doc, null).Count;
         foreach (var def in ReadSectionDefs(doc))
             if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);
@@ -191,6 +192,7 @@ public partial class RhinoMCPFunctions
     /// <summary>At Print: the model the sheets were drawn from, so the classifier can tell when they are older.</summary>
     private static void StampSheetFingerprint(RhinoDoc doc)
     {
-        doc.Strings.SetString(LayoutMetaSection, SheetFingerprintKey, SheetFingerprint.Of(ChipRows(doc)));
+        doc.Strings.SetString(LayoutMetaSection, SheetFingerprintKey,
+            SheetFingerprint.Of(ChipRows(doc), doc.Strings.GetValue(UserDims.Section, UserDims.Entry)));
     }
 }

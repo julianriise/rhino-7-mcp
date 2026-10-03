@@ -509,3 +509,47 @@ def test_a_leader_tag_without_its_leader_goes_red():
     failures = []
     plan_smoke.check_leaders(rows, "office fit", failures)
     assert failures == ["office fit leaders: rd-03 leader missing"]
+
+
+class _FakeRhino:
+    """Serves the garage's walls, and a plan whose user chain is given."""
+
+    def __init__(self, values, chains=1):
+        self.values, self.chains, self.calls = values, chains, []
+
+    def __call__(self, cmd, params):
+        self.calls.append((cmd, params))
+        if cmd == "get_objects" and params["layer_filter"] == "A-WALL":
+            walls = [("w01", (0, 0), (8000, 200)), ("w02", (0, 3800), (8000, 4000)),
+                     ("w03", (0, 200), (200, 3800)), ("w04", (7800, 200), (8000, 3800))]
+            return {"objects": [
+                {"id": fid, "bounding_box": [[a[0], a[1], 0], [b[0], b[1], 3000]],
+                 "attributes": {"forsk:kind": "wall", "forsk:id": fid}} for fid, a, b in walls]}
+        if cmd == "get_objects":
+            return {"objects": [
+                {"id": f"t{i}", "attributes": {"forsk:role": "dimension", "forsk:symbol": "text",
+                                               "forsk:dim_kind": "user", "forsk:dim_chain": f"U0{1 + i % self.chains}",
+                                               "forsk:dim_value": str(v)}}
+                for i, v in enumerate(self.values)]}
+        if cmd == "plan_dims" and params["action"] == "add":
+            return {"id": "U01", "dims": [], "count": 1, "message": "ok"}
+        return {}
+
+
+def test_user_dims_step_finds_the_clear_width_and_cleans_up():
+    rhino = _FakeRhino([200, 3600, 200])
+    failures = []
+    assert plan_smoke.check_user_dims(rhino, "sheet", failures) == 3600
+    assert failures == []
+    add = next(p for c, p in rhino.calls if c == "plan_dims" and p["action"] == "add")
+    assert add["refs"] == [{"wall": "w01"}, {"wall": "w02"}]
+    assert ("plan_dims", {"action": "remove", "ids": ["U01"]}) in rhino.calls
+
+
+def test_user_dims_step_fails_without_the_clear_width_or_with_two_chains():
+    failures = []
+    assert plan_smoke.check_user_dims(_FakeRhino([200, 3500, 300]), "sheet", failures) == 0
+    assert any("3600" in f for f in failures)
+    failures = []
+    plan_smoke.check_user_dims(_FakeRhino([200, 3600, 200], chains=2), "sheet", failures)
+    assert any("2 user chains" in f for f in failures)

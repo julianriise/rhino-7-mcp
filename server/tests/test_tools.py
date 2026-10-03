@@ -4377,3 +4377,45 @@ class TestExportSheetsTool:
         }
         mock_get_conn.return_value = mock_conn
         assert export_sheets(ctx=None, folder="/tmp/g")["success"] is False
+
+
+class TestPlanDimsTool:
+    @patch("rhinomcp.tools.plan_dims.get_rhino_connection")
+    def test_add_from_the_selection(self, mock_get_conn):
+        from rhinomcp.tools.plan_dims import plan_dims
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "dims": [{"id": "U01", "walls": 2, "openings": 0}], "count": 1, "id": "U01",
+            "message": "✓ Dimension across 2 walls added · it prints on the plan.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = plan_dims(ctx=None, action="add")
+
+        mock_conn.send_command.assert_called_once_with("plan_dims", {"action": "add"})
+        assert result["success"] is True
+        assert result["id"] == "U01"
+
+    @patch("rhinomcp.tools.plan_dims.get_rhino_connection")
+    def test_remove_some_or_all(self, mock_get_conn):
+        from rhinomcp.tools.plan_dims import plan_dims
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"dims": [], "count": 0, "message": "✓ Removed 1 dimension."}
+        mock_get_conn.return_value = mock_conn
+
+        plan_dims(ctx=None, action="remove", ids=["U02"])
+        plan_dims(ctx=None, action="remove")
+        assert mock_conn.send_command.call_args_list[0].args == ("plan_dims", {"action": "remove", "ids": ["U02"]})
+        assert mock_conn.send_command.call_args_list[1].args == ("plan_dims", {"action": "remove"})
+
+    @patch("rhinomcp.tools.plan_dims.get_rhino_connection")
+    def test_refuses_bad_input_before_calling_rhino(self, mock_get_conn):
+        from rhinomcp.tools.plan_dims import plan_dims
+
+        assert plan_dims(ctx=None, action="move")["success"] is False
+        assert plan_dims(ctx=None, action="remove", ids=["w01"])["success"] is False
+        assert plan_dims(ctx=None, action="add", refs=[{"wall": "w01"}])["success"] is False
+        assert plan_dims(ctx=None, action="add", refs=[{"wall": "w01", "opening": "o"}, {"wall": "w2"}])["success"] is False
+        mock_get_conn.assert_not_called()

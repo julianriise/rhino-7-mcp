@@ -1138,6 +1138,8 @@ def main() -> int:
         # F5.2: the dimensions read back against the model, and any room tag on a leader.
         plan_smoke.check_dimensions(rows, page, "sheet", failures, markers)
         plan_smoke.check_leaders(rows, "sheet", failures)
+        # R2: a dimension the user asked for, across the two long walls.
+        plan_smoke.check_user_dims(lambda cmd, params: send_command(sock, cmd, params), "sheet", failures)
         groups = {
             "hinged": symbol_attrs(rows, door_id),
             "flip": symbol_attrs(rows, flip_id),

@@ -890,6 +890,50 @@ def check_dimensions(rows, page, label, failures, markers=()) -> dict:
     return counts
 
 
+def check_user_dims(send, label, failures) -> int:
+    """R2: plan_dims add across the garage's two long walls, a plan Print,
+    then exactly one forsk:dim_kind=user chain on the plan, with the clear
+    width between the walls among its values. The dimension is removed
+    again so the rest of the smoke sees the plan it expects. Returns the
+    clear width it found, 0 when it did not."""
+    walls = [row for row in layer_rows(send, "A-WALL") if _attrs(row).get("forsk:kind") == "wall"]
+
+    def span_x(row):
+        box = row.get("bounding_box") or [[0, 0, 0], [0, 0, 0]]
+        return float(box[1][0]) - float(box[0][0])
+
+    long = sorted(walls, key=span_x, reverse=True)[:2]
+    if len(long) < 2 or not all(_attrs(w).get("forsk:id") for w in long):
+        failures.append(f"{label} user dims: two long walls with ids, found {len(long)}")
+        return 0
+    south, north = sorted(long, key=lambda row: float(row["bounding_box"][0][1]))
+    clear = round(float(north["bounding_box"][0][1]) - float(south["bounding_box"][1][1]))
+    added = send("plan_dims", {
+        "action": "add",
+        "refs": [{"wall": _attrs(south)["forsk:id"]}, {"wall": _attrs(north)["forsk:id"]}],
+    })
+    try:
+        send("layout_pack", {"views": ["plan"], "replace": True})
+        texts = [
+            row for row in layer_rows(send, "S-DRAW::Plan")
+            if _attrs(row).get("forsk:role") == "dimension"
+            and _attrs(row).get("forsk:symbol") == "text"
+            and _attrs(row).get("forsk:dim_kind") == "user"
+        ]
+        chains = {_attrs(row).get("forsk:dim_chain") for row in texts}
+        values = sorted(int(_number(_attrs(row), "forsk:dim_value") or 0) for row in texts)
+        print(f"    {label} user dims {len(chains)} chain(s), values {values}, clear width {clear}")
+        if len(chains) != 1:
+            failures.append(f"{label} user dims: {len(chains)} user chains, want 1")
+        if clear not in values:
+            failures.append(f"{label} user dims: no value {clear} in {values}")
+            return 0
+        return clear
+    finally:
+        if added.get("id"):
+            send("plan_dims", {"action": "remove", "ids": [added["id"]]})
+
+
 def check_leaders(rows, label, failures) -> int:
     """F5.2: a room tag on a leader (forsk:leader) sits outside its room,
     and a leader line of the same room runs from inside the room to within

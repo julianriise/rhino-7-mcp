@@ -179,6 +179,10 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),
             new ForskAction("print.pages", Runs.Card, "group.print", f => f.HasWalls),
+            // R2: two or more things picked, all walls or walls with doors and windows, at least one wall.
+            new ForskAction("dims.add", Runs.Run, "group.print", f => f.PickedCount >= 2 && f.PickedWalls >= 1
+                && f.PickedWalls + f.PickedOpenings == f.PickedCount),
+            new ForskAction("dims.list", Runs.Card, "group.print", f => f.Dims.Count > 0),
             // R3: the set as DWG, one file per sheet. Also a pill on Choose sheets, and the bar's next step after a Print.
             new ForskAction("export.dwg", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
@@ -252,12 +256,16 @@ namespace RhinoMCPPlugin.Forsk
         static IEnumerable<ForskAction> Candidates(FileFacts f, ForskAction slot1)
         {
             if (f.JustPrinted && f.Picked == Picked.None) yield return Find("export.dwg");
+            // Walls with doors and windows: Add dimensions is the one thing for them all.
+            if (f.Picked == Picked.Other) yield return Find("dims.add");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");
             if (f.Picked == Picked.Wall) yield return Find("wall.move");
             // One straight run: Drag wall is the next suggestion, so the bar shows it.
             // A whole record is not one run, and the bar stays Move, then Add a door.
             if (ForskPick.OneRunWall(f.Selected) != null) yield return Find("wall.drag");
+            // Two or more walls: Move, then Add dimensions (Add a door is a one-wall act).
+            if (f.Picked == Picked.Wall) yield return Find("dims.add");
             if (f.Picked == Picked.Opening) yield return Find("opening.type");
             if (f.Picked == Picked.Room) yield return Find("daylight.room");
             if (f.Picked == Picked.Room) yield return Find("section.room");

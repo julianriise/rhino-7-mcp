@@ -366,6 +366,62 @@ public class PlanDimsTests
     /// a mark or a symbol, or runs along another chain's line; crossing one
     /// (an inner corner, a room's width and depth) is allowed.
     /// </summary>
+    /// <summary>R2: the garage's south and north walls, across, as UserDims resolves them.</summary>
+    static PlanDims.UserChain AcrossTheGarage() => new()
+    {
+        Id = "U01",
+        Origin = P(4000, 0),
+        Dir = P(0, 1),
+        Out = P(1, 0),
+        Stops = { 0, 200, 3800, 4000 },
+        StopIds = { null, null, null, null },
+        Reach = 4000,
+        Walls = 2
+    };
+
+    [Fact]
+    public void UserChain_IsPlacedClearOfTheTag_AddsUp_AndLeavesTheOutsideChainsAlone()
+    {
+        var plain = PlanDims.Layout(Garage(30));
+        var scene = Garage(30);
+        // The room's tag sits where the line would start: it moves along the walls until clear.
+        var tag = new Box(3400, 1700, 4600, 2300);
+        scene.Taken.Add(new PlanDims.Obstacle(tag, PlanDims.Kind.Text));
+        scene.User.Add(AcrossTheGarage());
+        var result = PlanDims.Layout(scene);
+
+        var user = result.Chains.Single(c => c.Kind == "user");
+        Assert.Equal("U01", user.Id);
+        Assert.True(user.Placed);
+        Assert.Equal(new[] { 200, 3600, 200 }, Values(user));
+        Assert.Equal(user.Total, Values(user).Sum());
+        Assert.Equal(4000, user.Total);
+        // Off the tag: the line is beside it, not through it.
+        Assert.True(Math.Abs(user.Offset) > 600, "offset " + user.Offset);
+        Assert.True(Math.Abs(user.Offset) <= 4000);
+
+        // The chains outside the building are as they were; the room keeps its width and depth.
+        foreach (var before in plain.Chains.Where(c => c.Kind != "room"))
+        {
+            var after = result.Chains.Single(c => c.Id == before.Id);
+            Assert.Equal(before.Offset, after.Offset);
+            Assert.Equal(Values(before), Values(after));
+        }
+        Assert.Equal(2, result.Chains.Count(c => c.Kind == "room" && c.Placed));
+        AssertNothingTouches(result, scene.Taken, scene.Walls);
+    }
+
+    [Fact]
+    public void UserChain_ComesAfterTheOutsideChains_AndBeforeTheRooms()
+    {
+        var scene = Garage(30);
+        scene.User.Add(AcrossTheGarage());
+        var kinds = PlanDims.Layout(scene).Chains.Select(c => c.Kind).ToList();
+        var user = kinds.IndexOf("user");
+        Assert.True(user > kinds.LastIndexOf("overall"));
+        Assert.True(user < kinds.IndexOf("room"));
+    }
+
     static void AssertNothingTouches(PlanDims.Result result, List<PlanDims.Obstacle> drawn, List<List<List<Pt>>> walls)
     {
         var chains = result.Chains.Where(c => c.Placed).ToList();
@@ -401,6 +457,11 @@ public class PlanDimsTests
     [InlineData("målsett planen", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
     [InlineData("vis målkjeder", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
     [InlineData("print with dimensions", RhinoMCPPlugin.Forsk.ForskIntent.Print)]
+    [InlineData("remove the dimensions", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("fjern målene", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("remove dimension U02", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("add dimensions across the windows", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
+    [InlineData("fjern målene ved døra", RhinoMCPPlugin.Forsk.ForskIntent.Sheets)]
     public void DimensionWords_ClassifyAsSheets(string text, RhinoMCPPlugin.Forsk.ForskIntent expected)
     {
         Assert.Equal(expected, RhinoMCPPlugin.Forsk.ForskIntentRouter.Classify(text));

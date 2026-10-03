@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan_dims.json",
+  "title": "PlanDims Command",
+  "description": "The user's own plan dimensions, stored by Forsk ids and drawn at the next Print. add: across two or more parallel walls (refs, or the picked walls and their doors and windows). remove: the ids given, or all. list: what is stored.",
+  "type": "object",
+  "properties": {
+    "action": { "type": "string", "enum": ["add", "remove", "list"] },
+    "ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^U[0-9]+$" },
+      "description": "remove only: which dimensions (U01, U02). Omit to remove every one."
+    },
+    "refs": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "properties": {
+          "wall": { "type": "string", "minLength": 1 },
+          "opening": { "type": "string", "minLength": 1 }
+        },
+        "minProperties": 1,
+        "maxProperties": 1,
+        "additionalProperties": false
+      },
+      "description": "add only: walls by forsk:id and openings by their marker's forsk:id. Omit to use the selection."
+    }
+  },
+  "required": ["action"],
+  "additionalProperties": false
+}

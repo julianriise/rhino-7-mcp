@@ -25,7 +25,14 @@ namespace RhinoMCPPlugin.Forsk
             if (kinds.Count > 1)
             {
                 var openings = kinds.All(k => k == "door" || k == "window" || k == "opening");
-                return Text(openings ? "pick.openings" : "pick.objects", nb, "n", Count(things.Count));
+                if (openings) return Text("pick.openings", nb, "n", Count(things.Count));
+                // R2: walls with doors and windows, by kind: "2 walls, 1 window".
+                if (kinds.Contains("wall") && kinds.All(k => k == "wall" || k == "door" || k == "window" || k == "opening"))
+                    return string.Join(", ", new[] { "wall", "door", "window", "opening" }
+                        .Select(k => (Kind: k, N: things.Count(t => Kind(t) == k)))
+                        .Where(p => p.N > 0)
+                        .Select(p => p.N == 1 ? Text("pick.mix." + p.Kind, nb) : Text("pick." + p.Kind + "s", nb, "n", Count(p.N))));
+                return Text("pick.objects", nb, "n", Count(things.Count));
             }
             var kind = kinds[0];
             if (things.Count == 1) return One(things[0], kind, nb);

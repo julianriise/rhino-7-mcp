@@ -100,8 +100,26 @@ public static class PlanDims
     }
 
     /// <summary>
+    /// R2: a dimension the user asked for (UserDims), resolved: stops along
+    /// Dir from Origin, across the walls; Origin sits at the middle of the
+    /// walls' shared span, and the line may move Reach either way along Out.
+    /// </summary>
+    public sealed class UserChain
+    {
+        public string Id;
+        public Pt Origin;
+        public Pt Dir;
+        public Pt Out;
+        public List<double> Stops = new List<double>();
+        public List<string> StopIds = new List<string>();
+        public double Reach;
+        public int Walls;
+    }
+
+    /// <summary>
     /// The plan in drawing mm: the outer wall faces of the building, the
-    /// openings, the tagged rooms, what is already drawn, and the poché.
+    /// openings, the tagged rooms, what is already drawn, the poché, and the
+    /// user's own dimensions.
     /// </summary>
     public sealed class Scene
     {
@@ -109,6 +127,7 @@ public static class PlanDims
         public List<List<Pt>> Outlines = new List<List<Pt>>();
         public List<Opening> Openings = new List<Opening>();
         public List<Room> Rooms = new List<Room>();
+        public List<UserChain> User = new List<UserChain>();
         public List<Obstacle> Taken = new List<Obstacle>();
         public List<List<List<Pt>>> Walls = new List<List<List<Pt>>>();
         /// <summary>Paper width in mm of a value printed TextMm tall; 0 falls back to an estimate.</summary>
@@ -173,6 +192,8 @@ public static class PlanDims
         public List<Label> Texts = new List<Label>();
         public bool Placed;
         public int Collisions;
+        /// <summary>A user chain runs across walls: its line may cross the poché.</summary>
+        public bool CrossesWalls;
     }
 
     public sealed class Result
@@ -329,6 +350,20 @@ public static class PlanDims
             }
         }
 
+        // R2: the user's own chains, across their walls, at the middle of the
+        // walls' shared span first, then a step at a time either way along them.
+        foreach (var user in scene.User ?? new List<UserChain>())
+        {
+            if (user == null || user.Stops.Count < 2) continue;
+            var chain = NewChain("user", user.Id, user.Origin, user.Dir, user.Out, result.Chains.Count);
+            chain.Id = user.Id;
+            chain.CrossesWalls = true;
+            for (var i = 0; i < user.Stops.Count; i++)
+                AddStop(chain, user.Stops[i], i < user.StopIds.Count ? user.StopIds[i] : null);
+            Place(chain, BothWays(user.Reach, StepMm * s), taken, walls, s, scene.Measure, false);
+            result.Chains.Add(chain);
+        }
+
         // Rooms: a width and a depth in each rectangle, near a wall, clear of
         // its tag and the door swings, or not at all.
         foreach (var room in scene.Rooms ?? new List<Room>())
@@ -450,6 +485,18 @@ public static class PlanDims
         return list;
     }
 
+    /// <summary>0, then +step, −step, +2 step, … out to reach either way.</summary>
+    static List<double> BothWays(double reach, double step)
+    {
+        var list = new List<double> { 0 };
+        for (var d = step; d <= reach + 1e-9; d += step)
+        {
+            list.Add(d);
+            list.Add(-d);
+        }
+        return list;
+    }
+
     /// <summary>A room dimension's offsets from its wall: near a wall first, then toward the middle.</summary>
     static List<double> Inward(double extent, double s)
     {
@@ -548,7 +595,7 @@ public static class PlanDims
         var line = new Seg(At(chain, first, d), At(chain, last, d));
         // The line may end on a wall face; only its run between must be clear.
         var run = SegBox(new Seg(At(chain, first + clear, d), At(chain, last - clear, d)));
-        if (Blocked(run, near, clear, false) || Schedules.OnWalls(run, walls)) return null;
+        if (Blocked(run, near, clear, false) || (!chain.CrossesWalls && Schedules.OnWalls(run, walls))) return null;
         attempt.Lines.Add(line);
         var own = new List<Box> { SegBox(line) };
         if (chain.Witness)

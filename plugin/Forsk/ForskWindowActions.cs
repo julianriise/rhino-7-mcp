@@ -175,6 +175,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "export.dwg":
                     Export(thread, null, "dwg");
                     return;
+                case "dims.add":
+                    Job(thread, action.Id, label, sink => sink.Tool("plan_dims", new JObject { ["action"] = "add" }));
+                    return;
                 case "file.draw":
                     Draw(thread, action, doc);
                     return;
@@ -376,6 +379,17 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
+                    break;
+                case "dims.list":
+                    var unticked = ForskCards.DimsRemoved(values);
+                    if (pill.Id == "save" && unticked.Count == 0)
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line("Kept every dimension."), userText: pill.Label);
+                    else
+                    {
+                        var dimsArgs = new JObject { ["action"] = "remove" };
+                        if (pill.Id == "save") dimsArgs["ids"] = unticked;
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("plan_dims", dimsArgs), userText: pill.Label);
+                    }
                     break;
                 case "sheets.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_drawings", new JObject()), userText: pill.Label);

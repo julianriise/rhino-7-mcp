@@ -289,4 +289,27 @@ public class RegistryTests
         var picked = FileClassifier.Read(Docs.Of(Docs.House(wallSelected: true)).With(d => d.JustPrinted = true));
         Assert.DoesNotContain(ForskRegistry.Bar(picked).Context, a => a.Id == "export.dwg");
     }
+
+    /// <summary>R2: Add dimensions for two or more walls, with or without doors and windows; first for a mixed pick.</summary>
+    [Fact]
+    public void AddDimensions_IsTheBarsNextStep_ForWallsPickedTogether()
+    {
+        var walls = Docs.Facts("house, two walls selected");
+        Assert.Equal(new[] { "file.print", "wall.move", "dims.add" }, ForskRegistry.Bar(walls).Slots.Select(a => a.Id));
+        var mixed = Docs.Facts("house, two walls and a window selected");
+        Assert.Equal(Picked.Other, mixed.Picked);
+        Assert.Equal("dims.add", ForskRegistry.Bar(mixed).Context[0].Id);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("dims.add"));
+        // One wall is a thickness, not a dimension across walls; a door alone has no wall.
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, wall selected")).Actions, a => a.Id == "dims.add");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, door selected")).Actions, a => a.Id == "dims.add");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "dims.add");
+    }
+
+    [Fact]
+    public void TheDimensionsList_IsOnTheCard_OnlyWhenThereAreSome()
+    {
+        Assert.Contains(ForskRegistry.Card(Docs.Facts("house, two user dimensions")).Actions, a => a.Id == "dims.list");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "dims.list");
+    }
 }
