@@ -32,6 +32,6 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 - "print the room schedule" stays Print, "romliste" stays Sheets, and "how big is the daylight" stays Daylight.
 - "the area is wrong", "problem med arealene", and "how do I find the area" stay Support.
 - "bra" in "ser bra", "er bra", "veldig bra", "helt bra", or "ganske bra" is not an area question. Bare "BRA?" is.
-- "m²" is read as the word "m2". "12m²" with no space may not route.
+- "m²" is read as the word "m2". "12m²", "12 m2", "make this room 12 m2" and "rommet skal være 12 m²" route to Modeller. "hvor stor er stua?", "BRA?" and "areal per etasje" stay Analyser.
 - `rooms_detect` stays in the Analyser pack. `add_opening` stays in the daylight pack and stays Modeller's tool. `rooms.list` stays Planner. Nothing is removed.
 - The Romliste gains a BRA or BTA row only when that figure exists. A note adds no row, and a table with no figures is unchanged.

@@ -203,10 +203,12 @@ namespace RhinoMCPPlugin.Forsk
         /// "print the room schedule" is print, checked first, and "romliste" is sheets.
         /// "bra" the adjective ("ser bra", "er bra") is not a figure.
         /// "the area is wrong" stays a bug report: a lone wrong, bug or feil is not this task.
+        /// A target size ("12m²", "make this room 12 m2") is an edit, not this.
         /// </summary>
         static bool IsArea(string t)
         {
             if (BugWeak(t)) return false;
+            if (IsSizeEdit(t)) return false;
             if (t.Contains("how big") || t.Contains("hvor stor")) return true;
             if (HasWord(t, "area") || HasWord(t, "areas") || HasStem(t, "areal")) return true;
             if (HasWord(t, "kvm") || HasWord(t, "kvadratmeter") || HasWord(t, "kvadratmetre") || HasWord(t, "m2")) return true;
@@ -288,8 +290,77 @@ namespace RhinoMCPPlugin.Forsk
             return true;
         }
 
+        /// <summary>
+        /// A number and m² is a size to set: "12m²", "12 m2", "make this room 12 m2",
+        /// "rommet skal være 12 m²". A question (hvor stor, areal, BRA) is not.
+        /// </summary>
+        static bool IsSizeEdit(string t)
+        {
+            if (!HasAreaMeasure(t) || AreaQuestion(t)) return false;
+            return BareMeasure(t) || SizingVerb(t);
+        }
+
+        /// <summary>m² glued to or following a number. "12m2" and "12 m2" both count. "m2" alone does not.</summary>
+        static bool HasAreaMeasure(string t)
+        {
+            var i = 0;
+            while ((i = t.IndexOf("m2", i, StringComparison.Ordinal)) >= 0)
+            {
+                var j = i - 1;
+                while (j >= 0 && t[j] == ' ') j--;
+                if (j >= 0 && t[j] >= '0' && t[j] <= '9') return true;
+                i += 2;
+            }
+            return false;
+        }
+
+        /// <summary>Nothing in the message but the measure, and a few fillers.</summary>
+        static bool BareMeasure(string t)
+        {
+            var any = false;
+            foreach (var word in t.Split(' '))
+            {
+                if (word.Length == 0) continue;
+                any = true;
+                if (word == "m2" || Digits(word)) continue;
+                if (word.EndsWith("m2", StringComparison.Ordinal) && Digits(word.Substring(0, word.Length - 2))) continue;
+                if (word == "ca" || word == "about" || word == "rundt" || word == "omtrent") continue;
+                return false;
+            }
+            return any;
+        }
+
+        static bool Digits(string word)
+        {
+            if (word.Length == 0) return false;
+            foreach (var c in word)
+                if (c < '0' || c > '9') return false;
+            return true;
+        }
+
+        static bool SizingVerb(string t)
+        {
+            return HasWord(t, "make") || HasWord(t, "lag") || HasWord(t, "gjør") || HasWord(t, "gjor")
+                || HasWord(t, "sett") || HasWord(t, "set") || HasWord(t, "resize")
+                || HasWord(t, "endre") || HasWord(t, "change")
+                || HasWord(t, "skal") || HasWord(t, "should");
+        }
+
+        /// <summary>The words that ask for a figure. A size target can carry m² without being one of these.</summary>
+        static bool AreaQuestion(string t)
+        {
+            if (t.Contains("how big") || t.Contains("hvor stor")) return true;
+            if (HasWord(t, "area") || HasWord(t, "areas") || HasStem(t, "areal")) return true;
+            if (HasWord(t, "bruksareal") || HasWord(t, "bruttoareal") || HasWord(t, "bta")) return true;
+            if (HasWord(t, "kvm") || HasWord(t, "kvadratmeter") || HasWord(t, "kvadratmetre")) return true;
+            if (!HasWord(t, "bra")) return false;
+            return !t.Contains("er bra") && !t.Contains("ser bra") && !t.Contains("veldig bra")
+                && !t.Contains("helt bra") && !t.Contains("ganske bra");
+        }
+
         static bool IsEdit(string t)
         {
+            if (IsSizeEdit(t)) return true;
             if (t.Contains("move opening") || t.Contains("add opening") || t.Contains("delete opening"))
                 return true;
             if (t.Contains("set opening") || t.Contains("set window") || t.Contains("set door"))

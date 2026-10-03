@@ -364,6 +364,27 @@ public class AreaStatsTests
     }
 
     [Theory]
+    [InlineData("12m²", ForskIntent.Edit)]
+    [InlineData("12m2", ForskIntent.Edit)]
+    [InlineData("12 m²", ForskIntent.Edit)]
+    [InlineData("12 m2", ForskIntent.Edit)]
+    [InlineData("make this room 12 m2", ForskIntent.Edit)]
+    [InlineData("make this room 12m²", ForskIntent.Edit)]
+    [InlineData("rommet skal være 12 m²", ForskIntent.Edit)]
+    [InlineData("rommet skal være 12m2", ForskIntent.Edit)]
+    [InlineData("hvor stor er stua?", ForskIntent.Area)]
+    [InlineData("hvor stor er stua i m²", ForskIntent.Area)]
+    [InlineData("how big is the flat?", ForskIntent.Area)]
+    [InlineData("how big is the flat in m2", ForskIntent.Area)]
+    [InlineData("BRA?", ForskIntent.Area)]
+    [InlineData("areal per etasje", ForskIntent.Area)]
+    public void ASize_GoesToModeller_AndAnAreaQuestionStaysAnalyser(string said, ForskIntent intent)
+    {
+        Assert.Equal(intent, ForskIntentRouter.Classify(said));
+        Assert.Equal(intent == ForskIntent.Edit ? "Modeller" : "Analyser", ForskRoles.Mark(intent, ForskRole.None));
+    }
+
+    [Theory]
     [InlineData("how big is the flat?", ForskIntent.Area)]
     [InlineData("areal per etasje", ForskIntent.Area)]
     [InlineData("BRA?", ForskIntent.Area)]
