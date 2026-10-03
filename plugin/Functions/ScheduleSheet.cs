@@ -183,8 +183,7 @@ public partial class RhinoMCPFunctions
                 Name = r.Name,
                 AreaMm2 = r.Area
             }).ToList();
-            // Same rooms and the same BRA/BTA as area_stats. A floor with no figure adds no row.
-            tables.Add(Schedules.RoomTable(tagged, ReadAreaStats(doc).Gross));
+            tables.Add(Schedules.RoomTable(tagged));
         }
         // Column widths from Rhino's own layout of each text, not a glyph guess.
         var style = OneToOneTextStyle(
@@ -234,7 +233,7 @@ public partial class RhinoMCPFunctions
     /// column's width, so the smoke reads back what the page shows and the
     /// page can tell a text that runs past its cell.
     /// </summary>
-    private void DrawSchedules(RhinoDoc doc, RhinoPageView page, string stableId, List<Schedules.Block> blocks, JArray ids)
+    private void DrawSchedules(RhinoDoc doc, RhinoPageView page, string view, string stableId, List<Schedules.Block> blocks, JArray ids)
     {
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
         var pageId = page.MainViewport.Id;
@@ -245,7 +244,7 @@ public partial class RhinoMCPFunctions
         PrintProfiles.Active = profile;
         ObjectAttributes Attr(string role, string kind)
         {
-            var attr = LayoutAttr(layer.Index, pageId, SchedulesView, stableId);
+            var attr = LayoutAttr(layer.Index, pageId, view, stableId);
             var ink = role == "schedule_line" ? profile.Thin.Color : profile.Text;
             attr.ObjectColor = ink;
             attr.PlotColor = ink;
@@ -303,6 +302,9 @@ public partial class RhinoMCPFunctions
                     cx += table.Widths[c];
                 }
             }
+            if (block.Note)
+                AddPaperText(doc, ids, table.Note, x0, tableBottom - Schedules.RowMm / 2.0, Schedules.TextMm,
+                    TextHorizontalAlignment.Left, TextVerticalAlignment.Middle, Attr("schedule_note", table.Kind));
         }
     }
 
@@ -348,6 +350,11 @@ public partial class RhinoMCPFunctions
                 // The first block's title; a continued block adds (forts.).
                 if (!text.PlainText.EndsWith("(forts.)", StringComparison.Ordinal))
                     list["title"] = text.PlainText;
+                continue;
+            }
+            if (role == "schedule_note")
+            {
+                list["note"] = text.PlainText;
                 continue;
             }
             if (role != "schedule_cell") continue;
@@ -480,7 +487,7 @@ public partial class RhinoMCPFunctions
             var stableId = parts.Length > 1 ? parts[1] : "";
             foreach (var obj in ScheduleObjects(doc, pages[i]))
                 doc.Objects.Delete(obj.Id, true);
-            DrawSchedules(doc, pages[i], stableId, blocks.Where(b => b.Page == i).ToList(), new JArray());
+            DrawSchedules(doc, pages[i], SchedulesView, stableId, blocks.Where(b => b.Page == i).ToList(), new JArray());
         }
         return null;
     }

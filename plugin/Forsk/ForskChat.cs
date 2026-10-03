@@ -341,7 +341,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Print)
             {
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
-                    + "layout_pack, export_pdf, clear_layouts. Print includes the schedules page, the plan's dimensions and every stored section. "
+                    + "layout_pack, export_pdf, clear_layouts. Print writes the set: the front sheet (Tegningsliste and Arealer), the plan with its dimensions, the four facades, every stored section and the lists, numbered A-00-001, A-20-001, A-40-001 and on. "
                     + "Print in a profile (grey, hatch) is print_profile first, then Print. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "

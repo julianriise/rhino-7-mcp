@@ -52,7 +52,7 @@ public partial class RhinoMCPFunctions
     private const string LayoutPagePrefix = "Forsk — ";
     private const string NothingToLayOutMessage = "Nothing to lay out. Bake walls first.";
     private const string UnknownLayoutViewMessage =
-        "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a).";
+        "Unknown view. Use front, plan, north, east, south, west, schedules, or a stored section (section_a).";
     private const string UnknownPaperMessage = "Unknown paper. Use A3.";
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
@@ -129,6 +129,10 @@ public partial class RhinoMCPFunctions
             case "west":
                 spec = LayoutSpec("west", "Forsk — West", Vector3d.XAxis, Vector3d.ZAxis);
                 return true;
+            case SheetSet.FrontId:
+                // Tables only: no look, no detail.
+                spec = LayoutSpec(SheetSet.FrontId, FrontPageName, Vector3d.Zero, Vector3d.ZAxis);
+                return true;
             default:
                 // A section's page. Its look lives on the stored section (TryGetSectionView).
                 if (!Sections.TryLetter(view, out var letter)) return false;
@@ -185,8 +189,9 @@ public partial class RhinoMCPFunctions
         var views = ReadLayoutViews(doc, parameters, out var offViews);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
         var replace = ReadBoolParam(parameters, "replace", true);
-        // The schedules are a page of their own, not a drawing view.
+        // The schedules and the front sheet are pages of tables, not drawing views.
         var withSchedules = views.RemoveAll(v => string.Equals(v, SchedulesView, StringComparison.OrdinalIgnoreCase)) > 0;
+        var withFront = views.RemoveAll(v => string.Equals(v, SheetSet.FrontId, StringComparison.OrdinalIgnoreCase)) > 0;
         var scheduleKinds = ReadScheduleKinds(parameters);
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
@@ -444,6 +449,15 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        // Last: its Tegningsliste reads every page laid out before it.
+        if (withFront)
+        {
+            if (replace)
+                RemoveLayoutPages(doc, SheetSet.FrontId, false);
+            pages.Add(AddFrontPage(doc, pages.Count + 1, wallLevel));
+            sheetCount++;
+        }
+
         doc.Views.Redraw();
         var reported = sheets.Count > 0 ? picked.Scale : requestedScale;
         var bumped = picked.Bumped;
@@ -495,7 +509,7 @@ public partial class RhinoMCPFunctions
             var sheetNo = SheetSet.Number(SchedulesView, 0, i);
             var footer = new JObject();
             var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, 0, pageTitle, footer);
-            DrawSchedules(doc, page, stableId, blocks.Where(b => b.Page == i).ToList(), ids);
+            DrawSchedules(doc, page, SchedulesView, stableId, blocks.Where(b => b.Page == i).ToList(), ids);
             RememberSchedules(doc, page, kinds, stableId);
             records.Add(new JObject
             {
@@ -770,7 +784,7 @@ public partial class RhinoMCPFunctions
         var clock = Stopwatch.StartNew();
         var doc = page.Document ?? RhinoDoc.ActiveDoc;
         var view = ViewKeyForPage(page);
-        if (doc != null && view != SchedulesView && CountPrintDrawings(doc, view) == 0)
+        if (doc != null && !SheetSet.IsListSheet(view) && CountPrintDrawings(doc, view) == 0)
             EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
         ApplyPageDrawingDisplay(doc, page);
         var other = page.MainViewport.Id == _lastPreviewPage ? OtherPage(doc, page) : null;
@@ -982,6 +996,11 @@ public partial class RhinoMCPFunctions
                 if (stale != null) return stale;
                 continue;
             }
+            if (view == SheetSet.FrontId)
+            {
+                RefreshFront(doc, page);
+                continue;
+            }
             var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
             // A type swap must show on the next export without a new layout_pack.
             if (!plan && CountPrintDrawings(doc, view) > 0) continue;
@@ -1034,7 +1053,7 @@ public partial class RhinoMCPFunctions
         if (page == null) return null;
         if (IsSchedulesPage(page))
             return SchedulesView;
-        foreach (var name in new[] { "plan", "north", "east", "south", "west" })
+        foreach (var name in new[] { SheetSet.FrontId, "plan", "north", "east", "south", "west" })
         {
             if (!TryGetLayoutView(name, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))
@@ -2562,8 +2581,8 @@ public partial class RhinoMCPFunctions
         {
             var view = ViewKeyForPage(page);
             if (string.IsNullOrEmpty(view)) return false;
-            // The schedules page has no detail: it shows its tables.
-            if (view == SchedulesView)
+            // The lists and the front sheet have no detail: they show their tables.
+            if (SheetSet.IsListSheet(view))
             {
                 if (ScheduleObjects(doc, page).Count == 0) return false;
                 continue;
@@ -2744,10 +2763,12 @@ public partial class RhinoMCPFunctions
             // forsk:cell is the English key the smokes read; the caption is Norwegian.
             var captionAttr = Attr("title_cell");
             captionAttr.SetUserString("forsk:cell", cells[i].Key);
+            captionAttr.SetUserString("forsk:part", "caption");
             Text(cells[i].Caption, cx + TitleBlock.PadMm, ty1 - 2.0 - TitleBlock.CaptionMm, TitleBlock.CaptionMm,
                 TextHorizontalAlignment.Left, captionAttr);
             var valueAttr = Attr("title_cell");
             valueAttr.SetUserString("forsk:cell", cells[i].Key);
+            valueAttr.SetUserString("forsk:part", "value");
             Text(cells[i].Value, cx + TitleBlock.PadMm, ty0 + 4.0, cells[i].Mm, TextHorizontalAlignment.Left, valueAttr);
             cellRows.Add(new JObject { ["name"] = cells[i].Key, ["caption"] = cells[i].Caption, ["text"] = cells[i].Value });
             cx += widths[i];

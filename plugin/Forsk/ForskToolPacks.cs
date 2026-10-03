@@ -265,10 +265,10 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
-        /// <summary>A Layout page: a drawing view, the schedules sheet, or a stored section (section_a to section_z).</summary>
+        /// <summary>A Layout page: the front sheet, a drawing view, the schedules sheet, or a stored section (section_a to section_z).</summary>
         static JObject PageEnum(string description)
         {
-            var pages = new JArray("plan", "north", "east", "south", "west", "schedules");
+            var pages = new JArray("front", "plan", "north", "east", "south", "west", "schedules");
             for (var c = 'a'; c <= 'z'; c++)
                 pages.Add("section_" + c);
             return new JObject
@@ -550,7 +550,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["revision"] = Str("Revision letter or number, such as B. An empty string removes the Rev. cell.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the plan, the four facades, each stored section, the lists). The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the front sheet with the Tegningsliste and the Arealtabell, the plan, the four facades, each stored section, the lists). The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),

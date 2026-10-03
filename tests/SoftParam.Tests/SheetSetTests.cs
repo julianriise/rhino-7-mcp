@@ -24,9 +24,10 @@ public class SheetSetTests
     static string[] Ids(IEnumerable<SheetSet.Sheet> set) => set.Select(s => s.Id).ToArray();
 
     [Fact]
-    public void Garage_GivesThePlanTheFacadesAndTheLists_InNumberOrder()
+    public void Garage_GivesTheFrontSheetThePlanTheFacadesAndTheLists_InNumberOrder()
     {
-        Assert.Equal(new[] { "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-00-002" },
+        // The set opens on the front sheet; the lists close it.
+        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-00-002" },
             Numbers(SheetSet.Infer(Garage())));
         Assert.All(SheetSet.Infer(Garage()), s => Assert.True(s.On));
     }
@@ -35,9 +36,9 @@ public class SheetSetTests
     public void Sections_FollowTheFacades_ByLetter()
     {
         var set = SheetSet.Infer(Garage("B", "A"));
-        Assert.Equal(new[] { "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-40-101", "A-40-102", "A-00-002" },
+        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-40-101", "A-40-102", "A-00-002" },
             Numbers(set));
-        Assert.Equal(new[] { "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules" }, Ids(set));
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules" }, Ids(set));
     }
 
     [Fact]
@@ -57,6 +58,7 @@ public class SheetSetTests
         Assert.Equal("A-00-002", SheetSet.Number("schedules", 0));
         // A list that flows onto three pages numbers each page.
         Assert.Equal("A-00-004", SheetSet.Number("schedules", 0, 2));
+        Assert.Equal("A-00-001", SheetSet.Number("front", 0));
         Assert.Equal("", SheetSet.Number("nonsense", 0));
     }
 
@@ -68,6 +70,9 @@ public class SheetSetTests
         Assert.Equal("Snitt B–B", SheetSet.Title("section_b", 0));
         Assert.Equal("Dør-, vindus- og romliste", SheetSet.Title("schedules", 0));
         Assert.Equal("Dørliste", SheetSet.Title("schedules", 0, new[] { "door" }));
+        Assert.Equal("Tegningsliste og arealer", SheetSet.Title("front", 0));
+        // With no rooms there is no Arealtabell.
+        Assert.Equal("Tegningsliste", SheetSet.Title("front", 0, new[] { "door" }));
     }
 
     [Fact]
@@ -87,7 +92,8 @@ public class SheetSetTests
         };
         // Now B is gone and C is new.
         var merged = SheetSet.Merge(SheetSet.Infer(Garage("A", "C")), stored);
-        Assert.Equal(new[] { "section_a", "plan", "north", "east", "south", "west", "section_c", "schedules" }, Ids(merged));
+        // The front sheet, new since that set was stored, opens it.
+        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "section_c", "schedules" }, Ids(merged));
         Assert.False(merged.Single(s => s.Id == "east").On);
         Assert.True(merged.Single(s => s.Id == "section_c").On);
     }
@@ -106,7 +112,7 @@ public class SheetSetTests
         var merged = SheetSet.Merge(new List<SheetSet.Sheet> { new SheetSet.Sheet("plan", true), new SheetSet.Sheet("north", true) }, stored);
         Assert.Equal(new[] { "north", "plan" }, Ids(merged));
         var withSchedules = SheetSet.Merge(SheetSet.Infer(Garage()), new List<SheetSet.Sheet> { new SheetSet.Sheet("west", true) });
-        Assert.Equal(new[] { "plan", "north", "east", "south", "west", "schedules" }, Ids(withSchedules));
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "schedules" }, Ids(withSchedules));
     }
 
     [Fact]
@@ -128,9 +134,9 @@ public class SheetSetTests
     public void Order_SortsShuffledPagesIntoSetOrder_SchedulesPagesKeepTheirOrder()
     {
         var set = SheetSet.Infer(Garage("A"));
-        var pages = new[] { "schedules", "west", "section_a", "plan", "schedules", "north", "east", "south" };
+        var pages = new[] { "schedules", "west", "section_a", "plan", "schedules", "front", "north", "east", "south" };
         var order = SheetSet.Order(pages, set);
-        Assert.Equal(new[] { "plan", "north", "east", "south", "west", "section_a", "schedules", "schedules" },
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "schedules", "schedules" },
             order.Select(i => pages[i]).ToArray());
         // The first schedules page stays before the second.
         Assert.Equal(new[] { 0, 4 }, order.Where(i => pages[i] == "schedules").ToArray());
@@ -142,6 +148,15 @@ public class SheetSetTests
         var set = SheetSet.Infer(Garage());
         var pages = new[] { "section_z", "north", "plan" };
         Assert.Equal(new[] { "plan", "north", "section_z" }, SheetSet.Order(pages, set).Select(i => pages[i]).ToArray());
+    }
+
+    [Fact]
+    public void TheFrontSheetAndTheLists_AreListSheets_WithNoDetail()
+    {
+        Assert.True(SheetSet.IsListSheet("front"));
+        Assert.True(SheetSet.IsListSheet("schedules"));
+        Assert.False(SheetSet.IsListSheet("plan"));
+        Assert.False(SheetSet.IsListSheet("section_a"));
     }
 
     [Fact]

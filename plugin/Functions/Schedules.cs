@@ -65,9 +65,10 @@ public static class Schedules
         public List<string> Ids = new List<string>();
         public List<string[]> Rows = new List<string[]>();
         public string[] Total;
-        /// <summary>Rows under the total: BRA and BTA when those figures exist.</summary>
-        public List<string[]> Foot = new List<string[]>();
-        public List<string> FootIds = new List<string>();
+        /// <summary>One line printed under the table, after its last row. Null for none.</summary>
+        public string Note;
+        /// <summary>The note's printed width (Fit sets it): its column is at least this wide.</summary>
+        public double NoteWidth;
 
         public double Width
         {
@@ -79,35 +80,29 @@ public static class Schedules
             }
         }
 
-        /// <summary>Body lines: the rows, then the total, then the foot.</summary>
+        /// <summary>Body lines: the rows, then the total.</summary>
         public int Lines
         {
-            get { return Rows.Count + (Total == null ? 0 : 1) + Foot.Count; }
+            get { return Rows.Count + (Total == null ? 0 : 1); }
         }
 
-        /// <summary>Cells of body line i: a row, the total, or a foot row under it.</summary>
+        /// <summary>The width a column needs for this table: the table, or its note when that is wider.</summary>
+        public double ColumnWidth
+        {
+            get { return Note == null ? Width : Math.Max(Width, NoteWidth); }
+        }
+
+        /// <summary>Cells of body line i: a row, or the total.</summary>
         public string[] Line(int i)
         {
             if (i < Rows.Count) return Rows[i];
-            var after = i - Rows.Count;
-            if (Total != null)
-            {
-                if (after == 0) return Total;
-                after--;
-            }
-            return after >= 0 && after < Foot.Count ? Foot[after] : null;
+            return Total != null && i == Rows.Count ? Total : null;
         }
 
         public string LineId(int i)
         {
             if (i < Rows.Count) return Ids[i];
-            var after = i - Rows.Count;
-            if (Total != null)
-            {
-                if (after == 0) return "total";
-                after--;
-            }
-            return after >= 0 && after < FootIds.Count ? FootIds[after] : "";
+            return Total != null && i == Rows.Count ? "total" : "";
         }
     }
 
@@ -125,16 +120,18 @@ public static class Schedules
         public double Top;
         /// <summary>0 for the first schedules page, 1 for the next, and on.</summary>
         public int Page;
+        /// <summary>The table's note goes under this block: its last.</summary>
+        public bool Note;
 
         public string Title
         {
             get { return Continued ? Table.Title + " (forts.)" : Table.Title; }
         }
 
-        /// <summary>Title, head row, and the body lines.</summary>
+        /// <summary>Title, head row, the body lines, and the note's line when it is here.</summary>
         public double Height
         {
-            get { return TitleSpaceMm + RowMm * (1 + Count); }
+            get { return TitleSpaceMm + RowMm * (1 + Count + (Note ? 1 : 0)); }
         }
     }
 
@@ -421,19 +418,10 @@ public static class Schedules
 
     /// <summary>
     /// Romliste: each tagged room's name and area as its plan tag prints them,
-    /// in room id order, then the sum of the rooms' areas.
+    /// in room id order, then the sum of the rooms' areas. BRA and BTA are in
+    /// the Arealtabell on the front sheet, once.
     /// </summary>
     public static Table RoomTable(IList<Room> rooms)
-    {
-        return RoomTable(rooms, null);
-    }
-
-    /// <summary>
-    /// The same Romliste. Under the sum, one BRA row and one BTA row per floor
-    /// that has that figure. The row names the Norwegian storey: stored 0 is "1. etasje". A note, or
-    /// no figure, adds no row, so the table without gross is unchanged.
-    /// </summary>
-    public static Table RoomTable(IList<Room> rooms, IList<AreaStats.FloorGross> gross)
     {
         var table = new Table
         {
@@ -452,32 +440,83 @@ public static class Schedules
             total += room.AreaMm2;
         }
         if (sorted.Count > 0)
-        {
             table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
-            AddGrossRows(table, gross);
-        }
         return Fit(table, null);
     }
 
-    /// <summary>BRA then BTA, in the order the floors were given. A missing figure is left out.</summary>
-    static void AddGrossRows(Table table, IList<AreaStats.FloorGross> gross)
+    public const string AreaNote = "Arealer er ca.-tall fra modellen, ikke målt etter NS 3940.";
+
+    /// <summary>
+    /// Arealtabell for the front sheet, from area_stats' own result (no second
+    /// computation): per floor ("1. etasje") its BTA, BRA and Netto (the sum
+    /// of its rooms), then the net area per use, largest first. A floor whose
+    /// BRA and BTA could not be derived shows Netto alone, and the note under
+    /// the table says so. Every figure is an estimate, and the note says
+    /// that too. No rooms: no lines.
+    /// </summary>
+    public static Table AreaTable(AreaStats.Result result)
     {
-        if (gross == null) return;
-        foreach (var floor in gross)
+        var table = new Table
         {
-            if (floor == null) continue;
-            var level = string.IsNullOrWhiteSpace(floor.Level) ? "0" : floor.Level.Trim();
-            if (floor.BraMm2.HasValue)
-            {
-                table.FootIds.Add("bra-" + level);
-                table.Foot.Add(new[] { "BRA " + AreaStats.FloorName(level, true), OpeningTypes.AreaText(floor.BraMm2.Value) });
-            }
-            if (floor.BtaMm2.HasValue)
-            {
-                table.FootIds.Add("bta-" + level);
-                table.Foot.Add(new[] { "BTA " + AreaStats.FloorName(level, true), OpeningTypes.AreaText(floor.BtaMm2.Value) });
-            }
+            Kind = "area",
+            Title = "Arealer",
+            Heads = new[] { "", "Areal" },
+            Right = new[] { false, true }
+        };
+        if (result == null || result.Floors.Count == 0) return Fit(table, null);
+        var missing = new List<string>();
+        void Row(string id, string label, string value)
+        {
+            table.Ids.Add(id);
+            table.Rows.Add(new[] { label, value });
         }
+        foreach (var floor in result.Floors)
+        {
+            var level = string.IsNullOrWhiteSpace(floor.Key) ? "0" : floor.Key.Trim();
+            var name = AreaStats.FloorName(level, true);
+            Row("floor-" + level, name, "");
+            var gross = result.Gross?.Find(g => g != null && (string.IsNullOrWhiteSpace(g.Level) ? "0" : g.Level.Trim()) == level);
+            if (gross?.BtaMm2 != null) Row("bta-" + level, "BTA", OpeningTypes.AreaText(gross.BtaMm2.Value));
+            if (gross?.BraMm2 != null) Row("bra-" + level, "BRA", OpeningTypes.AreaText(gross.BraMm2.Value));
+            if (gross?.BtaMm2 == null && gross?.BraMm2 == null) missing.Add(name);
+            Row("net-" + level, "Netto", OpeningTypes.AreaText(floor.AreaMm2));
+        }
+        Row("uses", "Netto per bruk", "");
+        foreach (var use in result.Uses)
+            Row("use-" + use.Key, use.Key, OpeningTypes.AreaText(use.AreaMm2));
+        table.Note = AreaNote + (missing.Count == 0 ? "" : " " + string.Join(", ", missing) + ": BRA og BTA mangler.");
+        return Fit(table, null);
+    }
+
+    /// <summary>One sheet on the Tegningsliste. Scale 0: the sheet has none (the lists).</summary>
+    public sealed class Drawing
+    {
+        public string Number;
+        public string Title;
+        public int Scale;
+    }
+
+    /// <summary>Tegningsliste: each sheet that prints, in set order: its number, its title, its scale.</summary>
+    public static Table DrawingList(IList<Drawing> sheets)
+    {
+        var table = new Table
+        {
+            Kind = "drawings",
+            Title = "Tegningsliste",
+            Heads = new[] { "Nr.", "Tegning", "Målestokk" },
+            Right = new[] { false, false, false }
+        };
+        foreach (var sheet in sheets ?? new Drawing[0])
+        {
+            if (sheet == null || string.IsNullOrEmpty(sheet.Number)) continue;
+            table.Ids.Add(sheet.Number);
+            table.Rows.Add(new[]
+            {
+                sheet.Number, sheet.Title ?? "",
+                sheet.Scale > 0 ? "1:" + sheet.Scale.ToString(CultureInfo.InvariantCulture) : ""
+            });
+        }
+        return Fit(table, null);
     }
 
     /// <summary>Sheet title for the lists shown: Dørliste; Dør- og vindusliste; Dør-, vindus- og romliste.</summary>
@@ -511,11 +550,11 @@ public static class Schedules
         foreach (var table in tables)
         {
             if (table == null || table.Lines == 0) continue;
-            if (table.Width > width + 1e-9) return null;
+            if (table.ColumnWidth > width + 1e-9) return null;
             var first = 0;
             while (first < table.Lines)
             {
-                if (x + table.Width > width + 1e-9)
+                if (x + table.ColumnWidth > width + 1e-9)
                 {
                     page++;
                     x = 0;
@@ -532,18 +571,38 @@ public static class Schedules
                     continue;
                 }
                 if (room < 1) return null;
+                var count = Math.Min(room, left);
+                var note = table.Note != null && count == left;
+                if (note && count + 1 > room)
+                {
+                    // The note needs a line more: the last row goes on with it.
+                    if (count > 1)
+                    {
+                        count--;
+                        note = false;
+                    }
+                    else if (y > 0)
+                    {
+                        x += column + GapMm;
+                        y = 0;
+                        column = 0;
+                        continue;
+                    }
+                    else return null;
+                }
                 var block = new Block
                 {
                     Table = table,
                     First = first,
-                    Count = Math.Min(room, left),
+                    Count = count,
                     Continued = first > 0,
                     X = x,
                     Top = y,
-                    Page = page
+                    Page = page,
+                    Note = note
                 };
                 blocks.Add(block);
-                column = Math.Max(column, table.Width);
+                column = Math.Max(column, note ? table.ColumnWidth : table.Width);
                 y += block.Height + GapMm;
                 first += block.Count;
                 if (first < table.Lines)
@@ -639,6 +698,7 @@ public static class Schedules
             }
             table.Widths[c] = Math.Max(MinColumnMm, Math.Ceiling(widest + 2 * PadMm));
         }
+        table.NoteWidth = table.Note == null ? 0 : Math.Ceiling(TextWidth(table.Note, measure));
         return table;
     }
 

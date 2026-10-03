@@ -23,6 +23,8 @@ public static class SheetSet
 
     public const string PlanId = "plan";
     public const string SchedulesId = "schedules";
+    /// <summary>The front sheet: the Tegningsliste and the Arealtabell.</summary>
+    public const string FrontId = "front";
 
     /// <summary>The facades in the order they print and number: A-40-001 to A-40-004.</summary>
     public static readonly IReadOnlyList<string> Facades = new[] { "north", "east", "south", "west" };
@@ -55,14 +57,15 @@ public static class SheetSet
     }
 
     /// <summary>
-    /// The default set: the plan and the four facades when walls exist, each
-    /// stored section by letter, then the lists when one has rows. Every
-    /// sheet on. No walls, no set.
+    /// The default set: the front sheet, the plan and the four facades when
+    /// walls exist, each stored section by letter, then the lists when one
+    /// has rows. Every sheet on. No walls, no set.
     /// </summary>
     public static List<Sheet> Infer(SetFacts facts)
     {
         var set = new List<Sheet>();
         if (facts == null || !facts.Walls) return set;
+        set.Add(new Sheet(FrontId, true));
         set.Add(new Sheet(PlanId, true));
         foreach (var facade in Facades)
             set.Add(new Sheet(facade, true));
@@ -114,14 +117,16 @@ public static class SheetSet
     }
 
     /// <summary>
-    /// The sheet number: plan A-20-00n (n the storey), facades A-40-001 to
-    /// 004, section A A-40-101 and on by letter, the lists A-00-002 and one
-    /// more per page they flow onto (page is 0-based). Empty for an id that
-    /// is no sheet.
+    /// The sheet number: the front sheet A-00-001, plan A-20-00n (n the
+    /// storey), facades A-40-001 to 004, section A A-40-101 and on by letter,
+    /// the lists A-00-002 and one more per page they flow onto (page is
+    /// 0-based). A-10-001 is kept for the site plan. Empty for an id that is
+    /// no sheet.
     /// </summary>
     public static string Number(string id, int level, int page = 0)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
+        if (key == FrontId) return Format(0, 1);
         if (key == PlanId) return Format(20, Math.Max(0, level) + 1);
         var facade = IndexOf(Facades, key);
         if (facade >= 0) return Format(40, facade + 1);
@@ -132,15 +137,25 @@ public static class SheetSet
     }
 
     /// <summary>
-    /// The sheet's title as its title block prints it. The lists sheet names
-    /// the lists it shows (all three when kinds is null).
+    /// The sheet's title as its title block prints it. listKinds are the
+    /// lists that have rows (all three when null): the lists sheet names
+    /// them, and the front sheet holds the Arealtabell only with rooms.
     /// </summary>
     public static string Title(string id, int level, IList<string> listKinds = null)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
+        if (key == FrontId)
+            return listKinds == null || listKinds.Contains("room") ? "Tegningsliste og arealer" : "Tegningsliste";
         if (key == SchedulesId)
             return Schedules.SheetTitle(listKinds ?? ListKinds.ToList());
         return OpeningTypes.ViewTitle(key, level);
+    }
+
+    /// <summary>A sheet of tables and no detail: the front sheet and the lists. It has no scale.</summary>
+    public static bool IsListSheet(string id)
+    {
+        var key = (id ?? "").Trim().ToLowerInvariant();
+        return key == FrontId || key == SchedulesId;
     }
 
     /// <summary>
