@@ -16,12 +16,12 @@ namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
     /// Drag one straight wall along its normal. The preview and the dimension
-    /// are drawn and then dropped. Release calls move_wall once. Esc changes nothing.
+    /// are drawn and then dropped. A click, Enter, or right-click calls move_wall
+    /// once, for the distance the dimension showed. Esc changes nothing.
     /// </summary>
     public static class ForskDragWall
     {
         public const string CommandName = "ForskDragWall";
-        const double Reach = 100000;
 
         public sealed class Outcome
         {
@@ -154,7 +154,6 @@ namespace RhinoMCPPlugin.Forsk
             int _mouseSign;
             double _shown = double.NaN;
             int _shownStep = -1;
-            string _prompt;
             bool _refused;
             string _why;
             List<Point3d[]> _moved;
@@ -170,60 +169,57 @@ namespace RhinoMCPPlugin.Forsk
                 _origin = WallJoins.Middle(_run);
                 _old = Loops(pick.Graph.Shape);
                 SetBasePoint(new Point3d(_origin.X, _origin.Y, 0), false);
-                var n = _run.Normal;
-                Constrain(
-                    new Point3d(_origin.X - n.X * Reach, _origin.Y - n.Y * Reach, 0),
-                    new Point3d(_origin.X + n.X * Reach, _origin.Y + n.Y * Reach, 0));
+                // A line constraint never returns the mouse-up, so a click does not
+                // finish the get. The distance is the normal component instead.
                 AcceptNumber(true, true);
-                AcceptNothing(false);
+                AcceptNothing(true);
                 AddStep();
-                Say(WallDrag.FormatDimension(0, _outward, _nb));
+                SetCommandPrompt(Text("wall.drag.prompt", _nb));
             }
 
             public void Run(Outcome outcome)
             {
-                var result = Ask();
-                if (result == GetResult.Point && Math.Abs(Along(Point())) < 1)
-                    result = Ask();
-                if (result == GetResult.Cancel || result == GetResult.Nothing)
+                var waited = false;
+                while (true)
                 {
-                    outcome.Cancelled = true;
-                    outcome.Line = Text("wall.drag.cancel", _nb);
-                    return;
-                }
-                double by;
-                if (result == GetResult.Number)
-                {
+                    var result = Ask();
                     var sign = _mouseSign != 0 ? _mouseSign : _outward;
-                    by = WallDrag.Typed(Number(), sign);
-                    if (Math.Abs(by) < 1)
+                    var typed = result == GetResult.Number ? WallDrag.Typed(Number(), sign) : 0;
+                    var along = result == GetResult.Point ? Along(Point()) : 0;
+                    var end = WallDrag.Finish(Name(result), along, _shown, typed, _step, waited, out var by);
+                    if (end == WallDrag.DragEnd.Wait)
+                    {
+                        waited = true;
+                        continue;
+                    }
+                    if (end == WallDrag.DragEnd.Cancel)
+                    {
+                        outcome.Cancelled = true;
+                        outcome.Line = Text("wall.drag.cancel", _nb);
+                        return;
+                    }
+                    if (end == WallDrag.DragEnd.Still)
                     {
                         outcome.Line = WallDrag.NotMoved(_nb);
                         return;
                     }
-                }
-                else if (result == GetResult.Point)
-                {
-                    by = WallDrag.Snap(Along(Point()), _step);
-                    if (Math.Abs(by) < _step)
+                    if (!WallJoins.TryMove(_pick.Records, _pick.Graph, _run, by, _tol, out _, out var why))
                     {
-                        outcome.Line = WallDrag.NotMoved(_nb);
+                        outcome.Line = WallDrag.Plain(why);
                         return;
                     }
-                }
-                else
-                {
-                    outcome.Cancelled = true;
-                    outcome.Line = Text("wall.drag.cancel", _nb);
+                    outcome.Toward = WallEdit.Heading(_run, by);
+                    outcome.Mm = Math.Abs(by);
                     return;
                 }
-                if (!WallJoins.TryMove(_pick.Records, _pick.Graph, _run, by, _tol, out _, out var why))
-                {
-                    outcome.Line = WallDrag.Plain(why);
-                    return;
-                }
-                outcome.Toward = WallEdit.Heading(_run, by);
-                outcome.Mm = Math.Abs(by);
+            }
+
+            static string Name(GetResult result)
+            {
+                if (result == GetResult.Point) return "point";
+                if (result == GetResult.Number) return "number";
+                if (result == GetResult.Nothing) return "nothing";
+                return "cancel";
             }
 
             GetResult Ask()
@@ -266,9 +262,11 @@ namespace RhinoMCPPlugin.Forsk
                     foreach (var loop in _moved) e.Display.DrawPolyline(loop, blue, 2);
                 if (_red != null)
                     e.Display.DrawPolyline(_red, System.Drawing.Color.FromArgb(196, 40, 40), 2);
-                var label = WallDrag.FormatDimension(snapped, _outward, _nb);
-                Say(_refused ? _why : label);
-                DrawDimension(e, snapped, label, blue);
+                // The distance stays on the dimension. Setting the command prompt
+                // from here swallows the click, so the prompt is set once.
+                var label = _refused ? _why : WallDrag.FormatDimension(snapped, _outward, _nb);
+                var ink = _refused ? System.Drawing.Color.FromArgb(196, 40, 40) : blue;
+                DrawDimension(e, snapped, label, ink);
                 base.OnDynamicDraw(e);
             }
 
@@ -303,13 +301,6 @@ namespace RhinoMCPPlugin.Forsk
                     e.Display.DrawArrowHead(a, -dir, color, 12, 0);
                 }
                 e.Display.Draw2dText(label, color, mid, true, 14);
-            }
-
-            void Say(string prompt)
-            {
-                if (prompt == _prompt) return;
-                _prompt = prompt;
-                SetCommandPrompt(prompt ?? "");
             }
 
             Point3d[] Shift(List<Pt> ring, double by)

@@ -52,10 +52,11 @@ One wall is selected.
 
 - The bar is still Print, Move, Add a door. **Drag wall** is not in the bar and is not slot 1.
 - It is on “What can I do here?” for that one wall, in Model, after Move and before Delete. It is hidden with no wall, with two or more walls, with a room, and with an opening. A whole record that is one selected object still shows the pill. The command then refuses it, as in D2.
-- The pill writes “Drag wall”, then “Drag the wall in the view, or type a distance. Esc cancels.” Rhino takes the click.
+- The pill writes “Drag wall”, then “Drag the wall in the view, or type a distance. Click or Enter places it. Esc cancels.” Rhino takes the click.
+- A click places the wall at the distance the dimension shows. Enter and right-click do the same. Esc cancels. The point is not constrained to a line: that constraint swallows the mouse-up, so the click never returned and the preview was never applied.
 - Release uses the same joined move as a typed move: one undo record, the D3 sentence as the receipt, the wall review card under it when neighbours followed, and a stale daylight map when one was showing. The undo name is `Forsk: Drag wall`. The Undo pill appears and undoes that record.
 - A refusal or Esc is one chat line. It does not replace the Undo pill.
-- Write a Norwegian line first, for example “dra veggen”, then use the pill. The bubble is “Dra vegg”. The prompt is “Dra veggen i visningen, eller skriv en avstand. Esc avbryter.” The dimension says “300 mm ut” or “300 mm inn”. The receipt is the Norwegian D3 sentence. Esc says “Avbrutt.”
+- Write a Norwegian line first, for example “dra veggen”, then use the pill. The bubble is “Dra vegg”. The prompt is “Dra veggen i visningen, eller skriv en avstand. Klikk eller Enter plasserer den. Esc avbryter.” The dimension says “300 mm ut” or “300 mm inn”. The receipt is the Norwegian D3 sentence. Esc says “Avbrutt.”
 
 ## D6 — this list
 

@@ -248,4 +248,54 @@ public class WallDragTests
             WallDrag.Plain("Not moved: 500 mm would close the room or wall beyond it, 200 mm deep."));
         Assert.Equal("", WallDrag.Plain("  "));
     }
+
+    [Fact]
+    public void Click_OnTheWall_AfterADrag_CommitsTheDimension()
+    {
+        // The getter came back on the wall. The dimension had already drawn the drag.
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("point", 0, 300, 0, 10, false, out var by));
+        Assert.Equal(300, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("point", 0.4, -300, 0, 10, false, out by));
+        Assert.Equal(-300, by, 6);
+    }
+
+    [Fact]
+    public void Click_AtTheDraggedPoint_CommitsThatPoint()
+    {
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("point", 304, 300, 0, 10, false, out var by));
+        Assert.Equal(300, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("point", 14, 0, 0, 10, false, out by));
+        Assert.Equal(10, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("point", -25, 0, 0, 50, false, out by));
+        Assert.Equal(-50, by, 6);
+    }
+
+    [Fact]
+    public void Click_AtRest_WaitsOnce_ThenDoesNotMove()
+    {
+        Assert.Equal(WallDrag.DragEnd.Wait, WallDrag.Finish("point", 0, 0, 0, 10, false, out _));
+        Assert.Equal(WallDrag.DragEnd.Still, WallDrag.Finish("point", 2, 0, 0, 10, true, out _));
+        Assert.Equal(WallDrag.DragEnd.Still, WallDrag.Finish("point", 4, double.NaN, 0, 10, true, out _));
+    }
+
+    [Fact]
+    public void Enter_CommitsTheDimension_EscCancels_AShortDragDoesNotMove()
+    {
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("nothing", 0, 250, 0, 10, false, out var by));
+        Assert.Equal(250, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Still, WallDrag.Finish("nothing", 0, 0, 0, 10, false, out _));
+        Assert.Equal(WallDrag.DragEnd.Still, WallDrag.Finish("nothing", 0, 4, 0, 10, false, out _));
+        Assert.Equal(WallDrag.DragEnd.Cancel, WallDrag.Finish("cancel", 0, 300, 0, 10, false, out _));
+        Assert.Equal(WallDrag.DragEnd.Cancel, WallDrag.Finish("miss", 300, 300, 0, 10, false, out _));
+    }
+
+    [Fact]
+    public void Typed_IgnoresTheStep_AndAZeroDoesNotMove()
+    {
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("number", 0, 0, 250, 10, false, out var by));
+        Assert.Equal(250, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Move, WallDrag.Finish("number", 0, 300, -40, 50, false, out by));
+        Assert.Equal(-40, by, 6);
+        Assert.Equal(WallDrag.DragEnd.Still, WallDrag.Finish("number", 0, 300, 0.2, 10, false, out _));
+    }
 }

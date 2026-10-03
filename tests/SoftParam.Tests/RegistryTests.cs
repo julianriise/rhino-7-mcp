@@ -138,8 +138,8 @@ public class RegistryTests
         Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
         Assert.Equal("Drag wall", ForskText.Label("wall.drag"));
         Assert.Equal("Dra vegg", ForskText.Get("wall.drag.nb"));
-        Assert.Equal("Drag the wall in the view, or type a distance. Esc cancels.", ForskText.Get("wall.drag.prompt"));
-        Assert.Equal("Dra veggen i visningen, eller skriv en avstand. Esc avbryter.", ForskText.Get("wall.drag.prompt.nb"));
+        Assert.Equal("Drag the wall in the view, or type a distance. Click or Enter places it. Esc cancels.", ForskText.Get("wall.drag.prompt"));
+        Assert.Equal("Dra veggen i visningen, eller skriv en avstand. Klikk eller Enter plasserer den. Esc avbryter.", ForskText.Get("wall.drag.prompt.nb"));
         Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("wall.drag"));
         Assert.Contains(ForskRegistry.Card(Docs.Facts("one whole wall record selected")).Actions, a => a.Id == "wall.drag");
 

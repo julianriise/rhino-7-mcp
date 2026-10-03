@@ -57,6 +57,43 @@ public static class WallDrag
         return (WallEdit.Heading(run, snapped), Math.Abs(snapped));
     }
 
+    /// <summary>What one finished Get does. Wait asks again. Still is a drag under one step.</summary>
+    public enum DragEnd { Wait, Cancel, Still, Move }
+
+    /// <summary>
+    /// The click, Enter, or a typed distance. pointAlong is the click projected
+    /// on the normal. shown is the snapped distance the dimension was drawing.
+    /// typed is a typed distance with its sign already applied. A click that
+    /// comes back on the wall commits shown: that is the drag the user saw.
+    /// Enter does the same. Esc cancels, even mid-drag. The first click on the
+    /// wall, before a drag, waits. by is the signed millimetres on Move.
+    /// </summary>
+    public static DragEnd Finish(string result, double pointAlong, double shown, double typed, int step, bool waited, out double by)
+    {
+        by = 0;
+        if (double.IsNaN(shown)) shown = 0;
+        if (step <= 0) step = DefaultStep;
+        if (result == "cancel") return DragEnd.Cancel;
+        if (result == "number")
+        {
+            if (Math.Abs(typed) < 1) return DragEnd.Still;
+            by = typed;
+            return DragEnd.Move;
+        }
+        if (result == "nothing")
+        {
+            if (Math.Abs(shown) < step) return DragEnd.Still;
+            by = shown;
+            return DragEnd.Move;
+        }
+        if (result != "point") return DragEnd.Cancel;
+        var snapped = Snap(pointAlong, step);
+        if (Math.Abs(snapped) >= step) by = snapped;
+        else if (Math.Abs(shown) >= step) by = shown;
+        else return waited ? DragEnd.Still : DragEnd.Wait;
+        return DragEnd.Move;
+    }
+
     public static string NotMoved(bool nb) => Text("wall.drag.not", nb);
 
     public static string Many(bool nb) => Text("wall.drag.many", nb);

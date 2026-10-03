@@ -368,6 +368,8 @@ namespace RhinoMCPPlugin.Forsk
         {
             try
             {
+                // Otherwise the first viewport click only activates Rhino and the get never sees it.
+                RhinoApp.SetFocusToMainWindow();
                 RhinoEtoApp.MainWindow?.Focus();
             }
             catch (Exception e)
