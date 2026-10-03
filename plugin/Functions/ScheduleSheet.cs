@@ -39,6 +39,8 @@ public partial class RhinoMCPFunctions
         public string Who;
         public string Name;
         public double Area;
+        /// <summary>forsk:level. Empty when the marker does not carry one.</summary>
+        public string Level;
         public List<Point3d> Ring;
         public List<RoomDetect.Pt> Outline;
         public RoomDetect.Pt Inside;
@@ -65,7 +67,8 @@ public partial class RhinoMCPFunctions
             var room = new PlanRoom
             {
                 RoomId = roomId ?? "",
-                Who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString()
+                Who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString(),
+                Level = obj.Attributes?.GetUserString("forsk:level")
             };
             rooms.Add(room);
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));

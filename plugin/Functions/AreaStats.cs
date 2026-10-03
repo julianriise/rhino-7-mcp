@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
+using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Area statistics for the Analyser. Each room brings the net area the plan
 /// tag and the Romliste already store (mm²). This sums those figures per
-/// floor, per use and for the model. It does not measure an outline again.
-/// The use is a small name map; a caller may set one. Pure, no Rhino document.
+/// floor, per use and for the model. It does not measure a room outline again.
+/// The use is a small name map; a caller may set one.
+/// BRA and BTA, when asked, come from the outer face of the outer walls
+/// (the wall record's outer loop, the same ring the floor slab is extruded
+/// from) inset by that floor's wall thickness. Inner walls stay inside BRA.
+/// A figure that cannot be derived is left out, with one reason. Pure, no Rhino document.
 /// </summary>
 public static class AreaStats
 {
@@ -74,8 +80,28 @@ public static class AreaStats
         public List<Group> Floors = new List<Group>();
         /// <summary>By use, largest area first.</summary>
         public List<Group> Uses = new List<Group>();
+        /// <summary>Set by ApplyGross. Null until then, so a net-only summary stays as it was.</summary>
+        public List<FloorGross> Gross;
         public double NetMm2;
         public string Summary;
+    }
+
+    /// <summary>BRA and BTA for one floor, or a note and neither figure.</summary>
+    public sealed class FloorGross
+    {
+        public string Level;
+        public double? BraMm2;
+        public double? BtaMm2;
+        /// <summary>Why both were left out. Null when both are set.</summary>
+        public string Note;
+    }
+
+    /// <summary>One wall record: forsk:path rings (outer, then holes) and forsk:thickness.</summary>
+    public sealed class Wall
+    {
+        public string Level;
+        public double? ThicknessMm;
+        public List<List<Pt>> Rings;
     }
 
     /// <summary>
@@ -152,7 +178,7 @@ public static class AreaStats
         for (var i = 0; i < floors.Length; i++)
         {
             var floor = result.Floors[i];
-            floors[i] = "Floor " + floor.Key + ": " + OpeningTypes.AreaText(floor.AreaMm2);
+            floors[i] = "Floor " + floor.Key + ": " + OpeningTypes.AreaText(floor.AreaMm2) + GrossClause(result, floor.Key);
         }
         var uses = new string[result.Uses.Count];
         for (var i = 0; i < uses.Length; i++)
@@ -167,6 +193,333 @@ public static class AreaStats
         var more = result.Rooms.Count - shown;
         if (more > 0) text += ", +" + more.ToString(CultureInfo.InvariantCulture) + " more";
         return text + ".";
+    }
+
+    static string GrossClause(Result result, string level)
+    {
+        if (result.Gross == null) return "";
+        FloorGross gross = null;
+        foreach (var row in result.Gross)
+            if (row.Level == level) gross = row;
+        if (gross == null) return "";
+        if (gross.BraMm2.HasValue && gross.BtaMm2.HasValue)
+            return ", BRA " + OpeningTypes.AreaText(gross.BraMm2.Value) + ", BTA " + OpeningTypes.AreaText(gross.BtaMm2.Value);
+        return string.IsNullOrEmpty(gross.Note) ? "" : " (" + gross.Note + ")";
+    }
+
+    /// <summary>
+    /// BTA is the area of the outer face. BRA is that ring inset by the wall
+    /// thickness, so the inner walls stay inside it. False leaves both unset
+    /// and says why.
+    /// </summary>
+    public static bool TryEnvelope(IList<Pt> outer, double thicknessMm, out double btaMm2, out double braMm2, out string reason)
+    {
+        btaMm2 = 0;
+        braMm2 = 0;
+        reason = null;
+        var ring = Clean(outer);
+        if (ring == null)
+        {
+            reason = "the wall outline is missing";
+            return false;
+        }
+        if (!(thicknessMm > 0) || double.IsNaN(thicknessMm))
+        {
+            reason = "wall thickness is missing";
+            return false;
+        }
+        var area = RoomDetect.Area(ring);
+        if (Math.Abs(area) < 1)
+        {
+            reason = "the wall outline has no area";
+            return false;
+        }
+        if (area < 0) ring.Reverse();
+        btaMm2 = Math.Abs(RoomDetect.Area(ring));
+        if (!TryInset(ring, thicknessMm, out var inset, out reason))
+        {
+            btaMm2 = 0;
+            return false;
+        }
+        braMm2 = Math.Abs(RoomDetect.Area(inset));
+        var collapsed = braMm2 <= 1;
+        var grew = braMm2 >= btaMm2 - 1;
+        if (collapsed || grew)
+        {
+            btaMm2 = 0;
+            braMm2 = 0;
+            reason = collapsed ? "the walls are thicker than the outline" : "the wall outline does not inset cleanly";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// BRA and BTA for each floor that has rooms, from that floor's wall
+    /// records. One thickness for the floor. Several outlines are summed.
+    /// A floor that cannot be derived keeps the note and neither figure.
+    /// </summary>
+    public static void ApplyGross(Result result, IList<Wall> walls, double tol)
+    {
+        if (result == null) return;
+        result.Gross = new List<FloorGross>();
+        if (result.Rooms.Count == 0) return;
+        var byLevel = new Dictionary<string, List<Wall>>(StringComparer.Ordinal);
+        if (walls != null)
+        {
+            foreach (var wall in walls)
+            {
+                if (wall?.Rings == null || wall.Rings.Count == 0 || wall.Rings[0] == null || wall.Rings[0].Count < 3) continue;
+                var level = string.IsNullOrWhiteSpace(wall.Level) ? "0" : wall.Level.Trim();
+                if (!byLevel.TryGetValue(level, out var list))
+                {
+                    list = new List<Wall>();
+                    byLevel[level] = list;
+                }
+                list.Add(wall);
+            }
+        }
+        foreach (var floor in result.Floors)
+        {
+            var gross = new FloorGross { Level = floor.Key };
+            result.Gross.Add(gross);
+            if (!byLevel.TryGetValue(floor.Key, out var levelWalls))
+            {
+                gross.Note = "no wall outline on this floor";
+                continue;
+            }
+            if (!OneThickness(levelWalls, tol, out var thickness, out var why))
+            {
+                gross.Note = why;
+                continue;
+            }
+            var records = new List<List<List<Pt>>>();
+            foreach (var wall in levelWalls) records.Add(wall.Rings);
+            var outlines = WallJoins.Outlines(records, tol <= 0 ? 1 : tol);
+            if (outlines == null || outlines.Count == 0)
+            {
+                gross.Note = "no wall outline on this floor";
+                continue;
+            }
+            double bra = 0, bta = 0;
+            string reason = null;
+            foreach (var outline in outlines)
+            {
+                if (!TryEnvelope(outline, thickness, out var oneBta, out var oneBra, out reason)) break;
+                bra += oneBra;
+                bta += oneBta;
+            }
+            if (reason != null)
+            {
+                gross.Note = reason;
+                continue;
+            }
+            gross.BraMm2 = bra;
+            gross.BtaMm2 = bta;
+        }
+        result.Summary = Summarize(result);
+    }
+
+    /// <summary>Compact JSON for the chat: printed areas, no ids and no coordinates. message is the summary.</summary>
+    public static JObject ToJson(Result result)
+    {
+        var floors = new JArray();
+        var uses = new JArray();
+        var rooms = new JArray();
+        var omitted = new JArray();
+        if (result != null)
+        {
+            foreach (var floor in result.Floors)
+            {
+                var row = new JObject
+                {
+                    ["level"] = floor.Key,
+                    ["net"] = OpeningTypes.AreaText(floor.AreaMm2),
+                    ["rooms"] = floor.Count
+                };
+                FloorGross gross = null;
+                if (result.Gross != null)
+                    foreach (var item in result.Gross)
+                        if (item.Level == floor.Key) gross = item;
+                if (gross != null)
+                {
+                    if (gross.BraMm2.HasValue) row["bra"] = OpeningTypes.AreaText(gross.BraMm2.Value);
+                    if (gross.BtaMm2.HasValue) row["bta"] = OpeningTypes.AreaText(gross.BtaMm2.Value);
+                    if (!string.IsNullOrEmpty(gross.Note))
+                    {
+                        row["note"] = gross.Note;
+                        omitted.Add("Floor " + floor.Key + ": " + gross.Note);
+                    }
+                }
+                floors.Add(row);
+            }
+            foreach (var use in result.Uses)
+                uses.Add(new JObject { ["use"] = use.Key, ["area"] = OpeningTypes.AreaText(use.AreaMm2), ["rooms"] = use.Count });
+            foreach (var room in result.Rooms)
+                rooms.Add(new JObject
+                {
+                    ["name"] = room.Name,
+                    ["level"] = room.Level,
+                    ["use"] = room.Use,
+                    ["area"] = OpeningTypes.AreaText(room.AreaMm2)
+                });
+        }
+        return new JObject
+        {
+            ["summary"] = result?.Summary ?? "",
+            ["message"] = result?.Summary ?? "",
+            ["floors"] = floors,
+            ["uses"] = uses,
+            ["rooms"] = rooms,
+            ["more"] = Math.Max(0, (result?.Rooms.Count ?? 0) - SummaryRooms),
+            ["omitted"] = omitted
+        };
+    }
+
+    static bool OneThickness(List<Wall> walls, double tol, out double thickness, out string why)
+    {
+        thickness = 0;
+        why = null;
+        var limit = Math.Max(tol, 1);
+        var seen = false;
+        foreach (var wall in walls)
+        {
+            if (!wall.ThicknessMm.HasValue || !(wall.ThicknessMm.Value > 0) || double.IsNaN(wall.ThicknessMm.Value))
+            {
+                why = "wall thickness is missing";
+                return false;
+            }
+            if (!seen)
+            {
+                thickness = wall.ThicknessMm.Value;
+                seen = true;
+                continue;
+            }
+            if (Math.Abs(thickness - wall.ThicknessMm.Value) > limit)
+            {
+                why = "the outer walls do not share one thickness";
+                return false;
+            }
+        }
+        if (!seen)
+        {
+            why = "no wall outline on this floor";
+            return false;
+        }
+        return true;
+    }
+
+    static bool TryInset(List<Pt> ring, double thickness, out List<Pt> inset, out string reason)
+    {
+        inset = new List<Pt>(ring.Count);
+        reason = null;
+        var n = ring.Count;
+        for (var i = 0; i < n; i++)
+        {
+            var prev = ring[(i + n - 1) % n];
+            var at = ring[i];
+            var next = ring[(i + 1) % n];
+            var din = Sub(at, prev);
+            var dout = Sub(next, at);
+            if (Len(din) < 1e-6 || Len(dout) < 1e-6)
+            {
+                reason = "the wall outline does not inset cleanly";
+                return false;
+            }
+            var p = Add(prev, Mul(Left(din), thickness));
+            var q = Add(at, Mul(Left(dout), thickness));
+            if (!TryMeet(p, din, q, dout, out var meet))
+            {
+                if (Dot(din, dout) <= 0)
+                {
+                    reason = "the wall outline does not inset cleanly";
+                    return false;
+                }
+                meet = Add(at, Mul(Left(dout), thickness));
+            }
+            inset.Add(meet);
+        }
+        inset = Clean(inset);
+        if (inset == null)
+        {
+            reason = "the walls are thicker than the outline";
+            return false;
+        }
+        if (Crosses(inset))
+        {
+            reason = "the wall outline does not inset cleanly";
+            return false;
+        }
+        return true;
+    }
+
+    static bool TryMeet(Pt p, Pt d, Pt q, Pt e, out Pt at)
+    {
+        var den = Cross(d, e);
+        var scale = Len(d) * Len(e);
+        if (Math.Abs(den) <= 1e-9 * Math.Max(scale, 1))
+        {
+            at = default;
+            return false;
+        }
+        var t = Cross(Sub(q, p), e) / den;
+        at = new Pt(p.X + t * d.X, p.Y + t * d.Y);
+        return true;
+    }
+
+    static bool Crosses(List<Pt> ring)
+    {
+        var n = ring.Count;
+        for (var i = 0; i < n; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % n];
+            for (var j = i + 1; j < n; j++)
+            {
+                if (j == i || j == (i + 1) % n || i == (j + 1) % n) continue;
+                if (i == 0 && j == n - 1) continue;
+                var c = ring[j];
+                var d = ring[(j + 1) % n];
+                if (ProperCross(a, b, c, d)) return true;
+            }
+        }
+        return false;
+    }
+
+    static bool ProperCross(Pt a, Pt b, Pt c, Pt d)
+    {
+        var d1 = Cross(Sub(b, a), Sub(c, a));
+        var d2 = Cross(Sub(b, a), Sub(d, a));
+        var d3 = Cross(Sub(d, c), Sub(a, c));
+        var d4 = Cross(Sub(d, c), Sub(b, c));
+        return d1 * d2 < 0 && d3 * d4 < 0;
+    }
+
+    static List<Pt> Clean(IList<Pt> ring)
+    {
+        if (ring == null) return null;
+        var clean = new List<Pt>();
+        foreach (var p in ring)
+        {
+            if (clean.Count > 0 && Dist2(clean[clean.Count - 1], p) < 0.01) continue;
+            clean.Add(p);
+        }
+        if (clean.Count > 1 && Dist2(clean[0], clean[clean.Count - 1]) < 0.01) clean.RemoveAt(clean.Count - 1);
+        return clean.Count >= 3 ? clean : null;
+    }
+
+    static Pt Sub(Pt a, Pt b) => new Pt(a.X - b.X, a.Y - b.Y);
+    static Pt Add(Pt a, Pt b) => new Pt(a.X + b.X, a.Y + b.Y);
+    static Pt Mul(Pt a, double k) => new Pt(a.X * k, a.Y * k);
+    static double Dot(Pt a, Pt b) => a.X * b.X + a.Y * b.Y;
+    static double Cross(Pt a, Pt b) => a.X * b.Y - a.Y * b.X;
+    static double Len(Pt a) => Math.Sqrt(a.X * a.X + a.Y * a.Y);
+    static double Dist2(Pt a, Pt b) => (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y);
+
+    static Pt Left(Pt d)
+    {
+        var len = Len(d);
+        return new Pt(-d.Y / len, d.X / len);
     }
 
     static int BySize(RoomLine a, RoomLine b)

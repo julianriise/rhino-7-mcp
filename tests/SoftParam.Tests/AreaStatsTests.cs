@@ -1,3 +1,4 @@
+using RhinoMCPPlugin.Forsk;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 
@@ -130,6 +131,133 @@ public class AreaStatsTests
         Assert.DoesNotContain("Rom 1 ", result.Summary);
         Assert.EndsWith(", +1 more.", result.Summary);
         Assert.Equal(8, AreaStats.SummaryRooms);
+    }
+
+    [Fact]
+    public void Envelope_OfARectangle_IsTheOuterFace_AndTheInnerFace()
+    {
+        // 10 m by 8 m outside, walls 200 mm. BTA is the outer face. BRA is inset by the thickness.
+        var ring = Rect(0, 0, 10000, 8000);
+        Assert.True(AreaStats.TryEnvelope(ring, 200, out var bta, out var bra, out var reason), reason);
+        Assert.Equal(80_000_000, bta, 1);
+        Assert.Equal(9_600.0 * 7_600.0, bra, 1);
+        Assert.Equal("80,0 m²", OpeningTypes.AreaText(bta));
+        Assert.Equal("73,0 m²", OpeningTypes.AreaText(bra));
+
+        // The same ring walked clockwise, or closed by repeating the first point, is the same pair.
+        ring.Reverse();
+        Assert.True(AreaStats.TryEnvelope(ring, 200, out var btaCw, out var braCw, out reason), reason);
+        Assert.Equal(bta, btaCw, 1);
+        Assert.Equal(bra, braCw, 1);
+        ring.Add(ring[0]);
+        Assert.True(AreaStats.TryEnvelope(ring, 200, out var btaClosed, out var braClosed, out reason), reason);
+        Assert.Equal(bta, btaClosed, 1);
+        Assert.Equal(bra, braClosed, 1);
+    }
+
+    [Fact]
+    public void Envelope_OfAnL_InsetsTheOuterFace_IncludingTheNotch()
+    {
+        var ring = new List<RoomDetect.Pt>
+        {
+            new RoomDetect.Pt(0, 0),
+            new RoomDetect.Pt(10000, 0),
+            new RoomDetect.Pt(10000, 4000),
+            new RoomDetect.Pt(6000, 4000),
+            new RoomDetect.Pt(6000, 8000),
+            new RoomDetect.Pt(0, 8000)
+        };
+        Assert.True(AreaStats.TryEnvelope(ring, 200, out var bta, out var bra, out var reason), reason);
+        Assert.Equal(64_000_000, bta, 1);
+        Assert.Equal(56_960_000, bra, 1);
+        Assert.Equal("64,0 m²", OpeningTypes.AreaText(bta));
+        Assert.Equal("57,0 m²", OpeningTypes.AreaText(bra));
+    }
+
+    [Fact]
+    public void Envelope_LeavesTheFigureOut_WhenItCannotBeDerived()
+    {
+        var ring = Rect(0, 0, 10000, 8000);
+        Assert.False(AreaStats.TryEnvelope(ring, 0, out _, out _, out var reason));
+        Assert.Equal("wall thickness is missing", reason);
+        Assert.False(AreaStats.TryEnvelope(null, 200, out _, out _, out reason));
+        Assert.Equal("the wall outline is missing", reason);
+        Assert.False(AreaStats.TryEnvelope(ring, 5000, out _, out _, out reason));
+        Assert.Equal("the walls are thicker than the outline", reason);
+    }
+
+    [Fact]
+    public void Gross_SumsSeparateOutlines_AndOmitsAFloorItCannotRead()
+    {
+        var result = AreaStats.Compute(new[]
+        {
+            Room("a", "Stue", "0", 10_000_000),
+            Room("b", "Soverom", "1", 8_000_000)
+        });
+        AreaStats.ApplyGross(result, new[]
+        {
+            Wall("0", 200, Rect(0, 0, 10000, 8000)),
+            Wall("0", 200, Rect(20000, 0, 24000, 3000))
+        }, 1);
+        var ground = result.Gross.Single(g => g.Level == "0");
+        Assert.Null(ground.Note);
+        Assert.Equal(80_000_000 + 12_000_000, ground.BtaMm2.Value, 1);
+        Assert.Equal(9_600.0 * 7_600.0 + 3_600.0 * 2_600.0, ground.BraMm2.Value, 1);
+        Assert.Equal("no wall outline on this floor", result.Gross.Single(g => g.Level == "1").Note);
+        Assert.Contains("BRA 82,3 m², BTA 92,0 m²", result.Summary);
+        Assert.Contains("Floor 1: 8,0 m² (no wall outline on this floor)", result.Summary);
+
+        var mixed = AreaStats.Compute(new[] { Room("a", "Stue", "0", 10_000_000) });
+        AreaStats.ApplyGross(mixed, new[]
+        {
+            Wall("0", 200, Rect(0, 0, 10000, 8000)),
+            Wall("0", 300, Rect(0, 0, 10000, 8000))
+        }, 1);
+        Assert.Equal("the outer walls do not share one thickness", mixed.Gross.Single().Note);
+        Assert.Null(mixed.Gross.Single().BraMm2);
+        Assert.DoesNotContain("BRA", mixed.Summary);
+
+        var json = AreaStats.ToJson(result);
+        Assert.Equal(result.Summary, json["message"]!.ToString());
+        Assert.Equal("82,3 m²", json["floors"]![0]!["bra"]!.ToString());
+        Assert.Equal("92,0 m²", json["floors"]![0]!["bta"]!.ToString());
+        Assert.Equal("no wall outline on this floor", json["floors"]![1]!["note"]!.ToString());
+        var text = json.ToString();
+        Assert.DoesNotContain("\"id\"", text);
+        Assert.DoesNotContain("\"x\"", text);
+        Assert.DoesNotContain("\"y\"", text);
+    }
+
+    [Fact]
+    public void AreaStats_IsListed_WithADescriptionThatDoesNotGuess()
+    {
+        var tool = ForskToolPacks.Catalog["area_stats"];
+        var description = tool["function"]!["description"]!.ToString();
+        Assert.Contains("Romliste", description);
+        Assert.Contains("BRA", description);
+        Assert.Contains("rooms_detect", description);
+        Assert.Contains("Read only", description);
+    }
+
+    static AreaStats.Wall Wall(string level, double thickness, List<RoomDetect.Pt> outer)
+    {
+        return new AreaStats.Wall
+        {
+            Level = level,
+            ThicknessMm = thickness,
+            Rings = new List<List<RoomDetect.Pt>> { outer }
+        };
+    }
+
+    static List<RoomDetect.Pt> Rect(double x0, double y0, double x1, double y1)
+    {
+        return new List<RoomDetect.Pt>
+        {
+            new RoomDetect.Pt(x0, y0),
+            new RoomDetect.Pt(x1, y0),
+            new RoomDetect.Pt(x1, y1),
+            new RoomDetect.Pt(x0, y1)
+        };
     }
 
     static AreaStats.Room Room(string id, string name, string level, double areaMm2, string use = null)
