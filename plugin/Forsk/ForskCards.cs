@@ -43,7 +43,7 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskCards
     {
         public const int MaxPages = 24;
-        static readonly string[] MetaKeys = { "project", "client", "address" };
+        static readonly string[] MetaKeys = { "project", "client", "address", "revision" };
 
         /// <summary>The card a registry card action opens, or null for help, the bridge, and an action that is not a card.</summary>
         public static CardSpec For(string actionId, FileFacts f)

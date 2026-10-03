@@ -1235,9 +1235,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var message = result?["message"]?.ToString() ?? "";
             var blankAt = message.IndexOf("Blank preview:", StringComparison.Ordinal);
             var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
-            if (string.IsNullOrWhiteSpace(count))
-                return "Print PDF · ok · " + written + blank;
-            return "Print PDF · ok · " + count + " · " + written + blank;
+            return ForskReceipt.PrintLine(count, written, StoredMeta("revision"), blank);
         }
 
         static void Report(Action<string> progress, string status)
@@ -1324,6 +1322,18 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 if (any) meta = obj;
             }));
             return meta;
+        }
+
+        /// <summary>A title block value stored on the document, or null.</summary>
+        static string StoredMeta(string key)
+        {
+            string value = null;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                var doc = RhinoDoc.ActiveDoc;
+                if (doc != null) value = doc.Strings.GetValue(MetaSection, key);
+            }));
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
         static string DefaultFileName()

@@ -159,6 +159,7 @@ public partial class RhinoMCPFunctions
         MaybeStoreMeta(doc, parameters, "project");
         MaybeStoreMeta(doc, parameters, "client");
         MaybeStoreMeta(doc, parameters, "address");
+        MaybeStoreMeta(doc, parameters, "revision");
         MaybeStoreMeta(doc, parameters, "date");
         MaybeStoreMeta(doc, parameters, "scale_label");
         return ProjectMetaRecord(doc);
@@ -318,7 +319,7 @@ public partial class RhinoMCPFunctions
             // The footer reads the scale the detail recorded, not the request.
             var pageScale = scaleLocked ? DetailModelScale(page) : 0;
             var footer = new JObject();
-            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, pageScale, viewTitle, plan, footer);
+            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, pageScale, viewTitle, footer);
             var pageRecord = new JObject
             {
                 ["view"] = spec.View,
@@ -488,7 +489,7 @@ public partial class RhinoMCPFunctions
                 : title;
             var sheetNo = SheetSet.Number(SchedulesView, 0, i);
             var footer = new JObject();
-            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, 0, pageTitle, false, footer);
+            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, 0, pageTitle, footer);
             DrawSchedules(doc, page, stableId, blocks.Where(b => b.Page == i).ToList(), ids);
             RememberSchedules(doc, page, kinds, stableId);
             records.Add(new JObject
@@ -1463,6 +1464,7 @@ public partial class RhinoMCPFunctions
             ["project"] = MetaOrEmpty(doc, "project"),
             ["client"] = MetaOrEmpty(doc, "client"),
             ["address"] = MetaOrEmpty(doc, "address"),
+            ["revision"] = MetaOrEmpty(doc, "revision"),
             ["date"] = MetaOr(doc, "date", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
             ["scale_label"] = MetaOr(doc, "scale_label", "1:100")
         };
@@ -2681,7 +2683,7 @@ public partial class RhinoMCPFunctions
     /// </summary>
     private JArray AddSheetFooter(
         RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string sheetNo, int pageScale,
-        string viewTitle, bool northArrow, JObject footer)
+        string viewTitle, JObject footer)
     {
         var ids = new JArray();
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
@@ -2716,20 +2718,22 @@ public partial class RhinoMCPFunctions
         var ty0 = LayoutMarginMm;
         var ty1 = LayoutMarginMm + FooterBandMm;
         var meta = ProjectMetaRecord(doc);
-        var cells = OpeningTypes.TitleCells(new[]
+        var cells = TitleBlock.Cells(new TitleBlock.Fields
         {
-            new KeyValuePair<string, string>("Drawing", viewTitle),
-            new KeyValuePair<string, string>("Scale", pageScale > 0
-                ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture)
-                : ""),
-            new KeyValuePair<string, string>("Sheet", "A3"),
+            Drawing = viewTitle,
+            Number = sheetNo,
+            Scale = pageScale > 0 ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture) : "",
+            Format = "A3",
             // The day the sheet is printed. A date stored on the file is not used.
-            new KeyValuePair<string, string>("Date", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-            new KeyValuePair<string, string>("Project", meta["project"]?.ToString()),
-            new KeyValuePair<string, string>("Client", meta["client"]?.ToString()),
-            new KeyValuePair<string, string>("Address", meta["address"]?.ToString())
+            Date = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            Revision = meta["revision"]?.ToString(),
+            Project = meta["project"]?.ToString(),
+            Client = meta["client"]?.ToString(),
+            Address = meta["address"]?.ToString()
         });
-        var widths = OpeningTypes.TitleCellWidths(cells, TitleBlockWidthMm);
+        // Widths from Rhino's own layout of each text at its height, not a glyph guess.
+        var widths = TitleBlock.Widths(cells, TitleBlockWidthMm, (text, mm) => PaperTextWidth(doc,
+            OneToOneTextStyle(doc, "Forsk paper " + mm.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, mm)), text));
         var titleStart = ids.Count;
         var frameId = Rect(tx0, ty0, tx1, ty1, Attr("title_block"));
         var cellRows = new JArray();
@@ -2738,14 +2742,15 @@ public partial class RhinoMCPFunctions
         {
             if (i > 0)
                 Line(cx, ty0, cx, ty1, Attr("title_block"));
+            // forsk:cell is the English key the smokes read; the caption is Norwegian.
             var captionAttr = Attr("title_cell");
-            captionAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
-            Text(cells[i].Key, cx + 2.0, ty1 - 2.0 - 1.8, 1.8, TextHorizontalAlignment.Left, captionAttr);
+            captionAttr.SetUserString("forsk:cell", cells[i].Key);
+            Text(cells[i].Caption, cx + TitleBlock.PadMm, ty1 - 2.0 - TitleBlock.CaptionMm, TitleBlock.CaptionMm,
+                TextHorizontalAlignment.Left, captionAttr);
             var valueAttr = Attr("title_cell");
-            valueAttr.SetUserString("forsk:cell", cells[i].Key.ToLowerInvariant());
-            var valueHeight = i == 0 ? 3.5 : FooterTextMm;
-            Text(cells[i].Value, cx + 2.0, ty0 + 4.0, valueHeight, TextHorizontalAlignment.Left, valueAttr);
-            cellRows.Add(new JObject { ["name"] = cells[i].Key.ToLowerInvariant(), ["text"] = cells[i].Value });
+            valueAttr.SetUserString("forsk:cell", cells[i].Key);
+            Text(cells[i].Value, cx + TitleBlock.PadMm, ty0 + 4.0, cells[i].Mm, TextHorizontalAlignment.Left, valueAttr);
+            cellRows.Add(new JObject { ["name"] = cells[i].Key, ["caption"] = cells[i].Caption, ["text"] = cells[i].Value });
             cx += widths[i];
         }
         var titleBox = PaperBox(doc, new[] { frameId });
@@ -2759,7 +2764,7 @@ public partial class RhinoMCPFunctions
 
         // North arrow: far left of the band, arrow plus letter centred on it,
         // NorthArrowMm tall in paper mm whatever the plan scale.
-        if (northArrow)
+        if (TitleBlock.NorthArrow(spec.View))
         {
             const double head = 3.2;
             const double letterGap = 1.0;
@@ -2778,7 +2783,7 @@ public partial class RhinoMCPFunctions
         }
 
         // Scale bar: between the arrow and the title block, at the page scale.
-        if (pageScale > 0)
+        if (TitleBlock.ScaleBar(spec.View, pageScale))
         {
             var meters = OpeningTypes.ScaleBarMeters(pageScale);
             var length = OpeningTypes.ScaleBarPaperMm(meters, pageScale);

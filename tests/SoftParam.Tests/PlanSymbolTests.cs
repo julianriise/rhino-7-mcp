@@ -377,25 +377,6 @@ public class PlanSymbolTests
         Assert.Equal(meters + " m", OpeningTypes.ScaleBarLabel(meters));
     }
 
-    [Fact]
-    public void TitleCells_DropEmptyAndSplitTheWidth()
-    {
-        var cells = OpeningTypes.TitleCells(new[]
-        {
-            new System.Collections.Generic.KeyValuePair<string, string>("Drawing", "Plan 1. etg"),
-            new System.Collections.Generic.KeyValuePair<string, string>("Scale", "1:50"),
-            new System.Collections.Generic.KeyValuePair<string, string>("Project", ""),
-            new System.Collections.Generic.KeyValuePair<string, string>("Client", "—"),
-            new System.Collections.Generic.KeyValuePair<string, string>("Address", "  "),
-            new System.Collections.Generic.KeyValuePair<string, string>("Date", "2026-09-27")
-        });
-        Assert.Equal(new[] { "Drawing", "Scale", "Date" }, cells.Select(c => c.Key).ToArray());
-        var widths = OpeningTypes.TitleCellWidths(cells, 280);
-        Assert.Equal(280, widths.Sum(), 6);
-        Assert.True(widths[0] > widths[1]);
-        Assert.Empty(OpeningTypes.TitleCellWidths(new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>(), 280));
-    }
-
     static void AssertSills(System.Collections.Generic.List<OpeningTypes.PlanMark> marks, OpeningTypes.PlanFrame frame)
     {
         var sills = marks.Where(m => m.Part == "sill").ToList();

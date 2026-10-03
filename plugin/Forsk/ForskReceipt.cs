@@ -70,6 +70,14 @@ namespace RhinoMCPPlugin.Forsk
             return new ForskReceipt { Ok = ok, Subject = StepLabel(parts[0].Trim()), Text = text.Trim() };
         }
 
+        /// <summary>Print PDF's line: the page count, the file, the revision when one is set, then any blank-page clause.</summary>
+        public static string PrintLine(string count, string written, string revision, string blank)
+        {
+            var rev = string.IsNullOrWhiteSpace(revision) ? "" : " · Rev. " + revision.Trim();
+            var pages = string.IsNullOrWhiteSpace(count) ? "" : count + " · ";
+            return "Print PDF · ok · " + pages + written + rev + (blank ?? "");
+        }
+
         /// <summary>The label a step shows when its message names no object.</summary>
         public static string StepLabel(string tool)
         {

@@ -116,6 +116,15 @@ public class ForskCoreTests
     }
 
     [Fact]
+    public void ThePrintLine_NamesASetRevision()
+    {
+        Assert.Equal("Print PDF · ok · 7 · /Users/jr/Desktop/Holmen.pdf",
+            ForskReceipt.PrintLine("7", "/Users/jr/Desktop/Holmen.pdf", null, ""));
+        Assert.Equal("Print PDF · ok · 7 · /Users/jr/Desktop/Holmen.pdf · Rev. B",
+            ForskReceipt.PrintLine("7", "/Users/jr/Desktop/Holmen.pdf", " B ", ""));
+    }
+
+    [Fact]
     public void TheViewModel_CarriesTheThreadTheBarAndTheStatus()
     {
         var thread = new DocThread { Serial = 9, File = "holmen.3dm" };

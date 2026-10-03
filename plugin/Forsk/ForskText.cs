@@ -143,6 +143,7 @@ namespace RhinoMCPPlugin.Forsk
             ["meta.project"] = "Project",
             ["meta.client"] = "Client",
             ["meta.address"] = "Address",
+            ["meta.revision"] = "Rev.",
             ["print.one.ask"] = "Which sheet?",
             ["sheet.section"] = "Section {letter}",
             ["print.clear.ask"] = "Clear the Forsk layouts and their drawings? The model stays.",

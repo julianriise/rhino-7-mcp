@@ -480,40 +480,6 @@ public static class OpeningTypes
         return meters.ToString(CultureInfo.InvariantCulture) + " m";
     }
 
-    /// <summary>Title block cells in order, blank values dropped.</summary>
-    public static List<KeyValuePair<string, string>> TitleCells(IEnumerable<KeyValuePair<string, string>> fields)
-    {
-        var cells = new List<KeyValuePair<string, string>>();
-        if (fields == null) return cells;
-        foreach (var field in fields)
-        {
-            var value = field.Value?.Trim();
-            if (string.IsNullOrEmpty(value) || value == "—" || value == "-") continue;
-            cells.Add(new KeyValuePair<string, string>(field.Key, value));
-        }
-        return cells;
-    }
-
-    /// <summary>
-    /// Cell widths that sum to <paramref name="total"/>, in proportion to
-    /// the longer of caption and value (at least 6 characters).
-    /// </summary>
-    public static double[] TitleCellWidths(IList<KeyValuePair<string, string>> cells, double total)
-    {
-        if (cells == null || cells.Count == 0 || total <= 0) return new double[0];
-        var widths = new double[cells.Count];
-        var sum = 0.0;
-        for (var i = 0; i < cells.Count; i++)
-        {
-            var chars = Math.Max(cells[i].Key?.Length ?? 0, cells[i].Value?.Length ?? 0);
-            widths[i] = Math.Max(6, chars);
-            sum += widths[i];
-        }
-        for (var i = 0; i < widths.Length; i++)
-            widths[i] = total * widths[i] / sum;
-        return widths;
-    }
-
     /// <summary>
     /// Printed height in paper mm of model text seen through a 1:scale
     /// detail. Layout-space annotation scaling draws the text at its own

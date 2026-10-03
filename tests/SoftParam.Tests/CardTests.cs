@@ -71,19 +71,22 @@ public class CardTests
     }
 
     [Fact]
-    public void TheTitleBlock_HasProjectClientAndAddress_AndIgnoresStoredDateAndScale()
+    public void TheTitleBlock_HasProjectClientAddressAndRev_AndIgnoresStoredDateAndScale()
     {
         var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
         {
             ["project"] = "Tilbygg Holmen",
             ["client"] = "Holmen",
+            ["revision"] = "B",
             ["date"] = "2020-01-01",
             ["scale_label"] = "1:50"
         }));
         var card = ForskCards.For("meta.title", facts)!;
-        Assert.Equal(new[] { "project", "client", "address" }, card.Fields!.Select(f => f.Key));
+        Assert.Equal(new[] { "project", "client", "address", "revision" }, card.Fields!.Select(f => f.Key));
         Assert.Equal("Tilbygg Holmen", card.Fields![0].Value);
         Assert.Equal("", card.Fields![2].Value);
+        Assert.Equal("Rev.", card.Fields![3].Label);
+        Assert.Equal("B", card.Fields![3].Value);
         Assert.Null(card.Note);
         Assert.Equal("save", card.Pills[0].Id);
     }
@@ -191,7 +194,7 @@ public class CardTests
     {
         var thread = new DocThread();
         var item = thread.AddCard(ForskCards.TitleBlock(Docs.Facts("house"))!, Docs.Facts("house"));
-        Assert.Equal(new[] { "Project", "Client", "Address" }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
+        Assert.Equal(new[] { "Project", "Client", "Address", "Rev." }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
         Assert.Equal("Project", item["fields"]![0]!["label"]!.ToString());
         Assert.Equal("none", item["depends"]!.ToString());
         var review = thread.AddCard(ForskCards.Review(Docs.Facts("scaled, reviewed"))!, null);

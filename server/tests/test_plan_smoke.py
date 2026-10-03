@@ -133,6 +133,22 @@ def test_footer_fails_on_each_broken_rule(page, needle):
     assert any(needle in item for item in failures), failures
 
 
+def test_footer_reads_the_norwegian_title_block_by_its_english_keys():
+    # v3 P3: captions are Norwegian, forsk:cell stays the English key, and a
+    # revision that is not set has no cell at all.
+    cells = [
+        {"name": "drawing", "caption": "Tegning", "text": "Plan 1. etg"},
+        {"name": "number", "caption": "Tegningsnr.", "text": "A-20-001"},
+        {"name": "scale", "caption": "Målestokk", "text": "1:50"},
+        {"name": "sheet", "caption": "Format", "text": "A3"},
+        {"name": "date", "caption": "Dato", "text": "2026-10-03"},
+        {"name": "project", "caption": "Prosjekt", "text": "Holmen"},
+    ]
+    failures = []
+    plan_smoke.check_footer(_footer_page(cells=cells), "sheet", failures)
+    assert failures == []
+
+
 def test_footer_fails_a_tall_title_block():
     page = _footer_page()
     page["footer"]["title_block"].update({"y1": 56, "h": 46, "w": 168, "x0": 242})
