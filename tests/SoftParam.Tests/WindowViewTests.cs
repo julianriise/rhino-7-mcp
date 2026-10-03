@@ -40,12 +40,12 @@ public class WindowViewTests
     }
 
     [Fact]
-    public void ADoorSelected_PrintStaysSlot1_MoveAndResizePrefill_DeleteNotInTheFirstTwo()
+    public void ADoorSelected_PrintStaysSlot1_MovePrefill_ChangeTypeCard_DeleteNotInTheFirstTwo()
     {
         var view = View("house, door selected");
         var slots = (JArray)view["bar"]!["slots"]!;
         Assert.Equal("Print PDF", slots[0]["label"]!.ToString());
-        Assert.Equal(new[] { "prefill", "prefill" }, slots.Skip(1).Select(s => s["runs"]!.ToString()));
+        Assert.Equal(new[] { "prefill", "card" }, slots.Skip(1).Select(s => s["runs"]!.ToString()));
         Assert.DoesNotContain(slots.Take(2), s => s["label"]!.ToString() == "Delete");
     }
 

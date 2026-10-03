@@ -336,9 +336,10 @@ public partial class RhinoMCPFunctions
             && string.IsNullOrWhiteSpace(swingRaw))
             throw new ArgumentException("Specify type, hand, or swing.");
 
+        var all = parameters?["all"]?.Type == JTokenType.Boolean && parameters["all"].Value<bool>();
         var edits = new List<StyleEdit>();
         var seen = new HashSet<Guid>();
-        foreach (var target in ResolveDeleteTargets(parameters))
+        foreach (var target in all ? AllOfTypeKind(doc, parameters, typeRaw) : ResolveDeleteTargets(parameters))
         {
             var marker = ResolveOpeningHandle(target);
             RefuseExistingUnderlay(doc, marker);
@@ -349,15 +350,11 @@ public partial class RhinoMCPFunctions
                 throw new ArgumentException(error);
             ParkPocket(doc, rec.MarkerId, edit, string.IsNullOrWhiteSpace(handRaw));
             var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
-            var label = host.Attributes?.GetUserString("forsk:id");
-            if (string.IsNullOrWhiteSpace(label)) label = host.Attributes?.Name;
-            if (string.IsNullOrWhiteSpace(label)) label = "the wall";
             edits.Add(new StyleEdit
             {
                 Record = rec,
                 Edit = edit,
-                HostId = host.Id,
-                HostLabel = label
+                HostId = host.Id
             });
         }
         if (edits.Count == 0)
@@ -423,7 +420,33 @@ public partial class RhinoMCPFunctions
         public OpeningRecord Record;
         public OpeningTypes.Edit Edit;
         public Guid HostId;
-        public string HostLabel;
+    }
+
+    /// <summary>"all" with a type: every generated, non-existing marker of that type's kind. The selection is not read.</summary>
+    private static List<RhinoObject> AllOfTypeKind(RhinoDoc doc, JObject parameters, string typeRaw)
+    {
+        if (string.IsNullOrWhiteSpace(typeRaw))
+            throw new ArgumentException("all needs a type.");
+        if (!string.IsNullOrWhiteSpace(parameters?["id"]?.ToString()))
+            throw new ArgumentException("Specify id or all, not both.");
+        var byId = new Dictionary<string, RhinoObject>(StringComparer.Ordinal);
+        var markers = new List<OpeningTypes.Marker>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj)) continue;
+            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            var id = obj.Id.ToString();
+            byId[id] = obj;
+            markers.Add(new OpeningTypes.Marker
+            {
+                Id = id,
+                Kind = obj.Attributes.GetUserString("forsk:opening_kind"),
+                Existing = IsExistingUnderlay(doc, obj)
+            });
+        }
+        var ids = OpeningTypes.AllOfKind(typeRaw, markers, out var error);
+        if (ids.Count == 0) throw new InvalidOperationException(error);
+        return ids.Select(id => byId[id]).ToList();
     }
 
     private static OpeningTypes.Record ReadOpeningStyle(RhinoObject marker, OpeningKind kind)
@@ -533,7 +556,6 @@ public partial class RhinoMCPFunctions
             {
                 Kind = item.Edit.After.Kind,
                 ShortName = item.Edit.After.Def.ShortName,
-                Host = item.HostLabel,
                 TypeChanged = item.Edit.TypeChanged,
                 HandChanged = item.Edit.HandChanged,
                 SwingChanged = item.Edit.SwingChanged

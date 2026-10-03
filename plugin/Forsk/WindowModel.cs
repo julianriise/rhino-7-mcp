@@ -13,11 +13,14 @@ namespace RhinoMCPPlugin.Forsk
     {
         public string Id;
         public string Label;
+        /// <summary>An inline page icon drawn before the label (window.html holder icon-{Icon}), or null.</summary>
+        public string Icon;
 
-        public CardPill(string id, string label)
+        public CardPill(string id, string label, string icon = null)
         {
             Id = id;
             Label = label;
+            Icon = icon;
         }
     }
 
@@ -124,7 +127,11 @@ namespace RhinoMCPPlugin.Forsk
         {
             var pills = new JArray();
             foreach (var pill in spec.Pills)
-                pills.Add(new JObject { ["id"] = pill.Id, ["label"] = pill.Label });
+            {
+                var token = new JObject { ["id"] = pill.Id, ["label"] = pill.Label };
+                if (!string.IsNullOrEmpty(pill.Icon)) token["icon"] = pill.Icon;
+                pills.Add(token);
+            }
             var item = new JObject
             {
                 ["role"] = "card",

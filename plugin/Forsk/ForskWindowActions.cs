@@ -330,7 +330,10 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("delete_wall", new JObject { ["side"] = pill.Id }), userText: pill.Label);
                     break;
                 case "opening.type":
-                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", new JObject { ["type"] = pill.Id }), userText: pill.Label);
+                    // The card made with nothing picked changes every opening of the pill's kind.
+                    var typeArgs = new JObject { ["type"] = pill.Id };
+                    if (card["data"]?["all"]?.Value<bool>() == true) typeArgs["all"] = true;
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", typeArgs), userText: pill.Label);
                     break;
                 case "ink.set":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);

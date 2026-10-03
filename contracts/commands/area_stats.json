@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "area_stats.json",
+  "title": "AreaStats Command",
+  "description": "Read only. The tagged rooms as the room list lists them, by floor and use, plus BRA and BTA where the wall records give them. Does not change the model.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

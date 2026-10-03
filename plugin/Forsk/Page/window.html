@@ -134,6 +134,7 @@ header.top {
   background: var(--card); color: var(--ink); box-shadow: var(--shadow); cursor: pointer; white-space: nowrap;
 }
 .pill.primary { background: var(--brand); color: #FFFFFF; box-shadow: none; font-weight: 600; }
+.pill .icon { width: 18px; height: 18px; margin: -4px 6px -4px -4px; vertical-align: middle; }
 .step { position: relative; overflow: hidden; color: var(--meta); font-size: 13px; margin: 0 0 8px; }
 .dots { display: inline-flex; gap: 4px; padding: 4px 0 8px; }
 .dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--meta); opacity: 0.35; animation: blink 1.2s infinite ease-in-out; }
@@ -274,6 +275,15 @@ textarea::placeholder { color: var(--faint); }
     <div id="avatar-analyser">%%AVATAR_ANALYSER%%</div>
     <div id="avatar-support">%%AVATAR_SUPPORT%%</div>
     <div id="avatar-render">%%AVATAR_RENDER%%</div>
+  </div>
+  <div id="icons" hidden>
+    <div id="icon-door.hinged_single"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V4M6 4A12 12 0 0 1 18 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-door.hinged_double"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V10M6 10A6 6 0 0 1 12 16M18 16V10M18 10A6 6 0 0 0 12 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-door.sliding"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14.5h7M11 17.5h7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-door.pocket"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 13.5h4M2 18.5h4M18 16h4M3 16h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-window.fixed"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14h12M6 16h12M6 18h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-window.side_hung"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M6 8A8 8 0 0 1 14 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div id="icon-window.top_hung"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M12 16V10M9.5 10h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
   </div>
 </header>
 <main id="thread" aria-live="polite"></main>
