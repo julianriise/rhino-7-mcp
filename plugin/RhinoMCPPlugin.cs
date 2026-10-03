@@ -1,4 +1,5 @@
 ﻿using Rhino.PlugIns;
+using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin
 {
@@ -26,6 +27,7 @@ namespace RhinoMCPPlugin
             Functions.ForskWhiteHost.Start();
             Functions.ForskChromeHost.Start();
             Functions.ForskWallHatchHost.Start();
+            ForskSupportHttp.RetryOnStartup();
             return LoadReturnCode.Success;
         }
 

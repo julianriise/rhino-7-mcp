@@ -66,6 +66,8 @@
     <Compile Include="..\..\plugin\Forsk\ForskReports.cs" Link="ForskReports.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskSupport.cs" Link="ForskSupport.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReplyEmail.cs" Link="ForskReplyEmail.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskOutbox.cs" Link="ForskOutbox.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskSupportSend.cs" Link="ForskSupportSend.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />
     <Compile Include="..\..\plugin\Functions\ForskWhite.cs" Link="ForskWhite.cs" />
     <Compile Include="..\..\plugin\Functions\ForskChrome.cs" Link="ForskChrome.cs" />
