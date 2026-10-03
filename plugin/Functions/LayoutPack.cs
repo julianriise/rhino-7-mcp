@@ -359,6 +359,7 @@ public partial class RhinoMCPFunctions
                 pageRecord["symbol_arcs"] = drawn.SymbolArcs;
                 pageRecord["symbol_dashed"] = drawn.SymbolDashed;
                 pageRecord["roof_outline"] = drawn.RoofOutline;
+                pageRecord["stairs"] = drawn.Stairs;
                 pageRecord["fit_need"] = Math.Round(fitNeed, 2);
                 // Picked from the ladder, not asked.
                 pageRecord["fitted"] = !asked.HasValue;
