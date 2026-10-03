@@ -192,7 +192,7 @@ public class FileClassifierTests
         // S4: a wall baked one per run is one wall.
         var f = Docs.Facts("house, wall selected");
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, bar.Slots.Select(a => a.Id));
         Assert.Equal("The click selects one wall.", bar.Reason);
     }
 
@@ -232,10 +232,10 @@ public class FileClassifierTests
     }
 
     [Fact]
-    public void ASelectedWallWithNoKey_LeavesTheSlotEmpty_NotAFileLevelAction()
+    public void ASelectedWallWithNoKey_SuggestsDrag_NotAFileLevelAction()
     {
         var bar = ForskRegistry.Bar(Docs.Facts("house, wall selected, no key"));
-        Assert.Equal(new[] { "file.print", "wall.move" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, bar.Slots.Select(a => a.Id));
     }
 
     [Fact]

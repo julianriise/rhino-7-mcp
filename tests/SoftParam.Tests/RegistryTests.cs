@@ -128,36 +128,53 @@ public class RegistryTests
     }
 
     [Fact]
-    public void DragWall_IsOnTheCard_ForOneWall_AndNeverInTheBar()
+    public void DragWall_IsASuggestion_ForOneStraightWall()
     {
         var one = Docs.Facts("house, wall selected");
+        Assert.NotNull(ForskPick.OneRunWall(one.Selected));
         var card = ForskRegistry.Card(one).Actions.Select(a => a.Id).ToList();
         Assert.Contains("wall.drag", card);
         Assert.True(card.IndexOf("wall.move") < card.IndexOf("wall.drag"));
         Assert.True(card.IndexOf("wall.drag") < card.IndexOf("wall.delete"));
-        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
+        Assert.Contains(card, id => id == "opening.add_door");
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
+        foreach (var role in Enum.GetValues(typeof(ForskRole)).Cast<ForskRole>())
+        {
+            var boosted = ForskRegistry.Bar(one, role);
+            Assert.Equal("file.print", boosted.Slot1.Id);
+            Assert.Contains(boosted.Slots, a => a.Id == "wall.drag");
+        }
         Assert.Equal("Drag wall", ForskText.Label("wall.drag"));
         Assert.Equal("Dra vegg", ForskText.Get("wall.drag.nb"));
         Assert.Equal("Drag the wall in the view, or type a distance. Click or Enter places it. Esc cancels.", ForskText.Get("wall.drag.prompt"));
         Assert.Equal("Dra veggen i visningen, eller skriv en avstand. Klikk eller Enter plasserer den. Esc avbryter.", ForskText.Get("wall.drag.prompt.nb"));
         Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("wall.drag"));
-        Assert.Contains(ForskRegistry.Card(Docs.Facts("one whole wall record selected")).Actions, a => a.Id == "wall.drag");
+
+        // A whole record is one object, so the card still offers the command. The bar does not: it is not one straight run.
+        var whole = Docs.Facts("one whole wall record selected");
+        Assert.Null(ForskPick.OneRunWall(whole.Selected));
+        Assert.Contains(ForskRegistry.Card(whole).Actions, a => a.Id == "wall.drag");
+        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, ForskRegistry.Bar(whole).Slots.Select(a => a.Id));
 
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "wall.drag");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, room selected")).Actions, a => a.Id == "wall.drag");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, door selected")).Actions, a => a.Id == "wall.drag");
-        var two = FileClassifier.Read(Docs.Of(Row.Wall(selected: true), Row.Wall(stamp: "w02", selected: true), Row.Floor()));
+        var two = FileClassifier.Read(Docs.Of(Row.Wall(selected: true, run: "the north wall"), Row.Wall(stamp: "w02", selected: true, run: "the east wall"), Row.Floor()));
         Assert.Equal(Picked.Wall, two.Picked);
         Assert.Equal(2, two.PickedCount);
+        Assert.Null(ForskPick.OneRunWall(two.Selected));
         Assert.DoesNotContain(ForskRegistry.Card(two).Actions, a => a.Id == "wall.drag");
+        Assert.DoesNotContain(ForskRegistry.Bar(two).Slots, a => a.Id == "wall.drag");
     }
 
     [Theory]
     [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
-    public void DragWall_IsNeverInTheBar(string name)
+    public void DragWall_IsSuggested_OnlyForOneStraightWall_AndNeverSlot1(string name)
     {
-        Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts(name)).Slots, a => a.Id == "wall.drag");
-        Assert.NotEqual("wall.drag", ForskRegistry.Slot1(Docs.Facts(name)).Id);
+        var facts = Docs.Facts(name);
+        var slots = ForskRegistry.Bar(facts).Slots.Select(a => a.Id).ToList();
+        Assert.NotEqual("wall.drag", ForskRegistry.Slot1(facts).Id);
+        Assert.Equal(ForskPick.OneRunWall(facts.Selected) != null, slots.Contains("wall.drag"));
     }
 
     [Theory]

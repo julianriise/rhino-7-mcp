@@ -247,6 +247,9 @@ namespace RhinoMCPPlugin.Forsk
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");
             if (f.Picked == Picked.Wall) yield return Find("wall.move");
+            // One straight run: Drag wall is the next suggestion, so the bar shows it.
+            // A whole record is not one run, and the bar stays Move, then Add a door.
+            if (ForskPick.OneRunWall(f.Selected) != null) yield return Find("wall.drag");
             if (f.Picked == Picked.Opening) yield return Find("opening.resize");
             if (f.Picked == Picked.Room) yield return Find("daylight.room");
             if (f.Picked == Picked.Room) yield return Find("section.room");
