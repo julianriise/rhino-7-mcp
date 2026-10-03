@@ -1314,7 +1314,7 @@ public partial class RhinoMCPFunctions
         var added = 0;
         if (!dashed)
         {
-            added += AddRibbon(doc, layer, curve, width, ink, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
+            added += AddRibbon(doc, layer, curve, width, paperMm, ink, pattern, tol, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             if (added == 0)
                 added += AddPlainCurve(doc, layer, curve, paperMm, ink, role, part, markerId, openY, dashed, ref box, ref index, ref count, faces);
             return added;
@@ -1342,7 +1342,7 @@ public partial class RhinoMCPFunctions
                     catch (Exception) { piece = null; }
                     if (piece != null)
                     {
-                        var n = AddRibbon(doc, layer, piece, width, ink, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
+                        var n = AddRibbon(doc, layer, piece, width, paperMm, ink, pattern, tol, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         if (n == 0)
                             n = AddPlainCurve(doc, layer, piece, paperMm, ink, role, part, markerId, openY, true, ref box, ref index, ref count, faces);
                         added += n;
@@ -1356,11 +1356,14 @@ public partial class RhinoMCPFunctions
         return added;
     }
 
+    /// <param name="penMm">The pen in paper mm. Every hatch of the ribbon carries it, and the first one kept
+    /// carries the stroke itself, so a DWG export draws the centreline once at that weight.</param>
     private static int AddRibbon(
         RhinoDoc doc,
         Layer layer,
         Curve curve,
         double width,
+        double penMm,
         Color ink,
         int pattern,
         double tol,
@@ -1400,12 +1403,17 @@ public partial class RhinoMCPFunctions
         var pad = Math.Max(half * 3.0, 1.0);
         if (limit.IsValid) limit.Inflate(pad, pad, Math.Max(pad, 1.0));
         var added = 0;
+        var stroke = StrokeText(curve, tol);
+        var stamped = false;
         foreach (var hatch in hatches)
         {
             if (hatch == null) continue;
             var stableId = FormatStableId("d", index);
             var attr = DrawAttr(layer, stableId, role, part, markerId, openY, dashed, ink);
             StampSymbolLine(attr, curve, part, faces);
+            attr.SetUserString(SheetFlat.PenKey, penMm.ToString("0.###", CultureInfo.InvariantCulture));
+            if (!stamped && stroke.Length > 0)
+                attr.SetUserString(SheetFlat.StrokeKey, stroke);
             Guid id;
             try { id = doc.Objects.AddHatch(hatch, attr); }
             catch (Exception) { id = Guid.Empty; }
@@ -1439,12 +1447,49 @@ public partial class RhinoMCPFunctions
                 id = Guid.Empty;
             }
             if (id == Guid.Empty) continue;
+            stamped = true;
             index++;
             count++;
             if (hatchBox.IsValid) box.Union(hatchBox);
             added++;
         }
         return added;
+    }
+
+    /// <summary>
+    /// A stroke's centreline for SheetFlat: lines, arcs, and anything else as
+    /// a polyline within tol. Empty when the curve gives nothing.
+    /// </summary>
+    private static string StrokeText(Curve curve, double tol)
+    {
+        var segs = new List<SheetFlat.Seg>();
+        if (curve == null) return "";
+        var pieces = curve.DuplicateSegments();
+        if (pieces == null || pieces.Length == 0) pieces = new[] { curve.DuplicateCurve() };
+        foreach (var piece in pieces)
+        {
+            if (piece == null) continue;
+            if (piece.TryGetPolyline(out var polyline))
+            {
+                for (var i = 1; i < polyline.Count; i++)
+                    segs.Add(SheetFlat.Seg.Line(polyline[i - 1].X, polyline[i - 1].Y, polyline[i].X, polyline[i].Y));
+            }
+            else if (piece.TryGetArc(out var arc, Math.Max(tol, 0.01)))
+            {
+                var mid = arc.MidPoint;
+                segs.Add(SheetFlat.Seg.ArcOf(arc.StartPoint.X, arc.StartPoint.Y, mid.X, mid.Y, arc.EndPoint.X, arc.EndPoint.Y));
+            }
+            else
+            {
+                var approx = piece.ToPolyline(0, 0, 0.1, 0, 0, Math.Max(tol, 0.01), 0, 0, true);
+                if (approx != null && approx.TryGetPolyline(out var points))
+                    for (var i = 1; i < points.Count; i++)
+                        segs.Add(SheetFlat.Seg.Line(points[i - 1].X, points[i - 1].Y, points[i].X, points[i].Y));
+                approx?.Dispose();
+            }
+            piece.Dispose();
+        }
+        return SheetFlat.Encode(segs);
     }
 
     private static bool BoxHolds(BoundingBox limit, BoundingBox inner)
