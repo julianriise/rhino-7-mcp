@@ -540,7 +540,11 @@ def main() -> int:
                 write_acad_model_units(ACAD_UNITS_MM)
             import_office_dxf(sock, dxf, failures)
             summary = send_command(sock, "get_document_summary", {})
-            print(f"    objects={summary.get('object_count')}")
+            imported = send_command(sock, "get_objects", {
+                "include_geometry": False, "include_hidden": True, "limit": 500,
+            }).get("objects") or []
+            # The hidden forsk-plan-cut clip plane is in object_count. The pin is the import.
+            print(f"    objects={plan_smoke.without_plan_cut(summary.get('object_count'), imported)}")
             assert_import_span(summary)
             for name, expect in OFFICE_SOURCE_LAYERS:
                 got = layer_count(summary, name)
