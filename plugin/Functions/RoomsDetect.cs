@@ -127,7 +127,8 @@ public partial class RhinoMCPFunctions
                 attr.SetUserString(RoomIdKey, roomIds[i]);
                 attr.SetUserString("forsk:id", roomIds[i]);
                 attr.SetUserString("forsk:area", FormatMm(room.Area));
-                var added = doc.Objects.AddCurve(outline, attr);
+                BakePace.Breathe(null);
+                var added = BakePace.AddCurves(doc, new[] { outline }, new[] { attr }, null)[0];
                 if (added == Guid.Empty)
                 {
                     warnings.Add($"Room outline {roomIds[i]} was not added.");
@@ -185,7 +186,7 @@ public partial class RhinoMCPFunctions
             if (roomId.Length > 0 && !suspectRooms.Contains(roomId)) suspectRooms.Add(roomId);
         }
 
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
         var squareMetres = Math.Round(area / 1000000.0, 1, MidpointRounding.AwayFromZero);
         var message = RoomDetect.Message(ids.Count, squareMetres, found.Open, labels);
         if (suspect.Count > 0)
@@ -386,7 +387,7 @@ public partial class RhinoMCPFunctions
             attr.SetUserString(RoomSourceKey, DetectedRoomSource);
             attr.SetUserString(RoomIdKey, tag.Id);
         }
-        doc.Objects.ModifyAttributes(marker.Id, attr, true);
+        BakePace.Modify(doc, marker.Id, attr, true);
         return tag;
     }
 

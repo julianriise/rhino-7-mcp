@@ -101,6 +101,7 @@ public partial class RhinoMCPFunctions
 
         foreach (var foot in footprints)
         {
+            BakePace.Breathe(openingKind == "window" ? BakePace.PlacingWindows : BakePace.PlacingDoors);
             Brep cutter = null;
             try
             {
@@ -193,7 +194,7 @@ public partial class RhinoMCPFunctions
 
                     if (first != null)
                     {
-                        RetargetOpeningMarkers(doc, oldId, first.Id);
+                        RetargetOpeningMarkers(doc, oldId, first.Id, first.Attributes?.GetUserString("forsk:id"));
                         walls[i] = first;
                         if (hostId == Guid.Empty) hostId = first.Id;
                     }
@@ -209,6 +210,16 @@ public partial class RhinoMCPFunctions
                     cutCount++;
                     if (hostId != Guid.Empty)
                     {
+                        Brep hostBrep = null;
+                        WallSolid hostSolid = null;
+                        for (var w = 0; w < walls.Count; w++)
+                        {
+                            if (walls[w].Id != hostId) continue;
+                            hostBrep = walls[w].Brep;
+                            hostSolid = walls[w];
+                            break;
+                        }
+                        var hostForskId = hostSolid?.Attributes?.GetUserString("forsk:id");
                         var markerId = AddOpeningMarker(
                             doc,
                             openLayer,
@@ -219,20 +230,12 @@ public partial class RhinoMCPFunctions
                             markerIndex,
                             sill,
                             head,
-                            sourceLayer.Name);
+                            sourceLayer.Name,
+                            hostForskId);
                         if (markerId != Guid.Empty)
                         {
                             markerIds.Add(markerId.ToString());
                             StampImportedSwing(doc, markerId, foot, hostId, tol);
-                            Brep hostBrep = null;
-                            WallSolid hostSolid = null;
-                            for (var w = 0; w < walls.Count; w++)
-                            {
-                                if (walls[w].Id != hostId) continue;
-                                hostBrep = walls[w].Brep;
-                                hostSolid = walls[w];
-                                break;
-                            }
                             var blockId = AddOpeningBlock(
                                 doc,
                                 markerId,
@@ -246,7 +249,8 @@ public partial class RhinoMCPFunctions
                                 pad,
                                 sourceLayer.Name,
                                 hostBrep,
-                                null);
+                                null,
+                                hostForskId);
                             if (blockId != Guid.Empty)
                                 blockIds.Add(blockId.ToString());
                             if (hostSolid != null)
@@ -284,7 +288,8 @@ public partial class RhinoMCPFunctions
         }
 
         PurgeOpeningBlockDefinitions(doc);
-        doc.Views.Redraw();
+        if (!BakePace.HoldsRedraw)
+            doc.Views.Redraw();
 
         var wallIds = new JArray(walls.Select(w => w.Id.ToString()));
         return new JObject
@@ -341,31 +346,41 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private void RetargetOpeningMarkers(RhinoDoc doc, Guid oldHost, Guid newHost)
+    private void RetargetOpeningMarkers(RhinoDoc doc, Guid oldHost, Guid newHost, string stable = null)
     {
         if (oldHost == Guid.Empty || newHost == Guid.Empty || oldHost == newHost)
             return;
         var oldStr = oldHost.ToString();
+        foreach (var obj in BakePace.Markers(doc, OpeningHosts))
+        {
+            if (obj?.Attributes == null) continue;
+            if (obj.Attributes.GetUserString("forsk:host") != oldStr)
+                continue;
+            RehostOpening(doc, obj, newHost, stable);
+        }
+    }
+
+    /// <summary>Markers and blocks, including ones added earlier in this pass.</summary>
+    private static IEnumerable<RhinoObject> OpeningHosts(RhinoDoc doc)
+    {
         foreach (var obj in EnumerateDocObjects(doc))
         {
             var kind = GetForskKind(obj);
-            if (!string.Equals(kind, "opening_marker", StringComparison.Ordinal)
-                && !string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (obj.Attributes.GetUserString("forsk:host") != oldStr)
-                continue;
-            RehostOpening(doc, obj, newHost);
+            if (string.Equals(kind, "opening_marker", StringComparison.Ordinal)
+                || string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase))
+                yield return obj;
         }
     }
 
     /// <summary>An opening's marker or block now stands in another wall: its host GUID and the wall's forsk:id.</summary>
-    private static void RehostOpening(RhinoDoc doc, RhinoObject obj, Guid newHost)
+    private static void RehostOpening(RhinoDoc doc, RhinoObject obj, Guid newHost, string stable = null)
     {
         obj.Attributes.SetUserString("forsk:host", newHost.ToString());
-        var stable = ReadForskUserString(doc, newHost, "forsk:id");
+        if (string.IsNullOrEmpty(stable))
+            stable = ReadForskUserString(doc, newHost, "forsk:id");
         if (!string.IsNullOrEmpty(stable))
             obj.Attributes.SetUserString("forsk:host_id", stable);
-        obj.CommitChanges();
+        BakePace.Commit(obj);
     }
 
     private Guid AddOpeningMarker(
@@ -378,7 +393,8 @@ public partial class RhinoMCPFunctions
         int index,
         double sill,
         double head,
-        string sourceLayerName)
+        string sourceLayerName,
+        string hostForskId = null)
     {
         var width = LongerXySide(foot.Bbox);
         var markerBrep = BuildOpeningMarkerBox(foot, sill, head, 50.0);
@@ -389,14 +405,15 @@ public partial class RhinoMCPFunctions
         {
             Name = $"{namePrefix}{index:D2}",
             LayerIndex = openLayer.Index,
-            MaterialSource = ObjectMaterialSource.MaterialFromLayer
+            MaterialSource = ObjectMaterialSource.MaterialFromLayer,
+            Visible = false
         };
         StampForskTags(attr, new ForskStamp
         {
             Kind = "opening_marker",
             Level = "0",
             Host = hostId.ToString(),
-            HostId = ReadForskUserString(doc, hostId, "forsk:id"),
+            HostId = hostForskId ?? ReadForskUserString(doc, hostId, "forsk:id"),
             OpeningKind = openingKind,
             Sill = sill,
             Head = head,
@@ -408,7 +425,13 @@ public partial class RhinoMCPFunctions
             : "door";
         StampOpeningStyle(attr, OpeningTypes.DefaultRecord(kindTag));
         var id = doc.Objects.AddBrep(markerBrep, attr);
-        HideOpeningMarker(doc, id);
+        if (id != Guid.Empty)
+        {
+            var added = doc.Objects.FindId(id);
+            // Visible was set on the way in. A file that ignored it is hidden once.
+            if (added != null && !added.IsHidden) HideOpeningMarker(doc, id);
+            BakePace.NoteMarker(added);
+        }
         return id;
     }
 
@@ -440,7 +463,7 @@ public partial class RhinoMCPFunctions
         StampOpeningStyle(marker.Attributes, record);
         // What the plan's swing read as, kept apart from the type a later edit changes.
         marker.Attributes.SetUserString("forsk:import_swing", hand + "/" + swing);
-        marker.CommitChanges();
+        BakePace.Commit(marker);
     }
 
     private static double LongerXySide(BoundingBox bbox)

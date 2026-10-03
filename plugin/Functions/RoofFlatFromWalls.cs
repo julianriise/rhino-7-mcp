@@ -99,7 +99,7 @@ public partial class RhinoMCPFunctions
                 attr.SetUserString("forsk:overhang", FormatMm(overhang));
                 attr.SetUserString("forsk:thickness", FormatMm(thickness));
 
-                var id = doc.Objects.AddBrep(brep, attr);
+                var id = BakePace.AddBreps(doc, new[] { brep }, new[] { attr }, null)[0];
                 if (id != Guid.Empty)
                 {
                     ids.Add(id.ToString());
@@ -141,7 +141,7 @@ public partial class RhinoMCPFunctions
             };
         }
 
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
         return result;
     }
 

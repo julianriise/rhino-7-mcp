@@ -73,7 +73,7 @@ public partial class RhinoMCPFunctions
                     Level = "0",
                     SourceLayer = profiles.SourceLayer.Name
                 });
-                var id = doc.Objects.AddBrep(brep, attr);
+                var id = BakePace.AddBreps(doc, new[] { brep }, new[] { attr }, null)[0];
                 if (id != Guid.Empty)
                 {
                     ids.Add(id.ToString());
@@ -103,7 +103,7 @@ public partial class RhinoMCPFunctions
         if (applyDefaultMaterials && ids.Count > 0)
             TryApplyDefaultMaterial(doc, targetLayer.Name, "concrete", warnings, result);
 
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
         return result;
     }
 

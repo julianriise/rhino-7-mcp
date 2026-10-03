@@ -71,7 +71,7 @@ public partial class RhinoMCPFunctions
                     deleted.Add(id.ToString());
             }
             if (deleted.Count > 0)
-                doc.Views.Redraw();
+                BakePace.Redraw(doc);
             PurgeOpeningBlockDefinitions(doc);
         }
 

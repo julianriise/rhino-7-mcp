@@ -50,7 +50,12 @@ public partial class RhinoMCPFunctions
     private Layer EnsureOpeningBlockLayer(RhinoDoc doc)
     {
         var layer = EnsureOpeningBlockLayerCore(doc);
-        HideOpeningMarkers(doc);
+        // Generate 3D asks once. A later opening in the same pass does not walk the file again.
+        if (!BakePace.MarkersSwept)
+        {
+            HideOpeningMarkers(doc);
+            BakePace.MarkMarkersSwept();
+        }
         return layer;
     }
 
@@ -156,7 +161,8 @@ public partial class RhinoMCPFunctions
         double pad,
         string sourceLayer,
         Brep hostBrep,
-        WallSegment segment)
+        WallSegment segment,
+        string hostForskId = null)
     {
         if (doc == null || markerId == Guid.Empty || foot == null) return Guid.Empty;
         if (width <= 1 || head <= sill) return Guid.Empty;
@@ -172,6 +178,7 @@ public partial class RhinoMCPFunctions
             : "door";
         var style = ResolvedOpeningStyle(doc, markerId, kindTag);
         WriteOpeningStyle(doc, markerId, style);
+        BakePace.Breathe(kindTag == "window" ? BakePace.PlacingWindows : BakePace.PlacingDoors);
         if (!TryOpeningPlane(center, widthDir, thickDir, out var wall))
             return Guid.Empty;
         var inward = segment != null ? segment.Inward : thickDir;
@@ -201,7 +208,7 @@ public partial class RhinoMCPFunctions
             Kind = "opening",
             Level = "0",
             Host = hostId.ToString(),
-            HostId = ReadForskUserString(doc, hostId, "forsk:id"),
+            HostId = hostForskId ?? ReadForskUserString(doc, hostId, "forsk:id"),
             OpeningKind = kindTag,
             Sill = sill,
             Head = head,
@@ -279,6 +286,7 @@ public partial class RhinoMCPFunctions
         var rebuilt = 0;
         foreach (var marker in markers)
         {
+            BakePace.Breathe(null);
             var blockId = FindOpeningBlock(doc, marker.Id);
             var block = blockId == Guid.Empty ? null : doc.Objects.FindId(blockId);
             var desc = (block as InstanceObject)?.InstanceDefinition?.Description ?? "";
@@ -338,7 +346,7 @@ public partial class RhinoMCPFunctions
         var obj = doc.Objects.FindId(id);
         if (obj?.Attributes == null) return;
         obj.Attributes.SetUserString(key, value);
-        obj.CommitChanges();
+        BakePace.Commit(obj);
     }
 
     /// <summary>
@@ -368,7 +376,7 @@ public partial class RhinoMCPFunctions
         var block = doc.Objects.FindId(blockId);
         if (block?.Attributes == null) return;
         block.Attributes.SetUserString("forsk:id", forskId);
-        block.CommitChanges();
+        BakePace.Commit(block);
     }
 
     /// <summary>
@@ -560,6 +568,14 @@ public partial class RhinoMCPFunctions
     int FindOpeningDefinition(RhinoDoc doc, OpeningBlockShare.Key key)
     {
         if (doc == null || key == null) return -1;
+        if (BakePace.TryDefinition(key.Token, out var cached)) return cached;
+        var index = FindOpeningDefinitionScan(doc, key);
+        BakePace.RememberDefinition(key.Token, index);
+        return index;
+    }
+
+    int FindOpeningDefinitionScan(RhinoDoc doc, OpeningBlockShare.Key key)
+    {
         var token = key.Token;
         for (var i = 0; i < doc.InstanceDefinitions.Count; i++)
         {
@@ -667,7 +683,11 @@ public partial class RhinoMCPFunctions
         attr.ColorSource = ObjectColorSource.ColorFromLayer;
 
         var id = doc.Objects.AddInstanceObject(index, OpeningInstanceTransform(placed), attr);
-        if (id != Guid.Empty) return id;
+        if (id != Guid.Empty)
+        {
+            BakePace.NoteMarker(doc.Objects.FindId(id));
+            return id;
+        }
         if (created) DeleteOpeningDefinitionIfUnused(doc, index);
         return Guid.Empty;
     }
@@ -694,7 +714,12 @@ public partial class RhinoMCPFunctions
             if (!string.IsNullOrEmpty(part))
                 kept.SetUserString("forsk:part", part);
             ApplyOpeningPartMaterial(doc, kept, string.Equals(part, "glass", StringComparison.Ordinal));
-            try { doc.Objects.ModifyAttributes(members[i], kept, true); }
+            // The pre-Add blob is Mode Normal. This write keeps the part in the definition.
+            try
+            {
+                using (BakePace.Time(BakePhases.Attributes))
+                    doc.Objects.ModifyAttributes(members[i], kept, true);
+            }
             catch (Exception) { }
         }
     }
@@ -856,8 +881,19 @@ public partial class RhinoMCPFunctions
         if (doc == null || id == Guid.Empty || style == null) return;
         var obj = doc.Objects.FindId(id);
         if (obj?.Attributes == null) return;
+        if (SameOpeningString(obj.Attributes, OpeningTypes.TypeKey, style.TypeId)
+            && SameOpeningString(obj.Attributes, OpeningTypes.HandKey, style.Hand)
+            && SameOpeningString(obj.Attributes, OpeningTypes.SwingKey, style.Swing))
+            return;
         StampOpeningStyle(obj.Attributes, style);
-        obj.CommitChanges();
+        BakePace.Commit(obj);
+    }
+
+    static bool SameOpeningString(ObjectAttributes attr, string key, string value)
+    {
+        var have = attr.GetUserString(key);
+        if (string.IsNullOrEmpty(value)) return string.IsNullOrEmpty(have);
+        return string.Equals(have, value, StringComparison.Ordinal);
     }
 
     private static string FormatOpeningParts(List<OpeningPart> parts)

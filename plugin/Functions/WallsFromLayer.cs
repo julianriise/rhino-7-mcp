@@ -66,9 +66,13 @@ public partial class RhinoMCPFunctions
         var forskIds = new JArray();
         var index = 1;
         string thicknessNote = null;
+        var solids = new List<Brep>();
+        var solidAttrs = new List<ObjectAttributes>();
+        var solidIds = new List<string>();
 
         foreach (var bake in bakes)
         {
+            BakePace.Breathe(BakePace.BuildingWalls);
             try
             {
                 var breps = bake.Breps;
@@ -113,13 +117,11 @@ public partial class RhinoMCPFunctions
                             Path = record.Path,
                             SourceLayer = profiles.SourceLayer.Name
                         });
-                        var id = doc.Objects.AddBrep(record.Brep, attr);
-                        if (id != Guid.Empty)
-                        {
-                            ids.Add(id.ToString());
-                            forskIds.Add(forskId);
-                            index++;
-                        }
+                        // Queued, then added together with redraw held. The name stays on a failed add.
+                        solids.Add(record.Brep);
+                        solidAttrs.Add(attr);
+                        solidIds.Add(forskId);
+                        index++;
                     }
                 }
             }
@@ -127,6 +129,14 @@ public partial class RhinoMCPFunctions
             {
                 warnings.Add($"Wall profile failed: {ex.Message}");
             }
+        }
+
+        var added = BakePace.AddBreps(doc, solids, solidAttrs, BakePace.BuildingWalls);
+        for (var i = 0; i < added.Count; i++)
+        {
+            if (added[i] == Guid.Empty) continue;
+            ids.Add(added[i].ToString());
+            forskIds.Add(solidIds[i]);
         }
 
         var message = $"Created {ids.Count} wall solid(s) on {targetLayer.Name} from layer '{profiles.SourceLayer.Name}'.";
@@ -151,7 +161,7 @@ public partial class RhinoMCPFunctions
         if (applyDefaultMaterials && ids.Count > 0)
             TryApplyDefaultMaterial(doc, targetLayer.Name, "plaster", warnings, result);
 
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
         return result;
     }
 
@@ -180,6 +190,7 @@ public partial class RhinoMCPFunctions
         var split = new List<(Brep Brep, string Path)>();
         foreach (var piece in pieces)
         {
+            BakePace.Breathe(BakePace.BuildingWalls);
             var piecePath = WallEdit.Path(new List<List<RoomDetect.Pt>> { piece.Ring });
             var solid = PrepareFreshSolid(ExtrudeFromPath(piecePath, height, tol, warnings), tol, out var diagnostic);
             if (solid == null)

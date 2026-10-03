@@ -24,12 +24,19 @@ public partial class RhinoMCPFunctions
     private Layer FindLayerCaseInsensitive(RhinoDoc doc, string name)
     {
         if (string.IsNullOrEmpty(name)) return null;
-        var layer = FindLayerByNameOrFullPath(doc, name);
-        if (layer != null && !layer.IsDeleted) return layer;
-        return doc.Layers.FirstOrDefault(candidate =>
-            !candidate.IsDeleted &&
-            (candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-             candidate.FullPath.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        if (BakePace.TryLayer(name, out var cached)) return cached;
+        Layer layer;
+        using (BakePace.Time(BakePhases.Layers))
+        {
+            layer = FindLayerByNameOrFullPath(doc, name);
+            if (layer == null || layer.IsDeleted)
+                layer = doc.Layers.FirstOrDefault(candidate =>
+                    !candidate.IsDeleted &&
+                    (candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
+                     candidate.FullPath.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        }
+        BakePace.RememberLayer(name, layer);
+        return layer;
     }
 
     /// <summary>

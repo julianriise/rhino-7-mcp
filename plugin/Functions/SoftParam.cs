@@ -349,9 +349,14 @@ public partial class RhinoMCPFunctions
         if (doc == null || id == Guid.Empty) return;
         var obj = doc.Objects.FindId(id);
         if (obj?.Attributes == null) return;
-        obj.Attributes.SetUserString("forsk:t", FormatParamT(t));
-        obj.Attributes.SetUserString("forsk:offset", FormatMm(offset));
-        obj.CommitChanges();
+        var along = FormatParamT(t);
+        var off = FormatMm(offset);
+        if (obj.Attributes.GetUserString("forsk:t") == along
+            && obj.Attributes.GetUserString("forsk:offset") == off)
+            return;
+        obj.Attributes.SetUserString("forsk:t", along);
+        obj.Attributes.SetUserString("forsk:offset", off);
+        BakePace.Commit(obj);
     }
 
     private static Guid FindOpeningBlock(RhinoDoc doc, Guid markerId)

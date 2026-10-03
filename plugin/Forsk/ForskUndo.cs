@@ -1,4 +1,5 @@
 using Rhino;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
@@ -34,7 +35,8 @@ namespace RhinoMCPPlugin.Forsk
                 ForskWindow.Log("undo: a record was already open; " + undo.Name + " did not nest");
                 return undo;
             }
-            undo.Serial = doc.BeginUndoRecord(undo.Name);
+            using (BakePace.Time(BakePhases.Undo))
+                undo.Serial = doc.BeginUndoRecord(undo.Name);
             ForskWindow.Log("undo: began " + undo.Serial + " " + undo.Name + " · recording " + doc.UndoRecordingIsActive);
             return undo;
         }
@@ -42,7 +44,9 @@ namespace RhinoMCPPlugin.Forsk
         public void End()
         {
             if (Serial == 0 || _doc == null) return;
-            var ended = _doc.EndUndoRecord(Serial);
+            bool ended;
+            using (BakePace.Time(BakePhases.Undo))
+                ended = _doc.EndUndoRecord(Serial);
             ForskWindow.Log("undo: ended " + Serial + " · " + ended);
             Serial = 0;
         }

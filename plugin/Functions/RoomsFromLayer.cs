@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -79,6 +80,9 @@ public partial class RhinoMCPFunctions
         var ids = new JArray();
         var forskIds = new JArray();
         var index = 1;
+        var curves = new List<Curve>();
+        var attrs = new List<ObjectAttributes>();
+        var queuedIds = new List<string>();
 
         foreach (var curve in profiles.Closed)
         {
@@ -107,16 +111,9 @@ public partial class RhinoMCPFunctions
                     Area = CurveArea(curve),
                     SourceLayer = profiles.SourceLayer.Name
                 });
-                var id = doc.Objects.AddCurve(marker, attr);
-                if (id == Guid.Empty)
-                {
-                    warnings.Add("Room marker was not added.");
-                    skipped++;
-                    continue;
-                }
-
-                ids.Add(id.ToString());
-                forskIds.Add(forskId);
+                curves.Add(marker);
+                attrs.Add(attr);
+                queuedIds.Add(forskId);
                 index++;
             }
             catch (Exception ex)
@@ -126,7 +123,20 @@ public partial class RhinoMCPFunctions
             }
         }
 
-        doc.Views.Redraw();
+        var added = BakePace.AddCurves(doc, curves, attrs, null);
+        for (var i = 0; i < added.Count; i++)
+        {
+            if (added[i] == Guid.Empty)
+            {
+                warnings.Add("Room marker was not added.");
+                skipped++;
+                continue;
+            }
+            ids.Add(added[i].ToString());
+            forskIds.Add(queuedIds[i]);
+        }
+
+        BakePace.Redraw(doc);
         return new JObject
         {
             ["ids"] = ids,

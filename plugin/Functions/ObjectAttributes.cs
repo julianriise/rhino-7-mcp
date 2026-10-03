@@ -225,11 +225,17 @@ public partial class RhinoMCPFunctions
 
     private Layer FindLayerByNameOrFullPath(RhinoDoc doc, string nameOrFullPath)
     {
-        var layer = doc.Layers.FindName(nameOrFullPath);
-        if (layer != null && !layer.IsDeleted) return layer;
-
-        return doc.Layers.FirstOrDefault(layerCandidate =>
-            !layerCandidate.IsDeleted &&
-            layerCandidate.FullPath.Equals(nameOrFullPath, StringComparison.OrdinalIgnoreCase));
+        if (BakePace.TryLayer(nameOrFullPath, out var cached)) return cached;
+        Layer layer;
+        using (BakePace.Time(BakePhases.Layers))
+        {
+            layer = doc.Layers.FindName(nameOrFullPath);
+            if (layer == null || layer.IsDeleted)
+                layer = doc.Layers.FirstOrDefault(layerCandidate =>
+                    !layerCandidate.IsDeleted &&
+                    layerCandidate.FullPath.Equals(nameOrFullPath, StringComparison.OrdinalIgnoreCase));
+        }
+        BakePace.RememberLayer(nameOrFullPath, layer);
+        return layer;
     }
 }

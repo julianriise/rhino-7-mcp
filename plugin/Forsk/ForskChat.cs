@@ -1012,7 +1012,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             // An existing file's private window-06-block definitions fold into the shared ones.
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                new RhinoMCPFunctions().CollapseOpeningBlocks(RhinoDoc.ActiveDoc);
+                var doc = RhinoDoc.ActiveDoc;
+                BakePace.Hold(doc);
+                using (BakePace.Time(BakePhases.Openings))
+                    new RhinoMCPFunctions().CollapseOpeningBlocks(doc);
             }));
             return Finish(lines);
         }
@@ -1026,11 +1029,23 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         static List<string> Finish(List<string> lines)
         {
+            // The pass redraws once, when it restores RedrawEnabled. A bake with no pass still redraws.
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                RhinoDoc.ActiveDoc?.Views.Redraw();
+                BakePace.Redraw(RhinoDoc.ActiveDoc);
             }));
             return lines;
+        }
+
+        static string PhaseOf(string name)
+        {
+            if (name == "walls_from_layer" || name == "floor_from_layer" || name == "roof_flat_from_walls")
+                return BakePhases.Walls;
+            if (name == "openings_from_layer")
+                return BakePhases.Openings;
+            if (name == "rooms_from_layer" || name == "rooms_detect")
+                return BakePhases.Rooms;
+            return null;
         }
 
         static bool Step(string name, JObject args, List<string> lines, bool stopOnZero)
@@ -1068,9 +1083,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         static JObject Call(string name, JObject args)
         {
             JObject envelope = null;
+            var phase = PhaseOf(name);
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                envelope = ForskTools.ExecuteAllowed(name, args);
+                BakePace.Hold(RhinoDoc.ActiveDoc);
+                using (BakePace.Time(phase))
+                    envelope = ForskTools.ExecuteAllowed(name, args);
             }));
             return envelope ?? ForskTools.Fail("No result");
         }

@@ -598,6 +598,16 @@ namespace RhinoMCPPlugin.Forsk
             // A pill's receipts carry the role that knows the action; a typed shortcut passes the router's.
             thread.BeginReply(mark ?? ForskRoles.MarkForAction(kind));
             thread.Busy = ForskText.Format("line.running", "what", label);
+            // Generate 3D suspends view redraw for the whole pill and logs each phase.
+            if (kind == "file.generate" || kind == "file.rebuild")
+            {
+                BakePace.Begin(text =>
+                {
+                    thread.Busy = text;
+                    Render();
+                }, Log);
+                BakePace.Hold(doc);
+            }
             var undo = ownRecord ? ForskUndo.Begin(doc, label) : null;
             _jobChanges = 0;
             var serial = doc?.RuntimeSerialNumber ?? 0;
@@ -636,6 +646,8 @@ namespace RhinoMCPPlugin.Forsk
         void Finish(DocThread thread, string kind, ForskUndo undo, uint serial, long? longest, string label)
         {
             undo?.End();
+            // One redraw for the pass, then the phase line. Other jobs leave the pace closed.
+            BakePace.End(RhinoDoc.ActiveDoc);
             Tracker.Record(new LastAction
             {
                 Kind = kind,

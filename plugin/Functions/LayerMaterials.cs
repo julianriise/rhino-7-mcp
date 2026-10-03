@@ -70,7 +70,7 @@ public partial class RhinoMCPFunctions
                 $"Display mode '{modeName}' not found. Use Rendered, Arctic, Shaded, or Wireframe.");
 
         view.ActiveViewport.DisplayMode = mode;
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
 
         return new JObject
         {
@@ -223,13 +223,13 @@ public partial class RhinoMCPFunctions
                 {
                     attrs.MaterialSource = ObjectMaterialSource.MaterialFromLayer;
                     attrs.MaterialIndex = -1;
-                    doc.Objects.ModifyAttributes(obj, attrs, true);
+                    BakePace.Modify(doc, obj, attrs, true);
                 }
                 objectsUpdated++;
             }
         }
 
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
 
         return new JObject
         {

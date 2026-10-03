@@ -66,7 +66,7 @@ public partial class RhinoMCPFunctions
                 if (!string.IsNullOrEmpty(value)) attr.SetUserString(key, value);
             }
             attr.SetUserString("forsk:marker", marker.Id.ToString());
-            var id = doc.Objects.AddBrep(plate, attr);
+            var id = BakePace.AddBreps(doc, new[] { plate }, new[] { attr }, null)[0];
             if (id == Guid.Empty) none.Add(new JObject { ["room"] = name, ["why"] = "Rhino did not take its plate" });
             else plates.Add(id.ToString());
         }
@@ -82,7 +82,7 @@ public partial class RhinoMCPFunctions
         var note = plates["note"]?.ToString();
         if (!string.IsNullOrEmpty(note)) result["message"] = (result["message"]?.ToString() ?? "") + " " + note;
         LockPlatedRoomCurves(doc);
-        doc.Views.Redraw();
+        BakePace.Redraw(doc);
     }
 
     /// <summary>

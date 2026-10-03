@@ -116,7 +116,7 @@ public partial class RhinoMCPFunctions
         var marker = doc.Objects.FindId(markerId);
         if (marker?.Attributes == null) return;
         marker.Attributes.SetUserString("forsk:host_id", stable);
-        marker.CommitChanges();
+        BakePace.Commit(marker);
     }
 
     /// <summary>
