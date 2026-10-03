@@ -105,6 +105,13 @@ header.top {
 }
 .answer { font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .answer b { font-weight: 600; }
+.answer ul, .answer ol { white-space: normal; margin: 0.35em 0; padding: 0 0 0 1.2em; }
+.answer ul { list-style: disc; }
+.answer ol { list-style: decimal; }
+.answer li { margin: 0.12em 0; color: var(--meta); }
+.answer li::marker { color: var(--meta); }
+.answer li > span { color: var(--ink); }
+.answer li ul, .answer li ol { margin: 0.1em 0; }
 .marked { margin: 16px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .meta { display: flex; align-items: center; gap: 6px; color: var(--meta); font-size: 12px; margin: 0 0 8px; }
 .meta .mini { width: 16px; height: 16px; }

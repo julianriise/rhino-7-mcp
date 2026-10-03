@@ -193,6 +193,118 @@
     return [match[1], lead, tail];
   };
 
+  /*
+   * An answer's lists. Unordered and ordered, one nested level. The marker
+   * stays off the text: the list draws it. A lead is the same cut as a bullet.
+   * No DOM, so it tests headless. Deeper indent stays in that one nested list.
+   */
+  function listItem(line) {
+    var unordered = /^([ \t]*)([-*+]|\u2013|\u2022)[ \t]+(\S.*)$/.exec(line);
+    if (unordered) return { t: 'ul', level: listLevel(unordered[1]), text: unordered[3] };
+    var ordered = /^([ \t]*)(\d{1,3})[.)][ \t]+(\S.*)$/.exec(line);
+    if (ordered) return { t: 'ol', level: listLevel(ordered[1]), text: ordered[3] };
+    return null;
+  }
+
+  function listLevel(prefix) {
+    var n = 0;
+    for (var i = 0; i < prefix.length; i++) n += prefix.charAt(i) === '\t' ? 2 : 1;
+    return n >= 2 ? 1 : 0;
+  }
+
+  function pushNested(parent, child) {
+    var lists = parent.lists || (parent.lists = []);
+    var last = lists.length ? lists[lists.length - 1] : null;
+    if (!last || last.t !== child.t) {
+      last = { t: child.t, items: [] };
+      lists.push(last);
+    }
+    last.items.push({ text: child.text });
+  }
+
+  Forsk.answerBlocks = function (text) {
+    var lines = String(text || '').split('\n');
+    var blocks = [];
+    var i = 0;
+    while (i < lines.length) {
+      var item = listItem(lines[i]);
+      if (item) {
+        var list = { t: item.t, items: [] };
+        while (i < lines.length) {
+          if (String(lines[i]).replace(/[ \t]/g, '') === '') {
+            var look = i + 1;
+            var blanks = 1;
+            while (look < lines.length && String(lines[look]).replace(/[ \t]/g, '') === '') {
+              blanks += 1;
+              look += 1;
+            }
+            var ahead = look < lines.length ? listItem(lines[look]) : null;
+            if (blanks === 1 && ahead && (ahead.level > 0 || ahead.t === list.t)) {
+              i = look;
+              continue;
+            }
+            break;
+          }
+          var parsed = listItem(lines[i]);
+          if (!parsed) break;
+          if (parsed.level === 0 && parsed.t !== list.t) break;
+          if (parsed.level === 0 || !list.items.length) {
+            list.items.push({ text: parsed.text });
+            i += 1;
+            continue;
+          }
+          pushNested(list.items[list.items.length - 1], parsed);
+          i += 1;
+        }
+        blocks.push(list);
+        continue;
+      }
+      var para = [];
+      while (i < lines.length && !listItem(lines[i])) {
+        para.push(lines[i]);
+        i += 1;
+      }
+      var body = para.join('\n').replace(/\n+$/, '');
+      if (body !== '') blocks.push({ t: 'p', text: body });
+    }
+    return blocks;
+  };
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function itemHtml(text) {
+    var lead = Forsk.leadWords('- ' + String(text || ''));
+    if (!lead) return escapeHtml(text);
+    return '<b>' + escapeHtml(lead[1]) + '</b>' + escapeHtml(lead[2]);
+  }
+
+  function listHtml(block) {
+    var html = '<' + block.t + '>';
+    var items = block.items || [];
+    for (var n = 0; n < items.length; n++) {
+      html += '<li><span>' + itemHtml(items[n].text) + '</span>';
+      var nested = items[n].lists || [];
+      for (var k = 0; k < nested.length; k++) html += listHtml(nested[k]);
+      html += '</li>';
+    }
+    return html + '</' + block.t + '>';
+  }
+
+  Forsk.answerHtml = function (text) {
+    var blocks = Forsk.answerBlocks(text);
+    var html = '';
+    for (var n = 0; n < blocks.length; n++) {
+      if (blocks[n].t === 'p') html += escapeHtml(blocks[n].text);
+      else html += listHtml(blocks[n]);
+    }
+    return html;
+  };
+
   // ---------------------------------------------------------------- DOM
 
   var model = null;
@@ -383,24 +495,14 @@
 
   function textBlock(text, cls) {
     var node = el('div', cls);
-    var lines = String(text || '').split('\n');
-    var any = false;
-    for (var i = 0; i < lines.length; i++) if (Forsk.leadWords(lines[i])) any = true;
-    if (!any) {
+    var blocks = Forsk.answerBlocks(text);
+    var listed = false;
+    for (var i = 0; i < blocks.length; i++) if (blocks[i].t !== 'p') listed = true;
+    if (!listed) {
       node.textContent = text || '';
       return node;
     }
-    lines.forEach(function (line, index) {
-      if (index) node.appendChild(document.createElement('br'));
-      var lead = Forsk.leadWords(line);
-      if (!lead) {
-        node.appendChild(document.createTextNode(line));
-        return;
-      }
-      node.appendChild(document.createTextNode(lead[0]));
-      if (lead[1]) node.appendChild(el('b', null, lead[1]));
-      if (lead[2]) node.appendChild(document.createTextNode(lead[2]));
-    });
+    node.innerHTML = Forsk.answerHtml(text);
     return node;
   }
 

@@ -197,4 +197,46 @@ public class PageChromeTests
         Assert.Equal("[\"- \",\"one two three four\",\" five\"]", Eval("JSON.stringify(Forsk.leadWords('- one two three four five'))"));
         Assert.Equal("null", Eval("JSON.stringify(Forsk.leadWords('Hello'))"));
     }
+
+    /// <summary>
+    /// A dash at the start of a line used to stay a dash. An answer renders
+    /// unordered and ordered lists, one level deep, and bolds the lead.
+    /// </summary>
+    [Fact]
+    public void AnAnswerList_RendersAsARealList()
+    {
+        var engine = PageScript.Load();
+        string Render(string text) => engine.Evaluate("Forsk.answerHtml(" + PageScript.Quote(text) + ")").ToString();
+
+        Assert.Equal(
+            "<ul><li><span><b>Checked the plan</b>. The walls are 2700.</span></li><li><span><b>one two three four</b> five</span></li></ul>",
+            Render("- Checked the plan. The walls are 2700.\n- one two three four five"));
+        Assert.Equal(
+            "<ol><li><span><b>First room</b></span></li><li><span><b>Second room</b></span></li></ol>",
+            Render("1. First room\n2. Second room"));
+        Assert.Equal(
+            "<ul><li><span><b>Walls</b></span><ul><li><span><b>North</b></span></li><li><span><b>South</b></span></li></ul></li><li><span><b>Roof</b></span></li></ul>",
+            Render("- Walls\n  - North\n    - South\n- Roof"));
+        Assert.Equal(
+            "<ol><li><span><b>Walls</b></span><ul><li><span><b>North</b></span></li></ul></li></ol>",
+            Render("1. Walls\n   - North"));
+        Assert.Equal(
+            "<ul><li><span><b>One</b></span></li><li><span><b>Two</b></span></li></ul>",
+            Render("- One\n\n- Two"));
+        Assert.Equal(
+            "<ul><li><span><b>One</b></span></li></ul>Hello<ul><li><span><b>Two</b></span></li></ul>",
+            Render("- One\nHello\n- Two"));
+        Assert.Equal("Rooms:<ul><li><span><b>Kitchen</b>. 12 m²</span></li></ul>", Render("Rooms:\n- Kitchen. 12 m²"));
+        Assert.Equal("<ul><li><span><b>2 &lt; 3</b></span></li></ul>", Render("- 2 < 3"));
+        Assert.Equal("Hello", Render("Hello"));
+        Assert.DoesNotContain("<ul>", Render("Hello"));
+        Assert.Contains("node.innerHTML = Forsk.answerHtml", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js")));
+
+        var css = Html();
+        Assert.Contains(".answer ul { list-style: disc;", css);
+        Assert.Contains(".answer ol { list-style: decimal;", css);
+        Assert.Contains(".answer li::marker { color: var(--meta); }", css);
+        Assert.Contains(".answer li > span { color: var(--ink); }", css);
+        Assert.Contains("padding: 0 0 0 1.2em", css);
+    }
 }
