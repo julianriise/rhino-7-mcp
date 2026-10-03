@@ -21,7 +21,17 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    private sealed class WallPick
+    /// <summary>The selected wall on the graph move_wall uses. No Rhino types, so a drag can check it.</summary>
+    internal sealed class SelectedDrag
+    {
+        public WallEdit.Run Run;
+        public string Label;
+        public List<List<RoomDetect.Pt>> Rings;
+        public List<List<List<RoomDetect.Pt>>> Records;
+        public WallJoins.Graph Graph;
+    }
+
+    sealed class WallPick
     {
         public WallSolid Host;
         /// <summary>The host record's own rings.</summary>
@@ -829,11 +839,56 @@ public partial class RhinoMCPFunctions
     /// </summary>
     private WallPick PickWallRun(RhinoDoc doc, JObject parameters, double tol)
     {
-        var side = parameters?["side"]?.ToString();
-        var hasSide = !string.IsNullOrWhiteSpace(side);
+        var pick = Gather(doc, parameters, tol, out var hasAt, out var hasSide, out var at, out var side);
+        if (!hasAt && !hasSide)
+        {
+            // Selection S4: a record of one run is that run.
+            var only = WallJoins.RunIn(pick.Graph, pick.Rings);
+            if (only < 0)
+                throw new ArgumentException("Say which wall: a side (north, south, east or west) or a point at [x, y] in mm. This record holds more than one wall; Split walls for picking makes each its own.");
+            pick.Run = pick.Graph.Runs[only];
+            pick.Label = pick.Graph.Names[only];
+            return pick;
+        }
+        var ok = hasAt
+            ? WallEdit.TryPick(pick.Graph.Shape, at, tol, out var run, out var why)
+            : WallEdit.TryPickSide(pick.Graph.Shape, side, tol, out run, out why);
+        if (!ok) throw new InvalidOperationException(why);
+        pick.Run = run;
+        pick.Label = RunLabel(pick.Graph, pick.Graph.Find(run, tol), RoomRings(doc), ForskSpeech.Norwegian);
+        return pick;
+    }
+
+    /// <summary>
+    /// The selected wall on the same graph move_wall uses. Run stays empty
+    /// when the record holds several runs, so a drag can say why.
+    /// </summary>
+    internal SelectedDrag SelectedWall(RhinoDoc doc)
+    {
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var pick = Gather(doc, new JObject(), tol, out _, out _, out _, out _);
+        var chosen = new SelectedDrag
+        {
+            Rings = pick.Rings,
+            Records = pick.Records,
+            Graph = pick.Graph
+        };
+        if (pick.Graph == null) return chosen;
+        var only = WallJoins.RunIn(pick.Graph, pick.Rings);
+        if (only < 0) return chosen;
+        chosen.Run = pick.Graph.Runs[only];
+        chosen.Label = RunLabel(pick.Graph, only, RoomRings(doc), ForskSpeech.Norwegian);
+        return chosen;
+    }
+
+    /// <summary>The host, its cluster and its rings. The run is chosen by the caller.</summary>
+    private WallPick Gather(RhinoDoc doc, JObject parameters, double tol, out bool hasAt, out bool hasSide, out RoomDetect.Pt at, out string side)
+    {
+        side = parameters?["side"]?.ToString();
+        hasSide = !string.IsNullOrWhiteSpace(side);
         var atToken = parameters?["at"];
-        var hasAt = atToken != null && atToken.Type != JTokenType.Null;
-        RoomDetect.Pt at = default;
+        hasAt = atToken != null && atToken.Type != JTokenType.Null;
+        at = default;
         if (hasAt && !TryReadPoint(atToken, out at))
             throw new ArgumentException("at is [x, y] in mm.");
         if (hasAt && hasSide)
@@ -861,23 +916,7 @@ public partial class RhinoMCPFunctions
         // The records that touch the host are read as one shape; a lone record is its own rings.
         var graph = WallJoins.Build(records, WallJoins.ClusterOf(records, index, tol), tol)
             ?? WallJoins.Build(records, new List<int> { index }, tol);
-
-        WallEdit.Run run;
-        string why;
-        if (!hasAt && !hasSide)
-        {
-            // Selection S4: a record of one run is that run.
-            var only = WallJoins.RunIn(graph, rings);
-            if (only < 0)
-                throw new ArgumentException("Say which wall: a side (north, south, east or west) or a point at [x, y] in mm. This record holds more than one wall; Split walls for picking makes each its own.");
-            return new WallPick { Host = host, Rings = rings, Run = graph.Runs[only], Label = graph.Names[only], Walls = walls, Records = records, Graph = graph };
-        }
-        var ok = hasAt
-            ? WallEdit.TryPick(graph.Shape, at, tol, out run, out why)
-            : WallEdit.TryPickSide(graph.Shape, side, tol, out run, out why);
-        if (!ok) throw new InvalidOperationException(why);
-        var label = RunLabel(graph, graph.Find(run, tol), RoomRings(doc), ForskSpeech.Norwegian);
-        return new WallPick { Host = host, Rings = rings, Run = run, Label = label, Walls = walls, Records = records, Graph = graph };
+        return new WallPick { Host = host, Rings = rings, Walls = walls, Records = records, Graph = graph };
     }
 
     /// <summary>Room markers as rings the receipt can name an inner wall by.</summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using RhinoMCPPlugin.Forsk;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -57,6 +58,29 @@ public static class WallDrag
     }
 
     public static string NotMoved(bool nb) => Text("wall.drag.not", nb);
+
+    public static string Many(bool nb) => Text("wall.drag.many", nb);
+
+    public static string Curved(bool nb) => Text("wall.drag.curved", nb);
+
+    /// <summary>
+    /// Null when this record is one straight run and can be dragged.
+    /// A curve is named first, then a record that holds several runs.
+    /// </summary>
+    public static string Check(WallJoins.Graph graph, List<List<Pt>> rings, WallEdit.Run run)
+    {
+        return Check(graph, rings, run, 1.0, false);
+    }
+
+    public static string Check(WallJoins.Graph graph, List<List<Pt>> rings, WallEdit.Run run, double tol, bool nb)
+    {
+        if (graph?.Shape == null || rings == null) return Many(nb);
+        if (!WallSplit.Straight(graph, tol, out _)) return Curved(nb);
+        var only = WallJoins.RunIn(graph, rings);
+        if (only < 0) return Many(nb);
+        if (run != null && graph.Find(run, tol) != only) return Many(nb);
+        return null;
+    }
 
     /// <summary>+1 when +normal is out, -1 when +normal is in, 0 for an inner wall.</summary>
     public static int Outward(string outerSide, WallEdit.Run run)

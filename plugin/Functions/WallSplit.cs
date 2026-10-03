@@ -109,7 +109,7 @@ public static class WallSplit
     /// one after another by less. Otherwise the wall is a curve drawn in
     /// short straight pieces, and it stays whole.
     /// </summary>
-    static bool Straight(WallJoins.Graph graph, double tol, out string why)
+    internal static bool Straight(WallJoins.Graph graph, double tol, out string why)
     {
         why = null;
         var shape = graph.Shape;

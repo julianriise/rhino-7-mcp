@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -139,5 +142,67 @@ public class WallDragTests
         (from, to) = WallDrag.Measure(NorthSouth(), 0);
         Assert.Equal(from.X, to.X, 6);
         Assert.Equal(from.Y, to.Y, 6);
+    }
+
+    [Fact]
+    public void OneStraightRun_CanBeDragged()
+    {
+        var records = new List<List<List<Pt>>> { new() { WallJoinsTests.Rect(0, 0, 4000, 200) } };
+        var graph = WallJoins.Build(records, new List<int> { 0 }, 1);
+        var only = WallJoins.RunIn(graph, records[0]);
+        Assert.True(only >= 0);
+        Assert.Null(WallDrag.Check(graph, records[0], graph.Runs[only]));
+    }
+
+    [Fact]
+    public void OneRunInsideAJoinedCluster_CanBeDragged()
+    {
+        var whole = new List<List<List<Pt>>> { WallJoinsTests.Garage() };
+        var pieces = WallSplit.Pieces(WallJoins.Build(whole, new List<int> { 0 }, 1), 1, out var why);
+        Assert.True(pieces != null, why);
+        var split = pieces.Select(p => new List<List<Pt>> { p.Ring }).ToList();
+        var north = split.FindIndex(r => r[0].All(p => p.Y >= 3800));
+        var graph = WallJoins.Build(split, WallJoins.ClusterOf(split, north, 1), 1);
+        var only = WallJoins.RunIn(graph, split[north]);
+        Assert.Null(WallDrag.Check(graph, split[north], graph.Runs[only]));
+    }
+
+    [Fact]
+    public void WholePlan_AsksToSplit_WithNoCoordinates()
+    {
+        var records = new List<List<List<Pt>>> { WallJoinsTests.Garage() };
+        var graph = WallJoins.Build(records, new List<int> { 0 }, 1);
+        var why = WallDrag.Check(graph, records[0], null);
+        Assert.Equal("Drag works on one wall. Split walls for picking first.", why);
+        Assert.DoesNotContain("(", why);
+        Assert.Equal("Du kan dra én vegg. Del veggene for plukking først.",
+            WallDrag.Check(graph, records[0], null, 1, true));
+    }
+
+    [Fact]
+    public void CurvedWall_StaysOneRecord_WithNoCoordinates()
+    {
+        var arc = new List<Pt>();
+        for (var i = 0; i <= 10; i++)
+        {
+            var a = Math.PI / 2 * i / 10.0;
+            arc.Add(new Pt(3000 * Math.Cos(a), 3000 * Math.Sin(a)));
+        }
+        var records = new List<List<List<Pt>>> { new() { WallJoinsTests.Mitre(arc, 200) } };
+        var graph = WallJoins.Build(records, new List<int> { 0 }, 1);
+        var why = WallDrag.Check(graph, records[0], null);
+        Assert.Equal("A curved wall can't be dragged; it stays one record.", why);
+        Assert.DoesNotContain("(", why);
+        Assert.Equal("En buet vegg kan ikke dras. Den blir stående som én vegg.",
+            WallDrag.Check(graph, records[0], null, 1, true));
+    }
+
+    [Fact]
+    public void ARunFromAnotherWall_IsTheSplitSentence()
+    {
+        var records = new List<List<List<Pt>>> { new() { WallJoinsTests.Rect(0, 0, 4000, 200) } };
+        var graph = WallJoins.Build(records, new List<int> { 0 }, 1);
+        Assert.Equal(WallDrag.Many(false), WallDrag.Check(graph, records[0], NorthSouth()));
+        Assert.Equal(WallDrag.Many(false), WallDrag.Check(null, records[0], null));
     }
 }
