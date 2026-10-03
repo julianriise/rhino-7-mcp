@@ -160,6 +160,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("file.rebuild", Runs.Run, "group.model", f => f.HasGenerated),
             new ForskAction("wall.split", Runs.Run, "group.model", f => f.WholeWalls),
             new ForskAction("wall.move", Runs.Prefill, "group.model", f => f.Picked == Picked.Wall),
+            new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("exist.mark", Runs.Run, "group.model", f => f.Picked == Picked.Loose),
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),

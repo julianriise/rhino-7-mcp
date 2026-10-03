@@ -218,6 +218,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.split":
                     Job(thread, action.Id, label, sink => sink.Tool("split_walls", new JObject()));
                     return;
+                case "wall.drag":
+                    DragWall(thread);
+                    return;
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;
@@ -510,9 +513,11 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>A tool's receipt, and under it the wall review when more than the wall changed.</summary>
-        void AddReceipt(DocThread thread, string tool, JObject envelope)
+        void AddReceipt(DocThread thread, string tool, JObject envelope, string text = null)
         {
-            thread.Add(ForskReceipt.From(tool, envelope));
+            var item = ForskReceipt.From(tool, envelope);
+            if (!string.IsNullOrWhiteSpace(text)) item.Text = text;
+            thread.Add(item);
             var review = ForskCards.WallReview(envelope, LastUserIsNorwegian(thread));
             var doc = RhinoDoc.ActiveDoc;
             if (review != null) thread.AddCard(review, doc == null ? null : ReadFacts(doc));
@@ -574,15 +579,26 @@ namespace RhinoMCPPlugin.Forsk
                 });
             }
 
-            /// <summary>One tool, on the UI thread, and its structured receipt.</summary>
-            public JObject Tool(string name, JObject args)
+            /// <summary>
+            /// One tool, on the UI thread, and its structured receipt.
+            /// words replaces the receipt text. On a failure it is one chat line instead.
+            /// </summary>
+            public JObject Tool(string name, JObject args, Func<JObject, string> words = null)
             {
                 JObject envelope = null;
                 RhinoApp.InvokeOnUiThread(new Action(() => envelope = ForskTools.ExecuteAllowed(name, args)));
                 envelope = envelope ?? ForskTools.Fail("No result");
+                var text = words?.Invoke(envelope);
+                var failed = words != null && !string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
                 Post(() =>
                 {
-                    _window.AddReceipt(_thread, name, envelope);
+                    if (failed)
+                    {
+                        _thread.Add("line", string.IsNullOrWhiteSpace(text) ? envelope["message"]?.ToString() : text);
+                        _window.Render();
+                        return;
+                    }
+                    _window.AddReceipt(_thread, name, envelope, text);
                     _window.Render();
                 });
                 return envelope;
@@ -593,11 +609,11 @@ namespace RhinoMCPPlugin.Forsk
         /// A pill's work, off the UI thread, inside one undo record named after
         /// the pill. The step line stays on screen; the longest UI stall is logged.
         /// </summary>
-        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true, Action after = null, string mark = null)
+        void Job(DocThread thread, string kind, string label, Action<JobSink> work, string userText = null, bool ownRecord = true, Action after = null, string mark = null, bool noteUser = true)
         {
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
-            thread.Add("user", userText ?? label);
+            if (noteUser) thread.Add("user", userText ?? label);
             // A pill's receipts carry the role that knows the action; a typed shortcut passes the router's.
             thread.BeginReply(mark ?? ForskRoles.MarkForAction(kind));
             thread.Busy = ForskText.Format("line.running", "what", label);
@@ -890,6 +906,46 @@ namespace RhinoMCPPlugin.Forsk
             // ForskSection kept its own single record.
             Finish(thread, "section.add", null, doc?.RuntimeSerialNumber ?? 0, null, userText);
             TakeKeyboard();
+        }
+
+        /// <summary>The wall is dragged in the view. Release runs move_wall inside this pill's one record.</summary>
+        void DragWall(DocThread thread)
+        {
+            if (Refuse(thread)) return;
+            var doc = RhinoDoc.ActiveDoc;
+            var nb = ForskPrefill.Language(thread.LastUserText()) == "nb";
+            var shown = ForskText.Get(nb ? "wall.drag.nb" : "wall.drag");
+            thread.Add("user", shown);
+            thread.BeginReply(ForskRoles.MarkForAction("wall.drag"));
+            thread.Add("line", ForskText.Get(nb ? "wall.drag.prompt.nb" : "wall.drag.prompt"));
+            Render();
+            HandToRhino();
+            _busy = true;
+            ForskDragWall.Outcome outcome = null;
+            ForskSpeech.Use(nb ? "dra veggen" : "drag");
+            try
+            {
+                outcome = ForskDragWall.Pick(doc);
+            }
+            finally
+            {
+                ForskSpeech.Clear();
+            }
+            if (outcome == null || string.IsNullOrEmpty(outcome.Toward))
+            {
+                _busy = false;
+                if (!string.IsNullOrEmpty(outcome?.Line)) thread.Add("line", outcome.Line);
+                thread.EndReply();
+                Models.Persist(thread);
+                Render();
+                TakeKeyboard();
+                return;
+            }
+            Job(thread, "wall.drag", shown, sink => sink.Tool("move_wall", new JObject
+            {
+                ["toward"] = outcome.Toward,
+                ["distance_mm"] = outcome.Mm
+            }, envelope => ForskDragWall.Words(outcome, envelope)), userText: shown, noteUser: false, after: TakeKeyboard);
         }
 
         static string SelectedRoom(RhinoDoc doc)

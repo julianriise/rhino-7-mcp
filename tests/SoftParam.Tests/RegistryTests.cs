@@ -127,6 +127,39 @@ public class RegistryTests
         Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts(name)).Slots, a => a.Id == "wall.split");
     }
 
+    [Fact]
+    public void DragWall_IsOnTheCard_ForOneWall_AndNeverInTheBar()
+    {
+        var one = Docs.Facts("house, wall selected");
+        var card = ForskRegistry.Card(one).Actions.Select(a => a.Id).ToList();
+        Assert.Contains("wall.drag", card);
+        Assert.True(card.IndexOf("wall.move") < card.IndexOf("wall.drag"));
+        Assert.True(card.IndexOf("wall.drag") < card.IndexOf("wall.delete"));
+        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
+        Assert.Equal("Drag wall", ForskText.Label("wall.drag"));
+        Assert.Equal("Dra vegg", ForskText.Get("wall.drag.nb"));
+        Assert.Equal("Drag the wall in the view, or type a distance. Esc cancels.", ForskText.Get("wall.drag.prompt"));
+        Assert.Equal("Dra veggen i visningen, eller skriv en avstand. Esc avbryter.", ForskText.Get("wall.drag.prompt.nb"));
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("wall.drag"));
+        Assert.Contains(ForskRegistry.Card(Docs.Facts("one whole wall record selected")).Actions, a => a.Id == "wall.drag");
+
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "wall.drag");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, room selected")).Actions, a => a.Id == "wall.drag");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, door selected")).Actions, a => a.Id == "wall.drag");
+        var two = FileClassifier.Read(Docs.Of(Row.Wall(selected: true), Row.Wall(stamp: "w02", selected: true), Row.Floor()));
+        Assert.Equal(Picked.Wall, two.Picked);
+        Assert.Equal(2, two.PickedCount);
+        Assert.DoesNotContain(ForskRegistry.Card(two).Actions, a => a.Id == "wall.drag");
+    }
+
+    [Theory]
+    [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
+    public void DragWall_IsNeverInTheBar(string name)
+    {
+        Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts(name)).Slots, a => a.Id == "wall.drag");
+        Assert.NotEqual("wall.drag", ForskRegistry.Slot1(Docs.Facts(name)).Id);
+    }
+
     [Theory]
     [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
     public void Slot1_ReadsTheFileOnly(string name)
