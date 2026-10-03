@@ -21,6 +21,8 @@ public partial class RhinoMCPFunctions
         public int Arcs;
         public int Dashed;
         public int Roof;
+        // R5: stairs drawn as their plan symbol.
+        public int Stairs;
         // Every room marker ends in exactly one of three counts: Rooms (tagged:
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
         // RoomsNoOutline (no outline to read). Of the
@@ -155,6 +157,9 @@ public partial class RhinoMCPFunctions
             ref box, ref index, ref count, ref stats);
         added += BakeRoofOutlines(
             doc, layer, scale, worldToHld, delta, pattern, tol,
+            ref box, ref index, ref count, ref stats);
+        added += BakeStairSymbols(
+            doc, layer, scale, cutZ, worldToHld, delta, pattern, tol,
             ref box, ref index, ref count, ref stats);
         var tagBoxes = new List<RoomDetect.Box>();
         var leaders = new List<RoomDetect.Box>();
@@ -745,6 +750,140 @@ public partial class RhinoMCPFunctions
             }
         }
         return added;
+    }
+
+    /// <summary>
+    /// R5: each stair as its plan symbol (Stairs.PlanSymbol) from its record:
+    /// the outline at the beyond pen, the steps, walking line, arrow and break
+    /// thin, the steps above the plan cut dashed, the start dot filled and the
+    /// label along the climb, reading up or to the right. Role stair, so a DWG
+    /// export puts all of it on A-STAIR.
+    /// </summary>
+    private int BakeStairSymbols(
+        RhinoDoc doc,
+        Layer layer,
+        int scale,
+        double cutZ,
+        Transform worldToHld,
+        Vector3d delta,
+        int pattern,
+        double tol,
+        ref BoundingBox box,
+        ref int index,
+        ref int count,
+        ref PlanStats stats)
+    {
+        var added = 0;
+        foreach (var obj in StairObjects(doc))
+        {
+            var spec = ReadStairSpec(obj);
+            if (spec == null) continue;
+            // The rise the solid was last built with, so the symbol and the 3D agree.
+            var risers = ParseMm(obj.Attributes.GetUserString(Stairs.RisersKey)) ?? 0;
+            var riser = ParseMm(obj.Attributes.GetUserString(Stairs.RiserKey)) ?? 0;
+            Stairs.Flight flight;
+            try { flight = Stairs.Plan(spec, risers * riser); }
+            catch (ArgumentException) { continue; }
+            var plane = new Plane(new Point3d(spec.X, spec.Y, 0), new Vector3d(spec.Dx, spec.Dy, 0), new Vector3d(-spec.Dy, spec.Dx, 0));
+            var stairId = obj.Id.ToString();
+            var baked = 0;
+            foreach (var mark in Stairs.PlanSymbol(flight, cutZ - spec.Z, scale, Stairs.LabelHeight(flight, scale)))
+            {
+                try
+                {
+                    if (mark.Shape == "line")
+                    {
+                        using (var curve = new LineCurve(
+                            MapPlan(mark.U0, mark.V0, plane, worldToHld, delta),
+                            MapPlan(mark.U1, mark.V1, plane, worldToHld, delta)))
+                        {
+                            var pen = mark.Part == "outline" ? PenBeyond : PenThin;
+                            baked += AddStroke(doc, layer, curve, pen, scale, mark.Dashed, pattern, tol,
+                                "stair", mark.Part, stairId, null, ref box, ref index, ref count);
+                        }
+                    }
+                    else if (mark.Shape == "dot")
+                        baked += AddStairDot(doc, layer, MapPlan(mark.U0, mark.V0, plane, worldToHld, delta), mark.Radius,
+                            pattern, tol, stairId, ref box, ref index, ref count);
+                    else if (mark.Shape == "text")
+                        baked += AddStairLabel(doc, layer, mark, plane, worldToHld, delta, scale, stairId, ref box, ref index, ref count);
+                }
+                catch (Exception)
+                {
+                    // One piece that will not draw leaves the rest of the symbol.
+                }
+            }
+            if (baked > 0) stats.Stairs++;
+            added += baked;
+        }
+        return added;
+    }
+
+    private static int AddStairDot(
+        RhinoDoc doc, Layer layer, Point3d at, double radius, int pattern, double tol, string stairId,
+        ref BoundingBox box, ref int index, ref int count)
+    {
+        if (radius <= 0) return 0;
+        Hatch[] hatches;
+        using (var circle = new ArcCurve(new Circle(at, radius)))
+        {
+            try { hatches = Hatch.Create(circle, pattern, 0.0, 1.0, Math.Max(tol, 0.01)); }
+            catch (Exception) { hatches = null; }
+        }
+        if (hatches == null) return 0;
+        var added = 0;
+        foreach (var hatch in hatches)
+        {
+            if (hatch == null) continue;
+            var attr = DrawAttr(layer, FormatStableId("d", index), "stair", "dot", stairId);
+            Guid id;
+            try { id = doc.Objects.AddHatch(hatch, attr); }
+            catch (Exception) { id = Guid.Empty; }
+            var dot = hatch.GetBoundingBox(true);
+            hatch.Dispose();
+            if (id == Guid.Empty) continue;
+            if (dot.IsValid) box.Union(dot);
+            index++;
+            count++;
+            added++;
+        }
+        return added;
+    }
+
+    private static int AddStairLabel(
+        RhinoDoc doc, Layer layer, Stairs.Mark mark, Plane plane, Transform worldToHld, Vector3d delta, int scale, string stairId,
+        ref BoundingBox box, ref int index, ref int count)
+    {
+        var at = MapPlan(mark.U0, mark.V0, plane, worldToHld, delta);
+        var along = MapPlan(mark.U0 + 1000, mark.V0, plane, worldToHld, delta) - at;
+        along.Z = 0;
+        if (!along.Unitize()) return 0;
+        // Text reads left to right, or bottom to top on a stair that climbs south.
+        if (along.X < -1e-9 || Math.Abs(along.X) <= 1e-9 && along.Y < 0) along = -along;
+        var textPlane = new Plane(at, along, new Vector3d(-along.Y, along.X, 0));
+        var entity = PlanAnnotation(doc, mark.Text, textPlane, mark.Radius);
+        if (entity == null) return 0;
+        Guid id;
+        try
+        {
+            var attr = DrawAttr(layer, FormatStableId("d", index), "stair", "label", stairId);
+            id = doc.Objects.AddText(entity, attr);
+        }
+        catch (Exception) { id = Guid.Empty; }
+        finally { entity.Dispose(); }
+        if (id == Guid.Empty) return 0;
+        var written = doc.Objects.FindId(id);
+        if (written?.Geometry is TextEntity stored)
+        {
+            var model = stored.TextHeight * (stored.DimensionScale > 0 ? stored.DimensionScale : 1.0);
+            var paper = OpeningTypes.PaperTextHeight(model, scale, doc.LayoutSpaceAnnotationScalingEnabled);
+            written.Attributes.SetUserString("forsk:paper_height", paper.ToString("0.###", CultureInfo.InvariantCulture));
+            written.CommitChanges();
+            box.Union(stored.GetBoundingBox(true));
+        }
+        index++;
+        count++;
+        return 1;
     }
 
     private int BakeRoomTags(

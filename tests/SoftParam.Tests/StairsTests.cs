@@ -125,7 +125,7 @@ public class StairsTests
     {
         var f = Stairs.Plan(2880, 180, 260, 900);
         Assert.Equal(7, Stairs.CutTread(f, ForskPlanCut.AboveFloorMm));
-        var marks = Stairs.PlanSymbol(f, ForskPlanCut.AboveFloorMm, 50, 125);
+        var marks = Stairs.PlanSymbol(f, ForskPlanCut.AboveFloorMm, 50, Stairs.LabelHeight(f, 50));
         var cut = Assert.Single(marks, m => m.Part == "cut");
         Assert.Equal(6 * 260, cut.U0);
         Assert.Equal(-450, cut.V0);
@@ -139,8 +139,15 @@ public class StairsTests
         Assert.Single(marks, m => m.Part == "walk" && m.Shape == "line" && m.Dashed);
         Assert.Single(marks, m => m.Shape == "dot");
         Assert.Equal(2, marks.Count(m => m.Part == "arrow"));
-        Assert.Contains(marks, m => m.Shape == "text" && m.Text == "UP");
-        Assert.Contains(marks, m => m.Shape == "text" && m.Text == "16 × 180/260");
+        var label = Assert.Single(marks, m => m.Shape == "text");
+        Assert.Equal("UP 16 × 180/260", label.Text);
+        // Below the break, in the left half, clear of the walking line.
+        Assert.True(label.U0 < 6 * 260);
+        Assert.Equal(225, label.V0);
+        Assert.True(label.V0 - label.Radius / 2 > 0);
+        Assert.Equal(100, Stairs.LabelHeight(f, 50));
+        Assert.Equal(200, Stairs.LabelHeight(f, 100));
+        Assert.Equal(360, Stairs.LabelHeight(f, 500));
         // 16 step lines across: the first riser, 14 between, the top edge.
         Assert.Equal(16, marks.Count(m => m.U0 == m.U1 && m.V0 == -450 && m.V1 == 450));
     }

@@ -167,7 +167,7 @@ public static class Stairs
     /// <summary>
     /// The plan symbol. cutAbove is the plan cut over the stair's floor;
     /// scale sizes the dot and the arrow (paper mm × scale); textHeight is the
-    /// label's model height.
+    /// label's model height, carried on the label mark as its Radius.
     /// </summary>
     public static List<Mark> PlanSymbol(Flight f, double cutAbove, int scale, double textHeight)
     {
@@ -211,13 +211,18 @@ public static class Stairs
         Line("arrow", f.Run, 0, f.Run - arrow, arrow * 0.4, false);
         Line("arrow", f.Run, 0, f.Run - arrow, -arrow * 0.4, false);
 
-        // The label sits in the left half, below the break, along the climb.
+        // One line in the left half, below the break, along the climb: it clears the walking line
+        // while the text is under half the width high.
         var labelU = (k > 0 ? breakR : f.Run) / 2.0;
-        var lift = 0.7 * Math.Max(0, textHeight);
-        marks.Add(new Mark { Shape = "text", Part = "label", U0 = labelU, V0 = h / 2 + lift, Text = "UP" });
-        marks.Add(new Mark { Shape = "text", Part = "label", U0 = labelU, V0 = h / 2 - lift, Text = Sizes(f) });
+        marks.Add(new Mark { Shape = "text", Part = "label", U0 = labelU, V0 = h / 2, Radius = Math.Max(0, textHeight), Text = Label(f) });
         return marks;
     }
+
+    /// <summary>The plan label: "UP 16 × 180/260".</summary>
+    public static string Label(Flight f) => "UP " + Sizes(f);
+
+    /// <summary>The label's model height on a sheet at 1:scale: 2 mm on paper, and under half the width.</summary>
+    public static double LabelHeight(Flight f, int scale) => Math.Min(2.0 * Math.Max(1, scale), 0.4 * f.Width);
 
     /// <summary>"16 × 180/260": risers × riser/going, rounded to the mm for display only.</summary>
     public static string Sizes(Flight f)

@@ -408,7 +408,7 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Generated wall, floor, roof, and opening solids. Skips markers, rooms, and drawings.
+    /// Generated wall, floor, roof, opening and stair solids. Skips markers, rooms, and drawings.
     /// Existing underlay is included only when includeExisting is true.
     /// </summary>
     private static bool IsSheetSource(RhinoDoc doc, RhinoObject obj, bool includeExisting)
@@ -424,7 +424,8 @@ public partial class RhinoMCPFunctions
         return kind.Equals("wall", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("floor", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("roof", StringComparison.OrdinalIgnoreCase)
-            || kind.Equals("opening", StringComparison.OrdinalIgnoreCase);
+            || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals(Stairs.Kind, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -836,7 +837,9 @@ public partial class RhinoMCPFunctions
     private static bool IsSkippedFillKind(string kind, bool fillFloors)
     {
         if (string.IsNullOrEmpty(kind)) return false;
-        return (!fillFloors && kind.Equals("floor", StringComparison.OrdinalIgnoreCase))
+        // The plan draws a stair as its symbol; a section cuts it with poché.
+        return (!fillFloors && (kind.Equals("floor", StringComparison.OrdinalIgnoreCase)
+                                || kind.Equals(Stairs.Kind, StringComparison.OrdinalIgnoreCase)))
             || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("room", StringComparison.OrdinalIgnoreCase)
@@ -1389,9 +1392,10 @@ public partial class RhinoMCPFunctions
         var wallSolids = WallClusterSolids(doc, sources, out result.WallNote, clusterMembers);
         foreach (var obj in sources)
         {
-            // Plan symbols replace the frame. Elevations and sections keep the 3D block.
+            // Plan symbols replace the frame and the stair. Elevations and sections keep the 3D solid.
             if (plan
-                && string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase))
+                && (string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(GetForskKind(obj), Stairs.Kind, StringComparison.OrdinalIgnoreCase)))
                 continue;
             var kind = GetForskKind(obj) ?? "";
             AppendSource(obj, wallSolids, geometries);

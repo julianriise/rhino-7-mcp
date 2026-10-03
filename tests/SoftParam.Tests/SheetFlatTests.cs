@@ -35,6 +35,8 @@ public class SheetFlatTests
         Assert.Equal("A-WALL-CUT", SheetFlat.LayerFor("cut"));
         Assert.Equal("A-WALL-PATT", SheetFlat.LayerFor("section_fill"));
         Assert.Equal("A-SYMB", SheetFlat.LayerFor("symbol"));
+        // R5: every piece of the stair symbol goes to its own layer.
+        Assert.Equal("A-STAIR", SheetFlat.LayerFor("stair"));
         Assert.Equal("A-ELEV", SheetFlat.LayerFor("greyscale"));
         Assert.Equal("A-GRND", SheetFlat.LayerFor("ground_line"));
         Assert.Equal("A-ANNO-DIMS", SheetFlat.LayerFor("dimension"));
@@ -43,10 +45,10 @@ public class SheetFlatTests
     }
 
     [Fact]
-    public void TheEightLayers_CarryTheirWeights()
+    public void TheLayers_CarryTheirWeights()
     {
         Assert.Equal(
-            new[] { "A-WALL-CUT", "A-WALL-PATT", "A-SYMB", "A-ELEV", "A-GRND", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-ANNO-MISC" },
+            new[] { "A-WALL-CUT", "A-WALL-PATT", "A-SYMB", "A-STAIR", "A-ELEV", "A-GRND", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-ANNO-MISC" },
             SheetFlat.Layers.Select(l => l.Name));
         Assert.Equal(0.50, SheetFlat.Def("A-WALL-CUT").WeightMm);
         Assert.Equal(0.00, SheetFlat.Def("A-WALL-PATT").WeightMm);
