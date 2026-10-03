@@ -240,8 +240,8 @@ public partial class RhinoMCPFunctions
                 RemoveLayoutPages(doc, spec.View, false);
             var plan = string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
             var sheet = new PackSheet { Spec = spec, Plan = plan, Section = section, Clip = plan ? planClip : (Plane?)null };
-            // Tags, marks and dimensions are drawn at a stroke scale; a facade has none.
-            sheet.Stroke = plan || section ? requestedScale : 0;
+            // Tags, marks, dimensions and level marks are drawn at the sheet's scale.
+            sheet.Stroke = requestedScale;
             sheet.Drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, sheet.Clip, sheet.Stroke);
             sheets.Add(sheet);
         }
@@ -256,7 +256,7 @@ public partial class RhinoMCPFunctions
             for (var i = 0; i < sheets.Count; i++)
             {
                 var sheet = sheets[i];
-                if (sheet.Stroke == 0 || picked.Scales[i] == sheet.Stroke || !sheet.Drawn.Box.IsValid) continue;
+                if (picked.Scales[i] == sheet.Stroke || !sheet.Drawn.Box.IsValid) continue;
                 sheet.Stroke = picked.Scales[i];
                 sheet.Drawn = BakeGreyscaleDrawing(doc, sheet.Spec.View, includeExisting, sheet.Clip, sheet.Stroke);
                 again = true;
@@ -410,6 +410,11 @@ public partial class RhinoMCPFunctions
                     + "."
                     + (string.IsNullOrEmpty(drawn.SymbolNote) ? "" : " " + drawn.SymbolNote);
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
+            }
+            if (drawn.Facade != null)
+            {
+                pageRecord["view_title"] = viewTitle;
+                pageRecord["facade"] = FacadePageRecord(drawn.Facade);
             }
             if (section && drawn.Section != null)
             {
@@ -980,23 +985,17 @@ public partial class RhinoMCPFunctions
             var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
             // A type swap must show on the next export without a new layout_pack.
             if (!plan && CountPrintDrawings(doc, view) > 0) continue;
-            var section = Sections.TryLetter(view, out _);
             if (clay == null)
                 clay = CollectLayoutClay(doc, _drawIncludeExisting, out _);
             Plane? clip = null;
-            var strokeScale = 0;
             if (plan)
             {
                 var cutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
                 clip = new Plane(new Point3d(0, 0, cutZ), -Vector3d.ZAxis);
-                strokeScale = DetailModelScale(page);
-                if (strokeScale < 1) strokeScale = 100;
             }
-            else if (section)
-            {
-                strokeScale = DetailModelScale(page);
-                if (strokeScale < 1) strokeScale = 100;
-            }
+            // Tags, marks and level marks keep the page's scale.
+            var strokeScale = DetailModelScale(page);
+            if (strokeScale < 1) strokeScale = SheetScale.FirstStep;
             var drawn = BakeGreyscaleDrawing(doc, view, _drawIncludeExisting, clip, strokeScale);
             // The locked detail already frames this pack. Panning again after a
             // rebuild left the Mac preview black, so the camera stays.
@@ -1597,7 +1596,7 @@ public partial class RhinoMCPFunctions
         public bool Plan;
         public bool Section;
         public Plane? Clip;
-        /// <summary>The scale its tags and marks were baked at; 0 for a drawing with none.</summary>
+        /// <summary>The scale its tags and marks were baked at.</summary>
         public int Stroke;
         public GreyscaleDrawing Drawn;
     }

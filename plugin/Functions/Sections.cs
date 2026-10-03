@@ -414,6 +414,68 @@ public static class Sections
         return levels.OrderBy(l => l.Z).ToList();
     }
 
+    /// <summary>A solid of the model by its kind (floor, wall, roof) and its height range.</summary>
+    public sealed class Solid
+    {
+        public string Kind;
+        public double MinZ;
+        public double MaxZ;
+    }
+
+    public sealed class Heights
+    {
+        /// <summary>The ground: the lowest slab's underside, else the lowest wall base. Null with neither.</summary>
+        public double? Ground;
+        public List<Level> Levels = new List<Level>();
+    }
+
+    /// <summary>
+    /// The heights a section and a facade print, from one rule so the two
+    /// sheets cannot disagree. The model has no terrain yet, so the ground is
+    /// the lowest slab's underside (the house stands on it); with no slab,
+    /// the lowest wall base. The floors are the slab tops, or with no slab
+    /// the floors of the rooms. Gesims and møne come from the roof's outline
+    /// in (u, z): a section's cut loop, or a facade's roof as it is seen.
+    /// </summary>
+    public static Heights ModelHeights(IEnumerable<Solid> solids, IEnumerable<double> roomFloors, IList<List<Pt>> roofUz)
+    {
+        var slabTops = new List<double>();
+        double? ground = null;
+        double? lowestWall = null;
+        foreach (var solid in solids ?? new Solid[0])
+        {
+            if (solid == null) continue;
+            if (string.Equals(solid.Kind, "wall", StringComparison.OrdinalIgnoreCase))
+                lowestWall = lowestWall.HasValue ? Math.Min(lowestWall.Value, solid.MinZ) : solid.MinZ;
+            if (!string.Equals(solid.Kind, "floor", StringComparison.OrdinalIgnoreCase)) continue;
+            slabTops.Add(solid.MaxZ);
+            ground = ground.HasValue ? Math.Min(ground.Value, solid.MinZ) : solid.MinZ;
+        }
+        if (!ground.HasValue) ground = lowestWall;
+        double? gesims = null, mone = null;
+        if (RoofHeights(roofUz, out var g, out var m))
+        {
+            gesims = g;
+            mone = m;
+        }
+        return new Heights { Ground = ground, Levels = Levels(FloorTops(slabTops, roomFloors), ground, gesims, mone) };
+    }
+
+    /// <summary>How far a facade's ground line runs past the facade on each side, in model mm.</summary>
+    public const double FacadeGroundOverMm = 1000.0;
+
+    /// <summary>A facade's ground line from left to right: the facade's width plus FacadeGroundOverMm each side.</summary>
+    public static (double X0, double X1) FacadeGround(double left, double right)
+    {
+        return (left - FacadeGroundOverMm, right + FacadeGroundOverMm);
+    }
+
+    /// <summary>The ground line is drawn with the profile's cut pen, on a section and on a facade.</summary>
+    public static PrintPen GroundPen(PrintProfile profile) => (profile ?? PrintProfiles.Default).Cut;
+
+    /// <summary>The level marks are drawn with the profile's thin pen, on a section and on a facade.</summary>
+    public static PrintPen LevelPen(PrintProfile profile) => (profile ?? PrintProfiles.Default).Thin;
+
     /// <summary>
     /// The floor levels of a section: the slab tops. A model with no slab (a
     /// garage of walls on grade) has its floor where its rooms stand, so the

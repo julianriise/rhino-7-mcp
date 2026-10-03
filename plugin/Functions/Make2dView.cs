@@ -1261,6 +1261,8 @@ public partial class RhinoMCPFunctions
         public string RoomText;
         // F5.3: what a section sheet drew. Null on the plan and elevations.
         public SectionStats Section;
+        // v3 P4: the ground line and level marks on a facade. Null on the plan and sections.
+        public FacadeStats Facade;
     }
 
     private struct WeightedCurve
@@ -1508,10 +1510,9 @@ public partial class RhinoMCPFunctions
                 sectionStats = new SectionStats { Letter = section.Letter };
                 try
                 {
-                    SectionHeights(sources, out var floorTops, out var groundZ);
                     planRuled = TryBakeSectionLinework(
                         doc, layer, strokeScale, section, spec.View, worldToHld, delta, visible, fillGroups,
-                        cutUz, roofUz, floorTops, groundZ, tolerance, ref box, ref index, ref count, sectionStats);
+                        cutUz, roofUz, HeightSolids(sources), tolerance, ref box, ref index, ref count, sectionStats);
                 }
                 catch (Exception ex)
                 {
@@ -1596,6 +1597,21 @@ public partial class RhinoMCPFunctions
                 if (id == Guid.Empty) continue;
                 count++;
                 index++;
+            }
+
+            // A facade at section quality: the ground line and the level marks over its lines.
+            if (section == null && !plan && strokeScale > 0 && haveWorldToHld && count > 0)
+            {
+                try
+                {
+                    result.Facade = BakeFacadeMarks(doc, layer, strokeScale, spec.View, worldToHld, delta, sources, tolerance,
+                        ref box, ref index, ref count);
+                }
+                catch (Exception ex)
+                {
+                    result.SymbolNote = "Facade marks were skipped.";
+                    RhinoApp.WriteLine("Forsk facade marks skipped: " + ex.Message);
+                }
             }
 
             if (clip.HasValue && fillGroups != null && OverlapsPlan(box, FillBounds(fillGroups)))

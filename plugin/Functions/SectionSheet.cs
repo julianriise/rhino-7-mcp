@@ -310,7 +310,7 @@ public partial class RhinoMCPFunctions
     private bool TryBakeSectionLinework(
         RhinoDoc doc, Layer layer, int scale, Sections.Def def, string view,
         Transform worldToHld, Vector3d delta, List<WeightedCurve> visible, List<List<Curve>> fillGroups,
-        List<List<RoomDetect.Pt>> cutUz, List<List<RoomDetect.Pt>> roofUz, List<double> floorTops, double? groundZ,
+        List<List<RoomDetect.Pt>> cutUz, List<List<RoomDetect.Pt>> roofUz, IList<Sections.Solid> solids,
         double tol, ref BoundingBox box, ref int index, ref int count, SectionStats stats)
     {
         if (doc == null || layer == null || scale < 1 || def == null) return false;
@@ -348,25 +348,6 @@ public partial class RhinoMCPFunctions
         var left = box.Min.X;
         var right = box.Max.X;
 
-        if (groundZ.HasValue)
-        {
-            var y = SheetY(groundZ.Value);
-            var over = Sections.GroundOverMm * scale;
-            using (var ground = new LineCurve(new Point3d(left - over, y, 0), new Point3d(right + over, y, 0)))
-            {
-                var extra = new SymbolStamp { Extra = new Dictionary<string, string>(stamp.Extra) { ["forsk:z"] = Mm(groundZ.Value) } };
-                if (AddStroke(doc, layer, ground, PenCut, scale, false, pattern, tol,
-                        "ground_line", null, null, null, ref box, ref index, ref count, extra) > 0)
-                    stats.GroundZ = groundZ.Value;
-            }
-        }
-
-        double? gesims = null, mone = null;
-        if (Sections.RoofHeights(roofUz, out var g, out var m))
-        {
-            gesims = g;
-            mone = m;
-        }
         // Every room with an outline the line runs through, tagged on the plan or too small for its tag.
         var crossed = new List<(PlanRoom Room, double U, double FloorZ)>();
         foreach (var room in PlanRooms(doc))
@@ -376,9 +357,24 @@ public partial class RhinoMCPFunctions
             if (!Sections.RoomSpan(ring, def, out var u0, out var u1)) continue;
             crossed.Add((room, 0.5 * (u0 + u1), room.Ring[0].Z));
         }
-        var levels = Sections.Levels(Sections.FloorTops(floorTops, crossed.Select(c => c.FloorZ)), groundZ, gesims, mone);
+        // The same heights the facades print (FacadeSheet).
+        var heights = Sections.ModelHeights(solids, crossed.Select(c => c.FloorZ), roofUz);
+        var groundZ = heights.Ground;
+        if (groundZ.HasValue)
+        {
+            var y = SheetY(groundZ.Value);
+            var over = Sections.GroundOverMm * scale;
+            using (var ground = new LineCurve(new Point3d(left - over, y, 0), new Point3d(right + over, y, 0)))
+            {
+                var extra = new SymbolStamp { Extra = new Dictionary<string, string>(stamp.Extra) { ["forsk:z"] = Mm(groundZ.Value) } };
+                if (AddStroke(doc, layer, ground, Sections.GroundPen(PrintProfiles.Active), scale, false, pattern, tol,
+                        "ground_line", null, null, null, ref box, ref index, ref count, extra) > 0)
+                    stats.GroundZ = groundZ.Value;
+            }
+        }
+
         var valueHeight = Sections.ValueMm * scale;
-        var marks = Sections.PlaceLevels(levels, SheetY, right, scale,
+        var marks = Sections.PlaceLevels(heights.Levels, SheetY, right, scale,
             text => ModelTextWidth(doc, text, valueHeight) / scale);
         foreach (var mark in marks)
         {
@@ -389,7 +385,7 @@ public partial class RhinoMCPFunctions
                 ["forsk:level_value"] = mark.Level.Value.ToString(CultureInfo.InvariantCulture)
             };
             using (var line = new LineCurve(Sheet(mark.LineA), Sheet(mark.LineB)))
-                added += AddStroke(doc, layer, line, PenThin, scale, false, pattern, tol,
+                added += AddStroke(doc, layer, line, Sections.LevelPen(PrintProfiles.Active), scale, false, pattern, tol,
                     "level", "line", null, null, ref box, ref index, ref count, new SymbolStamp { Extra = extra });
             added += AddSolidTriangle(doc, layer, mark.Triangle, pattern, tol, "level", extra, ref box, ref index, ref count);
             if (AddSheetText(doc, layer, mark.Level.Text, new Plane(Sheet(mark.TextAt), Vector3d.XAxis, Vector3d.YAxis),
@@ -447,28 +443,17 @@ public partial class RhinoMCPFunctions
         return added > 0;
     }
 
-    /// <summary>
-    /// The level heights in the model: each floor slab's top, and the ground.
-    /// The model has no terrain yet, so the ground is the lowest slab's
-    /// underside (the house stands on it); with no slab, the lowest wall base.
-    /// </summary>
-    private static void SectionHeights(IList<RhinoObject> sources, out List<double> floorTops, out double? groundZ)
+    /// <summary>The floors, walls and roofs among the sources, as Sections.ModelHeights reads them.</summary>
+    private static List<Sections.Solid> HeightSolids(IList<RhinoObject> sources)
     {
-        floorTops = new List<double>();
-        groundZ = null;
-        double? lowest = null;
+        var solids = new List<Sections.Solid>();
         foreach (var obj in sources ?? new List<RhinoObject>())
         {
             var bbox = obj?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
             if (!bbox.IsValid) continue;
-            var kind = GetForskKind(obj);
-            if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
-                lowest = lowest.HasValue ? Math.Min(lowest.Value, bbox.Min.Z) : bbox.Min.Z;
-            if (!string.Equals(kind, "floor", StringComparison.OrdinalIgnoreCase)) continue;
-            floorTops.Add(bbox.Max.Z);
-            groundZ = groundZ.HasValue ? Math.Min(groundZ.Value, bbox.Min.Z) : bbox.Min.Z;
+            solids.Add(new Sections.Solid { Kind = GetForskKind(obj) ?? "", MinZ = bbox.Min.Z, MaxZ = bbox.Max.Z });
         }
-        if (!groundZ.HasValue) groundZ = lowest;
+        return solids;
     }
 
     private static Point3d Sheet(RoomDetect.Pt p) => new Point3d(p.X, p.Y, 0);
