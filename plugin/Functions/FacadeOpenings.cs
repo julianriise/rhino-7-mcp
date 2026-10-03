@@ -1490,7 +1490,6 @@ public partial class RhinoMCPFunctions
     {
         public OpeningRecord Record;
         public Guid HostId;
-        public string HostLabel;
         public Point3d Center;
     }
 
@@ -1532,14 +1531,10 @@ public partial class RhinoMCPFunctions
             var rec = ReadOpeningRecord(marker);
             if (!seen.Add(rec.MarkerId)) continue;
             var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
-            var label = host.Attributes?.GetUserString("forsk:id");
-            if (string.IsNullOrWhiteSpace(label)) label = host.Attributes?.Name;
-            if (string.IsNullOrWhiteSpace(label)) label = "the wall";
             removals.Add(new OpeningRemoval
             {
                 Record = rec,
                 HostId = host.Id,
-                HostLabel = label,
                 Center = rec.MarkerBbox.Center
             });
         }
@@ -1722,24 +1717,9 @@ public partial class RhinoMCPFunctions
         HashSet<Guid> before,
         double tol)
     {
-        var windows = 0;
-        var doors = 0;
-        var labels = new List<string>();
-        foreach (var item in removals)
-        {
-            if (item.Record.Kind == OpeningKind.Window) windows++;
-            else doors++;
-            var seen = false;
-            foreach (var label in labels)
-            {
-                if (string.Equals(label, item.HostLabel, StringComparison.Ordinal))
-                {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) labels.Add(item.HostLabel);
-        }
+        var windows = removals.Count(r => r.Record.Kind == OpeningKind.Window);
+        var doors = removals.Count - windows;
+        var walls = removals.Select(r => r.HostId).Distinct().Count();
 
         var hostIds = new HashSet<Guid>();
         var deleted = new JArray();
@@ -1806,7 +1786,7 @@ public partial class RhinoMCPFunctions
             ["markers"] = markers,
             ["plate_count"] = CountStrayObjects(doc, before, hostIds),
             ["ok"] = true,
-            ["message"] = SoftParamPlan.RemovalLine(windows, doors, labels)
+            ["message"] = SoftParamPlan.RemovalLine(windows, doors, walls)
         };
     }
 

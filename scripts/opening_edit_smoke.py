@@ -768,7 +768,7 @@ def main() -> int:
             removed = send_command(sock, "delete_opening", {})
             print(f"    {removed.get('message')} openings={removed.get('host_openings')} voids={removed.get('host_voids')} plates={removed.get('plate_count')}")
             message = str(removed.get("message") or "")
-            if message != f"Removed 2 windows from {wall_fid}":
+            if message != "Removed 2 windows.":
                 failures.append(f"delete message={message!r}")
             if removed.get("host_id") != host_id:
                 failures.append(f"delete host {removed.get('host_id')} != {host_id}")

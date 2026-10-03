@@ -779,7 +779,7 @@ def main() -> int:
             failures.append(f"delete select count={selected.get('count')}")
         removed = send_command(sock, "delete_opening", {})
         print(f"    {removed.get('message')} openings={removed.get('host_openings')} voids={removed.get('host_voids')} plates={removed.get('plate_count')}")
-        if removed.get("message") != f"Removed 2 windows from {wall_fid}":
+        if removed.get("message") != "Removed 2 windows.":
             failures.append(f"delete message={removed.get('message')!r}")
         if removed.get("host_openings") != 0 or removed.get("host_voids") != 0:
             failures.append(f"delete openings={removed.get('host_openings')} voids={removed.get('host_voids')}")

@@ -295,10 +295,10 @@ public static class SoftParamPlan
     }
 
     /// <summary>
-    /// Status line for a host rebuild that dropped openings.
-    /// "Removed 2 windows from w01".
+    /// Status line for a host rebuild that dropped openings: "Removed 2 windows.",
+    /// or "Removed 3 openings from 2 walls." No wall id: the chat names no ids.
     /// </summary>
-    public static string RemovalLine(int windows, int doors, IList<string> hosts)
+    public static string RemovalLine(int windows, int doors, int walls)
     {
         if (windows < 0) windows = 0;
         if (doors < 0) doors = 0;
@@ -310,33 +310,9 @@ public static class SoftParamPlan
             noun = doors == 1 ? "door" : "doors";
         else
             noun = count == 1 ? "opening" : "openings";
-
-        var where = "the wall";
-        if (hosts != null)
-        {
-            var labels = new List<string>();
-            for (var i = 0; i < hosts.Count; i++)
-            {
-                var label = hosts[i];
-                if (string.IsNullOrWhiteSpace(label)) continue;
-                label = label.Trim();
-                var seen = false;
-                for (var j = 0; j < labels.Count; j++)
-                {
-                    if (string.Equals(labels[j], label, StringComparison.Ordinal))
-                    {
-                        seen = true;
-                        break;
-                    }
-                }
-                if (!seen) labels.Add(label);
-            }
-            if (labels.Count > 0)
-                where = string.Join(", ", labels.ToArray());
-        }
-
-        return "Removed " + count.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            + " " + noun + " from " + where;
+        var line = "Removed " + count.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + noun;
+        if (walls > 1) line += " from " + walls.ToString(System.Globalization.CultureInfo.InvariantCulture) + " walls";
+        return line + ".";
     }
 
     /// <summary>

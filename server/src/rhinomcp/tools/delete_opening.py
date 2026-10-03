@@ -25,7 +25,7 @@ def delete_opening(
 
     Returns:
     Dictionary with deleted_marker_id, host_id, message, ok.
-    message is the status line, such as "Removed 2 windows from w01".
+    message is the status line, such as "Removed 2 windows."
     """
     try:
         rhino = get_rhino_connection()
