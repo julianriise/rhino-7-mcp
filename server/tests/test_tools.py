@@ -2804,7 +2804,7 @@ class TestSetOpeningTypeTool:
             "opening_type": "door.sliding",
             "hand": "L",
             "ok": True,
-            "message": "Changed 1 door to sliding on w01",
+            "message": "Changed 1 door to sliding.",
             "host_openings": 1,
             "host_voids": 1,
         }
@@ -2817,7 +2817,7 @@ class TestSetOpeningTypeTool:
         )
         assert result["success"] is True
         assert result["opening_type"] == "door.sliding"
-        assert result["message"] == "Changed 1 door to sliding on w01"
+        assert result["message"] == "Changed 1 door to sliding."
         assert result["host_openings"] == 1
 
     @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
@@ -2832,7 +2832,7 @@ class TestSetOpeningTypeTool:
             "hand": "L",
             "swing": "out",
             "ok": True,
-            "message": "Flipped swing on 1 door on w01",
+            "message": "Flipped swing on 1 door.",
         }
         mock_get_conn.return_value = mock_conn
 
@@ -2851,6 +2851,53 @@ class TestSetOpeningTypeTool:
         assert result["success"] is False
         assert "Specify type, hand, or swing." in result["message"]
         mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_all_windows(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "marker_id": "m1",
+            "host_id": "h1",
+            "opening_type": "window.fixed",
+            "ok": True,
+            "message": "Changed 6 windows to fixed.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_opening_type(ctx=None, type="window.fixed", all=True)
+
+        mock_conn.send_command.assert_called_once_with(
+            "set_opening_type", {"type": "window.fixed", "all": True}
+        )
+        assert result["message"] == "Changed 6 windows to fixed."
+
+    @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
+    def test_all_needs_a_type_and_no_id(self, mock_get_conn):
+        from rhinomcp.tools.set_opening_type import set_opening_type
+
+        result = set_opening_type(ctx=None, swing="flip", all=True)
+        assert result == {"success": False, "message": "all needs a type."}
+        guid = "12345678-1234-1234-1234-123456789012"
+        result = set_opening_type(ctx=None, id=guid, type="window.fixed", all=True)
+        assert result == {"success": False, "message": "Specify id or all, not both."}
+        mock_get_conn.assert_not_called()
+
+
+class TestAreaStatsTool:
+    @patch("rhinomcp.tools.area_stats.get_rhino_connection")
+    def test_passes_the_plugin_result_through(self, mock_get_conn):
+        from rhinomcp.tools.area_stats import area_stats
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"summary": "2 rooms · 31.0 m²", "rooms": [], "more": 0}
+        mock_get_conn.return_value = mock_conn
+
+        result = area_stats(ctx=None)
+
+        mock_conn.send_command.assert_called_once_with("area_stats", {})
+        assert result == {"success": True, "summary": "2 rooms · 31.0 m²", "rooms": [], "more": 0}
 
     @patch("rhinomcp.tools.set_opening_type.get_rhino_connection")
     def test_rejects_bad_type(self, mock_get_conn):

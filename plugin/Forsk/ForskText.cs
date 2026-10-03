@@ -53,7 +53,7 @@ namespace RhinoMCPPlugin.Forsk
             ["opening.resize"] = "Resize",
             ["opening.resize.prefill"] = "Make this {kind} {n} mm wide",
             ["opening.resize.prefill.nb"] = "Sett bredden på {kind} til {n} mm",
-            ["opening.type"] = "Swap type",
+            ["opening.type"] = "Change type",
             ["opening.delete"] = "Delete",
             ["opening.add_door"] = "Add a door here",
             ["opening.add_door.ask"] = "add a door on this wall",
@@ -127,6 +127,9 @@ namespace RhinoMCPPlugin.Forsk
 
             // One-time cards: the question, then the pills.
             ["opening.type.ask"] = "Which {kind} type?",
+            ["opening.type.all.ask"] = "Change all windows or all doors to:",
+            ["opening.type.all.door"] = "Change all doors to:",
+            ["opening.type.all.window"] = "Change all windows to:",
             ["file.check.ask"] = "What the import was not sure about",
             ["wall.review.ask"] = "What followed the wall",
             ["wall.review.ask.nb"] = "Hva som fulgte veggen",

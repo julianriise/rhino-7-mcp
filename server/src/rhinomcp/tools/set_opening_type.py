@@ -26,6 +26,7 @@ def set_opening_type(
     type: Optional[str] = None,
     hand: Optional[str] = None,
     swing: Optional[str] = None,
+    all: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Set type, hand, and/or swing on the selected openings, then rebuild
@@ -35,7 +36,8 @@ def set_opening_type(
     Id may be a marker or an opening frame. Omit it to use the current
     selection, including two or more openings. Do not guess the last
     opening created. "make this a sliding door", "top-hung window",
-    "flip swing", and "change hand" use this tool.
+    "flip swing", and "change hand" use this tool. "make all windows
+    fixed" is type window.fixed with all true and no id.
     Refuses forsk:kind=existing or layer X-EXIST. A refused change leaves
     the document unchanged. The same type does not rebuild.
     clear_generated and a rebake reset types, because the DXF has no type.
@@ -46,6 +48,7 @@ def set_opening_type(
       door.pocket, window.fixed, window.side_hung, or window.top_hung
     - hand: L, R, or flip
     - swing: in, out, or flip
+    - all: With type, every generated opening of that type's kind. Not with id.
 
     Returns:
     Dictionary with marker_id, host_id, opening_type, ok, message.
@@ -59,6 +62,10 @@ def set_opening_type(
             return {"success": False, "message": "hand must be L, R, or flip."}
         if swing is not None and swing not in SWINGS:
             return {"success": False, "message": "swing must be in, out, or flip."}
+        if all and type is None:
+            return {"success": False, "message": "all needs a type."}
+        if all and id:
+            return {"success": False, "message": "Specify id or all, not both."}
 
         rhino = get_rhino_connection()
         params: Dict[str, Any] = {}
@@ -70,6 +77,8 @@ def set_opening_type(
             params["hand"] = hand
         if swing is not None:
             params["swing"] = swing
+        if all:
+            params["all"] = True
 
         result = rhino.send_command("set_opening_type", params)
         out: Dict[str, Any] = {

@@ -166,7 +166,9 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),
             new ForskAction("opening.move", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
             new ForskAction("opening.resize", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
-            new ForskAction("opening.type", Runs.Card, "group.openings", f => f.Picked == Picked.Opening && f.PickedOpeningKind != null),
+            // One kind of opening picked: those. Nothing picked: all of a kind (the card's pills say which).
+            new ForskAction("opening.type", Runs.Card, "group.openings", f => f.Picked == Picked.Opening && f.PickedOpeningKind != null
+                || f.Picked == Picked.None && (f.HasDoors || f.HasWindows)),
             new ForskAction("opening.delete", Runs.Run, "group.openings", f => f.Picked == Picked.Opening),
             new ForskAction("opening.add_door", Runs.Ask, "group.openings", f => f.Picked == Picked.Wall),
             new ForskAction("daylight.window", Runs.Ask, "group.openings", f => f.HasWalls && f.HasRooms && !f.HasWindows && f.Map == MapState.None),
@@ -253,7 +255,7 @@ namespace RhinoMCPPlugin.Forsk
             // One straight run: Drag wall is the next suggestion, so the bar shows it.
             // A whole record is not one run, and the bar stays Move, then Add a door.
             if (ForskPick.OneRunWall(f.Selected) != null) yield return Find("wall.drag");
-            if (f.Picked == Picked.Opening) yield return Find("opening.resize");
+            if (f.Picked == Picked.Opening) yield return Find("opening.type");
             if (f.Picked == Picked.Room) yield return Find("daylight.room");
             if (f.Picked == Picked.Room) yield return Find("section.room");
             if (f.Picked == Picked.Room) yield return Find("room.push_pull");

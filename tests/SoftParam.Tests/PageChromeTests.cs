@@ -121,6 +121,36 @@ public class PageChromeTests
         }
     }
 
+    /// <summary>
+    /// R1: every opening type has a pill icon in the page, drawn like its plan
+    /// symbol: 24 units, currentColor, 1.5 stroke, no ids, so a copy needs no
+    /// renaming. The card's pill passes its icon to pill().
+    /// </summary>
+    [Fact]
+    public void EveryOpeningType_HasAnInlineIcon_ThePillDraws()
+    {
+        var html = Html();
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        var engine = PageScript.Load();
+
+        foreach (var type in RhinoMCPPlugin.Functions.OpeningTypes.All)
+        {
+            var holder = engine.Evaluate("Forsk.iconId(" + PageScript.Quote(type.Id) + ")").ToString();
+            Assert.Equal("icon-" + type.Id, holder);
+            var at = html.IndexOf("<div id=\"" + holder + "\">", StringComparison.Ordinal);
+            Assert.True(at > 0, type.Id);
+            var svg = html.Substring(at, html.IndexOf("</div>", at, StringComparison.Ordinal) - at);
+            Assert.Contains("viewBox=\"0 0 24 24\"", svg);
+            Assert.Contains("stroke=\"currentColor\"", svg);
+            Assert.Contains("stroke-width=\"1.5\"", svg);
+            Assert.Equal(1, svg.Split(" id=").Length - 1);
+        }
+        var holders = html.IndexOf("<div id=\"icons\" hidden>", StringComparison.Ordinal);
+        Assert.True(holders > 0 && holders < html.IndexOf("</header>", StringComparison.Ordinal));
+        Assert.Contains("}, p.icon));", script);
+        Assert.Contains(".pill .icon {", html);
+    }
+
     [Fact]
     public void TheHeaderFace_IsTheOverride_ElseTheLastRole_ElsePlanner()
     {

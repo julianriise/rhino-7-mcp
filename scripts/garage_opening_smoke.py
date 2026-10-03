@@ -910,7 +910,7 @@ def main() -> int:
                 failures.append("hinged depth unreadable")
 
         flipped = send_command(sock, "set_opening_type", {"id": door_id, "swing": "flip"})
-        if flipped.get("message") != f"Flipped swing on 1 door on {wall_fid}":
+        if flipped.get("message") != "Flipped swing on 1 door.":
             failures.append(f"flip message={flipped.get('message')!r}")
         flipped_attr = door_state(
             "flip", flipped, "door.hinged_single", {"frame", "leaf", "threshold"}
@@ -921,7 +921,7 @@ def main() -> int:
             )
 
         sliding = send_command(sock, "set_opening_type", {"id": door_id, "type": "door.sliding"})
-        if sliding.get("message") != f"Changed 1 door to sliding on {wall_fid}":
+        if sliding.get("message") != "Changed 1 door to sliding.":
             failures.append(f"sliding message={sliding.get('message')!r}")
         sliding_attr = door_state(
             "sliding", sliding, "door.sliding", {"frame", "leaf", "threshold", "track"}
@@ -932,7 +932,7 @@ def main() -> int:
             failures.append(f"sliding hand={sliding_attr.get('forsk:hand')!r}")
 
         pocket = send_command(sock, "set_opening_type", {"id": door_id, "type": "door.pocket"})
-        if pocket.get("message") != f"Changed 1 door to pocket on {wall_fid}":
+        if pocket.get("message") != "Changed 1 door to pocket.":
             failures.append(f"pocket message={pocket.get('message')!r}")
         pocket_attr = door_state(
             "pocket", pocket, "door.pocket", {"frame", "leaf", "threshold"}

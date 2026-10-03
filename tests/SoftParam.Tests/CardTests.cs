@@ -20,6 +20,42 @@ public class CardTests
         Assert.Equal(new[] { "Hinged door", "Double door", "Sliding door", "Pocket door" }, Choices(card));
         Assert.Equal("Which door type?", card.Question);
         Assert.Equal("selection", card.Depends);
+        Assert.Null(card.Data);
+        // Each type pill carries its plan-symbol icon; Cancel has none.
+        Assert.All(card.Pills.Where(p => p.Id != "cancel"), p => Assert.Equal(p.Id, p.Icon));
+        Assert.Null(card.Pills.Single(p => p.Id == "cancel").Icon);
+    }
+
+    /// <summary>Nothing picked: one card with every type of the kinds in the file, and a pill means all of that kind.</summary>
+    [Fact]
+    public void ChangeType_WithNothingPicked_ListsBothKinds_ForAll()
+    {
+        var facts = Docs.Facts("house");
+        Assert.Equal(Picked.None, facts.Picked);
+        var card = ForskCards.For("opening.type", facts)!;
+        Assert.Equal("Change all windows or all doors to:", card.Question);
+        Assert.Equal(OpeningTypes.All.Select(t => t.Label), Choices(card));
+        Assert.All(card.Pills.Where(p => p.Id != "cancel"), p => Assert.Equal(p.Id, p.Icon));
+        Assert.True(card.Data!["all"]!.Value<bool>());
+        Assert.Equal("selection", card.Depends);
+
+        // A file with doors only lists door types.
+        var doors = ForskCards.For("opening.type", Docs.Facts("rooms, no window"))!;
+        Assert.Equal("Change all doors to:", doors.Question);
+        Assert.Equal(new[] { "Hinged door", "Double door", "Sliding door", "Pocket door" }, Choices(doors));
+
+        Assert.Null(ForskCards.For("opening.type", Docs.Facts("walls only")));
+    }
+
+    [Fact]
+    public void ThePillIcon_ReachesThePage()
+    {
+        var thread = new DocThread();
+        var facts = Docs.Facts("house, door selected");
+        var card = thread.AddCard(ForskCards.SwapType(facts)!, facts);
+        var pills = (JArray)card["pills"]!;
+        Assert.Equal("door.sliding", pills.Single(p => p["id"]!.ToString() == "door.sliding")["icon"]!.ToString());
+        Assert.Null(pills.Single(p => p["id"]!.ToString() == "cancel")["icon"]);
     }
 
     [Fact]
@@ -38,6 +74,11 @@ public class CardTests
         Assert.Null(facts.PickedOpeningKind);
         Assert.False(ForskRegistry.Find("opening.type")!.When(facts));
         Assert.Null(ForskCards.SwapType(facts));
+
+        // Walls with openings is not an opening pick either.
+        var mixed = FileClassifier.Read(Docs.Of(Docs.House(wallSelected: true, doorSelected: true)));
+        Assert.False(ForskRegistry.Find("opening.type")!.When(mixed));
+        Assert.Null(ForskCards.SwapType(mixed));
     }
 
     [Fact]

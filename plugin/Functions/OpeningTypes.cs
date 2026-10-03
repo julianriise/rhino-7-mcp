@@ -61,10 +61,17 @@ public static class OpeningTypes
     {
         public string Kind;
         public string ShortName;
-        public string Host;
         public bool TypeChanged;
         public bool HandChanged;
         public bool SwingChanged;
+    }
+
+    /// <summary>A generated opening marker as set_opening_type all reads it.</summary>
+    public sealed class Marker
+    {
+        public string Id;
+        public string Kind;
+        public bool Existing;
     }
 
     static readonly TypeDef[] Catalog = new TypeDef[]
@@ -321,26 +328,47 @@ public static class OpeningTypes
         return "Opening swing already " + (string.IsNullOrEmpty(swing) ? "in" : swing) + ".";
     }
 
-    public static string ChangedLine(int count, string kind, string shortName, IList<string> hosts)
+    // The thread shows no ids, so a receipt counts the openings and names no host wall.
+    public static string ChangedLine(int count, string kind, string shortName)
     {
-        return "Changed " + Count(count) + " " + Noun(kind, count)
-            + " to " + shortName + " on " + HostList(hosts);
+        return "Changed " + Count(count) + " " + Noun(kind, count) + " to " + shortName + ".";
     }
 
-    public static string SwingLine(int count, string kind, IList<string> hosts)
+    public static string SwingLine(int count, string kind)
     {
-        return "Flipped swing on " + Count(count) + " " + Noun(kind, count) + " on " + HostList(hosts);
+        return "Flipped swing on " + Count(count) + " " + Noun(kind, count) + ".";
     }
 
-    public static string HandLine(int count, string kind, IList<string> hosts)
+    public static string HandLine(int count, string kind)
     {
-        return "Changed hand on " + Count(count) + " " + Noun(kind, count) + " on " + HostList(hosts);
+        return "Changed hand on " + Count(count) + " " + Noun(kind, count) + ".";
     }
 
-    public static string HandAndSwingLine(int count, string kind, IList<string> hosts)
+    public static string HandAndSwingLine(int count, string kind)
     {
-        return "Changed hand and flipped swing on " + Count(count) + " " + Noun(kind, count)
-            + " on " + HostList(hosts);
+        return "Changed hand and flipped swing on " + Count(count) + " " + Noun(kind, count) + ".";
+    }
+
+    /// <summary>
+    /// set_opening_type all: the ids of every generated, non-existing opening
+    /// of the type's kind, in the order given. Empty with a reason when the
+    /// type is unknown or the file has none of that kind.
+    /// </summary>
+    public static List<string> AllOfKind(string typeId, IEnumerable<Marker> markers, out string error)
+    {
+        var ids = new List<string>();
+        if (!TryGet(typeId, out var def))
+        {
+            error = "Unknown opening type.";
+            return ids;
+        }
+        foreach (var marker in markers ?? new Marker[0])
+        {
+            if (marker == null || marker.Existing || string.IsNullOrEmpty(marker.Id)) continue;
+            if (string.Equals(NormKind(marker.Kind), def.Kind, StringComparison.Ordinal)) ids.Add(marker.Id);
+        }
+        error = ids.Count == 0 ? "No " + Noun(def.Kind, 2) + " to change." : "";
+        return ids;
     }
 
     public static string Receipt(IList<ReceiptRow> rows)
@@ -780,19 +808,16 @@ public static class OpeningTypes
 
         foreach (var bucket in buckets)
         {
-            var hosts = new List<string>();
-            foreach (var row in bucket)
-                hosts.Add(row.Host);
             var kind = bucket[0].Kind;
             var count = bucket.Count;
             if (mode == "type")
-                lines.Add(ChangedLine(count, kind, bucket[0].ShortName, hosts));
+                lines.Add(ChangedLine(count, kind, bucket[0].ShortName));
             else if (mode == "swing")
-                lines.Add(SwingLine(count, kind, hosts));
+                lines.Add(SwingLine(count, kind));
             else if (mode == "hand")
-                lines.Add(HandLine(count, kind, hosts));
+                lines.Add(HandLine(count, kind));
             else
-                lines.Add(HandAndSwingLine(count, kind, hosts));
+                lines.Add(HandAndSwingLine(count, kind));
         }
     }
 
@@ -820,32 +845,6 @@ public static class OpeningTypes
     {
         if (count < 0) count = 0;
         return count.ToString(CultureInfo.InvariantCulture);
-    }
-
-    static string HostList(IList<string> hosts)
-    {
-        var labels = new List<string>();
-        if (hosts != null)
-        {
-            for (var i = 0; i < hosts.Count; i++)
-            {
-                var label = hosts[i];
-                if (string.IsNullOrWhiteSpace(label)) continue;
-                label = label.Trim();
-                var seen = false;
-                for (var j = 0; j < labels.Count; j++)
-                {
-                    if (string.Equals(labels[j], label, StringComparison.Ordinal))
-                    {
-                        seen = true;
-                        break;
-                    }
-                }
-                if (!seen) labels.Add(label);
-            }
-        }
-        if (labels.Count == 0) return "the wall";
-        return string.Join(", ", labels.ToArray());
     }
 
     static bool TryEditHand(string raw, string current, out string hand)

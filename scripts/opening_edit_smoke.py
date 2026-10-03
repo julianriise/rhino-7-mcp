@@ -456,7 +456,7 @@ def check_opening_types(
 
     print("==> swap one window to top_hung")
     top = send_command(sock, "set_opening_type", {"id": moved_id, "type": "window.top_hung"})
-    if top.get("message") != f"Changed 1 window to top-hung on {moved_fid}":
+    if top.get("message") != "Changed 1 window to top-hung.":
         failures.append(f"top_hung message={top.get('message')!r}")
     kept(
         "top_hung", top, moved_id, moved_attrs, center(before_moved.get("bounding_box")),
@@ -476,7 +476,7 @@ def check_opening_types(
 
     print("==> swap one window to fixed")
     fixed = send_command(sock, "set_opening_type", {"id": added_id, "type": "window.fixed"})
-    if fixed.get("message") != f"Changed 1 window to fixed on {added_fid}":
+    if fixed.get("message") != "Changed 1 window to fixed.":
         failures.append(f"fixed message={fixed.get('message')!r}")
     kept(
         "fixed", fixed, added_id, added_attrs, center(before_added.get("bounding_box")),

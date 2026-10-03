@@ -66,19 +66,32 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The types for the selected opening's kind only: a door lists four, a window three.</summary>
+        /// <summary>
+        /// Openings of one kind picked: that kind's types, for the picked ones.
+        /// Nothing picked: every type of the kinds the file has, and a pill
+        /// changes all of its kind (Data all). Each type pill has its icon.
+        /// </summary>
         public static CardSpec SwapType(FileFacts f)
         {
-            var kind = f?.PickedOpeningKind;
-            if (kind == null) return null;
-            var card = new CardSpec
+            if (f == null) return null;
+            var kinds = new List<string>();
+            string question;
+            if (f.Picked == Picked.Opening && f.PickedOpeningKind != null)
             {
-                Kind = "opening.type",
-                Question = ForskText.Format("opening.type.ask", "kind", ForskText.Get("word." + kind)),
-                Depends = "selection"
-            };
-            foreach (var type in OpeningTypes.All.Where(t => t.Kind == kind))
-                card.Pills.Add(new CardPill(type.Id, type.Label));
+                kinds.Add(f.PickedOpeningKind);
+                question = ForskText.Format("opening.type.ask", "kind", ForskText.Get("word." + f.PickedOpeningKind));
+            }
+            else if (f.Picked == Picked.None && (f.HasDoors || f.HasWindows))
+            {
+                if (f.HasDoors) kinds.Add("door");
+                if (f.HasWindows) kinds.Add("window");
+                question = ForskText.Get(kinds.Count == 2 ? "opening.type.all.ask" : "opening.type.all." + kinds[0]);
+            }
+            else return null;
+            var card = new CardSpec { Kind = "opening.type", Question = question, Depends = "selection" };
+            if (f.Picked == Picked.None) card.Data = new JObject { ["all"] = true };
+            foreach (var type in OpeningTypes.All.Where(t => kinds.Contains(t.Kind)))
+                card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }

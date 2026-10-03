@@ -82,6 +82,7 @@
             "section_pick",
             "section_clear",
             "print_profile",
+            "area_stats",
             "set_layer_material",
             "set_display_mode",
             "run_command",

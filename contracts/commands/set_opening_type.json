@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "set_opening_type.json",
   "title": "SetOpeningType Command",
-  "description": "Set type, hand, and/or swing on one or more openings, then rebuild each host wall once. Does not clear the model. Pass at least one of type, hand, swing. Id omitted uses the current selection, including two or more opening markers or frames. Refuses a marker or host with forsk:kind=existing or on layer X-EXIST. A refused change leaves the document unchanged. The same type with no hand or swing change does not rebuild.",
+  "description": "Set type, hand, and/or swing on one or more openings, then rebuild each host wall once. Does not clear the model. Pass at least one of type, hand, swing. Id omitted uses the current selection, including two or more opening markers or frames. all with a type changes every generated opening of that type's kind and reads no selection. Refuses a marker or host with forsk:kind=existing or on layer X-EXIST. A refused change leaves the document unchanged. The same type with no hand or swing change does not rebuild.",
   "type": "object",
   "properties": {
     "id": {
@@ -31,6 +31,10 @@
       "type": "string",
       "enum": ["in", "out", "flip"],
       "description": "in swings toward the interior. flip swaps in and out and keeps the hand."
+    },
+    "all": {
+      "type": "boolean",
+      "description": "With type: every generated, non-existing opening of the type's kind (\"make all windows fixed\"). Not with id."
     }
   },
   "anyOf": [
@@ -38,5 +42,6 @@
     { "required": ["hand"] },
     { "required": ["swing"] }
   ],
+  "dependentRequired": { "all": ["type"] },
   "additionalProperties": false
 }

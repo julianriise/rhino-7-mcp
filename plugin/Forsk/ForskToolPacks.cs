@@ -467,13 +467,14 @@ namespace RhinoMCPPlugin.Forsk
                         ["head"] = Num("Top Z in mm.")
                     }),
                 Fn("set_opening_type",
-                    "Set type, hand, or swing on the selected openings, then rebuild each host once. Pass at least one of type, hand, swing. Id omitted uses the selection, including two or more. Does not clear the model. Refuses X-EXIST. A refused change leaves the document unchanged.",
+                    "Set type, hand, or swing on the selected openings, then rebuild each host once. Pass at least one of type, hand, swing. Id omitted uses the selection, including two or more. all with a type changes every opening of that kind: make all windows fixed. Does not clear the model. Refuses X-EXIST. A refused change leaves the document unchanged.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker or frame GUID. Omit to use the selection."),
                         ["type"] = Str("door.hinged_single, door.hinged_double, door.sliding, door.pocket, window.fixed, window.side_hung, or window.top_hung."),
                         ["hand"] = Str("L, R, or flip."),
-                        ["swing"] = Str("in, out, or flip.")
+                        ["swing"] = Str("in, out, or flip."),
+                        ["all"] = Bool("With type: every door or every window of that type's kind. No id.")
                     }),
                 Fn("delete_opening",
                     "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the selection, including two or more openings. One id removes that opening. Refuses X-EXIST. If the rebuild fails, the openings return and the wall stays.",

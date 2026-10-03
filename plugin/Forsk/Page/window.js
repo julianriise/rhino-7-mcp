@@ -360,11 +360,28 @@
     return row;
   }
 
-  function pill(label, primary, onClick) {
+  function pill(label, primary, onClick, icon) {
     var button = el('button', 'pill' + (primary ? ' primary' : ''), label);
     button.type = 'button';
+    var drawn = icon ? iconNode(icon) : null;
+    if (drawn) button.insertBefore(drawn, button.firstChild);
     button.addEventListener('click', onClick);
     return button;
+  }
+
+  /* The holder of a pill icon in window.html. No DOM, so it tests headless. */
+  Forsk.iconId = function (name) {
+    return 'icon-' + name;
+  };
+
+  /* A copy of a pill icon. Icons are strokes with no ids, so a copy needs no renaming. */
+  function iconNode(name) {
+    var holder = document.getElementById(Forsk.iconId(name));
+    var src = holder ? first(holder, 'svg') : null;
+    if (!src) return null;
+    var node = src.cloneNode(true);
+    node.setAttribute('class', 'icon');
+    return node;
   }
 
   function card(item) {
@@ -451,7 +468,7 @@
     (item.pills || []).forEach(function (p, index) {
       pills.appendChild(pill(p.label, index === 0, function () {
         sender.send(Forsk.cardAction(item, p.id, values(), order));
-      }));
+      }, p.icon));
     });
     box.appendChild(pills);
     if (item.note) box.appendChild(el('div', 'note', item.note));

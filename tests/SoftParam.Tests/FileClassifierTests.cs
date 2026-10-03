@@ -102,9 +102,9 @@ public class FileClassifierTests
         Assert.Equal(Picked.Opening, f.Picked);
         Assert.Equal("door", f.PickedOpeningKind);
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "opening.move", "opening.resize" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "opening.move", "opening.type" }, bar.Slots.Select(a => a.Id));
         Assert.Equal(Runs.Prefill, bar.Context[0].Runs);
-        Assert.Equal(Runs.Prefill, bar.Context[1].Runs);
+        Assert.Equal(Runs.Card, bar.Context[1].Runs);
     }
 
     [Fact]

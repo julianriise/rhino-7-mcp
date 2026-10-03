@@ -99,6 +99,27 @@ public class RegistryTests
         Assert.DoesNotContain(ForskRegistry.Bar(f).Context, a => fileLevel.Contains(a.Id));
     }
 
+    /// <summary>R1: an opening pick suggests Move, Change type. Resize stays on the card.</summary>
+    [Fact]
+    public void AnOpeningPick_SuggestsMove_ThenChangeType()
+    {
+        var f = Docs.Facts("house, door selected");
+        Assert.Equal(new[] { "opening.move", "opening.type" }, ForskRegistry.Bar(f).Context.Select(a => a.Id));
+        Assert.Equal("Change type", ForskRegistry.Find("opening.type")!.Label);
+        Assert.Contains(ForskRegistry.Card(f).Actions, a => a.Id == "opening.resize");
+    }
+
+    /// <summary>R1: with nothing picked, Change type is on the "?" card when the file has doors or windows.</summary>
+    [Fact]
+    public void ChangeType_IsOnTheCard_WithNothingPicked_WhenOpeningsExist()
+    {
+        Assert.Contains(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "opening.type");
+        Assert.Contains(ForskRegistry.Card(Docs.Facts("rooms, no window")).Actions, a => a.Id == "opening.type");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("walls only")).Actions, a => a.Id == "opening.type");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, wall selected")).Actions, a => a.Id == "opening.type");
+        Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts("house")).Slots, a => a.Id == "opening.type");
+    }
+
     [Fact]
     public void Delete_IsOnTheCard_WhenSomethingIsSelected()
     {
@@ -220,7 +241,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 

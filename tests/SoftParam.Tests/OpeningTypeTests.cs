@@ -178,38 +178,59 @@ public class OpeningTypeTests
         Assert.Equal("Opening already sliding.", OpeningTypes.AlreadyLine(same.After.Def.ShortName));
     }
 
+    /// <summary>The thread shows no ids: a receipt counts the change and names no host wall.</summary>
     [Fact]
-    public void Receipts_NameTheHostAndTheChange()
+    public void Receipts_CountTheChange_AndNameNoHost()
     {
+        Assert.Equal("Changed 1 door to sliding.", OpeningTypes.ChangedLine(1, "door", "sliding"));
+        Assert.Equal("Flipped swing on 1 door.", OpeningTypes.SwingLine(1, "door"));
+        Assert.Equal("Changed hand on 1 door.", OpeningTypes.HandLine(1, "door"));
         Assert.Equal(
-            "Changed 1 door to sliding on w01",
-            OpeningTypes.ChangedLine(1, "door", "sliding", new[] { "w01" }));
+            "Changed 6 windows to fixed.",
+            OpeningTypes.Receipt(Enumerable.Range(0, 6).Select(_ => Row("window", "fixed", type: true)).ToList()));
         Assert.Equal(
-            "Flipped swing on 1 door on w01",
-            OpeningTypes.SwingLine(1, "door", new[] { "w01" }));
-        Assert.Equal(
-            "Changed hand on 1 door on w01",
-            OpeningTypes.HandLine(1, "door", new[] { "w01" }));
-        Assert.Equal(
-            "Changed 2 doors to sliding on w01, w02",
+            "Changed 1 window to top-hung. Changed 1 window to fixed.",
             OpeningTypes.Receipt(new[]
             {
-                Row("door", "sliding", "w01", type: true),
-                Row("door", "sliding", "w02", type: true)
+                Row("window", "top-hung", type: true),
+                Row("window", "fixed", type: true)
             }));
         Assert.Equal(
-            "Changed 1 window to top-hung on w01 Changed 1 window to fixed on w01",
+            "Changed hand and flipped swing on 1 door.",
             OpeningTypes.Receipt(new[]
             {
-                Row("window", "top-hung", "w01", type: true),
-                Row("window", "fixed", "w01", type: true)
+                Row("door", "hinged", hand: true, swing: true)
             }));
-        Assert.Equal(
-            "Changed hand and flipped swing on 1 door on w01",
-            OpeningTypes.Receipt(new[]
-            {
-                Row("door", "hinged", "w01", hand: true, swing: true)
-            }));
+    }
+
+    /// <summary>
+    /// "all": a type means every opening of its kind. Existing underlay is never
+    /// changed, and a kind with no openings says so instead of doing nothing.
+    /// </summary>
+    [Fact]
+    public void All_SelectsEveryOpeningOfTheTypesKind()
+    {
+        var markers = new[]
+        {
+            Marker("d1", "door"), Marker("v1", "window"), Marker("v2", "window"),
+            Marker("v3", "window", existing: true), Marker("d2", "door")
+        };
+
+        Assert.Equal(new[] { "v1", "v2" }, OpeningTypes.AllOfKind("window.fixed", markers, out var why));
+        Assert.Equal("", why);
+        Assert.Equal(new[] { "d1", "d2" }, OpeningTypes.AllOfKind("door.sliding", markers, out why));
+
+        Assert.Empty(OpeningTypes.AllOfKind("door.portal", markers, out why));
+        Assert.Equal("Unknown opening type.", why);
+        Assert.Empty(OpeningTypes.AllOfKind("door.pocket", new[] { Marker("v1", "window") }, out why));
+        Assert.Equal("No doors to change.", why);
+        Assert.Empty(OpeningTypes.AllOfKind("window.fixed", new[] { Marker("v3", "window", existing: true) }, out why));
+        Assert.Equal("No windows to change.", why);
+    }
+
+    static OpeningTypes.Marker Marker(string id, string kind, bool existing = false)
+    {
+        return new OpeningTypes.Marker { Id = id, Kind = kind, Existing = existing };
     }
 
     static OpeningTypes.PlanFrame Frame()
@@ -237,7 +258,6 @@ public class OpeningTypeTests
     static OpeningTypes.ReceiptRow Row(
         string kind,
         string shortName,
-        string host,
         bool type = false,
         bool hand = false,
         bool swing = false)
@@ -246,7 +266,6 @@ public class OpeningTypeTests
         {
             Kind = kind,
             ShortName = shortName,
-            Host = host,
             TypeChanged = type,
             HandChanged = hand,
             SwingChanged = swing
