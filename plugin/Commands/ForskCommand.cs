@@ -51,6 +51,17 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>Drag one wall along its normal. Release runs move_wall.</summary>
+    public class ForskDragWallCommand : Command
+    {
+        public override string EnglishName => ForskDragWall.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            return ForskDragWall.Run(doc);
+        }
+    }
+
     /// <summary>Drag a cross-section line in Top, name it, store it with section_add.</summary>
     public class ForskSectionCommand : Command
     {

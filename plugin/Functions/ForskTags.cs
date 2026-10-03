@@ -237,6 +237,13 @@ public partial class RhinoMCPFunctions
         return IsOnExistingLayer(doc, obj);
     }
 
+    /// <summary>A generated Forsk wall. Existing underlay is not a host.</summary>
+    internal static bool IsHostWall(RhinoDoc doc, RhinoObject obj)
+    {
+        return string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)
+            && !IsExistingUnderlay(doc, obj);
+    }
+
     private static void RefuseExistingUnderlay(RhinoDoc doc, RhinoObject obj)
     {
         if (IsExistingUnderlay(doc, obj))
