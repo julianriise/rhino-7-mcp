@@ -90,6 +90,34 @@ public class OpeningBlockSourceTests
         Assert.DoesNotContain("Objects.Find(", body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AHiddenMarkerIsShownBeforeReplace()
+    {
+        // Objects.Replace(Guid, Brep) misses an object-hidden marker, so a
+        // selected frame resolved and then move threw "Opening marker not found."
+        var blocks = File.ReadAllText(Path.Combine(FunctionsDir(), "OpeningBlocks.cs"));
+        var start = blocks.IndexOf("bool ReplaceOpeningMarker", StringComparison.Ordinal);
+        var end = blocks.IndexOf("private Guid AddOpeningBlock", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "replace helper is present");
+        var body = blocks.Substring(start, end - start);
+        Assert.True(
+            body.IndexOf("Objects.Show", StringComparison.Ordinal) >= 0
+            && body.IndexOf("Objects.Show", StringComparison.Ordinal) < body.IndexOf("Objects.Replace", StringComparison.Ordinal),
+            "show the marker before replace");
+        Assert.True(
+            body.IndexOf("HideOpeningMarker", StringComparison.Ordinal) > body.IndexOf("Objects.Replace", StringComparison.Ordinal),
+            "hide the marker after replace");
+
+        foreach (var file in new[] { "FacadeOpenings.cs", "WallEditCommands.cs", "SoftParam.cs" })
+        {
+            var source = File.ReadAllText(Path.Combine(FunctionsDir(), file));
+            Assert.Contains("ReplaceOpeningMarker", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Objects.Replace(rec.MarkerId", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Objects.Replace(item.Marker.Id", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Objects.Replace(id, copy)", source, StringComparison.Ordinal);
+        }
+    }
+
     static string FunctionsDir()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)

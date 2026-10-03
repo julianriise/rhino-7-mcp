@@ -148,6 +148,22 @@ public partial class RhinoMCPFunctions
         doc.Objects.Hide(id, true);
     }
 
+    /// <summary>
+    /// Replace a marker brep. Markers are object-hidden, and
+    /// Objects.Replace(Guid, Brep) builds an ObjRef that misses a hidden
+    /// object, so moving a selected frame threw "Opening marker not found."
+    /// Show it, replace, then hide it again even when the replace fails.
+    /// </summary>
+    private static bool ReplaceOpeningMarker(RhinoDoc doc, Guid id, Brep brep)
+    {
+        if (doc == null || id == Guid.Empty || brep == null) return false;
+        var obj = doc.Objects.FindId(id);
+        if (obj != null && obj.IsHidden) doc.Objects.Show(id, true);
+        var replaced = doc.Objects.Replace(id, brep);
+        HideOpeningMarker(doc, id);
+        return replaced;
+    }
+
     private Guid AddOpeningBlock(
         RhinoDoc doc,
         Guid markerId,

@@ -1249,9 +1249,8 @@ public partial class RhinoMCPFunctions
         var snap = CaptureMarker(doc, rec.MarkerId);
         try
         {
-            if (newMarker != null && !doc.Objects.Replace(rec.MarkerId, newMarker))
+            if (newMarker != null && !ReplaceOpeningMarker(doc, rec.MarkerId, newMarker))
                 throw new InvalidOperationException("Opening marker not found.");
-            HideOpeningMarker(doc, rec.MarkerId);
             WriteOpeningSize(doc, rec.MarkerId, width, sill, head);
             var rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
             var hostId = host.Id;
@@ -1428,7 +1427,7 @@ public partial class RhinoMCPFunctions
         {
             var copy = snap.Geometry.DuplicateBrep();
             if (copy != null)
-                doc.Objects.Replace(id, copy);
+                ReplaceOpeningMarker(doc, id, copy);
         }
 
         var obj = doc.Objects.FindId(id);

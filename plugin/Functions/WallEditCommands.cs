@@ -12,12 +12,12 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// F3 wall edits on the soft-param record. A baked plan is one wall record, so
-/// an edit works on one straight run inside its outline (WallEdit): the path
-/// is written, the openings on the run go with it, and the host is rebuilt
-/// from its path. The floor slab and flat roof that came from that record
-/// are rebuilt, and rooms are detected again. A refused edit puts the record
-/// back and the document is unchanged.
+/// F3 wall edits on the soft-param record. One straight run is one wall
+/// record (selection S1). An edit writes that run's path, the openings on
+/// the run go with it, and the host is rebuilt from its path. The floor slab
+/// and flat roof that came from that record are rebuilt, and rooms are
+/// detected again. A refused edit puts the record back and the document is
+/// unchanged.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -102,9 +102,8 @@ public partial class RhinoMCPFunctions
             foreach (var item in onRun)
             {
                 var brep = GetBrepFromObject(item.Marker)?.DuplicateBrep();
-                if (brep == null || !brep.Translate(shift) || !doc.Objects.Replace(item.Marker.Id, brep))
+                if (brep == null || !brep.Translate(shift) || !ReplaceOpeningMarker(doc, item.Marker.Id, brep))
                     throw new InvalidOperationException("Opening marker not found.");
-                HideOpeningMarker(doc, item.Marker.Id);
                 carried.Add(item.Marker.Id.ToString());
             }
             foreach (var undo in undos)

@@ -151,9 +151,7 @@ public partial class RhinoMCPFunctions
                     item.Spec.Sill,
                     item.Spec.Head,
                     FacadeConst.MarkerSelectDepth);
-                if (markerBrep != null && doc.Objects.Replace(item.Marker.Id, markerBrep))
-                    HideOpeningMarker(doc, item.Marker.Id);
-                else
+                if (markerBrep == null || !ReplaceOpeningMarker(doc, item.Marker.Id, markerBrep))
                     warnings.Add("Opening marker not found.");
 
                 StampOpeningHostId(doc, item.Marker.Id, host.Id);
