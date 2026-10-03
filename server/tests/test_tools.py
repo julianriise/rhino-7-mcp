@@ -4088,7 +4088,8 @@ class TestPrintGuards:
         assert "Nothing to lay out. Bake walls first." in src
         assert "Layout detail is empty. The sheet does not show the drawing." in src
         assert "PDF detail is empty. The sheet does not show the drawing." in src
-        pack = src[src.index('[McpCommand("layout_pack")]'):src.index('[McpCommand("export_pdf")]')]
+        assert '[McpCommand("layout_pack", ModelView = true)]' in src
+        pack = src[src.index('[McpCommand("layout_pack", ModelView = true)]'):src.index('[McpCommand("export_pdf")]')]
         assert "EnsureForskPen" not in pack
         assert "PaintClayForPreview" not in pack
         assert "BakeGreyscaleDrawing" in pack

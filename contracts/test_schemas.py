@@ -1475,8 +1475,10 @@ def test_contract_synchronization_across_tiers():
 # Write commands that add nothing to model space, or own the active view.
 # Every other write command carries ModelView = true.
 KEEPS_VIEW = {
-    # Layouts and sheets: they activate their own pages and model views.
-    "layout_pack", "export_pdf", "clear_layouts",
+    # These activate pages. layout_pack is ModelView instead: it bakes curves
+    # before it opens pages, and a layout left active would put them in page
+    # space so the detail prints a blank sheet.
+    "export_pdf", "clear_layouts",
     # The user's own code or command decides.
     "run_command", "execute_rhinoscript_python_code", "execute_rhinocommon_csharp_code",
     # Sets the active view's display mode: switching first would change the target.

@@ -201,6 +201,22 @@ public static class SoftParamPlan
     }
 
     /// <summary>
+    /// Plan centre of an opening at parameter t. A face segment steps in by
+    /// half its thickness. A centreline segment (a thin run's bbox middle)
+    /// stays put, so a slide along the wall does not cross the wall.
+    /// </summary>
+    public static void FootCenter(
+        double x0, double y0, double tx, double ty, double ix, double iy,
+        double length, double t, double thickness, bool centerline,
+        out double x, out double y)
+    {
+        var across = centerline ? 0.0 : thickness * 0.5;
+        var along = t * length;
+        x = x0 + along * tx + across * ix;
+        y = y0 + along * ty + across * iy;
+    }
+
+    /// <summary>
     /// Slide one opening along its current segment. deltaMm and absoluteT are
     /// exclusive. A segment that cannot hold the width returns false and the
     /// caller keeps the previous t. Siblings are not arguments.

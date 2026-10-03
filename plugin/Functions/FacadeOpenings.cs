@@ -54,6 +54,8 @@ public partial class RhinoMCPFunctions
         public double Length;
         public double Thickness;
         public bool FromOuter;
+        /// <summary>The segment already lies on the wall centreline (SegmentsFromLinear). A face segment does not.</summary>
+        public bool Centerline;
     }
 
     private sealed class Placement
@@ -1006,7 +1008,8 @@ public partial class RhinoMCPFunctions
                 Tangent = tangent,
                 Inward = inward,
                 Length = length,
-                Thickness = thickness
+                Thickness = thickness,
+                Centerline = true
             }
         };
     }
@@ -1162,8 +1165,15 @@ public partial class RhinoMCPFunctions
 
     private static Placement FootprintAtT(WallSegment seg, OpeningSpec spec, double t)
     {
-        var center = seg.Start + (t * seg.Length) * seg.Tangent
-                     + seg.Inward * (seg.Thickness * 0.5);
+        // A face segment is offset by half its thickness onto the centreline.
+        // SegmentsFromLinear already is the centreline of a thin run, so the
+        // same offset would walk the opening onto a face (500 mm along plus
+        // 100 mm across on a 200 mm wall).
+        SoftParamPlan.FootCenter(
+            seg.Start.X, seg.Start.Y, seg.Tangent.X, seg.Tangent.Y,
+            seg.Inward.X, seg.Inward.Y, seg.Length, t, seg.Thickness, seg.Centerline,
+            out var x, out var y);
+        var center = new Point3d(x, y, 0);
         var halfW = spec.Width * 0.5;
         var halfThin = FacadeConst.DummyThin * 0.5;
         BoundingBox bbox;

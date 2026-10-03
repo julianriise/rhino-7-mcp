@@ -10,6 +10,28 @@ namespace SoftParam.Tests;
 public class OpeningEditTests
 {
     [Fact]
+    public void ACenterlineSlide_StaysOnTheCentreline()
+    {
+        // South wall, segment on y=100, inward +Y, thickness 200. Five hundred
+        // millimetres from x=2600 must not add the half-thickness (that is
+        // sqrt(500²+100²) = 509.9, the opening on the face).
+        SoftParamPlan.FootCenter(
+            0, 100, 1, 0, 0, 1, 8000, 3100.0 / 8000.0, 200, true, out var x, out var y);
+        Assert.Equal(3100, x, 3);
+        Assert.Equal(100, y, 3);
+        var shift = Math.Sqrt(Math.Pow(x - 2600, 2) + Math.Pow(y - 100, 2));
+        Assert.Equal(500, shift, 3);
+    }
+
+    [Fact]
+    public void AFaceSegment_LandsOnTheCentreline()
+    {
+        SoftParamPlan.FootCenter(0, 0, 1, 0, 0, 1, 8000, 0.5, 200, false, out var x, out var y);
+        Assert.Equal(4000, x, 3);
+        Assert.Equal(100, y, 3);
+    }
+
+    [Fact]
     public void Slide_FiveHundredMillimetres_LeavesTheSiblingOffset()
     {
         var segs = Garage();

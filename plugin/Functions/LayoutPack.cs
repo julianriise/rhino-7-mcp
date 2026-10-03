@@ -171,12 +171,16 @@ public partial class RhinoMCPFunctions
         return ProjectMetaRecord(doc);
     }
 
-    [McpCommand("layout_pack")]
+    [McpCommand("layout_pack", ModelView = true)]
     public JObject LayoutPack(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
         if (doc == null)
             throw new InvalidOperationException("No active document.");
+        // A previous export leaves a layout active. Curves added then land in
+        // page space, at model millimetres, and the detail looks at the model
+        // and prints a blank sheet. The registry also switches first.
+        UseModelView(doc);
         ApplyDocumentPrintInk(doc);
 
         var paper = parameters?["paper"]?.ToString();

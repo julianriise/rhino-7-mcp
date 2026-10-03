@@ -759,7 +759,7 @@ def main() -> int:
                 failures.append("garage void missing after move")
             shift = ((float(row.get("x", 0)) - origin[0]) ** 2 + (float(row.get("y", 0)) - origin[1]) ** 2) ** 0.5
             print(f"    shift {shift:.1f} mm id={returned or moved_id}")
-            if shift < 50 or shift > 700:
+            if abs(shift - 500) > 2:
                 failures.append(f"shift {shift:.1f}")
 
         new_block = moved.get("block_id")
@@ -1244,6 +1244,8 @@ def main() -> int:
             failures.append(f"takeoff number {takeoff.get('number')}")
         set_pdf = send_command(sock, "export_pdf", {"path": "/tmp/forsk-f5-garage-set.pdf"})
         set_message = str(set_pdf.get("message") or "")
+        set_names = [str(name) for name in (set_pdf.get("pages") or [])]
+        print("    set pdf " + ", ".join(f"{i} {name}" for i, name in enumerate(set_names, 1)))
         print(f"    set export {set_message}")
         if (set_pdf.get("count") or 0) < 1 or "capture failed" in set_message.lower():
             failures.append(f"set export {set_message}")

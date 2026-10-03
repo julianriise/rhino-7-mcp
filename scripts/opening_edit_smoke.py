@@ -134,7 +134,7 @@ def check_host(label, result, marker_id, origin, expect, failures, want_shift=Fa
     if want_shift and origin is not None:
         shift = dist_xy(origin, (float(row["x"]), float(row["y"]), float(row["z"])))
         print(f"    {label} void shift {shift:.1f} mm")
-        if shift < 50 or shift > 700:
+        if abs(shift - 500) > 2:
             failures.append(f"{label} void shift {shift:.1f} mm, expected about 500")
     if want_previous_solid:
         try:
@@ -402,17 +402,24 @@ def check_opening_types(
             f"baked hand={moved_attrs.get('forsk:hand')!r} swing={moved_attrs.get('forsk:swing')!r}"
         )
 
-    def kept(label: str, result: dict, marker_id: str, previous: dict, origin) -> None:
+    def kept(
+        label: str, result: dict, marker_id: str, previous: dict, origin,
+        window_host: str, window_fid: str, window_thick: str, expect_count,
+    ) -> None:
         print(
             f"    {result.get('message')} openings={result.get('host_openings')} "
             f"voids={result.get('host_voids')} frame={result.get('max_frame_mm')}"
         )
-        if result.get("host_id") != host_id:
-            failures.append(f"{label} host {result.get('host_id')} != {host_id}")
-        if result.get("host_openings") != counts or result.get("host_voids") != counts:
+        if result.get("host_id") != window_host:
+            failures.append(f"{label} host {result.get('host_id')} != {window_host}")
+        openings = result.get("host_openings")
+        voids = result.get("host_voids")
+        if expect_count is not None and (openings != expect_count or voids != expect_count):
             failures.append(
-                f"{label} openings={result.get('host_openings')} voids={result.get('host_voids')} expected {counts}"
+                f"{label} openings={openings} voids={voids} expected {expect_count}"
             )
+        elif openings != voids:
+            failures.append(f"{label} openings={openings} voids={voids}")
         try:
             if float(result.get("max_frame_mm")) > 25:
                 failures.append(f"{label} max_frame_mm={result.get('max_frame_mm')}")
@@ -421,10 +428,10 @@ def check_opening_types(
         row = row_for(result.get("markers"), marker_id)
         if row is None or row.get("inside") is not False:
             failures.append(f"{label} marker is not a void")
-        wall = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
-        if wall.get("forsk:id") != wall_fid:
+        wall = attrs_of(send_command(sock, "get_object_info", {"id": window_host}))
+        if wall.get("forsk:id") != window_fid:
             failures.append(f"{label} wall id {wall.get('forsk:id')!r}")
-        if wall.get("forsk:thickness") != wall_thick:
+        if wall.get("forsk:thickness") != window_thick:
             failures.append(f"{label} thickness {wall.get('forsk:thickness')!r}")
         now = send_command(sock, "get_object_info", {"id": marker_id})
         now_attrs = attrs_of(now)
@@ -435,11 +442,26 @@ def check_opening_types(
         if origin and now_center and dist_xy(origin, now_center) > 1:
             failures.append(f"{label} moved {dist_xy(origin, now_center):.1f} mm")
 
+    def host_of(info: dict) -> tuple[str, str, str]:
+        hid = str(attrs_of(info).get("forsk:host") or "")
+        wall = attrs_of(send_command(sock, "get_object_info", {"id": hid})) if hid else {}
+        return hid, str(wall.get("forsk:id") or ""), str(wall.get("forsk:thickness") or "")
+
+    moved_host, moved_fid, moved_thick = host_of(before_moved)
+    added_host, added_fid, added_thick = host_of(before_added)
+    # The edited wall's count is known. A survivor on another wall only has to
+    # keep openings and voids equal.
+    moved_count = counts if moved_host == host_id else None
+    added_count = counts if added_host == host_id else None
+
     print("==> swap one window to top_hung")
     top = send_command(sock, "set_opening_type", {"id": moved_id, "type": "window.top_hung"})
-    if top.get("message") != f"Changed 1 window to top-hung on {wall_fid}":
+    if top.get("message") != f"Changed 1 window to top-hung on {moved_fid}":
         failures.append(f"top_hung message={top.get('message')!r}")
-    kept("top_hung", top, moved_id, moved_attrs, center(before_moved.get("bounding_box")))
+    kept(
+        "top_hung", top, moved_id, moved_attrs, center(before_moved.get("bounding_box")),
+        moved_host, moved_fid, moved_thick, moved_count,
+    )
     top_attr = attrs_of(send_command(sock, "get_object_info", {"id": moved_id}))
     if top_attr.get("forsk:opening_type") != "window.top_hung":
         failures.append(f"top_hung type={top_attr.get('forsk:opening_type')!r}")
@@ -454,9 +476,12 @@ def check_opening_types(
 
     print("==> swap one window to fixed")
     fixed = send_command(sock, "set_opening_type", {"id": added_id, "type": "window.fixed"})
-    if fixed.get("message") != f"Changed 1 window to fixed on {wall_fid}":
+    if fixed.get("message") != f"Changed 1 window to fixed on {added_fid}":
         failures.append(f"fixed message={fixed.get('message')!r}")
-    kept("fixed", fixed, added_id, added_attrs, center(before_added.get("bounding_box")))
+    kept(
+        "fixed", fixed, added_id, added_attrs, center(before_added.get("bounding_box")),
+        added_host, added_fid, added_thick, added_count,
+    )
     fixed_attr = attrs_of(send_command(sock, "get_object_info", {"id": added_id}))
     if fixed_attr.get("forsk:opening_type") != "window.fixed":
         failures.append(f"fixed type={fixed_attr.get('forsk:opening_type')!r}")
@@ -529,7 +554,7 @@ def main() -> int:
         require_fresh_copy(summary, fresh)
         if "office" not in doc_name.lower():
             raise SmokeError(
-                f"temp copy name {doc_name!r} must contain 'office' so the 77-opening check runs"
+                f"temp copy name {doc_name!r} must contain 'office'"
             )
 
         print(f"==> import {dxf.name}")
@@ -609,9 +634,11 @@ def main() -> int:
         if not frame_name:
             frame_name = window["info"].get("name")
 
-        expected = 77
+        # host_openings is this wall. The plan's symbol count is the whole bake.
+        building = 77
         if baked:
-            expected = int(baked.get("door_cuts") or 0) + int(baked.get("window_cuts") or 0)
+            building = int(baked.get("door_cuts") or 0) + int(baked.get("window_cuts") or 0)
+        expected = 1 + (1 if sibling_id else 0)
         print(f"==> select {frame_name} then move this window 500 mm")
         selected = send_command(sock, "select_objects", {"filters": {"name": [frame_name]}})
         print(f"    selected {selected.get('count')}")
@@ -631,9 +658,7 @@ def main() -> int:
         if origin and moved_center:
             shift = dist_xy(origin, moved_center)
             print(f"    shift {shift:.1f} mm")
-            if shift < 50:
-                failures.append(f"opening shifted {shift:.1f} mm, expected about 500")
-            if shift > 700:
+            if abs(shift - 500) > 2:
                 failures.append(f"opening shifted {shift:.1f} mm, expected about 500")
         wall_after = send_command(sock, "get_object_info", {"id": host_id})
         wall_after_attrs = attrs_of(wall_after)
@@ -730,9 +755,6 @@ def main() -> int:
                 failures.append("miss moved a sibling")
 
         print("==> select 2 windows and delete_opening")
-        doc_name = str(meta.get("name") or "")
-        if "office" in doc_name.lower() and expected != 77:
-            failures.append(f"office openings before delete={expected}, expected 77")
         pair = pick_delete_pair(sock, marker_ids, host_id, wall_path, marker_id)
         if len(pair) != 2:
             failures.append(f"delete pair={len(pair)}")
@@ -755,12 +777,6 @@ def main() -> int:
             if removed.get("host_openings") != expected - 2 or removed.get("host_voids") != expected - 2:
                 failures.append(
                     f"delete openings={removed.get('host_openings')} voids={removed.get('host_voids')} expected {expected - 2}"
-                )
-            if "office" in doc_name.lower() and (
-                removed.get("host_openings") != 75 or removed.get("host_voids") != 75
-            ):
-                failures.append(
-                    f"office delete openings={removed.get('host_openings')} voids={removed.get('host_voids')} expected 75"
                 )
             deleted_rows = removed.get("deleted") or []
             if len(deleted_rows) != 2:
@@ -821,16 +837,35 @@ def main() -> int:
                 failures.append("A-WALL ids changed on add")
 
             print(f"==> opening types, counts stay {expected - 1}")
-            check_opening_types(
-                sock,
-                marker_id,
-                str(added.get("marker_id") or ""),
-                host_id,
-                wall_fid,
-                wall_thick,
-                expected - 1,
-                failures,
-            )
+            # window-01's marker was one of the two just deleted. Swap a
+            # side-hung window that is still in the document, plus the one added back.
+            added_id = str(added.get("marker_id") or "")
+            side_id = None
+            for mid in marker_ids:
+                reply = send_raw(sock, "get_object_info", {"id": mid})
+                if reply.get("status") != "success":
+                    continue
+                attrs = attrs_of(reply.get("result") or {})
+                if (
+                    attrs.get("forsk:opening_type") == "window.side_hung"
+                    and attrs.get("forsk:hand") == "L"
+                    and attrs.get("forsk:swing") == "in"
+                ):
+                    side_id = mid
+                    break
+            if not side_id or not added_id:
+                failures.append("type swap needs a side-hung window that still exists and the added window")
+            else:
+                check_opening_types(
+                    sock,
+                    side_id,
+                    added_id,
+                    host_id,
+                    wall_fid,
+                    wall_thick,
+                    expected - 1,
+                    failures,
+                )
 
         if baked and baked["floor_ids"]:
             floor = send_command(sock, "get_object_info", {"id": baked["floor_ids"][0]})
@@ -983,7 +1018,7 @@ def main() -> int:
                 plan_smoke.check_pages_written(laid_out, pdf, label, failures)
             return page
 
-        openings_now = expected - 1 if baked else 0
+        openings_now = building - 1 if baked else 0
         check_plan("office fit", None, "/tmp/forsk-f5-office-fit.pdf", openings_now, schedules=True)
         check_plan("office 1:200", 200, "/tmp/forsk-f5-office-200.pdf", openings_now)
         # F5.3: a long and a cross section through a named room, as chat makes them.

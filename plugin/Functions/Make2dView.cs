@@ -435,7 +435,9 @@ public partial class RhinoMCPFunctions
     /// carries the solid and the others draw nothing. A cluster whose union
     /// fails draws its records, and the note says so.
     /// </summary>
-    private static Dictionary<Guid, Brep> WallClusterSolids(RhinoDoc doc, IList<RhinoObject> sources, out string note)
+    private static Dictionary<Guid, Brep> WallClusterSolids(
+        RhinoDoc doc, IList<RhinoObject> sources, out string note,
+        Dictionary<Guid, List<RhinoObject>> members = null)
     {
         note = null;
         var solids = new Dictionary<Guid, Brep>();
@@ -468,7 +470,13 @@ public partial class RhinoMCPFunctions
             }
             union[0].MergeCoplanarFaces(tolerance);
             solids[walls[cluster[0]].Id] = union[0];
-            for (var k = 1; k < cluster.Count; k++) solids[walls[cluster[k]].Id] = null;
+            var group = new List<RhinoObject> { walls[cluster[0]] };
+            for (var k = 1; k < cluster.Count; k++)
+            {
+                solids[walls[cluster[k]].Id] = null;
+                group.Add(walls[cluster[k]]);
+            }
+            if (members != null) members[walls[cluster[0]].Id] = group;
         }
         if (failed > 0)
             note = failed == 1
@@ -748,7 +756,8 @@ public partial class RhinoMCPFunctions
     /// </summary>
     private static List<List<Curve>> SectionFillLoops(
         IList<RhinoObject> sources, Plane cut, bool fillFloors, double tolerance, List<string> owners = null,
-        Dictionary<Guid, Brep> wallSolids = null)
+        Dictionary<Guid, Brep> wallSolids = null,
+        Dictionary<Guid, List<RhinoObject>> clusterMembers = null)
     {
         var groups = new List<List<Curve>>();
         if (sources == null) return groups;
@@ -758,9 +767,30 @@ public partial class RhinoMCPFunctions
             if (wallSolids != null && obj != null && wallSolids.TryGetValue(obj.Id, out var solid))
             {
                 // The cluster's one solid, so the poché has no seam between its records.
+                // A section still names every run the plane crosses: one copy of that
+                // solid per run, each stamped with that run.
                 var group = new List<Curve>();
                 if (solid != null) ContourMass(solid, cut, tolerance, group);
-                if (group.Count > 0) groups.Add(group);
+                if (group.Count > 0)
+                {
+                    List<RhinoObject> crossed = null;
+                    if (fillFloors && clusterMembers != null
+                        && clusterMembers.TryGetValue(obj.Id, out var members)
+                        && members != null && members.Count > 1)
+                        crossed = MembersCutBy(members, cut, tolerance);
+                    if (crossed != null && crossed.Count > 0)
+                    {
+                        for (var m = 0; m < crossed.Count; m++)
+                        {
+                            groups.Add(m == 0 ? group : DuplicateCurves(group));
+                            var id = crossed[m]?.Attributes?.GetUserString("forsk:id");
+                            if (string.IsNullOrEmpty(id)) id = crossed[m]?.Id.ToString() ?? "";
+                            owners?.Add(id);
+                        }
+                        continue;
+                    }
+                    groups.Add(group);
+                }
             }
             else
                 CollectSectionGroups(obj, Transform.Identity, cut, fillFloors, tolerance, groups, 0);
@@ -770,6 +800,34 @@ public partial class RhinoMCPFunctions
                 owners?.Add(owner);
         }
         return groups;
+    }
+
+    /// <summary>Runs in a joined band whose own solid meets the cut plane.</summary>
+    private static List<RhinoObject> MembersCutBy(IList<RhinoObject> members, Plane cut, double tolerance)
+    {
+        var crossed = new List<RhinoObject>();
+        if (members == null) return crossed;
+        foreach (var member in members)
+        {
+            var probe = new List<Curve>();
+            if (member?.Geometry is Brep brep) ContourMass(brep, cut, tolerance, probe);
+            var hit = probe.Count > 0;
+            foreach (var curve in probe) curve?.Dispose();
+            if (hit) crossed.Add(member);
+        }
+        return crossed;
+    }
+
+    private static List<Curve> DuplicateCurves(List<Curve> group)
+    {
+        var copy = new List<Curve>();
+        if (group == null) return copy;
+        foreach (var curve in group)
+        {
+            var dup = curve?.DuplicateCurve();
+            if (dup != null) copy.Add(dup);
+        }
+        return copy;
     }
 
     /// <summary>The plan's horizontal cut at the clip's height.</summary>
@@ -1324,7 +1382,8 @@ public partial class RhinoMCPFunctions
         }
 
         var geometries = new List<GeometryBase>();
-        var wallSolids = WallClusterSolids(doc, sources, out result.WallNote);
+        var clusterMembers = new Dictionary<Guid, List<RhinoObject>>();
+        var wallSolids = WallClusterSolids(doc, sources, out result.WallNote, clusterMembers);
         foreach (var obj in sources)
         {
             // Plan symbols replace the frame. Elevations and sections keep the 3D block.
@@ -1481,7 +1540,7 @@ public partial class RhinoMCPFunctions
             if (clip.HasValue && haveWorldToHld)
             {
                 fillGroups = SectionFillLoops(
-                    sources, section != null ? clip.Value : PlanFillPlane(clip.Value), section != null, tolerance, fillOwners, wallSolids);
+                    sources, section != null ? clip.Value : PlanFillPlane(clip.Value), section != null, tolerance, fillOwners, wallSolids, clusterMembers);
                 if (section != null)
                 {
                     // The heights are read off the model-space loops before they move onto the sheet.
@@ -1576,6 +1635,8 @@ public partial class RhinoMCPFunctions
                 {
                     LayerIndex = layer.Index,
                     Name = stableId,
+                    Space = ActiveSpace.ModelSpace,
+                    ViewportId = Guid.Empty,
                     ColorSource = ObjectColorSource.ColorFromObject,
                     ObjectColor = item.Color,
                     PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
