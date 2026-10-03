@@ -89,12 +89,23 @@ public class CardTests
     }
 
     [Fact]
-    public void PrintOneSheet_ListsThePlanElevationsSchedulesAndStoredSections()
+    public void PrintOneSheet_ListsTheSet_InSetOrder_WithNumberAndTitle()
     {
         var card = ForskCards.For("print.one", Docs.Facts("sheet cache, sections"))!;
-        Assert.Equal(new[] { "plan", "north", "east", "south", "west", "schedules", "section_a", "section_b" },
+        Assert.Equal(new[] { "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules" },
             card.Pills.Where(p => p.Id != "cancel").Select(p => p.Id));
-        Assert.Equal("Section A", card.Pills[6].Label);
+        Assert.Equal("A-40-101 Snitt A–A", card.Pills[5].Label);
+        Assert.Equal("A-20-001 Plan 1. etg", card.Pills[0].Label);
+    }
+
+    [Fact]
+    public void PrintOneSheet_ListsASheetThatIsOff_AndKeepsTheStoredOrder()
+    {
+        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d =>
+            d.PrintPages = "[{\"id\":\"north\",\"on\":false},{\"id\":\"plan\",\"on\":true}]"));
+        var card = ForskCards.For("print.one", facts)!;
+        Assert.Equal(new[] { "north", "plan", "east", "south", "west", "schedules" },
+            card.Pills.Where(p => p.Id != "cancel").Select(p => p.Id));
     }
 
     [Fact]

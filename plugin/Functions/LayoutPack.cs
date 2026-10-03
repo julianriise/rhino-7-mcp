@@ -57,6 +57,7 @@ public partial class RhinoMCPFunctions
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
+    private const string NoSheetOnMessage = "Every sheet in the set is off. Turn one on with Choose sheets.";
     private const string PdfWriteFailedMessage = "PDF write failed.";
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
@@ -187,7 +188,7 @@ public partial class RhinoMCPFunctions
                 throw new InvalidOperationException("Scale must be a positive number.");
         }
 
-        var views = ReadLayoutViews(doc, parameters);
+        var views = ReadLayoutViews(doc, parameters, out var offViews);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
         var replace = ReadBoolParam(parameters, "replace", true);
         // The schedules are a page of their own, not a drawing view.
@@ -220,6 +221,10 @@ public partial class RhinoMCPFunctions
 
         RestorePrintColors(doc);
         _drawIncludeExisting = includeExisting;
+        // A whole Print writes the set: pages of sheets switched off go.
+        if (replace && offViews.Count > 0)
+            RemoveLayoutPages(doc, new HashSet<string>(offViews, StringComparer.OrdinalIgnoreCase), false);
+        var wallLevel = WallLevel(doc);
         var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
         var detailH = A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
 
@@ -318,15 +323,18 @@ public partial class RhinoMCPFunctions
             }
 
             var stableId = FormatStableId("l", pages.Count + 1);
-            var viewTitle = OpeningTypes.ViewTitle(spec.View, WallLevel(doc));
+            var viewTitle = SheetSet.Title(spec.View, wallLevel);
+            var sheetNo = SheetSet.Number(spec.View, wallLevel);
             // The footer reads the scale the detail recorded, not the request.
             var pageScale = scaleLocked ? DetailModelScale(page) : 0;
             var footer = new JObject();
-            var ids = AddSheetFooter(doc, page, spec, stableId, pageScale, viewTitle, plan, footer);
+            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, pageScale, viewTitle, plan, footer);
             var pageRecord = new JObject
             {
                 ["view"] = spec.View,
                 ["page"] = spec.PageName,
+                ["number"] = sheetNo,
+                ["title"] = viewTitle,
                 ["scale"] = scale,
                 ["page_scale"] = pageScale,
                 ["detail_count"] = 1,
@@ -485,14 +493,17 @@ public partial class RhinoMCPFunctions
             var pageTitle = count > 1
                 ? title + " (" + (i + 1).ToString(CultureInfo.InvariantCulture) + "/" + count.ToString(CultureInfo.InvariantCulture) + ")"
                 : title;
+            var sheetNo = SheetSet.Number(SchedulesView, 0, i);
             var footer = new JObject();
-            var ids = AddSheetFooter(doc, page, spec, stableId, 0, pageTitle, false, footer);
+            var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, 0, pageTitle, false, footer);
             DrawSchedules(doc, page, stableId, blocks.Where(b => b.Page == i).ToList(), ids);
             RememberSchedules(doc, page, kinds, stableId);
             records.Add(new JObject
             {
                 ["view"] = SchedulesView,
                 ["page"] = name,
+                ["number"] = sheetNo,
+                ["title"] = pageTitle,
                 ["scale"] = 0,
                 ["page_scale"] = 0,
                 ["detail_count"] = 0,
@@ -527,7 +538,7 @@ public partial class RhinoMCPFunctions
         RestorePrintColors(doc);
         ApplyDocumentPrintInk(doc);
         var layout = parameters?["layout"]?.ToString();
-        var pages = MatchingForskPages(doc, layout);
+        var pages = InSetOrder(doc, MatchingForskPages(doc, layout));
         if (pages.Count == 0)
         {
             var message = string.IsNullOrWhiteSpace(layout) ? NoLayoutsMessage : "Unknown layout.";
@@ -1475,9 +1486,15 @@ public partial class RhinoMCPFunctions
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 
-    private static List<string> ReadLayoutViews(RhinoDoc doc, JObject parameters)
+    /// <summary>
+    /// The views asked for, or with none the set's sheets that are on, in set
+    /// order. off lists the set's sheets that are off (empty when views were
+    /// given): a whole Print removes their old pages.
+    /// </summary>
+    private static List<string> ReadLayoutViews(RhinoDoc doc, JObject parameters, out List<string> off)
     {
         var views = new List<string>();
+        off = new List<string>();
         if (parameters?["views"] is JArray requested)
         {
             foreach (var token in requested)
@@ -1491,15 +1508,45 @@ public partial class RhinoMCPFunctions
             return views;
         }
 
-        views.Add("plan");
-        views.Add("north");
-        views.Add("east");
-        views.Add("south");
-        views.Add("west");
-        foreach (var def in ReadSectionDefs(doc))
-            views.Add(Sections.View(def.Letter));
-        views.Add(SchedulesView);
+        var set = PrintSet(doc);
+        views.AddRange(set.Where(s => s.On).Select(s => s.Id));
+        off.AddRange(set.Where(s => !s.On).Select(s => s.Id));
+        if (views.Count == 0 && off.Count > 0)
+            throw new InvalidOperationException(NoSheetOnMessage);
         return views;
+    }
+
+    /// <summary>The set the next Print writes: inferred from the model, under the stored one.</summary>
+    private static List<SheetSet.Sheet> PrintSet(RhinoDoc doc)
+    {
+        var stored = SheetSet.Read(doc.Strings.GetValue(SheetSet.MetaSection, SheetSet.MetaEntry));
+        return SheetSet.Merge(SheetSet.Infer(PrintSetFacts(doc)), stored);
+    }
+
+    private static SheetSet.SetFacts PrintSetFacts(RhinoDoc doc)
+    {
+        var facts = new SheetSet.SetFacts { Level = WallLevel(doc) };
+        foreach (var def in ReadSectionDefs(doc))
+            facts.Sections.Add(def.Letter);
+        var doors = false;
+        var windows = false;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj) || IsExistingUnderlay(doc, obj)) continue;
+            var kind = GetForskKind(obj);
+            if (string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase))
+                facts.Walls = true;
+            else if (string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase))
+            {
+                var opening = obj.Attributes.GetUserString("forsk:opening_kind");
+                if (string.Equals(opening, "door", StringComparison.OrdinalIgnoreCase)) doors = true;
+                if (string.Equals(opening, "window", StringComparison.OrdinalIgnoreCase)) windows = true;
+            }
+        }
+        if (doors) facts.Lists.Add("door");
+        if (windows) facts.Lists.Add("window");
+        if (PlanRooms(doc).Any(r => r.Tagged)) facts.Lists.Add("room");
+        return facts;
     }
 
     private static List<RhinoObject> CollectLayoutClay(RhinoDoc doc, bool includeExisting, out bool hasWall)
@@ -2640,7 +2687,7 @@ public partial class RhinoMCPFunctions
     /// the measured boxes in paper mm.
     /// </summary>
     private JArray AddSheetFooter(
-        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, int pageScale,
+        RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string sheetNo, int pageScale,
         string viewTitle, bool northArrow, JObject footer)
     {
         var ids = new JArray();
@@ -2652,6 +2699,9 @@ public partial class RhinoMCPFunctions
         {
             var attr = LayoutAttr(layer.Index, pageId, spec.View, stableId);
             attr.SetUserString("forsk:role", role);
+            // Rhino 7 pages carry no user text: the sheet's id and number ride on its footer.
+            attr.SetUserString("forsk:sheet_id", spec.View);
+            attr.SetUserString("forsk:sheet_no", sheetNo ?? "");
             return attr;
         }
         Guid Line(double x0, double y0, double x1, double y1, ObjectAttributes attr)
@@ -2962,6 +3012,17 @@ public partial class RhinoMCPFunctions
             pages.Add(page);
         }
         return pages;
+    }
+
+    /// <summary>
+    /// The pages in set order, a flowing list's pages first to last. Rhino
+    /// lists pages as they were added, so a sheet printed again would come last.
+    /// </summary>
+    private static List<RhinoPageView> InSetOrder(RhinoDoc doc, List<RhinoPageView> pages)
+    {
+        var byPage = pages.OrderBy(p => IsSchedulesPage(p) ? SchedulesPageNumber(p) : 0).ToList();
+        var ids = byPage.Select(p => ViewKeyForPage(p) ?? "").ToList();
+        return SheetSet.Order(ids, PrintSet(doc)).Select(i => byPage[i]).ToList();
     }
 
     private static bool IsForskLayoutPage(RhinoPageView page)

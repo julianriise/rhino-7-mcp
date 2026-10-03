@@ -33,6 +33,7 @@
     <Compile Include="..\..\plugin\Functions\AreaStats.cs" Link="AreaStats.cs" />
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
+    <Compile Include="..\..\plugin\Functions\SheetSet.cs" Link="SheetSet.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />
     <Compile Include="..\..\plugin\Forsk\FieldInk.cs" Link="FieldInk.cs" />

@@ -43,7 +43,6 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskCards
     {
         public const int MaxPages = 24;
-        static readonly string[] SheetViews = { "plan", "north", "east", "south", "west", "schedules" };
         static readonly string[] MetaKeys = { "project", "client", "address" };
 
         /// <summary>The card a registry card action opens, or null for help, the bridge, and an action that is not a card.</summary>
@@ -125,16 +124,46 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
-        /// <summary>The plan, the four elevations, the schedules, and each stored section.</summary>
+        /// <summary>Every sheet of the set in set order, those switched off too: one sheet prints on its own.</summary>
         public static CardSpec PrintOne(FileFacts f)
         {
             var card = new CardSpec { Kind = "print.one", Question = ForskText.Get("print.one.ask"), Depends = "model" };
-            foreach (var view in SheetViews)
-                card.Pills.Add(new CardPill(view, ForskText.Get("sheet." + view)));
-            foreach (var letter in f?.SectionLetters ?? new List<string>())
-                card.Pills.Add(new CardPill("section_" + letter.ToLowerInvariant(), ForskText.Format("sheet.section", "letter", letter.ToUpperInvariant())));
+            foreach (var sheet in Set(f))
+                card.Pills.Add(new CardPill(sheet.Id, SheetLine(sheet.Id, f)));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
+        }
+
+        /// <summary>
+        /// The set as the next Print writes it, from the facts the window
+        /// reads: the inferred set under what the user stored. The model has
+        /// one storey (level 0).
+        /// </summary>
+        public static List<SheetSet.Sheet> Set(FileFacts f)
+        {
+            var facts = new SheetSet.SetFacts
+            {
+                Walls = f?.HasWalls == true,
+                Sections = new List<string>(f?.SectionLetters ?? new List<string>()),
+                Lists = ListKinds(f)
+            };
+            return SheetSet.Merge(SheetSet.Infer(facts), SheetSet.Read(f?.PrintPages));
+        }
+
+        /// <summary>The lists that have rows: door, window, room.</summary>
+        static List<string> ListKinds(FileFacts f)
+        {
+            var kinds = new List<string>();
+            if (f?.HasDoors == true) kinds.Add("door");
+            if (f?.HasWindows == true) kinds.Add("window");
+            if (f?.HasRooms == true) kinds.Add("room");
+            return kinds;
+        }
+
+        /// <summary>A sheet as the cards name it: A-40-001 Fasade mot nord.</summary>
+        static string SheetLine(string id, FileFacts f)
+        {
+            return SheetSet.Number(id, 0) + " " + SheetSet.Title(id, 0, ListKinds(f));
         }
 
         public static CardSpec Rooms(FileFacts f)

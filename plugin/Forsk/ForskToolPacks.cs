@@ -549,7 +549,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["address"] = Str("Site address.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. Default pages are plan, north, east, south, west, and schedules. The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
+                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the plan, the four facades, each stored section, the lists). The schedules page holds the door, window and room lists (dørliste, vindusliste, romliste) from the model; doors and windows get marks (D01, V01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
                     new JObject
                     {
                         ["paper"] = Str("A3 only. Default A3."),
@@ -557,7 +557,7 @@ namespace RhinoMCPPlugin.Forsk
                         {
                             ["type"] = "array",
                             ["items"] = PageEnum("A page to lay out."),
-                            ["description"] = "Omit for plan, four elevations, and schedules."
+                            ["description"] = "Omit for the set."
                         },
                         ["scale"] = Num("Requested scale denominator. 100 means 1:100."),
                         ["replace"] = Bool("Replace Forsk pages for these views. Default true."),
@@ -578,7 +578,7 @@ namespace RhinoMCPPlugin.Forsk
                     new JObject
                     {
                         ["path"] = Str("Omit in the panel. The save dialog sets an absolute .pdf path."),
-                        ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page.")
+                        ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page, in set order.")
                     }),
                 Fn("clear_layouts",
                     "Delete Forsk Layout pages, their title blocks, and the greyscale S-DRAW curves. Does not delete clay, X-EXIST, or the S-PLAN / S-ELEV sheet cache. clear_generated also leaves layouts.",

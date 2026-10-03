@@ -70,6 +70,8 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> SectionLetters = new List<string>();
         /// <summary>The title block as stored: project, client, address. A stored date or scale label is not shown.</summary>
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
+        /// <summary>The set as the user left it (SheetSet JSON), or null when Forsk infers it.</summary>
+        public string PrintPages;
         public string Ink = "default";
         public bool Millimetres = true;
         public bool KeyPresent;
@@ -104,6 +106,8 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> SectionLetters = new List<string>();
         public int Sections => SectionLetters.Count;
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
+        /// <summary>The stored set (SheetSet JSON), or null.</summary>
+        public string PrintPages;
         /// <summary>Room names with their area, as "Stue · 24.5 m²".</summary>
         public List<string> Rooms = new List<string>();
         public bool SheetsStale;
@@ -147,6 +151,7 @@ namespace RhinoMCPPlugin.Forsk
                 Layouts = input.Layouts,
                 SectionLetters = new List<string>(input.SectionLetters ?? new List<string>()),
                 Meta = new Dictionary<string, string>(input.Meta ?? new Dictionary<string, string>()),
+                PrintPages = input.PrintPages,
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
                 KeyPresent = input.KeyPresent,
                 ListenerUp = input.ListenerUp,
