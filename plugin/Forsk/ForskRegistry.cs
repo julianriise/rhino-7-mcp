@@ -177,6 +177,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),
             new ForskAction("print.pages", Runs.Card, "group.print", f => f.HasWalls),
+            // Like area.stats: the tool runs, then its receipt and the card of its lines.
+            new ForskAction("takeoff", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),
             new ForskAction("print.clear", Runs.Card, "group.print", f => f.Layouts > 0),
             new ForskAction("sheets.clear", Runs.Card, "group.print", f => f.HasSheetCache),

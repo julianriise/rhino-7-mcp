@@ -271,6 +271,23 @@ namespace RhinoMCPPlugin.Forsk
             return card.Rows.Count == 0 ? null : card;
         }
 
+        /// <summary>The takeoff under its receipt: one row per line. Null when the tool failed or found nothing.</summary>
+        public static CardSpec Takeoff(JObject envelope)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            var rows = (envelope["result"]?["rows"] as JArray)?.Select(r => r.ToString()).Where(r => r.Length > 0).ToList();
+            if (rows == null || rows.Count == 0) return null;
+            return new CardSpec
+            {
+                Kind = "takeoff",
+                Question = ForskText.Get("takeoff.ask"),
+                Rows = rows,
+                Note = ForskText.Get("takeoff.note"),
+                Depends = "model",
+                Pills = { new CardPill("done", ForskText.Get("word.done")) }
+            };
+        }
+
         /// <summary>
         /// After a wall edit that changed more than the wall: one row per wall
         /// that followed, then what was rebuilt. Outer walls by side, inner

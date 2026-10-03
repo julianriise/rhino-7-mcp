@@ -96,7 +96,7 @@ public class CardTests
     public void PrintOneSheet_ListsTheSet_InSetOrder_WithNumberAndTitle()
     {
         var card = ForskCards.For("print.one", Docs.Facts("sheet cache, sections"))!;
-        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules" },
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules", "takeoff" },
             card.Pills.Where(p => p.Id != "cancel").Select(p => p.Id));
         Assert.Equal("A-00-001 Tegningsliste og arealer", card.Pills[0].Label);
         Assert.Equal("A-20-001 Plan 1. etg", card.Pills[1].Label);
@@ -115,7 +115,10 @@ public class CardTests
         var card = ForskCards.For("print.pages", facts)!;
         Assert.Equal("print.pages", card.Kind);
         Assert.Equal("model", card.Depends);
-        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "schedules" }, card.Fields!.Select(f => f.Key));
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "schedules", "takeoff" }, card.Fields!.Select(f => f.Key));
+        // The Mengdeliste is on the card, unticked.
+        Assert.Equal("A-00-050 Mengdeliste", card.Fields!.Last().Label);
+        Assert.Equal("0", card.Fields!.Last().Value);
         Assert.All(card.Fields!, f => Assert.True(f.Check && f.Order));
         Assert.Equal("A-40-001 Fasade mot nord", card.Fields![2].Label);
         Assert.Equal("0", card.Fields![2].Value);
@@ -142,11 +145,12 @@ public class CardTests
         var values = new JObject();
         foreach (var sheet in ForskCards.Set(facts)) values[sheet.Id] = "1";
         values["north"] = "0";
+        values["takeoff"] = "0";
         // The page moved Snitt A–A above the plan with ↑ and posts the rows in their new order.
-        var order = new JArray("front", "section_a", "plan", "north", "east", "south", "west", "section_b", "schedules");
+        var order = new JArray("front", "section_a", "plan", "north", "east", "south", "west", "section_b", "schedules", "takeoff");
         var args = ForskCards.PagesArgs("save", values, order);
         Assert.Equal(order.Select(t => t.ToString()), args["order"]!.Select(t => t.ToString()));
-        Assert.Equal(new[] { "north" }, args["off"]!.Select(t => t.ToString()));
+        Assert.Equal(new[] { "north", "takeoff" }, args["off"]!.Select(t => t.ToString()));
         var applied = SheetSet.Apply(ForskCards.Set(facts), args["on"]!.Select(t => t.ToString()).ToList(),
             args["off"]!.Select(t => t.ToString()).ToList(), args["order"]!.Select(t => t.ToString()).ToList(), out _);
         Assert.Equal(order.Select(t => t.ToString()), applied.Select(s => s.Id));
@@ -156,12 +160,25 @@ public class CardTests
     }
 
     [Fact]
+    public void TheTakeoffCard_OneRowPerLine_AndDone()
+    {
+        var envelope = JObject.Parse("{\"status\":\"success\",\"result\":{\"message\":\"Mengder, ca.: yttervegger 23,2 m.\","
+            + "\"rows\":[\"Yttervegg 200 mm · 23,2 m · 67,7 m² · 13,5 m³\",\"Slagdør 900 × 2100 · 1 stk · 1,9 m²\"]}}");
+        var card = ForskCards.Takeoff(envelope)!;
+        Assert.Equal("takeoff", card.Kind);
+        Assert.Equal(new[] { "Yttervegg 200 mm · 23,2 m · 67,7 m² · 13,5 m³", "Slagdør 900 × 2100 · 1 stk · 1,9 m²" }, card.Rows);
+        Assert.Equal("model", card.Depends);
+        Assert.Equal(new[] { "done" }, card.Pills.Select(p => p.Id));
+        Assert.Null(ForskCards.Takeoff(JObject.Parse("{\"status\":\"error\",\"message\":\"No active document.\"}")));
+    }
+
+    [Fact]
     public void PrintOneSheet_ListsASheetThatIsOff_AndKeepsTheStoredOrder()
     {
         var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d =>
             d.PrintPages = "[{\"id\":\"north\",\"on\":false},{\"id\":\"plan\",\"on\":true}]"));
         var card = ForskCards.For("print.one", facts)!;
-        Assert.Equal(new[] { "front", "north", "plan", "east", "south", "west", "schedules" },
+        Assert.Equal(new[] { "front", "north", "plan", "east", "south", "west", "schedules", "takeoff" },
             card.Pills.Where(p => p.Id != "cancel").Select(p => p.Id));
     }
 

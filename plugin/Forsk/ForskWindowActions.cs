@@ -181,6 +181,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "area.stats":
                     Job(thread, action.Id, label, sink => sink.Tool("area_stats", new JObject()));
                     return;
+                case "takeoff":
+                    Job(thread, action.Id, label, sink => sink.Tool(ForskToolPacks.TakeoffTool, new JObject()));
+                    return;
                 case "daylight.run":
                 case "daylight.again":
                     Job(thread, action.Id, label, sink => Daylight(sink, DaylightAction.Run));
@@ -636,6 +639,11 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var rooms = ForskCards.AreaRooms(envelope, LastUserIsNorwegian(thread));
                 if (rooms != null) thread.AddCard(rooms, facts);
+            }
+            if (string.Equals(tool, ForskToolPacks.TakeoffTool, StringComparison.Ordinal))
+            {
+                var lines = ForskCards.Takeoff(envelope);
+                if (lines != null) thread.AddCard(lines, facts);
             }
         }
 

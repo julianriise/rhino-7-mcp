@@ -13,6 +13,8 @@ namespace RhinoMCPPlugin.Forsk
         Print,
         Daylight,
         Area,
+        /// <summary>Quantities: takeoff, mengdeliste, how much wall. A list is the card.</summary>
+        Takeoff,
         Dxf,
         Import,
         Support,
@@ -88,6 +90,8 @@ namespace RhinoMCPPlugin.Forsk
             if (IsPlanFile(t)) return ForskIntent.Import;
             if (IsPrint(t)) return ForskIntent.Print;
             if (IsDaylight(t)) return ForskIntent.Daylight;
+            // Before Area: m² of wall is a quantity, not a floor area.
+            if (IsTakeoff(t)) return ForskIntent.Takeoff;
             if (IsArea(t)) return ForskIntent.Area;
             if (IsSheets(t)) return ForskIntent.Sheets;
             if (IsDxf(t)) return ForskIntent.Dxf;
@@ -218,6 +222,21 @@ namespace RhinoMCPPlugin.Forsk
                 && !t.Contains("helt bra") && !t.Contains("ganske bra");
         }
 
+        /// <summary>
+        /// Quantities: takeoff, mengde, mengdeliste, hvor mye vegg, how much
+        /// wall, m² yttervegg. Adding the Mengdeliste to the set is a sheets turn.
+        /// </summary>
+        static bool IsTakeoff(string t)
+        {
+            if (IsSetEdit(t)) return false;
+            if (HasWord(t, "takeoff") || t.Contains("take off") || t.Contains("take-off")) return true;
+            if (HasStem(t, "mengde") || HasWord(t, "quantities") || HasWord(t, "quantity")) return true;
+            var wall = HasStem(t, "vegg") || HasStem(t, "yttervegg") || HasStem(t, "innervegg") || HasWord(t, "wall") || HasWord(t, "walls");
+            if (!wall) return false;
+            return t.Contains("hvor mye") || t.Contains("hvor mange") || t.Contains("how much") || t.Contains("how many")
+                || HasWord(t, "m2") || HasWord(t, "m3") || HasWord(t, "meter") || HasWord(t, "metres") || HasWord(t, "meters");
+        }
+
         /// <summary>A word that starts with stem: areal, arealet, arealene.</summary>
         static bool HasStem(string text, string stem)
         {
@@ -258,6 +277,7 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "include") || HasWord(t, "exclude") || HasWord(t, "skip") || HasWord(t, "put") || HasWord(t, "move");
             if (!verb) return false;
             return HasWord(t, "facade") || HasWord(t, "facades") || HasWord(t, "fasade") || HasWord(t, "fasader")
+                || HasStem(t, "mengdelist")
                 || HasWord(t, "fasadene") || HasWord(t, "elevation") || HasWord(t, "elevations")
                 || HasWord(t, "tegningsliste") || HasWord(t, "tegningslisten") || HasWord(t, "forside") || HasWord(t, "forsiden")
                 || ((HasWord(t, "put") || HasWord(t, "move")) && (t.Contains("before the plan") || t.Contains("after the plan")));

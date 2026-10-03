@@ -21,6 +21,8 @@ namespace RhinoMCPPlugin.Forsk
         public const string DebugTool = "debug_report";
         /// <summary>The set's sheets, on/off and order. A window tool: no server tool, no contract.</summary>
         public const string PrintPagesTool = "print_pages";
+        /// <summary>The takeoff, read only. A window tool: no server tool, no contract.</summary>
+        public const string TakeoffTool = "takeoff";
 
         /// <summary>Every turn reads the document and the selection.</summary>
         static readonly string[] Shared =
@@ -92,6 +94,9 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>No rooms: rooms_detect. No windows: add_opening. area_stats is read only.</summary>
         static readonly string[] DaylightPack = { DaylightTool, "rooms_detect", "add_opening", "area_stats" };
 
+        /// <summary>Quantities: the takeoff alone.</summary>
+        static readonly string[] TakeoffPack = { TakeoffTool };
+
         /// <summary>The figures. rooms_detect when the file has no rooms yet.</summary>
         static readonly string[] AreaPack = { "area_stats", "rooms_detect" };
 
@@ -115,7 +120,7 @@ namespace RhinoMCPPlugin.Forsk
         };
 
         /// <summary>The whole list, in the order the panel always sent it.</summary>
-        public static readonly IReadOnlyList<string> Union = Distinct(Shared, BuildPack, EditPack, SheetsPack, DaylightPack, ImportPack);
+        public static readonly IReadOnlyList<string> Union = Distinct(Shared, BuildPack, EditPack, SheetsPack, TakeoffPack, DaylightPack, ImportPack);
 
         public static readonly IReadOnlyDictionary<string, JObject> Catalog = BuildCatalog();
 
@@ -153,6 +158,7 @@ namespace RhinoMCPPlugin.Forsk
                 case ForskIntent.Print: return PrintPack;
                 case ForskIntent.Daylight: return DaylightPack;
                 case ForskIntent.Area: return AreaPack;
+                case ForskIntent.Takeoff: return TakeoffPack;
                 case ForskIntent.Dxf: return DxfPack;
                 case ForskIntent.Import: return ImportPack;
                 default: return new string[0];
@@ -174,7 +180,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 case ForskRole.Planner: return ImportPack.Concat(new[] { "rooms_detect", "rooms_from_layer" });
                 case ForskRole.Modeller: return BuildPack.Concat(EditPack);
-                case ForskRole.Plotter: return PrintPack.Concat(SheetsPack);
+                case ForskRole.Plotter: return PrintPack.Concat(SheetsPack).Concat(TakeoffPack);
                 case ForskRole.Analyser: return new[] { "area_stats", DaylightTool, "rooms_detect" };
                 case ForskRole.Support: return SupportPack;
                 default: return new string[0];
@@ -272,7 +278,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A Layout page: the front sheet, a drawing view, the schedules sheet, or a stored section (section_a to section_z).</summary>
         static JObject PageEnum(string description)
         {
-            var pages = new JArray("front", "plan", "north", "east", "south", "west", "schedules");
+            var pages = new JArray("front", "plan", "north", "east", "south", "west", "schedules", "takeoff");
             for (var c = 'a'; c <= 'z'; c++)
                 pages.Add("section_" + c);
             return new JObject
@@ -625,8 +631,11 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["letter"] = Str("A to Z. Omit for all.")
                     }),
+                Fn(TakeoffTool,
+                    "Takeoff (mengdeliste), read only: outer and inner walls per thickness (length m, area net of openings one side m², volume m³), walls on X-EXIST apart, each slab and roof (m², m³), doors and windows per type and size (count, m²), and BTA, BRA and net area per floor. Every figure is ca. Answer one line with the figure asked for; the window shows the whole list on a card.",
+                    new JObject()),
                 Fn(PrintPagesTool,
-                    "The set Print writes (the Choose sheets card): which sheets are on and their order. Sheets are front (Tegningsliste og arealer), plan, north, east, south, west (the facades), section_<letter>, schedules (the lists). Pass only what the user changed. drop the facades is off north, east, south, west; put section A before the plan is order section_a, plan (the others keep their places). reset forgets the user's set. Print prints the set.",
+                    "The set Print writes (the Choose sheets card): which sheets are on and their order. Sheets are front (Tegningsliste og arealer), plan, north, east, south, west (the facades), section_<letter>, schedules (the lists), takeoff (the Mengdeliste, off unless asked for). Pass only what the user changed. drop the facades is off north, east, south, west; put section A before the plan is order section_a, plan (the others keep their places). reset forgets the user's set. Print prints the set.",
                     new JObject
                     {
                         ["on"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch on." },

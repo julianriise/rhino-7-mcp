@@ -641,7 +641,8 @@ public static class Schedules
         return TryNumber(opening.Mark, Prefix(opening.Record?.Kind), out var n) ? n : int.MaxValue;
     }
 
-    static string TypeText(OpeningTypes.Record record)
+    /// <summary>The type as the lists print it: Slagdør, Slagdør m/glass.</summary>
+    public static string TypeText(OpeningTypes.Record record)
     {
         var label = record?.Def?.ScheduleLabel ?? "";
         var door = string.Equals(record?.Kind, "door", StringComparison.OrdinalIgnoreCase);

@@ -110,8 +110,32 @@ public partial class RhinoMCPFunctions
     /// </summary>
     private List<Schedules.Opening> ScheduleOpenings(RhinoDoc doc, List<PlanRoom> rooms)
     {
+        var openings = OpeningRows(doc, rooms, out var markers);
+        var next = ReadMarkNext(doc);
+        var marks = Schedules.AssignMarks(openings, next);
+        doc.Strings.SetString(ScheduleMetaSection, MarkNextEntry,
+            string.Join(";", next.Select(pair => pair.Key + "=" + pair.Value.ToString(CultureInfo.InvariantCulture))));
+        for (var i = 0; i < openings.Count; i++)
+        {
+            if (string.Equals(openings[i].Mark, marks[i], StringComparison.Ordinal)) continue;
+            var attr = markers[i].Attributes.Duplicate();
+            attr.SetUserString(Schedules.MarkKey, marks[i]);
+            doc.Objects.ModifyAttributes(markers[i].Id, attr, true);
+            openings[i].Mark = marks[i];
+        }
+        return openings;
+    }
+
+    /// <summary>
+    /// Every Forsk door and window as a schedule row, read only: the mark it
+    /// carries (none is stamped), its type record, its centre and its size,
+    /// and with rooms given the rooms either side. The lists and the takeoff
+    /// read the same rows.
+    /// </summary>
+    private List<Schedules.Opening> OpeningRows(RhinoDoc doc, List<PlanRoom> rooms, out List<RhinoObject> markers)
+    {
         var openings = new List<Schedules.Opening>();
-        var markers = new List<RhinoObject>();
+        markers = new List<RhinoObject>();
         foreach (var marker in EnumerateDocObjects(doc))
         {
             if (!IsForskGenerated(marker) || IsExistingUnderlay(doc, marker)) continue;
@@ -131,23 +155,10 @@ public partial class RhinoMCPFunctions
                 Sill = ParseMm(marker.Attributes.GetUserString("forsk:sill")) ?? 0,
                 Head = ParseMm(marker.Attributes.GetUserString("forsk:head")) ?? 0
             };
-            if (TrySymbolFrame(doc, marker, out _, out var plane, out var frame))
+            if (rooms != null && TrySymbolFrame(doc, marker, out _, out var plane, out var frame))
                 opening.Rooms = OpeningRooms(rooms, plane, frame.HalfThick);
             openings.Add(opening);
             markers.Add(marker);
-        }
-
-        var next = ReadMarkNext(doc);
-        var marks = Schedules.AssignMarks(openings, next);
-        doc.Strings.SetString(ScheduleMetaSection, MarkNextEntry,
-            string.Join(";", next.Select(pair => pair.Key + "=" + pair.Value.ToString(CultureInfo.InvariantCulture))));
-        for (var i = 0; i < openings.Count; i++)
-        {
-            if (string.Equals(openings[i].Mark, marks[i], StringComparison.Ordinal)) continue;
-            var attr = markers[i].Attributes.Duplicate();
-            attr.SetUserString(Schedules.MarkKey, marks[i]);
-            doc.Objects.ModifyAttributes(markers[i].Id, attr, true);
-            openings[i].Mark = marks[i];
         }
         return openings;
     }

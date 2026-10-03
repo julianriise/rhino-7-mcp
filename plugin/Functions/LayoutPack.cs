@@ -52,7 +52,7 @@ public partial class RhinoMCPFunctions
     private const string LayoutPagePrefix = "Forsk — ";
     private const string NothingToLayOutMessage = "Nothing to lay out. Bake walls first.";
     private const string UnknownLayoutViewMessage =
-        "Unknown view. Use front, plan, north, east, south, west, schedules, or a stored section (section_a).";
+        "Unknown view. Use front, plan, north, east, south, west, schedules, takeoff, or a stored section (section_a).";
     private const string UnknownPaperMessage = "Unknown paper. Use A3.";
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
@@ -130,8 +130,10 @@ public partial class RhinoMCPFunctions
                 spec = LayoutSpec("west", "Forsk — West", Vector3d.XAxis, Vector3d.ZAxis);
                 return true;
             case SheetSet.FrontId:
+            case SheetSet.TakeoffId:
                 // Tables only: no look, no detail.
-                spec = LayoutSpec(SheetSet.FrontId, FrontPageName, Vector3d.Zero, Vector3d.ZAxis);
+                var key = view.Trim().ToLowerInvariant();
+                spec = LayoutSpec(key, TablePageName(key), Vector3d.Zero, Vector3d.ZAxis);
                 return true;
             default:
                 // A section's page. Its look lives on the stored section (TryGetSectionView).
@@ -192,6 +194,7 @@ public partial class RhinoMCPFunctions
         // The schedules and the front sheet are pages of tables, not drawing views.
         var withSchedules = views.RemoveAll(v => string.Equals(v, SchedulesView, StringComparison.OrdinalIgnoreCase)) > 0;
         var withFront = views.RemoveAll(v => string.Equals(v, SheetSet.FrontId, StringComparison.OrdinalIgnoreCase)) > 0;
+        var withTakeoff = views.RemoveAll(v => string.Equals(v, SheetSet.TakeoffId, StringComparison.OrdinalIgnoreCase)) > 0;
         var scheduleKinds = ReadScheduleKinds(parameters);
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
@@ -449,12 +452,13 @@ public partial class RhinoMCPFunctions
             }
         }
 
-        // Last: its Tegningsliste reads every page laid out before it.
-        if (withFront)
+        // The front sheet last: its Tegningsliste reads every page laid out before it.
+        foreach (var (with, view) in new[] { (withTakeoff, SheetSet.TakeoffId), (withFront, SheetSet.FrontId) })
         {
+            if (!with) continue;
             if (replace)
-                RemoveLayoutPages(doc, SheetSet.FrontId, false);
-            pages.Add(AddFrontPage(doc, pages.Count + 1, wallLevel));
+                RemoveLayoutPages(doc, view, false);
+            pages.Add(AddTablePage(doc, view, pages.Count + 1, wallLevel));
             sheetCount++;
         }
 
@@ -999,9 +1003,9 @@ public partial class RhinoMCPFunctions
                 if (stale != null) return stale;
                 continue;
             }
-            if (view == SheetSet.FrontId)
+            if (view == SheetSet.FrontId || view == SheetSet.TakeoffId)
             {
-                RefreshFront(doc, page);
+                RefreshTablePage(doc, page, view);
                 continue;
             }
             var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
@@ -1056,7 +1060,7 @@ public partial class RhinoMCPFunctions
         if (page == null) return null;
         if (IsSchedulesPage(page))
             return SchedulesView;
-        foreach (var name in new[] { SheetSet.FrontId, "plan", "north", "east", "south", "west" })
+        foreach (var name in new[] { SheetSet.FrontId, SheetSet.TakeoffId, "plan", "north", "east", "south", "west" })
         {
             if (!TryGetLayoutView(name, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))

@@ -25,7 +25,8 @@ public class ToolPackTests
         ["edit"] = ForskIntent.Edit,
         ["support"] = ForskIntent.Support,
         ["general"] = ForskIntent.General,
-        ["area"] = ForskIntent.Area
+        ["area"] = ForskIntent.Area,
+        ["takeoff"] = ForskIntent.Takeoff
     };
 
     static IEnumerable<JObject> Recorded()
@@ -117,6 +118,9 @@ public class ToolPackTests
         Assert.Contains("print_pages", ForskToolPacks.For(ForskIntent.Print));
         Assert.Contains("print_pages", ForskToolPacks.For(ForskIntent.Sheets));
         Assert.True(plotter.IndexOf("print_pages") < plotter.IndexOf("floor_from_layer"));
+        Assert.True(plotter.IndexOf("takeoff") < plotter.IndexOf("floor_from_layer"));
+        Assert.Contains("takeoff", ForskToolPacks.For(ForskIntent.Takeoff));
+        Assert.DoesNotContain("layout_pack", ForskToolPacks.For(ForskIntent.Takeoff));
 
         // Analyser puts its tools first. area_stats joins daylight and rooms detection. The count is the pack's: nothing added or removed.
         var analyser = ForskToolPacks.For(ForskIntent.General, ForskRole.Analyser).ToList();

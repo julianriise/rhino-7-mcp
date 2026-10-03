@@ -25,6 +25,8 @@ public static class SheetSet
     public const string SchedulesId = "schedules";
     /// <summary>The front sheet: the Tegningsliste and the Arealtabell.</summary>
     public const string FrontId = "front";
+    /// <summary>The Mengdeliste: in every set, off until the user turns it on.</summary>
+    public const string TakeoffId = "takeoff";
 
     /// <summary>The facades in the order they print and number: A-40-001 to A-40-004.</summary>
     public static readonly IReadOnlyList<string> Facades = new[] { "north", "east", "south", "west" };
@@ -58,8 +60,9 @@ public static class SheetSet
 
     /// <summary>
     /// The default set: the front sheet, the plan and the four facades when
-    /// walls exist, each stored section by letter, then the lists when one
-    /// has rows. Every sheet on. No walls, no set.
+    /// walls exist, each stored section by letter, the lists when one has
+    /// rows, then the Mengdeliste. Every sheet on but the Mengdeliste. No
+    /// walls, no set.
     /// </summary>
     public static List<Sheet> Infer(SetFacts facts)
     {
@@ -78,13 +81,14 @@ public static class SheetSet
             set.Add(new Sheet(Sections.View(letter), true));
         if ((facts.Lists ?? new List<string>()).Any(k => ListKinds.Contains(k)))
             set.Add(new Sheet(SchedulesId, true));
+        set.Add(new Sheet(TakeoffId, false));
         return set;
     }
 
     /// <summary>
     /// The stored set over the inferred one. The stored order and on/off
     /// stand. A sheet the model has lost is dropped. A sheet the model has
-    /// gained goes in on, just before the next sheet of the inferred order
+    /// gained goes in as inferred (on; the Mengdeliste off), just before the next sheet of the inferred order
     /// that is left: a new section lands before the lists, wherever the
     /// user moved section A. The inferred order's first sheet goes first,
     /// and a sheet with nothing after it goes last. Nothing stored: the
@@ -111,7 +115,7 @@ public static class SheetSet
                 at = next;
                 break;
             }
-            merged.Insert(at, new Sheet(sheet.Id, true));
+            merged.Insert(at, new Sheet(sheet.Id, sheet.On));
         }
         return merged;
     }
@@ -127,6 +131,8 @@ public static class SheetSet
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
         if (key == FrontId) return Format(0, 1);
+        // Clear of the lists' pages, so it keeps its number however many they take.
+        if (key == TakeoffId) return Format(0, 50);
         if (key == PlanId) return Format(20, Math.Max(0, level) + 1);
         var facade = IndexOf(Facades, key);
         if (facade >= 0) return Format(40, facade + 1);
@@ -146,6 +152,7 @@ public static class SheetSet
         var key = (id ?? "").Trim().ToLowerInvariant();
         if (key == FrontId)
             return listKinds == null || listKinds.Contains("room") ? "Tegningsliste og arealer" : "Tegningsliste";
+        if (key == TakeoffId) return "Mengdeliste";
         if (key == SchedulesId)
             return Schedules.SheetTitle(listKinds ?? ListKinds.ToList());
         return OpeningTypes.ViewTitle(key, level);
@@ -195,7 +202,9 @@ public static class SheetSet
     {
         set = set ?? new List<Sheet>();
         var on = set.Count(s => s.On);
-        var off = set.Where(s => !s.On).Select(s => s.Id).ToList();
+        // The Mengdeliste is off unless asked for: it is named only when it is on.
+        var off = set.Where(s => !s.On && s.Id != TakeoffId).Select(s => s.Id).ToList();
+        var takeoff = set.Any(s => s.On && s.Id == TakeoffId) ? ", with the Mengdeliste" : "";
         var named = new List<string>();
         if (Facades.All(off.Contains))
         {
@@ -204,18 +213,18 @@ public static class SheetSet
         }
         named.AddRange(off.Select(id => Title(id, level)));
         var text = "Set: " + on.ToString(CultureInfo.InvariantCulture) + (on == 1 ? " sheet" : " sheets");
-        if (named.Count == 0) return text + ".";
+        if (named.Count == 0) return text + takeoff + ".";
         var list = named.Count == 1
             ? named[0]
             : string.Join(", ", named.Take(named.Count - 1)) + " and " + named[named.Count - 1];
-        return text + ", " + list + " off.";
+        return text + ", " + list + " off" + takeoff + ".";
     }
 
     /// <summary>A sheet of tables and no detail: the front sheet and the lists. It has no scale.</summary>
     public static bool IsListSheet(string id)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
-        return key == FrontId || key == SchedulesId;
+        return key == FrontId || key == SchedulesId || key == TakeoffId;
     }
 
     /// <summary>

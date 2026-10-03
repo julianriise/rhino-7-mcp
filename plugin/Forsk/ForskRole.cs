@@ -45,6 +45,7 @@ namespace RhinoMCPPlugin.Forsk
                     return ForskRole.Modeller;
                 case ForskIntent.Print:
                 case ForskIntent.Sheets:
+                case ForskIntent.Takeoff:
                     return ForskRole.Plotter;
                 case ForskIntent.Daylight:
                 case ForskIntent.Area:
@@ -91,6 +92,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.print":
                 case "print.one":
                 case "print.pages":
+                case "takeoff":
                 case "print.clear":
                 case "sheets.clear":
                 case "meta.title":

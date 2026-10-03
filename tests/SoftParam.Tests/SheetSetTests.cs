@@ -26,19 +26,20 @@ public class SheetSetTests
     [Fact]
     public void Garage_GivesTheFrontSheetThePlanTheFacadesAndTheLists_InNumberOrder()
     {
-        // The set opens on the front sheet; the lists close it.
-        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-00-002" },
+        // The set opens on the front sheet; the lists close it, then the Mengdeliste, off.
+        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-00-002", "A-00-050" },
             Numbers(SheetSet.Infer(Garage())));
-        Assert.All(SheetSet.Infer(Garage()), s => Assert.True(s.On));
+        Assert.All(SheetSet.Infer(Garage()).Where(s => s.Id != "takeoff"), s => Assert.True(s.On));
+        Assert.False(SheetSet.Infer(Garage()).Single(s => s.Id == "takeoff").On);
     }
 
     [Fact]
     public void Sections_FollowTheFacades_ByLetter()
     {
         var set = SheetSet.Infer(Garage("B", "A"));
-        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-40-101", "A-40-102", "A-00-002" },
+        Assert.Equal(new[] { "A-00-001", "A-20-001", "A-40-001", "A-40-002", "A-40-003", "A-40-004", "A-40-101", "A-40-102", "A-00-002", "A-00-050" },
             Numbers(set));
-        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules" }, Ids(set));
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "section_b", "schedules", "takeoff" }, Ids(set));
     }
 
     [Fact]
@@ -59,6 +60,8 @@ public class SheetSetTests
         // A list that flows onto three pages numbers each page.
         Assert.Equal("A-00-004", SheetSet.Number("schedules", 0, 2));
         Assert.Equal("A-00-001", SheetSet.Number("front", 0));
+        // The Mengdeliste keeps its number however many pages the lists take.
+        Assert.Equal("A-00-050", SheetSet.Number("takeoff", 0));
         Assert.Equal("", SheetSet.Number("nonsense", 0));
     }
 
@@ -73,6 +76,7 @@ public class SheetSetTests
         Assert.Equal("Tegningsliste og arealer", SheetSet.Title("front", 0));
         // With no rooms there is no Arealtabell.
         Assert.Equal("Tegningsliste", SheetSet.Title("front", 0, new[] { "door" }));
+        Assert.Equal("Mengdeliste", SheetSet.Title("takeoff", 0));
     }
 
     [Fact]
@@ -93,7 +97,9 @@ public class SheetSetTests
         // Now B is gone and C is new.
         var merged = SheetSet.Merge(SheetSet.Infer(Garage("A", "C")), stored);
         // The front sheet, new since that set was stored, opens it.
-        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "section_c", "schedules" }, Ids(merged));
+        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "section_c", "schedules", "takeoff" }, Ids(merged));
+        // A sheet new to a stored set comes in at its default: the Mengdeliste, off.
+        Assert.False(merged.Single(s => s.Id == "takeoff").On);
         Assert.False(merged.Single(s => s.Id == "east").On);
         Assert.True(merged.Single(s => s.Id == "section_c").On);
     }
@@ -112,7 +118,7 @@ public class SheetSetTests
         var merged = SheetSet.Merge(new List<SheetSet.Sheet> { new SheetSet.Sheet("plan", true), new SheetSet.Sheet("north", true) }, stored);
         Assert.Equal(new[] { "north", "plan" }, Ids(merged));
         var withSchedules = SheetSet.Merge(SheetSet.Infer(Garage()), new List<SheetSet.Sheet> { new SheetSet.Sheet("west", true) });
-        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "schedules" }, Ids(withSchedules));
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "schedules", "takeoff" }, Ids(withSchedules));
     }
 
     [Fact]
@@ -155,6 +161,7 @@ public class SheetSetTests
     {
         Assert.True(SheetSet.IsListSheet("front"));
         Assert.True(SheetSet.IsListSheet("schedules"));
+        Assert.True(SheetSet.IsListSheet("takeoff"));
         Assert.False(SheetSet.IsListSheet("plan"));
         Assert.False(SheetSet.IsListSheet("section_a"));
     }
@@ -166,10 +173,10 @@ public class SheetSetTests
         var applied = SheetSet.Apply(set, new[] { "north" }, new[] { "east", "west" }, new[] { "section_a", "plan" }, out var unknown);
         Assert.Empty(unknown);
         // Section A goes where the earliest of the two stood, before the plan.
-        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "schedules" }, Ids(applied));
-        Assert.Equal(new[] { "east", "west" }, applied.Where(s => !s.On).Select(s => s.Id));
+        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "schedules", "takeoff" }, Ids(applied));
+        Assert.Equal(new[] { "east", "west", "takeoff" }, applied.Where(s => !s.On).Select(s => s.Id));
         // A whole order is the whole order.
-        var all = new[] { "schedules", "west", "south", "east", "north", "section_a", "plan", "front" };
+        var all = new[] { "takeoff", "schedules", "west", "south", "east", "north", "section_a", "plan", "front" };
         Assert.Equal(all, Ids(SheetSet.Apply(set, null, null, all, out _)));
     }
 
@@ -191,6 +198,8 @@ public class SheetSetTests
         Assert.Equal("Set: 4 sheets, facades off.", SheetSet.Summary(noFacades));
         var oneOff = SheetSet.Apply(set, null, new[] { "section_a" }, null, out _);
         Assert.Equal("Set: 7 sheets, Snitt A–A off.", SheetSet.Summary(oneOff));
+        // The Mengdeliste is off by default: named only when it is on.
+        Assert.Equal("Set: 9 sheets, with the Mengdeliste.", SheetSet.Summary(SheetSet.Apply(set, new[] { "takeoff" }, null, null, out _)));
     }
 
     [Fact]

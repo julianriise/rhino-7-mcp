@@ -220,7 +220,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 
@@ -240,6 +240,13 @@ public class RegistryTests
             }
         }
         Assert.Equal("Choose sheets", ForskRegistry.Find("print.pages")!.Label);
+        Assert.Equal("Takeoff", ForskRegistry.Find("takeoff")!.Label);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("takeoff"));
+        foreach (var (name, make) in Docs.All)
+        {
+            var facts = FileClassifier.Read(make());
+            Assert.Equal(facts.HasWalls, ForskRegistry.Card(facts).Actions.Any(a => a.Id == "takeoff"));
+        }
         Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("print.pages"));
     }
 }

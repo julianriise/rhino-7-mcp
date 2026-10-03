@@ -57,6 +57,8 @@ namespace RhinoMCPPlugin.Forsk
                 return ForskDaylight.Run(parameters?["target"]?.ToString(), Dispatch);
             if (name == ForskToolPacks.PrintPagesTool)
                 return Local(Handler.PrintPages, parameters);
+            if (name == ForskToolPacks.TakeoffTool)
+                return Local(Handler.TakeoffTool, parameters);
             return Dispatch(name, parameters);
         }
 
@@ -373,6 +375,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "No windows: pass the refusal on and offer add_opening. Never lux or a code verdict.";
             }
             if (intent == ForskIntent.Area) return ForskArea.Bias;
+            if (intent == ForskIntent.Takeoff)
+                return "Turn bias: Takeoff. Call takeoff. Answer in one line with the figure the user asked for, from its rows, and say ca. "
+                    + "The window shows every line on a card under the receipt: do not list them. No coordinates, no ids. Do not invent a figure.";
             if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)
             {
@@ -765,6 +770,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Build) return "Build";
             if (intent == ForskIntent.Daylight) return "Daylight";
             if (intent == ForskIntent.Area) return "Area";
+            if (intent == ForskIntent.Takeoff) return "Takeoff";
             if (intent == ForskIntent.Support) return "Support";
             if (intent == ForskIntent.Dxf) return "Import DXF";
             if (intent == ForskIntent.Import) return "Import";
