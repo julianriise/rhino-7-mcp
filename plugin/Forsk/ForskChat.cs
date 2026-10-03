@@ -655,6 +655,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     return;
                 }
 
+                var areaAnswer = false;
                 foreach (var token in calls)
                 {
                     var call = token as JObject;
@@ -668,6 +669,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                         ? CallOnUi(name, args, hooks?.DialogParent)
                         : ForskTools.Fail("Support does not change the model.");
                     hooks?.Tool?.Invoke(name, envelope);
+                    if (ForskArea.Answered(name, envelope?["status"]?.ToString())) areaAnswer = true;
                     if (name == ForskDxf.Tool)
                     {
                         // The tool's whole receipt, as MCP clients get it.
@@ -689,6 +691,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                         ["name"] = name,
                         ["content"] = Slim(envelope)
                     });
+                }
+                // The receipt is the answer. Another sentence repeats the net total.
+                if (areaAnswer)
+                {
+                    Trim(history);
+                    return;
                 }
             }
 

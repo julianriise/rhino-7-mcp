@@ -55,7 +55,8 @@ public class AreaStatsTests
         Assert.Equal("2,9 m²", OpeningTypes.AreaText(result.NetMm2));
         Assert.Equal("2,9 m²", OpeningTypes.AreaText(result.NetMm2));
         Assert.Contains("Net 2,9 m², estimate.", result.Summary);
-        Assert.Contains("Bod 1,5 m²", result.Summary);
+        Assert.Contains("By use: Bod 2,9 m².", result.Summary);
+        Assert.DoesNotContain("Bod 1,5", result.Summary);
         Assert.Equal(result.NetMm2, result.Rooms.Sum(r => r.AreaMm2));
     }
 
@@ -81,7 +82,16 @@ public class AreaStatsTests
     [InlineData("Room", "Annet")]
     [InlineData("", "Annet")]
     [InlineData("Gjesterom", "Annet")]
-    [InlineData("Kontor", "Annet")]
+    [InlineData("Kontor", "Kontor")]
+    [InlineData("Kontorplasser", "Kontor")]
+    [InlineData("Open Office", "Kontor")]
+    [InlineData("Konferanserom", "Møterom")]
+    [InlineData("conference room", "Møterom")]
+    [InlineData("meeting room", "Møterom")]
+    [InlineData("Wet Room", "Bad")]
+    [InlineData("Bøttekott", "Bod")]
+    [InlineData("Data/arkiv", "Bod")]
+    [InlineData("Fax/kopi/printer", "Annet")]
     [InlineData("Stue/kjøkken", "Stue")]
     public void UseOf_MapsNorwegianAndEnglish(string name, string use)
     {
@@ -104,7 +114,8 @@ public class AreaStatsTests
         var result = AreaStats.Compute(new[] { Room("rd-01", "Stue", null, 2_000_000) });
         Assert.Equal("0", result.Rooms[0].Level);
         Assert.Equal("0", result.Floors.Single().Key);
-        Assert.Contains("Ground floor:", result.Summary);
+        Assert.DoesNotContain("Ground floor", result.Summary);
+        Assert.Equal("Net 2,0 m², estimate. By use: Stue 2,0 m².", result.Summary);
     }
 
     [Theory]
@@ -182,17 +193,36 @@ public class AreaStatsTests
     }
 
     [Fact]
-    public void Summary_LeadsWithTheTotals_ThenEightRooms_LargestFirst()
+    public void Summary_IsTheNetAndTheUses_NotTheRooms()
     {
         var rooms = new List<AreaStats.Room>();
         for (var i = 1; i <= 9; i++)
             rooms.Add(Room("rd-" + i.ToString("00"), "Rom " + i, "0", i * 1_000_000));
         var result = AreaStats.Compute(rooms);
-        Assert.StartsWith("Net 45,0 m², estimate. Ground floor: 45,0 m². By use: Annet 45,0 m². ", result.Summary);
-        Assert.Contains("Rom 9 9,0 m²", result.Summary);
-        Assert.DoesNotContain("Rom 1 ", result.Summary);
-        Assert.EndsWith(", +1 more.", result.Summary);
-        Assert.Equal(8, AreaStats.SummaryRooms);
+        Assert.Equal("Net 45,0 m², estimate. By use: Annet 45,0 m².", result.Summary);
+        Assert.DoesNotContain("Ground floor", result.Summary);
+        Assert.DoesNotContain("Rom ", result.Summary);
+    }
+
+    [Fact]
+    public void Summary_KeepsTheLargestUses_AndNamesEveryFloorWhenThereAreTwo()
+    {
+        var result = AreaStats.Compute(new[]
+        {
+            Room("a", "Stue", "0", 50_000_000),
+            Room("b", "Open Office", "0", 40_000_000),
+            Room("c", "Soverom", "1", 30_000_000),
+            Room("d", "Gang", "1", 20_000_000),
+            Room("e", "Bad", "1", 10_000_000),
+            Room("f", "Bod", "1", 5_000_000)
+        });
+        Assert.Equal(
+            "Net 155,0 m², estimate. Ground floor: 90,0 m²; 1st floor: 65,0 m². "
+            + "By use: Stue 50,0 m², Kontor 40,0 m², Soverom 30,0 m², Gang 20,0 m², +2 more.",
+            result.Summary);
+        Assert.DoesNotContain("Bad ", result.Summary);
+        Assert.DoesNotContain("Bod ", result.Summary);
+        Assert.Equal(4, AreaStats.SummaryUses);
     }
 
     [Fact]
@@ -305,7 +335,8 @@ public class AreaStatsTests
         Assert.Equal(9_600.0 * 7_600.0 + 3_600.0 * 2_600.0, ground.BraMm2.Value, 1);
         Assert.Equal("no wall outline on this floor", result.Gross.Single(g => g.Level == "1").Note);
         Assert.Contains("BRA 82,3 m², BTA 92,0 m²", result.Summary);
-        Assert.Contains("1st floor: 8,0 m² (no wall outline on this floor)", result.Summary);
+        Assert.Contains("1st floor: 8,0 m²", result.Summary);
+        Assert.DoesNotContain("no wall outline", result.Summary);
 
         var mixed = AreaStats.Compute(new[] { Room("a", "Stue", "0", 10_000_000) });
         AreaStats.ApplyGross(mixed, new[]
@@ -316,6 +347,9 @@ public class AreaStatsTests
         Assert.Equal("the outer walls do not share one thickness", mixed.Gross.Single().Note);
         Assert.Null(mixed.Gross.Single().BraMm2);
         Assert.DoesNotContain("BRA", mixed.Summary);
+        Assert.DoesNotContain("thickness", mixed.Summary);
+        Assert.DoesNotContain("Ground floor", mixed.Summary);
+        Assert.Equal("Net 10,0 m², estimate. By use: Stue 10,0 m².", mixed.Summary);
 
         var json = AreaStats.ToJson(result);
         Assert.Equal(result.Summary, json["message"]!.ToString());
@@ -434,6 +468,29 @@ public class AreaStatsTests
         });
         Assert.Equal(norwegian, named.Text);
         Assert.Contains("1. etasje: 20,0 m²", named.Text);
+
+        var oneFloor = AreaStats.Compute(new[]
+        {
+            Room("a", "Open Office", "0", 20_000_000),
+            Room("b", "Rom", "0", 5_000_000)
+        });
+        var card = ForskCards.AreaRooms(new JObject { ["status"] = "success", ["result"] = AreaStats.ToJson(oneFloor) });
+        Assert.Equal("Rooms", card.Question);
+        Assert.Equal(new[] { "Open Office 20,0 m²", "Rom 5,0 m²" }, card.Rows);
+        Assert.DoesNotContain("Open Office", oneFloor.Summary);
+        Assert.DoesNotContain("Rom ", oneFloor.Summary);
+        Assert.Null(ForskCards.AreaRooms(null));
+        Assert.Null(ForskCards.AreaRooms(new JObject { ["status"] = "error" }));
+        ForskSpeech.Use("hvor stor er leiligheten");
+        try
+        {
+            Assert.Equal("Alle rom", ForskCards.AreaRooms(
+                new JObject { ["status"] = "success", ["result"] = AreaStats.ToJson(oneFloor) }, true).Question);
+        }
+        finally
+        {
+            ForskSpeech.Clear();
+        }
         Assert.Contains("U. etasje: 8,0 m²", named.Text);
         Assert.Contains("By use:", named.Text);
     }
@@ -443,7 +500,12 @@ public class AreaStatsTests
     {
         var bias = ForskArea.Bias;
         Assert.Contains("Turn bias: Area.", bias);
-        Assert.Contains("at most 8 rooms", bias);
+        Assert.Contains("Do not repeat the net total", bias);
+        Assert.DoesNotContain("at most 8 rooms", bias);
+        Assert.True(ForskArea.Answered("area_stats", "success"));
+        Assert.True(ForskArea.Answered("area_stats", "Success"));
+        Assert.False(ForskArea.Answered("area_stats", "error"));
+        Assert.False(ForskArea.Answered("move_wall", "success"));
         Assert.Contains("No coordinates", bias);
         Assert.Contains("rooms_detect", bias);
         Assert.Contains("Do not invent a figure", bias);

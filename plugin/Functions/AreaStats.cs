@@ -22,29 +22,42 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public static class AreaStats
 {
-    /// <summary>How many rooms the summary names before "+N more".</summary>
-    public const int SummaryRooms = 8;
+    /// <summary>How many uses the summary names before "+N more". The rooms themselves are on the card.</summary>
+    public const int SummaryUses = 4;
 
     public const string OtherUse = "Annet";
 
-    /// <summary>Longest key first is not required: a word takes the longest key it matches.</summary>
+    /// <summary>Longest key first is not required: a word takes the longest key it matches. Keys are folded: ø is o.</summary>
     static readonly (string Key, string Use)[] NameUses =
     {
+        ("konferanse", "Møterom"),
+        ("kontorplass", "Kontor"),
+        ("conference", "Møterom"),
+        ("bottekott", "Bod"),
         ("bathroom", "Bad"),
         ("bedroom", "Soverom"),
         ("soverom", "Soverom"),
+        ("moterom", "Møterom"),
+        ("meeting", "Møterom"),
         ("kitchen", "Kjøkken"),
         ("kjokken", "Kjøkken"),
+        ("archive", "Bod"),
+        ("kontor", "Kontor"),
+        ("office", "Kontor"),
         ("living", "Stue"),
         ("storage", "Bod"),
         ("toalett", "Bad"),
+        ("vatrom", "Bad"),
+        ("arkiv", "Bod"),
         ("entre", "Gang"),
         ("stue", "Stue"),
         ("hall", "Gang"),
+        ("kott", "Bod"),
         ("gang", "Gang"),
         ("bath", "Bad"),
         ("bod", "Bod"),
         ("bad", "Bad"),
+        ("wet", "Bad"),
         ("wc", "Bad")
     };
 
@@ -109,7 +122,8 @@ public static class AreaStats
     }
 
     /// <summary>
-    /// The use of a room name. Norwegian and English both map. "Rom" and
+    /// The use of a room name. Norwegian and English both map, including an
+    /// office, a meeting room, a wet room, a closet and an archive. "Rom" and
     /// "Room", and any name the map does not know, are Annet.
     /// </summary>
     public static string UseOf(string name)
@@ -176,39 +190,55 @@ public static class AreaStats
         return groups;
     }
 
+    /// <summary>
+    /// The net once. One floor does not repeat it. BRA and BTA join when the
+    /// walls give them; a thickness note stays off this line. Uses are the
+    /// largest few. The rooms are not listed here.
+    /// </summary>
     static string Summarize(Result result)
     {
-        var floors = new string[result.Floors.Count];
-        for (var i = 0; i < floors.Length; i++)
+        var text = "Net " + OpeningTypes.AreaText(result.NetMm2) + ", estimate.";
+        if (result.Floors.Count == 1)
         {
-            var floor = result.Floors[i];
-            floors[i] = FloorName(floor.Key) + ": " + OpeningTypes.AreaText(floor.AreaMm2) + GrossClause(result, floor.Key);
+            var figures = GrossFigures(result, result.Floors[0].Key);
+            if (figures != null) text += " " + figures + ".";
         }
-        var uses = new string[result.Uses.Count];
-        for (var i = 0; i < uses.Length; i++)
-            uses[i] = result.Uses[i].Key + " " + OpeningTypes.AreaText(result.Uses[i].AreaMm2);
-        var shown = Math.Min(SummaryRooms, result.Rooms.Count);
-        var names = new string[shown];
+        else if (result.Floors.Count > 1)
+        {
+            var floors = new string[result.Floors.Count];
+            for (var i = 0; i < floors.Length; i++)
+            {
+                var floor = result.Floors[i];
+                var figures = GrossFigures(result, floor.Key);
+                floors[i] = FloorName(floor.Key) + ": " + OpeningTypes.AreaText(floor.AreaMm2)
+                    + (figures == null ? "" : ", " + figures);
+            }
+            text += " " + string.Join("; ", floors) + ".";
+        }
+        return text + " " + UsesClause(result);
+    }
+
+    static string UsesClause(Result result)
+    {
+        var shown = Math.Min(SummaryUses, result.Uses.Count);
+        var uses = new string[shown];
         for (var i = 0; i < shown; i++)
-            names[i] = result.Rooms[i].Name + " " + OpeningTypes.AreaText(result.Rooms[i].AreaMm2);
-        var text = "Net " + OpeningTypes.AreaText(result.NetMm2) + ", estimate. "
-            + string.Join("; ", floors) + ". By use: " + string.Join(", ", uses) + ". "
-            + string.Join(", ", names);
-        var more = result.Rooms.Count - shown;
+            uses[i] = result.Uses[i].Key + " " + OpeningTypes.AreaText(result.Uses[i].AreaMm2);
+        var text = "By use: " + string.Join(", ", uses);
+        var more = result.Uses.Count - shown;
         if (more > 0) text += ", +" + more.ToString(CultureInfo.InvariantCulture) + " more";
         return text + ".";
     }
 
-    static string GrossClause(Result result, string level)
+    /// <summary>BRA and BTA for the floor, or null when either is missing. The note is not printed.</summary>
+    static string GrossFigures(Result result, string level)
     {
-        if (result.Gross == null) return "";
+        if (result.Gross == null) return null;
         FloorGross gross = null;
         foreach (var row in result.Gross)
             if (row.Level == level) gross = row;
-        if (gross == null) return "";
-        if (gross.BraMm2.HasValue && gross.BtaMm2.HasValue)
-            return ", BRA " + OpeningTypes.AreaText(gross.BraMm2.Value) + ", BTA " + OpeningTypes.AreaText(gross.BtaMm2.Value);
-        return string.IsNullOrEmpty(gross.Note) ? "" : " (" + gross.Note + ")";
+        if (gross?.BraMm2 == null || gross.BtaMm2 == null) return null;
+        return "BRA " + OpeningTypes.AreaText(gross.BraMm2.Value) + ", BTA " + OpeningTypes.AreaText(gross.BtaMm2.Value);
     }
 
     /// <summary>
@@ -438,7 +468,7 @@ public static class AreaStats
             ["floors"] = floors,
             ["uses"] = uses,
             ["rooms"] = rooms,
-            ["more"] = Math.Max(0, (result?.Rooms.Count ?? 0) - SummaryRooms),
+            ["more"] = 0,
             ["omitted"] = omitted
         };
     }

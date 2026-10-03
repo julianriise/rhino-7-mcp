@@ -617,7 +617,13 @@ namespace RhinoMCPPlugin.Forsk
             thread.Add(item);
             var review = ForskCards.WallReview(envelope, LastUserIsNorwegian(thread));
             var doc = RhinoDoc.ActiveDoc;
-            if (review != null) thread.AddCard(review, doc == null ? null : ReadFacts(doc));
+            var facts = doc == null ? null : ReadFacts(doc);
+            if (review != null) thread.AddCard(review, facts);
+            if (string.Equals(tool, "area_stats", StringComparison.Ordinal))
+            {
+                var rooms = ForskCards.AreaRooms(envelope, LastUserIsNorwegian(thread));
+                if (rooms != null) thread.AddCard(rooms, facts);
+            }
         }
 
         /// <summary>The review card follows the last thing the user wrote. The tool's own phrase was already chosen.</summary>

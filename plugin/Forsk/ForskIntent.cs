@@ -473,11 +473,18 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskArea
     {
-        public const string Bias = "Turn bias: Area. area_stats reads the rooms. "
-            + "Lead with the totals, then at most 8 rooms, largest first, then +N more. "
-            + "Use the tool's m² figures. No coordinates, no ids. "
-            + "Pass on BRA and BTA when the tool gives them, and the reason when it leaves one out. Do not invent a figure. "
-            + "No rooms: offer rooms_detect, which finds them from the walls.";
+        public const string Bias = "Turn bias: Area. Call area_stats. "
+            + "The window prints that summary, and the room list on the card under it. "
+            + "Do not repeat the net total, the floors, or the rooms. "
+            + "No coordinates, no ids. Do not invent a figure. "
+            + "No rooms: the summary offers rooms_detect, which finds them from the walls.";
+
+        /// <summary>A successful area_stats is the whole answer. The model does not add a second line.</summary>
+        public static bool Answered(string tool, string status)
+        {
+            return string.Equals(tool, "area_stats", StringComparison.Ordinal)
+                && string.Equals(status, "success", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>

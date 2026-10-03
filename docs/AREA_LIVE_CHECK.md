@@ -5,12 +5,12 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 ## Chat
 
 - "how big is the flat?", "areal per etasje", and "BRA?" each get a short answer under the purple Analyser mark.
-- The answer leads with the totals, then at most eight rooms, largest first, then "+N more". Areas are m² to one decimal. No coordinates and no ids.
+- The line is the net once, then BRA and BTA when the walls give them, then the largest few uses. One floor does not get its own line. No wall-thickness note. No room list, and no second sentence that repeats the net. Areas are m² to one decimal. No coordinates and no ids.
+- The card under that line lists every room. A click on Area statistics still shows this answer.
 - A file with no rooms offers Make rooms. The line is "No rooms. Make rooms finds them from the walls."
 - Move a wall, then ask again. The net area, and BRA and BTA where they are shown, change with the model.
 - Area statistics is on the help card when the file has rooms. It is not on the bar. Print stays the first bar slot.
-- A card click shows the full answer: the totals, the floors, the uses and the rooms. It does not stop after the net total.
-- A failure is a mark other than Analyser, a second area that is not the plan tag, or a figure with no reason when the walls cannot give it.
+- A failure is a mark other than Analyser, a second line that repeats the net, or a BRA/BTA figure when the walls cannot give one.
 
 ## Sheets
 
@@ -24,11 +24,11 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 - Room area is the stamped net area on A-ROOM, the same number as the plan tag and the Romliste, not a second measurement.
 - The sum of those areas is the net room area, labelled "estimate", summed in mm² and then rounded to one decimal.
 - Per floor uses the stored `forsk:level`. 0 is the ground floor: "1. etasje" in a Norwegian answer and on the Romliste, "Ground floor" in an English answer. The next stored level is "2. etasje" / "1st floor". Below grade, -1 is "U. etasje" / "Lower ground" and -2 is "Kjeller" / "Basement". An empty level is that ground floor.
-- Per use maps soverom/bedroom to Soverom, bad/wc/bath/bathroom/toalett to Bad, kjøkken/kitchen to Kjøkken, stue/living to Stue, bod/storage to Bod, gang/entré/hall to Gang, and anything else, including "Rom", to Annet.
+- Per use maps soverom/bedroom to Soverom, bad/wc/bath/bathroom/toalett/wet room to Bad, kjøkken/kitchen to Kjøkken, stue/living to Stue, bod/storage/arkiv/bøttekott to Bod, gang/entré/hall to Gang, kontor/office/kontorplasser to Kontor, konferanse/meeting to Møterom, and anything else, including "Rom" and "Fax/kopi/printer", to Annet.
 - The first matching word wins, so "Stue/kjøkken" is Stue. An explicit use is kept as given.
 - BRA and BTA come from the outer face of the wall-union outline (`forsk:path`), not from the floor slab, which is extruded from that same ring and has no thickness of its own.
 - BTA is the area of that outer loop, minus a closed courtyard. BRA insets the outer face by the floor's one wall thickness and outs the courtyard by the same, so inner walls stay inside. The hole that is the inner face of the outer walls is the rooms, and it is not subtracted.
-- When the walls on a floor do not share one thickness, the thickness is missing, or the inset fails, both BRA and BTA for that floor are left out with one reason. No partial figure is printed.
+- When the walls on a floor do not share one thickness, the thickness is missing, or the inset fails, both BRA and BTA for that floor are left out. The reason stays on the floor record and off the chat line. No partial figure is printed.
 - "print the room schedule" stays Print, "romliste" stays Sheets, and "how big is the daylight" stays Daylight.
 - "the area is wrong", "problem med arealene", and "how do I find the area" stay Support.
 - "bra" in "ser bra", "er bra", "veldig bra", "helt bra", or "ganske bra" is not an area question. Bare "BRA?" is.

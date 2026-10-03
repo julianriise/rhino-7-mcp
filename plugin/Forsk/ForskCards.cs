@@ -162,6 +162,39 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
+        /// The rooms under an area answer, one row each. The chat line does not
+        /// list them. Null when the tool failed or there are no rooms.
+        /// </summary>
+        public static CardSpec AreaRooms(JObject envelope, bool nb = false)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            var result = envelope["result"] as JObject;
+            var rooms = result?["rooms"] as JArray;
+            if (rooms == null || rooms.Count == 0) return null;
+            var many = (result["floors"] as JArray)?.Count > 1;
+            var card = new CardSpec
+            {
+                Kind = "area.rooms",
+                Question = ForskText.Get(nb ? "area.rooms.ask.nb" : "area.rooms.ask"),
+                Rows = new List<string>(),
+                Depends = "model",
+                Pills = { new CardPill("done", ForskText.Get("word.done")) }
+            };
+            foreach (var token in rooms)
+            {
+                var room = token as JObject;
+                var name = room?["name"]?.ToString();
+                var area = room?["area"]?.ToString();
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(area)) continue;
+                var level = room["level"]?.ToString();
+                card.Rows.Add(many && !string.IsNullOrWhiteSpace(level)
+                    ? name + ", " + level + ", " + area
+                    : name + " " + area);
+            }
+            return card.Rows.Count == 0 ? null : card;
+        }
+
+        /// <summary>
         /// After a wall edit that changed more than the wall: one row per wall
         /// that followed, then what was rebuilt. Outer walls by side, inner
         /// walls by the rooms they bound. Null when only the wall changed, or
