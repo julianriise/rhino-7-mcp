@@ -23,7 +23,13 @@ namespace RhinoMCPPlugin
         protected override LoadReturnCode OnLoad(ref string errorMessage)
         {
             // Forsk is a floating window (Forsk, ForskChat). There is no panel to register.
+            Functions.ForskWhiteHost.Start();
             return LoadReturnCode.Success;
+        }
+
+        protected override void OnShutdown()
+        {
+            Functions.ForskWhiteHost.Stop();
         }
     }
 }

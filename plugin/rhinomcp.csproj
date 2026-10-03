@@ -69,6 +69,10 @@
     <EmbeddedResource Include="EmbeddedResources/plugin-utility.ico">
       <LogicalName>rhinomcp.EmbeddedResources.plugin-utility.ico</LogicalName>
     </EmbeddedResource>
+    <!-- Real Shaded export. Patched in memory; imported only when this Rhino cannot export its own. -->
+    <EmbeddedResource Include="EmbeddedResources/shaded-export.ini">
+      <LogicalName>RhinoMCPPlugin.ForskWhite.shaded-export.ini</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <PropertyGroup>

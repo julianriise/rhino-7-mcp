@@ -63,10 +63,12 @@
     <Compile Include="..\..\plugin\Forsk\ForskDebug.cs" Link="ForskDebug.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReports.cs" Link="ForskReports.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />
+    <Compile Include="..\..\plugin\Functions\ForskWhite.cs" Link="ForskWhite.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugin\EmbeddedResources\shaded-export.ini" Link="fixtures\shaded-export.ini" CopyToOutputDirectory="PreserveNewest" />
     <None Include="fixtures\recorded_prompts.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.js" Link="page\window.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.html" Link="page\window.html" CopyToOutputDirectory="PreserveNewest" />
