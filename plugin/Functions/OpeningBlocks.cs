@@ -531,13 +531,22 @@ public partial class RhinoMCPFunctions
         if (doc == null || index < 0 || index >= doc.InstanceDefinitions.Count) return false;
         var idef = doc.InstanceDefinitions[index];
         if (idef == null || idef.IsDeleted) return false;
-        InstanceObject[] refs = null;
-        try { refs = idef.GetReferences(-1); }
-        catch (Exception) { return true; }
-        if (refs == null) return false;
-        foreach (var refer in refs)
-            if (refer != null && !refer.IsDeleted) return true;
-        return false;
+        try
+        {
+            // 1 is top-level and nested inserts. -1 is not a scope: it comes
+            // back empty, and the generate purge then deletes the definition
+            // and every instance that still uses it.
+            if (idef.InUse(1)) return true;
+            var refs = idef.GetReferences(1);
+            if (refs == null) return true;
+            foreach (var refer in refs)
+                if (refer != null && !refer.IsDeleted) return true;
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
     }
 
     /// <summary>Drop a definition only after its last instance is gone. A shared one stays.</summary>
@@ -641,6 +650,14 @@ public partial class RhinoMCPFunctions
             if (index < 0) return Guid.Empty;
             created = true;
             BindOpeningPartAttributes(doc, index, attrs);
+            RhinoObject[] members = null;
+            try { members = doc.InstanceDefinitions[index].GetObjects(); }
+            catch (Exception) { members = null; }
+            if (members != null && members.Length == 0)
+            {
+                DeleteOpeningDefinitionIfUnused(doc, index);
+                return Guid.Empty;
+            }
         }
 
         // The instance keeps the opening identity. It does not carry one
@@ -655,7 +672,7 @@ public partial class RhinoMCPFunctions
         return Guid.Empty;
     }
 
-    private static void BindOpeningPartAttributes(
+    private void BindOpeningPartAttributes(
         RhinoDoc doc, int defIndex, IList<ObjectAttributes> attrs)
     {
         var idef = doc.InstanceDefinitions[defIndex];
@@ -664,8 +681,20 @@ public partial class RhinoMCPFunctions
         var count = Math.Min(members.Length, attrs.Count);
         for (var i = 0; i < count; i++)
         {
-            if (members[i] == null || attrs[i] == null) continue;
-            try { doc.Objects.ModifyAttributes(members[i], attrs[i], true); }
+            if (members[i]?.Attributes == null || attrs[i] == null) continue;
+            // The blob from before Add is Mode Normal. Writing it back takes the
+            // part out of the definition. The shared geometry lives at the
+            // origin, so the instance at the opening then draws nothing.
+            var kept = members[i].Attributes.Duplicate();
+            kept.Mode = ObjectMode.InstanceDefinitionObject;
+            kept.Visible = true;
+            kept.Name = attrs[i].Name;
+            kept.LayerIndex = attrs[i].LayerIndex;
+            var part = attrs[i].GetUserString("forsk:part");
+            if (!string.IsNullOrEmpty(part))
+                kept.SetUserString("forsk:part", part);
+            ApplyOpeningPartMaterial(doc, kept, string.Equals(part, "glass", StringComparison.Ordinal));
+            try { doc.Objects.ModifyAttributes(members[i], kept, true); }
             catch (Exception) { }
         }
     }

@@ -174,6 +174,108 @@ public class OpeningBlockShareTests
     }
 
     [Fact]
+    public void Generate3D_SharedOpenings_DrawAtTheOpening()
+    {
+        // Same functions AddOpeningBlock uses on the Generate 3D path: one key
+        // per size, layout on the canonical plane, placement on the wall.
+        var window = OpeningTypes.DefaultRecord("window");
+        var door = OpeningTypes.DefaultRecord("door");
+        var drawn = new[]
+        {
+            Draw("window", 1200, 900, 2300, 200, window, 5000, 2000, 1, 0, 0, 1, false),
+            Draw("window", 1200, 900, 2300, 200, window, 18000, 9000, 0, 1, -1, 0, true),
+            Draw("door", 900, 0, 2100, 200, door, 8000, 4000, 1, 0, 0, 1, false)
+        };
+        Assert.Equal(drawn[0].Name, drawn[1].Name);
+        Assert.NotEqual(drawn[0].Name, drawn[2].Name);
+        var catalog = new OpeningBlockShare.Catalog();
+        foreach (var item in drawn)
+            catalog.Place(item.Name + item.Ox.ToString(CultureInfo.InvariantCulture), item.Key);
+        catalog.Purge();
+        Assert.Equal(2, catalog.Definitions);
+
+        var blocks = Read("OpeningBlocks.cs");
+        var commit = Slice(blocks, "Guid CommitOpeningBlock", "void BindOpeningPartAttributes");
+        Assert.Contains("LayerIndex = attr.LayerIndex", commit, StringComparison.Ordinal);
+        Assert.Contains("members.Length == 0", commit, StringComparison.Ordinal);
+        Assert.DoesNotContain("forsk:kind", commit, StringComparison.Ordinal);
+        Assert.DoesNotContain("forsk:marker_id", commit, StringComparison.Ordinal);
+
+        var bind = Slice(blocks, "void BindOpeningPartAttributes", "void ApplyOpeningPartMaterial");
+        Assert.Contains("ObjectMode.InstanceDefinitionObject", bind, StringComparison.Ordinal);
+        Assert.Contains("kept.Visible = true", bind, StringComparison.Ordinal);
+        Assert.Contains("ModifyAttributes(members[i], kept, true)", bind, StringComparison.Ordinal);
+        Assert.DoesNotContain("ModifyAttributes(members[i], attrs[i]", bind, StringComparison.Ordinal);
+        Assert.DoesNotContain("forsk:marker_id", bind, StringComparison.Ordinal);
+        Assert.DoesNotContain("forsk:kind", bind, StringComparison.Ordinal);
+
+        var used = Slice(blocks, "bool OpeningDefinitionInUse", "bool DeleteOpeningDefinitionIfUnused");
+        Assert.Contains("InUse(1)", used, StringComparison.Ordinal);
+        Assert.Contains("GetReferences(1)", used, StringComparison.Ordinal);
+        Assert.Contains("if (refs == null) return true", used, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetReferences(-1)", used, StringComparison.Ordinal);
+
+        Assert.Contains("private const string OpeningBlockLayerPath = \"A-OPEN::Block\"", blocks, StringComparison.Ordinal);
+        var lookup = Read("LayerLookup.cs");
+        var hidden = Slice(lookup, "bool LayerHiddenByDefault", "private Layer EnsureLayer");
+        Assert.DoesNotContain("A-OPEN", hidden, StringComparison.Ordinal);
+    }
+
+    sealed class Drawn
+    {
+        public OpeningBlockShare.Key Key;
+        public string Name;
+        public double Ox, Oy;
+    }
+
+    static Drawn Draw(
+        string kind, double width, double sill, double head, double frame, OpeningTypes.Record style,
+        double ox, double oy, double widthX, double widthY, double thickX, double thickY, bool mirror)
+    {
+        var key = OpeningBlockShare.Key.From(kind, width, sill, head, frame, 0, style.TypeId, style.Swing);
+        Assert.True(key.WidthMm > 0 && key.HeightMm > 0 && key.FrameMm > 0);
+        var isWindow = kind == "window";
+        Assert.True(OpeningElement.TryLayout(
+            isWindow, key.WidthMm, key.SillMm, key.SillMm + key.HeightMm, key.FrameMm, key.PadMm, out var layout));
+        Assert.NotNull(layout.Left);
+        Assert.NotNull(layout.Right);
+        Assert.NotNull(layout.Head);
+        Assert.True(layout.Left.SpanX > 0 && layout.Left.SpanY > 0 && layout.Left.SpanZ > 0);
+        if (isWindow) Assert.NotNull(layout.Glass);
+        else Assert.NotNull(layout.Leaf);
+
+        var placed = OpeningBlockShare.Placement.On(ox, oy, widthX, widthY, thickX, thickY, mirror);
+        double minX = double.MaxValue, maxX = double.MinValue, minY = double.MaxValue, maxY = double.MinValue;
+        double minZ = double.MaxValue, maxZ = double.MinValue;
+        foreach (var x in new[] { -layout.OuterHalf, layout.OuterHalf })
+        foreach (var y in new[] { -layout.HalfThick, layout.HalfThick })
+        foreach (var z in new[] { layout.Z0, layout.Z1 })
+        {
+            placed.Map(x, y, z, out var wx, out var wy, out var wz);
+            if (wx < minX) minX = wx;
+            if (wx > maxX) maxX = wx;
+            if (wy < minY) minY = wy;
+            if (wy > maxY) maxY = wy;
+            if (wz < minZ) minZ = wz;
+            if (wz > maxZ) maxZ = wz;
+        }
+        var midX = (minX + maxX) * 0.5;
+        var midY = (minY + maxY) * 0.5;
+        Assert.Equal(ox, midX, 3);
+        Assert.Equal(oy, midY, 3);
+        Assert.True(maxX - minX > 50 && maxY - minY > 50 && maxZ - minZ > 80);
+        Assert.True(minZ < head && maxZ > sill);
+        Assert.True(Math.Abs(midX) > 100 || Math.Abs(midY) > 100);
+        return new Drawn
+        {
+            Key = key,
+            Name = OpeningBlockShare.Readable(key),
+            Ox = ox,
+            Oy = oy
+        };
+    }
+
+    [Fact]
     public void TheBake_SharesTheDefinition_AndUndoStaysTheCallersRecord()
     {
         var blocks = Read("OpeningBlocks.cs");
