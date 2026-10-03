@@ -177,12 +177,14 @@ public partial class RhinoMCPFunctions
             tables.Add(Schedules.WindowTable(openings.Where(o => o.Record.Kind == "window").ToList()));
         if (kinds.Contains("room"))
         {
-            tables.Add(Schedules.RoomTable(rooms.Where(r => r.Tagged).Select(r => new Schedules.Room
+            var tagged = rooms.Where(r => r.Tagged).Select(r => new Schedules.Room
             {
                 Id = r.ScheduleId,
                 Name = r.Name,
                 AreaMm2 = r.Area
-            }).ToList()));
+            }).ToList();
+            // Same rooms and the same BRA/BTA as area_stats. A floor with no figure adds no row.
+            tables.Add(Schedules.RoomTable(tagged, ReadAreaStats(doc).Gross));
         }
         // Column widths from Rhino's own layout of each text, not a glyph guess.
         var style = OneToOneTextStyle(

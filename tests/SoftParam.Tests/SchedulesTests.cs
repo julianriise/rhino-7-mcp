@@ -262,6 +262,48 @@ public class SchedulesTests
             Assert.Equal(room.Name, table.Rows[i][0]);
         }
         Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Total);
+        Assert.Equal(3, table.Lines);
+        Assert.Empty(table.Foot);
+    }
+
+    [Fact]
+    public void RoomTable_PrintsBraAndBtaUnderTheSum_WhenTheFloorHasThem()
+    {
+        var rooms = new[]
+        {
+            new Schedules.Room { Id = "rd-02", Name = "Gang", AreaMm2 = 20160000 },
+            new Schedules.Room { Id = "rd-01", Name = "Kontor", AreaMm2 = 12400000 }
+        };
+        var gross = new[]
+        {
+            new AreaStats.FloorGross { Level = "0", BraMm2 = 72_960_000, BtaMm2 = 80_000_000 },
+            new AreaStats.FloorGross { Level = "1", Note = "no wall outline on this floor" },
+            new AreaStats.FloorGross { Level = "2", BraMm2 = 10_000_000, BtaMm2 = 12_000_000 }
+        };
+        var plain = Schedules.RoomTable(rooms);
+        var table = Schedules.RoomTable(rooms, gross);
+        Assert.Equal(plain.Rows.Select(r => string.Join("|", r)), table.Rows.Select(r => string.Join("|", r)));
+        Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Total);
+        Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Line(2));
+        Assert.Equal("total", table.LineId(2));
+        Assert.Equal(new[] { "BRA etasje 0", "73,0 m²" }, table.Line(3));
+        Assert.Equal(new[] { "BTA etasje 0", "80,0 m²" }, table.Line(4));
+        Assert.Equal(new[] { "BRA etasje 2", "10,0 m²" }, table.Line(5));
+        Assert.Equal(new[] { "BTA etasje 2", "12,0 m²" }, table.Line(6));
+        Assert.Equal(new[] { "bra-0", "bta-0", "bra-2", "bta-2" }, table.FootIds);
+        Assert.Equal(7, table.Lines);
+        Assert.True(table.Widths[0] > plain.Widths[0]);
+        Assert.Equal(0, Schedules.RoomTable(new Schedules.Room[0], gross).Lines);
+
+        var noted = Schedules.RoomTable(rooms, new[]
+        {
+            new AreaStats.FloorGross { Level = "0", Note = "wall thickness is missing" }
+        });
+        Assert.Equal(plain.Lines, noted.Lines);
+        Assert.Empty(noted.Foot);
+
+        var blocks = Schedules.Flow(new[] { table }, 400, 254);
+        AssertFlowed(new[] { table }, blocks, 400, 254);
     }
 
     [Fact]

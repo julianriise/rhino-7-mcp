@@ -65,6 +65,9 @@ public static class Schedules
         public List<string> Ids = new List<string>();
         public List<string[]> Rows = new List<string[]>();
         public string[] Total;
+        /// <summary>Rows under the total: BRA and BTA when those figures exist.</summary>
+        public List<string[]> Foot = new List<string[]>();
+        public List<string> FootIds = new List<string>();
 
         public double Width
         {
@@ -76,21 +79,35 @@ public static class Schedules
             }
         }
 
-        /// <summary>Body lines: the rows, then the total.</summary>
+        /// <summary>Body lines: the rows, then the total, then the foot.</summary>
         public int Lines
         {
-            get { return Rows.Count + (Total == null ? 0 : 1); }
+            get { return Rows.Count + (Total == null ? 0 : 1) + Foot.Count; }
         }
 
-        /// <summary>Cells of body line i: a row, or the total after the last row.</summary>
+        /// <summary>Cells of body line i: a row, the total, or a foot row under it.</summary>
         public string[] Line(int i)
         {
-            return i < Rows.Count ? Rows[i] : Total;
+            if (i < Rows.Count) return Rows[i];
+            var after = i - Rows.Count;
+            if (Total != null)
+            {
+                if (after == 0) return Total;
+                after--;
+            }
+            return after >= 0 && after < Foot.Count ? Foot[after] : null;
         }
 
         public string LineId(int i)
         {
-            return i < Rows.Count ? Ids[i] : "total";
+            if (i < Rows.Count) return Ids[i];
+            var after = i - Rows.Count;
+            if (Total != null)
+            {
+                if (after == 0) return "total";
+                after--;
+            }
+            return after >= 0 && after < FootIds.Count ? FootIds[after] : "";
         }
     }
 
@@ -408,6 +425,16 @@ public static class Schedules
     /// </summary>
     public static Table RoomTable(IList<Room> rooms)
     {
+        return RoomTable(rooms, null);
+    }
+
+    /// <summary>
+    /// The same Romliste. Under the sum, one BRA row and one BTA row per floor
+    /// that has that figure. The level is the stored floor ("0"). A note, or
+    /// no figure, adds no row, so the table without gross is unchanged.
+    /// </summary>
+    public static Table RoomTable(IList<Room> rooms, IList<AreaStats.FloorGross> gross)
+    {
         var table = new Table
         {
             Kind = "room",
@@ -425,8 +452,32 @@ public static class Schedules
             total += room.AreaMm2;
         }
         if (sorted.Count > 0)
+        {
             table.Total = new[] { "Sum", OpeningTypes.AreaText(total) };
+            AddGrossRows(table, gross);
+        }
         return Fit(table, null);
+    }
+
+    /// <summary>BRA then BTA, in the order the floors were given. A missing figure is left out.</summary>
+    static void AddGrossRows(Table table, IList<AreaStats.FloorGross> gross)
+    {
+        if (gross == null) return;
+        foreach (var floor in gross)
+        {
+            if (floor == null) continue;
+            var level = string.IsNullOrWhiteSpace(floor.Level) ? "0" : floor.Level.Trim();
+            if (floor.BraMm2.HasValue)
+            {
+                table.FootIds.Add("bra-" + level);
+                table.Foot.Add(new[] { "BRA etasje " + level, OpeningTypes.AreaText(floor.BraMm2.Value) });
+            }
+            if (floor.BtaMm2.HasValue)
+            {
+                table.FootIds.Add("bta-" + level);
+                table.Foot.Add(new[] { "BTA etasje " + level, OpeningTypes.AreaText(floor.BtaMm2.Value) });
+            }
+        }
     }
 
     /// <summary>Sheet title for the lists shown: Dørliste; Dør- og vindusliste; Dør-, vindus- og romliste.</summary>
