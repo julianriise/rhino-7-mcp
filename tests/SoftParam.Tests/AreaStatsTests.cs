@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using RhinoMCPPlugin.Forsk;
 using RhinoMCPPlugin.Functions;
 using Xunit;
@@ -408,6 +409,33 @@ public class AreaStatsTests
         Assert.Equal(intent, ForskIntentRouter.Classify(said));
         if (intent == ForskIntent.Area)
             Assert.Equal("Analyser", ForskRoles.Mark(intent, ForskRole.None));
+    }
+
+    [Fact]
+    public void AreaStatsReceipt_KeepsTheWholeAnswer()
+    {
+        // Two sentences used to stop after the floors. "1. etasje" also ends at the ordinal point.
+        var message = "Net 45,4 m², estimate. Ground floor: 25,0 m², BRA 82,3 m², BTA 92,0 m². By use: Stue 20,2 m², Soverom 12,4 m². Stue 20,2 m², Soverom 12,4 m².";
+        var receipt = ForskReceipt.From("area_stats", new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject { ["message"] = message }
+        });
+        Assert.True(receipt.Ok);
+        Assert.Equal(message, receipt.Text);
+        Assert.Contains("By use:", receipt.Text);
+        Assert.Contains("Soverom 12,4 m².", receipt.Text);
+
+        var norwegian = "Net 32,0 m², estimate. 1. etasje: 20,0 m², BRA 68,0 m², BTA 80,0 m². U. etasje: 8,0 m². By use: Stue 20,0 m². Stue 20,0 m².";
+        var named = ForskReceipt.From("area_stats", new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject { ["message"] = norwegian }
+        });
+        Assert.Equal(norwegian, named.Text);
+        Assert.Contains("1. etasje: 20,0 m²", named.Text);
+        Assert.Contains("U. etasje: 8,0 m²", named.Text);
+        Assert.Contains("By use:", named.Text);
     }
 
     [Fact]

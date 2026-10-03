@@ -9,7 +9,7 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 - A file with no rooms offers Make rooms. The line is "No rooms. Make rooms finds them from the walls."
 - Move a wall, then ask again. The net area, and BRA and BTA where they are shown, change with the model.
 - Area statistics is on the help card when the file has rooms. It is not on the bar. Print stays the first bar slot.
-- A card click shows the first two sentences: the net total, then the floor, including BRA and BTA when the tool has them. The chat sees the full answer.
+- A card click shows the full answer: the totals, the floors, the uses and the rooms. It does not stop after the net total.
 - A failure is a mark other than Analyser, a second area that is not the plan tag, or a figure with no reason when the walls cannot give it.
 
 ## Sheets

@@ -42,7 +42,11 @@ namespace RhinoMCPPlugin.Forsk
             var message = result?["message"]?.ToString();
             if (!string.IsNullOrWhiteSpace(message))
             {
-                var text = Sentences(message, 2);
+                // area_stats is already the short answer. Two sentences would drop the
+                // uses and the rooms, and "1. etasje" would end at the ordinal point.
+                var text = string.Equals(tool, "area_stats", StringComparison.Ordinal)
+                    ? OneLine(message)
+                    : Sentences(message, 2);
                 var id = ForskId.Match(text);
                 return new ForskReceipt { Ok = true, Subject = id.Success ? id.Value : label, Text = text };
             }
@@ -76,7 +80,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The first sentences of a message: a receipt stays one line.</summary>
         static string Sentences(string text, int max)
         {
-            var one = (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+            var one = OneLine(text);
             var count = 0;
             for (var i = 0; i < one.Length; i++)
             {
@@ -85,6 +89,11 @@ namespace RhinoMCPPlugin.Forsk
                 if (++count == max) return one.Substring(0, i + 1);
             }
             return one;
+        }
+
+        static string OneLine(string text)
+        {
+            return (text ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
         }
     }
 }
