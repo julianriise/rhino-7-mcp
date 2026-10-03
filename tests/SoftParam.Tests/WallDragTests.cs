@@ -205,4 +205,47 @@ public class WallDragTests
         Assert.Equal(WallDrag.Many(false), WallDrag.Check(graph, records[0], NorthSouth()));
         Assert.Equal(WallDrag.Many(false), WallDrag.Check(null, records[0], null));
     }
+
+    [Fact]
+    public void Receipt_NamesOutOrIn_OrTheCompass_AndWhoFollowed()
+    {
+        Assert.Equal("North wall moved 300 mm out", WallDrag.Receipt("the north wall", "north", 300, "north", false));
+        Assert.Equal("Nordveggen flyttet 300 mm ut", WallDrag.Receipt("nordveggen", "north", 300.4, "north", true));
+        Assert.Equal("North wall moved 300 mm in", WallDrag.Receipt("the north wall", "south", 300, "north", false));
+        Assert.Equal("Nordveggen flyttet 300 mm inn", WallDrag.Receipt("nordveggen", "south", 300, "north", true));
+        Assert.Equal("South wall moved 250 mm out", WallDrag.Receipt("the south wall", "south", 250, "south", false));
+        Assert.Equal("Sørveggen flyttet 250 mm ut", WallDrag.Receipt("sørveggen", "south", 250, "south", true));
+        Assert.Equal("East wall moved 100 mm in", WallDrag.Receipt("the east wall", "west", 100, "east", false));
+        Assert.Equal("Vestveggen flyttet 100 mm ut", WallDrag.Receipt("vestveggen", "west", 100, "west", true));
+
+        Assert.Equal("Wall between Kitchen and Bath moved 300 mm east",
+            WallDrag.Receipt("wall between Kitchen and Bath", "east", 300, null, false));
+        Assert.Equal("Vegg mellom Kitchen og Bath flyttet 300 mm mot øst",
+            WallDrag.Receipt("vegg mellom Kitchen og Bath", "east", 299.6, "", true));
+        Assert.Equal("Wall of Kitchen moved 300 mm north",
+            WallDrag.Receipt("wall of Kitchen", "north", 300, null, false));
+
+        Assert.Equal("North wall moved 300 mm out; 1 wall followed",
+            WallDrag.Receipt("the north wall", "north", 300, "north", false, 1));
+        Assert.Equal("North wall moved 300 mm out; 2 walls followed",
+            WallDrag.Receipt("the north wall", "north", 300, "north", false, 2));
+        Assert.Equal("Nordveggen flyttet 300 mm ut; 1 vegg fulgte",
+            WallDrag.Receipt("nordveggen", "north", 300, "north", true, 1));
+        Assert.Equal("Vegg mellom Kitchen og Bath flyttet 300 mm mot øst; 2 vegger fulgte",
+            WallDrag.Receipt("vegg mellom Kitchen og Bath", "east", 300, null, true, 2));
+        Assert.DoesNotContain("followed", WallDrag.Receipt("the north wall", "north", 300, "north", false, 0));
+        Assert.DoesNotContain(".", WallDrag.Receipt("the north wall", "north", 300, "north", false, 2));
+    }
+
+    [Fact]
+    public void Plain_DropsTheCoordinateClause()
+    {
+        Assert.Equal("Not moved: the wall would cross another wall.",
+            WallDrag.Plain("Not moved: the wall would cross another wall near (4000, 2000)."));
+        Assert.Equal("Not moved: a wall meets it at under 15°.",
+            WallDrag.Plain("Not moved: a wall meets it at under 15° near (0, 0)."));
+        Assert.Equal("Not moved: 500 mm would close the room or wall beyond it, 200 mm deep.",
+            WallDrag.Plain("Not moved: 500 mm would close the room or wall beyond it, 200 mm deep."));
+        Assert.Equal("", WallDrag.Plain("  "));
+    }
 }

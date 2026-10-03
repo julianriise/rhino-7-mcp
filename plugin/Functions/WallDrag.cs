@@ -107,6 +107,43 @@ public static class WallDrag
         return ForskText.Format(TextKey(outwardMove ? "wall.drag.dim.out" : "wall.drag.dim.in", nb), "n", abs);
     }
 
+    /// <summary>
+    /// The one sentence after a drag. An outer wall says out or in on its own side.
+    /// An inner wall keeps its name and the compass word. followed is the walls that stretched with it.
+    /// </summary>
+    public static string Receipt(string label, string compass, double mm, string outerSide, bool nb, int followed = 0)
+    {
+        var n = Math.Abs((long)Math.Round(mm, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture);
+        string sentence;
+        if (!string.IsNullOrEmpty(outerSide))
+        {
+            var way = string.Equals(compass, outerSide, StringComparison.OrdinalIgnoreCase) ? "out" : "in";
+            sentence = ForskText.Format(TextKey("wall.drag.receipt.outer", nb),
+                "wall", SideName(outerSide, nb), "n", n, "way", Text("wall.drag." + way, nb));
+        }
+        else
+        {
+            sentence = ForskText.Format(TextKey("wall.drag.receipt.inner", nb),
+                "wall", Capital(label), "n", n, "toward", CompassWord(compass, nb));
+        }
+        if (followed > 0)
+            sentence += ForskText.Format(TextKey(followed == 1 ? "wall.drag.followed.one" : "wall.drag.followed", nb),
+                "n", followed.ToString(CultureInfo.InvariantCulture));
+        return sentence;
+    }
+
+    /// <summary>A refusal with the coordinate clause taken off.</summary>
+    public static string Plain(string why)
+    {
+        if (string.IsNullOrWhiteSpace(why)) return "";
+        var text = why.Trim();
+        var near = text.IndexOf(" near (", StringComparison.Ordinal);
+        if (near < 0) return text;
+        var end = text.IndexOf(')', near);
+        if (end < 0) return text;
+        return (text.Remove(near, end - near + 1)).Replace(" .", ".").Trim();
+    }
+
     /// <summary>The original face at mid-run, and that face after the signed move.</summary>
     public static (Pt From, Pt To) Measure(WallEdit.Run run, double by)
     {
@@ -115,6 +152,28 @@ public static class WallDrag
         var from = new Pt(run.Dir.X * s + run.Normal.X * face, run.Dir.Y * s + run.Normal.Y * face);
         var to = new Pt(from.X + run.Normal.X * by, from.Y + run.Normal.Y * by);
         return (from, to);
+    }
+
+    static string SideName(string side, bool nb)
+    {
+        var key = "wall.drag.side." + (side ?? "").Trim().ToLowerInvariant();
+        return ForskText.Has(TextKey(key, nb)) ? Text(key, nb) : Capital(side);
+    }
+
+    static string CompassWord(string compass, bool nb)
+    {
+        var key = "compass." + (compass ?? "").Trim().ToLowerInvariant();
+        return ForskText.Has(TextKey(key, nb)) ? Text(key, nb) : (compass ?? "").Trim().ToLowerInvariant();
+    }
+
+    static string Capital(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        text = text.Trim();
+        if (text.StartsWith("the ", StringComparison.OrdinalIgnoreCase))
+            text = text.Substring(4);
+        if (text.Length == 0) return "";
+        return char.ToUpperInvariant(text[0]) + text.Substring(1);
     }
 
     static string Text(string key, bool nb) => ForskText.Get(TextKey(key, nb));
