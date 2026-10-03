@@ -14,7 +14,7 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 
 ## Sheets
 
-- Print the schedules. Under the Romliste Sum, each floor that has a figure gets "BRA etasje {level}" and "BTA etasje {level}".
+- Print the schedules. Under the Romliste Sum, each floor that has a figure gets "BRA 1. etasje" and "BTA 1. etasje" for the ground floor.
 - Those rows match the chat. The room names and the Sum match the chat's rooms and net total.
 - A floor with no figure adds no row. Sum stays the net room area.
 - Glance at the chat and the Romliste on garage, then the same on office.
@@ -23,7 +23,7 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 
 - Room area is the stamped net area on A-ROOM, the same number as the plan tag and the Romliste, not a second measurement.
 - The sum of those areas is the net room area, labelled "estimate", summed in mm² and then rounded to one decimal.
-- Per floor uses the stored `forsk:level`, printed as "Floor 0" and "BRA etasje 0", not "1. etasje". An empty level is "0".
+- Per floor uses the stored `forsk:level`. 0 is the ground floor: "1. etasje" in a Norwegian answer and on the Romliste, "Ground floor" in an English answer. The next stored level is "2. etasje" / "1st floor". Below grade, -1 is "U. etasje" / "Lower ground" and -2 is "Kjeller" / "Basement". An empty level is that ground floor.
 - Per use maps soverom/bedroom to Soverom, bad/wc/bath/bathroom/toalett to Bad, kjøkken/kitchen to Kjøkken, stue/living to Stue, bod/storage to Bod, gang/entré/hall to Gang, and anything else, including "Rom", to Annet.
 - The first matching word wins, so "Stue/kjøkken" is Stue. An explicit use is kept as given.
 - BRA and BTA come from the outer face of the wall-union outline (`forsk:path`), not from the floor slab, which is extruded from that same ring and has no thickness of its own.

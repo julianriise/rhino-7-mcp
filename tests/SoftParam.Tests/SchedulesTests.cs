@@ -286,10 +286,10 @@ public class SchedulesTests
         Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Total);
         Assert.Equal(new[] { "Sum", "32,6 m²" }, table.Line(2));
         Assert.Equal("total", table.LineId(2));
-        Assert.Equal(new[] { "BRA etasje 0", "73,0 m²" }, table.Line(3));
-        Assert.Equal(new[] { "BTA etasje 0", "80,0 m²" }, table.Line(4));
-        Assert.Equal(new[] { "BRA etasje 2", "10,0 m²" }, table.Line(5));
-        Assert.Equal(new[] { "BTA etasje 2", "12,0 m²" }, table.Line(6));
+        Assert.Equal(new[] { "BRA 1. etasje", "73,0 m²" }, table.Line(3));
+        Assert.Equal(new[] { "BTA 1. etasje", "80,0 m²" }, table.Line(4));
+        Assert.Equal(new[] { "BRA 3. etasje", "10,0 m²" }, table.Line(5));
+        Assert.Equal(new[] { "BTA 3. etasje", "12,0 m²" }, table.Line(6));
         Assert.Equal(new[] { "bra-0", "bta-0", "bra-2", "bta-2" }, table.FootIds);
         Assert.Equal(7, table.Lines);
         Assert.True(table.Widths[0] > plain.Widths[0]);

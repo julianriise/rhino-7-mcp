@@ -430,7 +430,7 @@ public static class Schedules
 
     /// <summary>
     /// The same Romliste. Under the sum, one BRA row and one BTA row per floor
-    /// that has that figure. The level is the stored floor ("0"). A note, or
+    /// that has that figure. The row names the Norwegian storey: stored 0 is "1. etasje". A note, or
     /// no figure, adds no row, so the table without gross is unchanged.
     /// </summary>
     public static Table RoomTable(IList<Room> rooms, IList<AreaStats.FloorGross> gross)
@@ -470,12 +470,12 @@ public static class Schedules
             if (floor.BraMm2.HasValue)
             {
                 table.FootIds.Add("bra-" + level);
-                table.Foot.Add(new[] { "BRA etasje " + level, OpeningTypes.AreaText(floor.BraMm2.Value) });
+                table.Foot.Add(new[] { "BRA " + AreaStats.FloorName(level, true), OpeningTypes.AreaText(floor.BraMm2.Value) });
             }
             if (floor.BtaMm2.HasValue)
             {
                 table.FootIds.Add("bta-" + level);
-                table.Foot.Add(new[] { "BTA etasje " + level, OpeningTypes.AreaText(floor.BtaMm2.Value) });
+                table.Foot.Add(new[] { "BTA " + AreaStats.FloorName(level, true), OpeningTypes.AreaText(floor.BtaMm2.Value) });
             }
         }
     }

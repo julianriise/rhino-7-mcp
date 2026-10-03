@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Forsk;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
 namespace RhinoMCPPlugin.Functions;
@@ -79,7 +80,7 @@ public static class AreaStats
     {
         /// <summary>Largest net area first.</summary>
         public List<RoomLine> Rooms = new List<RoomLine>();
-        /// <summary>By floor, level order. An empty level is "0".</summary>
+        /// <summary>By floor, level order. An empty level is stored as "0", the ground floor.</summary>
         public List<Group> Floors = new List<Group>();
         /// <summary>By use, largest area first.</summary>
         public List<Group> Uses = new List<Group>();
@@ -181,7 +182,7 @@ public static class AreaStats
         for (var i = 0; i < floors.Length; i++)
         {
             var floor = result.Floors[i];
-            floors[i] = "Floor " + floor.Key + ": " + OpeningTypes.AreaText(floor.AreaMm2) + GrossClause(result, floor.Key);
+            floors[i] = FloorName(floor.Key) + ": " + OpeningTypes.AreaText(floor.AreaMm2) + GrossClause(result, floor.Key);
         }
         var uses = new string[result.Uses.Count];
         for (var i = 0; i < uses.Length; i++)
@@ -399,7 +400,7 @@ public static class AreaStats
             {
                 var row = new JObject
                 {
-                    ["level"] = floor.Key,
+                    ["level"] = FloorName(floor.Key),
                     ["net"] = OpeningTypes.AreaText(floor.AreaMm2),
                     ["rooms"] = floor.Count
                 };
@@ -414,7 +415,7 @@ public static class AreaStats
                     if (!string.IsNullOrEmpty(gross.Note))
                     {
                         row["note"] = gross.Note;
-                        omitted.Add("Floor " + floor.Key + ": " + gross.Note);
+                        omitted.Add(FloorName(floor.Key) + ": " + gross.Note);
                     }
                 }
                 floors.Add(row);
@@ -425,7 +426,7 @@ public static class AreaStats
                 rooms.Add(new JObject
                 {
                     ["name"] = room.Name,
-                    ["level"] = room.Level,
+                    ["level"] = FloorName(room.Level),
                     ["use"] = room.Use,
                     ["area"] = OpeningTypes.AreaText(room.AreaMm2)
                 });
@@ -670,6 +671,47 @@ public static class AreaStats
     {
         var byArea = b.AreaMm2.CompareTo(a.AreaMm2);
         return byArea != 0 ? byArea : string.CompareOrdinal(a.Key, b.Key);
+    }
+
+    /// <summary>
+    /// The storey a forsk:level prints as, in the language of the question.
+    /// 0 is the ground floor. Below it, -1 is underetasjen and -2 is the basement.
+    /// </summary>
+    public static string FloorName(string level, bool norwegian)
+    {
+        var key = string.IsNullOrWhiteSpace(level) ? "0" : level.Trim();
+        if (!int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+            return norwegian ? key : "Floor " + key;
+        if (n >= 0)
+            return norwegian
+                ? (n + 1).ToString(CultureInfo.InvariantCulture) + ". etasje"
+                : (n == 0 ? "Ground floor" : Ordinal(n) + " floor");
+        if (n == -1) return norwegian ? "U. etasje" : "Lower ground";
+        if (n == -2) return norwegian ? "Kjeller" : "Basement";
+        var deep = (-n - 1).ToString(CultureInfo.InvariantCulture);
+        return norwegian ? deep + ". kjeller" : "Basement " + deep;
+    }
+
+    /// <summary>FloorName in the language of the turn that is reading the areas. English when no question set it.</summary>
+    public static string FloorName(string level)
+    {
+        return FloorName(level, ForskSpeech.Norwegian);
+    }
+
+    static string Ordinal(int n)
+    {
+        var mod100 = n % 100;
+        var suffix = "th";
+        if (mod100 < 11 || mod100 > 13)
+        {
+            switch (n % 10)
+            {
+                case 1: suffix = "st"; break;
+                case 2: suffix = "nd"; break;
+                case 3: suffix = "rd"; break;
+            }
+        }
+        return n.ToString(CultureInfo.InvariantCulture) + suffix;
     }
 
     static int ByLevel(Group a, Group b)

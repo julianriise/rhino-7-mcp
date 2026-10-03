@@ -103,6 +103,67 @@ public class AreaStatsTests
         var result = AreaStats.Compute(new[] { Room("rd-01", "Stue", null, 2_000_000) });
         Assert.Equal("0", result.Rooms[0].Level);
         Assert.Equal("0", result.Floors.Single().Key);
+        Assert.Contains("Ground floor:", result.Summary);
+    }
+
+    [Theory]
+    [InlineData("0", false, "Ground floor")]
+    [InlineData("1", false, "1st floor")]
+    [InlineData("2", false, "2nd floor")]
+    [InlineData("3", false, "3rd floor")]
+    [InlineData("11", false, "11th floor")]
+    [InlineData("21", false, "21st floor")]
+    [InlineData("-1", false, "Lower ground")]
+    [InlineData("-2", false, "Basement")]
+    [InlineData("", false, "Ground floor")]
+    [InlineData("0", true, "1. etasje")]
+    [InlineData("1", true, "2. etasje")]
+    [InlineData("2", true, "3. etasje")]
+    [InlineData("-1", true, "U. etasje")]
+    [InlineData("-2", true, "Kjeller")]
+    [InlineData("", true, "1. etasje")]
+    public void FloorName_UsesTheStorey_InBothLanguages(string level, bool norwegian, string name)
+    {
+        Assert.Equal(name, AreaStats.FloorName(level, norwegian));
+    }
+
+    [Fact]
+    public void Summary_NamesFloorsInTheQuestionsLanguage()
+    {
+        var rooms = new[]
+        {
+            Room("a", "Stue", "0", 20_000_000),
+            Room("b", "Soverom", "-1", 8_000_000),
+            Room("c", "Bod", "1", 4_000_000)
+        };
+        ForskSpeech.Use("how big is the flat?");
+        try
+        {
+            var english = AreaStats.Compute(rooms);
+            Assert.Contains("Ground floor: 20,0 m²", english.Summary);
+            Assert.Contains("Lower ground: 8,0 m²", english.Summary);
+            Assert.Contains("1st floor: 4,0 m²", english.Summary);
+            Assert.DoesNotContain("etasje", english.Summary);
+        }
+        finally
+        {
+            ForskSpeech.Clear();
+        }
+
+        ForskSpeech.Use("hvor stor er stua?");
+        try
+        {
+            var norwegian = AreaStats.Compute(rooms);
+            Assert.Contains("1. etasje: 20,0 m²", norwegian.Summary);
+            Assert.Contains("U. etasje: 8,0 m²", norwegian.Summary);
+            Assert.Contains("2. etasje: 4,0 m²", norwegian.Summary);
+            Assert.DoesNotContain("Floor", norwegian.Summary);
+            Assert.DoesNotContain("Ground", norwegian.Summary);
+        }
+        finally
+        {
+            ForskSpeech.Clear();
+        }
     }
 
     [Fact]
@@ -126,7 +187,7 @@ public class AreaStatsTests
         for (var i = 1; i <= 9; i++)
             rooms.Add(Room("rd-" + i.ToString("00"), "Rom " + i, "0", i * 1_000_000));
         var result = AreaStats.Compute(rooms);
-        Assert.StartsWith("Net 45,0 m², estimate. Floor 0: 45,0 m². By use: Annet 45,0 m². ", result.Summary);
+        Assert.StartsWith("Net 45,0 m², estimate. Ground floor: 45,0 m². By use: Annet 45,0 m². ", result.Summary);
         Assert.Contains("Rom 9 9,0 m²", result.Summary);
         Assert.DoesNotContain("Rom 1 ", result.Summary);
         Assert.EndsWith(", +1 more.", result.Summary);
@@ -243,7 +304,7 @@ public class AreaStatsTests
         Assert.Equal(9_600.0 * 7_600.0 + 3_600.0 * 2_600.0, ground.BraMm2.Value, 1);
         Assert.Equal("no wall outline on this floor", result.Gross.Single(g => g.Level == "1").Note);
         Assert.Contains("BRA 82,3 m², BTA 92,0 m²", result.Summary);
-        Assert.Contains("Floor 1: 8,0 m² (no wall outline on this floor)", result.Summary);
+        Assert.Contains("1st floor: 8,0 m² (no wall outline on this floor)", result.Summary);
 
         var mixed = AreaStats.Compute(new[] { Room("a", "Stue", "0", 10_000_000) });
         AreaStats.ApplyGross(mixed, new[]
