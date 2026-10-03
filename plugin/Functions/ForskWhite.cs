@@ -10,9 +10,10 @@ namespace RhinoMCPPlugin.Functions;
 /// ini and adds nothing: a key ExportToFile did not write is left absent, and
 /// a colour keeps the component count it arrived with. Import the result and
 /// do not call UpdateDisplayMode afterwards; that drops the ini-only keys.
-/// Technical lines stay off (TechnicalMask is not raised). A small x-ray
-/// transparency is not applied: glass and the daylight ramp are unproven
-/// until the live check, so materials stay opaque.
+/// An earlier import is replaced by a new import on load, not retuned in place.
+/// Technical lines stay off (TechnicalMask is not raised). Cast shadows stay
+/// off. A small x-ray transparency is not applied: glass and the daylight ramp
+/// are unproven until the live check, so materials stay opaque.
 /// </summary>
 public static class ForskWhite
 {
@@ -20,6 +21,11 @@ public static class ForskWhite
     public const string ShadedModeName = "Shaded";
     public const string PageViewType = "RhinoPageView";
     public const string DetailType = "DetailViewObject";
+    /// <summary>
+    /// 1 is this import: cast shadows off. A missing plugin setting is 0,
+    /// so a Forsk White from an earlier build is replaced on load.
+    /// </summary>
+    public const int ModeRevision = 1;
 
     public const int GroundR = 245;
     public const int GroundG = 245;
@@ -63,6 +69,26 @@ public static class ForskWhite
     public static string TargetMode(bool polishOn)
     {
         return polishOn ? ModeName : ShadedModeName;
+    }
+
+    /// <summary>
+    /// A stored revision below <see cref="ModeRevision"/> is an older import.
+    /// </summary>
+    public static bool NeedsReimport(int storedRevision)
+    {
+        return storedRevision < ModeRevision;
+    }
+
+    /// <summary>
+    /// A model view still named Forsk White, but not on the current mode, is
+    /// the one that was just replaced. Assign the new one. A layout is skipped.
+    /// Off does not pull a view back onto Forsk White.
+    /// </summary>
+    public static bool NeedsReassign(bool polishOn, string currentModeName, string rhinoTypeName, bool sameMode)
+    {
+        if (!polishOn || sameMode) return false;
+        if (!AssignsDisplayMode(rhinoTypeName)) return false;
+        return string.Equals(currentModeName, ModeName, StringComparison.Ordinal);
     }
 
     /// <summary>4View, a new view, a split, and Open put the file's modes back.</summary>
@@ -189,7 +215,7 @@ public static class ForskWhite
             Rgb("Shading\\Material\\Front Material", "Specular", SpecularNearBlack, SpecularNearBlack, SpecularNearBlack),
             Int("Shading\\Material\\Front Material", "ShineIntensity", 0),
             Rgb("Lighting", "AmbientColor", Ambient, Ambient, Ambient),
-            Bool("Lighting", "CastShadows", true),
+            Bool("Lighting", "CastShadows", false),
             Int("Lighting", "ShadowMapSize", ShadowMap),
             Int("Lighting", "NumSamples", ShadowSamples),
             Int("Lighting", "ShadowBlur", ShadowBlur),

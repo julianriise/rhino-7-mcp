@@ -12,9 +12,9 @@ Forsk White is on by default.
 - The daylight ramp stays coloured. If it goes flat, the next edit is `ShadeVertexColors` true on Forsk Analysis only, with its wires left off.
 - `ForskWhite` turns the mode off. Model views that were Forsk White return to Shaded. A view already in Rendered stays Rendered.
 - Glass stays transparent. Object colour and object transparency are not overridden.
-- Shadows are on. If orbit stutters, the next edit is `CastShadows` off.
+- Shadows are off (`CastShadows`).
 - Technical lines are off. If silhouettes are missing and orbit is smooth, raising `TechnicalMask` is a later decision.
-- An existing Forsk White mode is not rewritten. If an older import looks wrong, delete that mode in Preferences and restart. The next launch imports it once.
+- An older Forsk White is replaced on load. Later launches leave that import in place.
 - A failure line is `Forsk White did not load: ...`.
 
 ## VP2 — demo chrome

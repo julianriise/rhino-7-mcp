@@ -41,7 +41,7 @@ public class ForskWhiteTests
         Assert.Equal("0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Shine"));
         Assert.Equal("8,8,8", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Specular"));
         Assert.Equal("200,200,200", ForskWhite.Read(ini, "Lighting", "AmbientColor"));
-        Assert.Equal("y", ForskWhite.Read(ini, "Lighting", "CastShadows"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Lighting", "CastShadows"));
         Assert.Equal("1024", ForskWhite.Read(ini, "Lighting", "ShadowMapSize"));
         Assert.Equal("n", ForskWhite.Read(ini, "Lighting", "PerPixelLighting"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ShowClippingPlanes"));
@@ -90,5 +90,34 @@ public class ForskWhiteTests
         Assert.True(ForskWhite.ReassignsAfterCommand("4View"));
         Assert.True(ForskWhite.ReassignsAfterCommand("Open"));
         Assert.False(ForskWhite.ReassignsAfterCommand("Move"));
+    }
+
+    [Fact]
+    public void White_replaces_an_older_import_and_keeps_shadows_off()
+    {
+        Assert.Equal(1, ForskWhite.ModeRevision);
+        Assert.True(ForskWhite.NeedsReimport(0));
+        Assert.False(ForskWhite.NeedsReimport(ForskWhite.ModeRevision));
+        Assert.True(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoView", true));
+        Assert.False(ForskWhite.NeedsReassign(true, "Rendered", "RhinoView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoPageView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "DetailViewObject", false));
+        Assert.False(ForskWhite.NeedsReassign(false, "Forsk White", "RhinoView", false));
+
+        var host = File.ReadAllText(Path.Combine(FunctionsDir(), "ForskWhiteHost.cs"));
+        Assert.Contains("ForskWhite.NeedsReimport", host, StringComparison.Ordinal);
+        Assert.Contains("ForskWhite.NeedsReassign", host, StringComparison.Ordinal);
+        Assert.Contains("ForskWhiteRevision", host, StringComparison.Ordinal);
+    }
+
+    static string FunctionsDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", "Functions");
+            if (Directory.Exists(path)) return path;
+        }
+        throw new DirectoryNotFoundException("plugin/Functions above " + AppContext.BaseDirectory);
     }
 }
