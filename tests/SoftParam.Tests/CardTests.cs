@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using RhinoMCPPlugin.Forsk;
+using RhinoMCPPlugin.Functions;
 using Xunit;
 
 namespace SoftParam.Tests;
@@ -100,6 +101,58 @@ public class CardTests
         Assert.Equal("A-00-001 Tegningsliste og arealer", card.Pills[0].Label);
         Assert.Equal("A-20-001 Plan 1. etg", card.Pills[1].Label);
         Assert.Equal("A-40-101 Snitt A–A", card.Pills[6].Label);
+    }
+
+    [Fact]
+    public void ChooseSheets_ListsTheSet_OneTickPerSheet_InSetOrder_WithOrderArrows()
+    {
+        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d =>
+        {
+            d.SectionLetters = new List<string> { "A" };
+            d.PrintScale = 200;
+            d.PrintPages = "[{\"id\":\"front\",\"on\":true},{\"id\":\"plan\",\"on\":true},{\"id\":\"north\",\"on\":false}]";
+        }));
+        var card = ForskCards.For("print.pages", facts)!;
+        Assert.Equal("print.pages", card.Kind);
+        Assert.Equal("model", card.Depends);
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "schedules" }, card.Fields!.Select(f => f.Key));
+        Assert.All(card.Fields!, f => Assert.True(f.Check && f.Order));
+        Assert.Equal("A-40-001 Fasade mot nord", card.Fields![2].Label);
+        Assert.Equal("0", card.Fields![2].Value);
+        Assert.Equal("1", card.Fields![1].Value);
+        Assert.Equal("1:200 · A3", card.Note);
+        // Print is filled (the first pill); then Save and Reset.
+        Assert.Equal(new[] { "print", "save", "reset" }, card.Pills.Select(p => p.Id));
+        // No coordinates and no ids beyond the sheet number.
+        Assert.DoesNotContain(card.Fields!, f => f.Label.Contains("section_") || f.Label.Contains("("));
+    }
+
+    [Fact]
+    public void ChooseSheets_WithNoScaleKnown_SaysItFits()
+    {
+        var card = ForskCards.For("print.pages", Docs.Facts("house"))!;
+        Assert.Equal("Scale picked to fit · A3", card.Note);
+        Assert.Null(ForskCards.For("print.pages", Docs.Facts("empty")));
+    }
+
+    [Fact]
+    public void ChooseSheets_PostingAReorderedList_WritesThatOrder()
+    {
+        var facts = Docs.Facts("sheet cache, sections");
+        var values = new JObject();
+        foreach (var sheet in ForskCards.Set(facts)) values[sheet.Id] = "1";
+        values["north"] = "0";
+        // The page moved Snitt A–A above the plan with ↑ and posts the rows in their new order.
+        var order = new JArray("front", "section_a", "plan", "north", "east", "south", "west", "section_b", "schedules");
+        var args = ForskCards.PagesArgs("save", values, order);
+        Assert.Equal(order.Select(t => t.ToString()), args["order"]!.Select(t => t.ToString()));
+        Assert.Equal(new[] { "north" }, args["off"]!.Select(t => t.ToString()));
+        var applied = SheetSet.Apply(ForskCards.Set(facts), args["on"]!.Select(t => t.ToString()).ToList(),
+            args["off"]!.Select(t => t.ToString()).ToList(), args["order"]!.Select(t => t.ToString()).ToList(), out _);
+        Assert.Equal(order.Select(t => t.ToString()), applied.Select(s => s.Id));
+        Assert.False(applied.Single(s => s.Id == "north").On);
+        // Reset clears the stored set.
+        Assert.True(ForskCards.PagesArgs("reset", values, order)["reset"]!.Value<bool>());
     }
 
     [Fact]

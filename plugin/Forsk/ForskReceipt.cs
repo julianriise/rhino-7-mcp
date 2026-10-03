@@ -62,6 +62,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A "Label · ok · rest" line, as ForskPrint and ForskBake return them.</summary>
         public static ForskReceipt FromLine(string line)
         {
+            if ((line ?? "").StartsWith(Done, StringComparison.Ordinal))
+                return new ForskReceipt { Ok = true, Text = line.Substring(Done.Length).Trim() };
             var parts = (line ?? "").Split(new[] { " · " }, 3, StringSplitOptions.None);
             if (parts.Length < 2) return new ForskReceipt { Text = (line ?? "").Trim() };
             var state = parts[1].Trim().ToLowerInvariant();
@@ -70,13 +72,25 @@ namespace RhinoMCPPlugin.Forsk
             return new ForskReceipt { Ok = ok, Subject = StepLabel(parts[0].Trim()), Text = text.Trim() };
         }
 
-        /// <summary>Print PDF's line: the page count, the file, the revision when one is set, then any blank-page clause.</summary>
-        public static string PrintLine(string count, string written, string revision, string blank)
+        /// <summary>
+        /// Print's one line: "✓ Printed 7 sheets at 1:200 on A3 · Holmen.pdf".
+        /// The file name only, no folder. A set revision is named, a sheet
+        /// bumped up the ladder is one clause, and a blank page keeps its clause.
+        /// scale 0: the sheets have none (a list alone).
+        /// </summary>
+        public static string PrintLine(int sheets, int scale, string written, string revision, string bumped, string blank)
         {
-            var rev = string.IsNullOrWhiteSpace(revision) ? "" : " · Rev. " + revision.Trim();
-            var pages = string.IsNullOrWhiteSpace(count) ? "" : count + " · ";
-            return "Print PDF · ok · " + pages + written + rev + (blank ?? "");
+            var text = "Printed " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture) + (sheets == 1 ? " sheet" : " sheets");
+            if (scale > 0) text += " at 1:" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            text += " on A3";
+            if (!string.IsNullOrWhiteSpace(revision)) text += ", rev. " + revision.Trim();
+            var bump = (bumped ?? "").Trim().TrimEnd('.');
+            if (bump.Length > 0) text += " (" + bump + ")";
+            return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + (blank ?? "");
         }
+
+        /// <summary>A line that starts with this is a finished receipt as it stands.</summary>
+        public const string Done = "✓ ";
 
         /// <summary>The label a step shows when its message names no object.</summary>
         public static string StepLabel(string tool)

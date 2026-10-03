@@ -55,7 +55,22 @@ namespace RhinoMCPPlugin.Forsk
                 return ReadDebugReport();
             if (name == ForskDaylight.ToolName)
                 return ForskDaylight.Run(parameters?["target"]?.ToString(), Dispatch);
+            if (name == ForskToolPacks.PrintPagesTool)
+                return Local(Handler.PrintPages, parameters);
             return Dispatch(name, parameters);
+        }
+
+        /// <summary>A window tool that is no bridge command, as a tool envelope. UI thread.</summary>
+        static JObject Local(Func<JObject, JObject> run, JObject parameters)
+        {
+            try
+            {
+                return new JObject { ["status"] = "success", ["result"] = run(parameters ?? new JObject()) ?? new JObject() };
+            }
+            catch (Exception e)
+            {
+                return Fail(e.Message);
+            }
         }
 
         /// <summary>A bridge command outside the chat catalog, such as daylight_scene. UI thread.</summary>
@@ -336,6 +351,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "A section (snitt) A–A is section_add (a room by name, axis cross or long, or from and to, or line_id), then layout_pack views plan and section_<letter>. Never draw a section yourself. "
                     + "add cross section is the viewport command ForskSection. Do not call section_add for that phrase and do not draw the line. "
                     + "A profile (use the grey profile, hatched poché, svart poché) is print_profile: default, grey or hatch; then layout_pack draws with it. "
+                    + "The set is on the Choose sheets card; change it with print_pages; Print prints the set. "
                     + "Print PDF opens a save dialog. Do not invent a file path. Never clear_generated for drawings.";
             }
             if (intent == ForskIntent.Print)
@@ -343,6 +359,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 return "Turn bias: Print. At most two sentences. No Target block on success. "
                     + "layout_pack, export_pdf, clear_layouts. Print writes the set: the front sheet (Tegningsliste and Arealer), the plan with its dimensions, the four facades, every stored section and the lists, numbered A-00-001, A-20-001, A-40-001 and on. "
                     + "Print in a profile (grey, hatch) is print_profile first, then Print. "
+                    + "The set is on the Choose sheets card; change it with print_pages; Print prints the set. "
                     + "Print PDF opens a save dialog. Do not invent a file path. "
                     + "clear_layouts removes the pages and the S-DRAW curves. "
                     + "sheet_pack stays available when the user asks for drawings.";
@@ -1215,6 +1232,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
             var pack = Call("layout_pack", view == null ? new JObject() : new JObject { ["views"] = new JArray(view) });
             if (!Ok(pack)) return FailLine(pack);
+            var packed = pack["result"] as JObject;
 
             Report(progress, "Layouts ready — choose where to save.");
             var path = PickPathFromBackground(parent);
@@ -1229,13 +1247,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (!Ok(exported)) return FailLine(exported);
 
             var result = exported["result"] as JObject;
-            var count = result?["count"]?.ToString();
             var written = result?["path"]?.ToString();
             if (string.IsNullOrWhiteSpace(written)) written = path;
             var message = result?["message"]?.ToString() ?? "";
             var blankAt = message.IndexOf("Blank preview:", StringComparison.Ordinal);
             var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
-            return ForskReceipt.PrintLine(count, written, StoredMeta("revision"), blank);
+            var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
+            var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
+            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank);
         }
 
         static void Report(Action<string> progress, string status)

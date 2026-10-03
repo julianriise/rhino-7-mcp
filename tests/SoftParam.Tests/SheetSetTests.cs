@@ -160,6 +160,40 @@ public class SheetSetTests
     }
 
     [Fact]
+    public void Apply_TurnsSheetsOffAndOn_AndMovesTheNamedOnes_TheRestKeepTheirOrder()
+    {
+        var set = SheetSet.Infer(Garage("A"));
+        var applied = SheetSet.Apply(set, new[] { "north" }, new[] { "east", "west" }, new[] { "section_a", "plan" }, out var unknown);
+        Assert.Empty(unknown);
+        // Section A goes where the earliest of the two stood, before the plan.
+        Assert.Equal(new[] { "front", "section_a", "plan", "north", "east", "south", "west", "schedules" }, Ids(applied));
+        Assert.Equal(new[] { "east", "west" }, applied.Where(s => !s.On).Select(s => s.Id));
+        // A whole order is the whole order.
+        var all = new[] { "schedules", "west", "south", "east", "north", "section_a", "plan", "front" };
+        Assert.Equal(all, Ids(SheetSet.Apply(set, null, null, all, out _)));
+    }
+
+    [Fact]
+    public void Apply_NamesAnIdThatIsNoSheet_AndChangesNothingForIt()
+    {
+        var set = SheetSet.Infer(Garage());
+        var applied = SheetSet.Apply(set, null, new[] { "section_q", "north" }, null, out var unknown);
+        Assert.Equal(new[] { "section_q" }, unknown);
+        Assert.False(applied.Single(s => s.Id == "north").On);
+    }
+
+    [Fact]
+    public void Summary_IsOneLine_FacadesByName()
+    {
+        var set = SheetSet.Infer(Garage("A"));
+        Assert.Equal("Set: 8 sheets.", SheetSet.Summary(set));
+        var noFacades = SheetSet.Apply(set, null, SheetSet.Facades.ToList(), null, out _);
+        Assert.Equal("Set: 4 sheets, facades off.", SheetSet.Summary(noFacades));
+        var oneOff = SheetSet.Apply(set, null, new[] { "section_a" }, null, out _);
+        Assert.Equal("Set: 7 sheets, Snitt A–A off.", SheetSet.Summary(oneOff));
+    }
+
+    [Fact]
     public void RePrintingOneSheet_DoesNotMoveTheOthers()
     {
         // Rhino lists the pages as they were added: the re-printed plan comes last.

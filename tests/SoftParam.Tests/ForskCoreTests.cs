@@ -102,7 +102,6 @@ public class ForskCoreTests
     }
 
     [Theory]
-    [InlineData("Print PDF · ok · 7 · /Users/jr/Desktop/Holmen.pdf", true, "Print PDF", "7 · /Users/jr/Desktop/Holmen.pdf")]
     [InlineData("Print PDF · error · Document units must be millimetres.", false, "Print PDF", "Document units must be millimetres.")]
     [InlineData("Print PDF · cancelled", null, "Print PDF", "cancelled")]
     [InlineData("walls_from_layer · ok · 1", true, "Walls", "1")]
@@ -116,12 +115,22 @@ public class ForskCoreTests
     }
 
     [Fact]
-    public void ThePrintLine_NamesASetRevision()
+    public void ThePrintReceipt_IsOneShortLine_TheFileNameOnly()
     {
-        Assert.Equal("Print PDF · ok · 7 · /Users/jr/Desktop/Holmen.pdf",
-            ForskReceipt.PrintLine("7", "/Users/jr/Desktop/Holmen.pdf", null, ""));
-        Assert.Equal("Print PDF · ok · 7 · /Users/jr/Desktop/Holmen.pdf · Rev. B",
-            ForskReceipt.PrintLine("7", "/Users/jr/Desktop/Holmen.pdf", " B ", ""));
+        Assert.Equal("✓ Printed 7 sheets at 1:200 on A3 · Holmen.pdf",
+            ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", null, null, ""));
+        // A set revision is named; a bumped sheet is one clause; the blank-page note keeps its clause.
+        Assert.Equal("✓ Printed 7 sheets at 1:200 on A3, rev. B · Holmen.pdf",
+            ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", " B ", "", ""));
+        Assert.Equal("✓ Printed 7 sheets at 1:200 on A3 (Snitt A–A at 1:500 to fit) · Holmen.pdf · Blank preview: page 3",
+            ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", null, " Snitt A–A at 1:500 to fit.", " · Blank preview: page 3"));
+        // One list sheet has no scale.
+        Assert.Equal("✓ Printed 1 sheet on A3 · Holmen.pdf", ForskReceipt.PrintLine(1, 0, "/Users/jr/Desktop/Holmen.pdf", null, null, ""));
+
+        var receipt = ForskReceipt.FromLine("✓ Printed 7 sheets at 1:200 on A3 · Holmen.pdf");
+        Assert.True(receipt.Ok);
+        Assert.Equal("Printed 7 sheets at 1:200 on A3 · Holmen.pdf", receipt.Text);
+        Assert.True(string.IsNullOrEmpty(receipt.Subject));
     }
 
     [Fact]

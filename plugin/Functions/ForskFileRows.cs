@@ -132,6 +132,7 @@ public partial class RhinoMCPFunctions
             if (!string.IsNullOrWhiteSpace(value)) input.Meta[key] = value.Trim();
         }
         input.PrintPages = doc.Strings.GetValue(SheetSet.MetaSection, SheetSet.MetaEntry);
+        input.PrintScale = KnownPrintScale(doc);
         input.Ink = ReadPrintProfile(doc).Name;
         var units = doc.ModelUnitSystem;
         input.Millimetres = units == UnitSystem.Millimeters;

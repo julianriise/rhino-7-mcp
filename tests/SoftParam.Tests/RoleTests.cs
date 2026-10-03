@@ -12,12 +12,26 @@ namespace SoftParam.Tests;
 public class RoleTests
 {
     [Theory]
+    [InlineData("ta bort døra")]
+    [InlineData("remove the door")]
+    [InlineData("move the window 200 along the wall")]
+    public void ASetWord_NeedsASheetWord_AnEditStaysOffTheSheetsTurn(string sentence)
+    {
+        Assert.NotEqual(ForskIntent.Sheets, ForskIntentRouter.Classify(sentence));
+    }
+
+    [Theory]
     [InlineData("import plan.pdf", ForskIntent.Import, "Planner")]
     [InlineData("import plan.dxf", ForskIntent.Dxf, "Planner")]
     [InlineData("generate the model with walls 2700", ForskIntent.Build, "Modeller")]
     [InlineData("move the window 200 along the wall", ForskIntent.Edit, "Modeller")]
     [InlineData("skriv ut", ForskIntent.Print, "Plotter")]
     [InlineData("add a door schedule", ForskIntent.Sheets, "Plotter")]
+    [InlineData("drop the facades from the set", ForskIntent.Sheets, "Plotter")]
+    [InlineData("ta bort fasadene", ForskIntent.Sheets, "Plotter")]
+    [InlineData("fjern snitt A fra settet", ForskIntent.Sheets, "Plotter")]
+    [InlineData("put section A before the plan", ForskIntent.Sheets, "Plotter")]
+    [InlineData("endre rekkefølgen på arkene", ForskIntent.Sheets, "Plotter")]
     [InlineData("run daylight", ForskIntent.Daylight, "Analyser")]
     [InlineData("clear daylight", ForskIntent.Daylight, "Analyser")]
     [InlineData("is this room dark", ForskIntent.Daylight, "Analyser")]

@@ -176,6 +176,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),
+            new ForskAction("print.pages", Runs.Card, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),
             new ForskAction("print.clear", Runs.Card, "group.print", f => f.Layouts > 0),
             new ForskAction("sheets.clear", Runs.Card, "group.print", f => f.HasSheetCache),

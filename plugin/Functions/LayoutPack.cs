@@ -473,6 +473,9 @@ public partial class RhinoMCPFunctions
             ["pages"] = pages,
             ["count"] = pages.Count,
             ["sheets"] = sheetCount,
+            // Drawing sheets in this pack: none means the scale names no sheet.
+            ["drawings"] = sheets.Count,
+            ["bumped"] = bumpNote.Trim(),
             ["scale"] = reported,
             ["asked"] = asked.HasValue,
             // "on A3 at 1:N." then the drawing notes: smoke_compare reads "at 1:N. Greyscale drawing: plan".
@@ -1654,10 +1657,33 @@ public partial class RhinoMCPFunctions
             doc.Strings.SetString(LayoutMetaSection, PrintScaleEntry, value.ToString(CultureInfo.InvariantCulture));
             return value;
         }
+        return StoredPrintScale(doc);
+    }
+
+    /// <summary>The scale kept from an earlier ask, or null.</summary>
+    private static int? StoredPrintScale(RhinoDoc doc)
+    {
         var stored = doc.Strings.GetValue(LayoutMetaSection, PrintScaleEntry);
         return int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var kept) && kept >= 1
             ? kept
             : (int?)null;
+    }
+
+    /// <summary>
+    /// The set's scale for the cards: the one asked for, else what the last
+    /// Print's drawing pages show (one scale for the set). 0 when neither.
+    /// </summary>
+    private static int KnownPrintScale(RhinoDoc doc)
+    {
+        var asked = StoredPrintScale(doc);
+        if (asked.HasValue) return asked.Value;
+        foreach (var page in MatchingForskPages(doc, null))
+        {
+            if (SheetSet.IsListSheet(ViewKeyForPage(page))) continue;
+            var scale = DetailModelScale(page);
+            if (scale > 0) return scale;
+        }
+        return 0;
     }
 
     private DetailViewObject AddClayDetail(

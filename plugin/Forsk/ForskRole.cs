@@ -90,6 +90,7 @@ namespace RhinoMCPPlugin.Forsk
                     return ForskRole.Modeller;
                 case "file.print":
                 case "print.one":
+                case "print.pages":
                 case "print.clear":
                 case "sheets.clear":
                 case "meta.title":

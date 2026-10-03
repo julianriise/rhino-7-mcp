@@ -268,9 +268,10 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// A one-time card answered once: the pill, and its fields' values when
-        /// it has fields. A stale, answered or closed card does nothing.
+        /// it has fields, and their order when its rows move. A stale, answered
+        /// or closed card does nothing.
         /// </summary>
-        void Answer(string cardId, string pillId, JObject values)
+        void Answer(string cardId, string pillId, JObject values, JArray order = null)
         {
             var thread = Active();
             var card = thread?.Find(cardId);
@@ -345,6 +346,18 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.one":
                     Print(thread, pill.Label, pill.Id);
+                    break;
+                case "print.pages":
+                    var pagesArgs = ForskCards.PagesArgs(pill.Id, values, order);
+                    if (pill.Id == "print")
+                        Job(thread, kind, ForskText.Label(kind), sink =>
+                        {
+                            sink.Tool("print_pages", pagesArgs);
+                            sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
+                            sink.Line(ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, null));
+                        }, userText: pill.Label);
+                    else
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_pages", pagesArgs), userText: pill.Label);
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
@@ -666,7 +679,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (string.IsNullOrWhiteSpace(line)) return;
                 Post(() =>
                 {
-                    if (line.Contains(" · ")) _thread.Add(ForskReceipt.FromLine(line));
+                    if (line.Contains(" · ") || line.StartsWith(ForskReceipt.Done, StringComparison.Ordinal)) _thread.Add(ForskReceipt.FromLine(line));
                     else _thread.Add("line", line);
                     _window.Render();
                 });

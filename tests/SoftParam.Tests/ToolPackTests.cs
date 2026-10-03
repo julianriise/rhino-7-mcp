@@ -113,6 +113,10 @@ public class ToolPackTests
         Assert.True(general.IndexOf("layout_pack") > general.IndexOf("floor_from_layer"));
         Assert.True(plotter.IndexOf("layout_pack") < plotter.IndexOf("floor_from_layer"));
         Assert.True(plotter.IndexOf("get_document_summary") > plotter.IndexOf("print_profile"));
+        // v3: the Plotter pack sets the sheets (print_pages) on a Print and a Sheets turn.
+        Assert.Contains("print_pages", ForskToolPacks.For(ForskIntent.Print));
+        Assert.Contains("print_pages", ForskToolPacks.For(ForskIntent.Sheets));
+        Assert.True(plotter.IndexOf("print_pages") < plotter.IndexOf("floor_from_layer"));
 
         // Analyser puts its tools first. area_stats joins daylight and rooms detection. The count is the pack's: nothing added or removed.
         var analyser = ForskToolPacks.For(ForskIntent.General, ForskRole.Analyser).ToList();

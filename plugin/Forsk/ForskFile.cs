@@ -72,6 +72,8 @@ namespace RhinoMCPPlugin.Forsk
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
         /// <summary>The set as the user left it (SheetSet JSON), or null when Forsk infers it.</summary>
         public string PrintPages;
+        /// <summary>The set's scale: the one asked for, else the plan page's from the last Print. 0 when neither.</summary>
+        public int PrintScale;
         public string Ink = "default";
         public bool Millimetres = true;
         public bool KeyPresent;
@@ -108,6 +110,8 @@ namespace RhinoMCPPlugin.Forsk
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
         /// <summary>The stored set (SheetSet JSON), or null.</summary>
         public string PrintPages;
+        /// <summary>The set's scale denominator, 0 when it is not known yet.</summary>
+        public int PrintScale;
         /// <summary>Room names with their area, as "Stue · 24.5 m²".</summary>
         public List<string> Rooms = new List<string>();
         public bool SheetsStale;
@@ -152,6 +156,7 @@ namespace RhinoMCPPlugin.Forsk
                 SectionLetters = new List<string>(input.SectionLetters ?? new List<string>()),
                 Meta = new Dictionary<string, string>(input.Meta ?? new Dictionary<string, string>()),
                 PrintPages = input.PrintPages,
+                PrintScale = input.PrintScale,
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
                 KeyPresent = input.KeyPresent,
                 ListenerUp = input.ListenerUp,

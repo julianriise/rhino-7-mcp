@@ -151,6 +151,66 @@ public static class SheetSet
         return OpeningTypes.ViewTitle(key, level);
     }
 
+    /// <summary>
+    /// The set after a change from the pages card or chat: the sheets in on
+    /// switched on, those in off switched off, and the sheets in order moved
+    /// so they stand in that order from where the earliest of them stood; the
+    /// rest keep theirs. An id that is no sheet of the set changes nothing and
+    /// comes back in unknown.
+    /// </summary>
+    public static List<Sheet> Apply(IList<Sheet> set, IList<string> on, IList<string> off, IList<string> order, out List<string> unknown)
+    {
+        var current = (set ?? new List<Sheet>()).ToList();
+        var ids = new HashSet<string>(current.Select(s => s.Id), StringComparer.Ordinal);
+        var missing = new List<string>();
+        List<string> Known(IList<string> list)
+        {
+            var known = new List<string>();
+            foreach (var raw in list ?? new List<string>())
+            {
+                var id = (raw ?? "").Trim().ToLowerInvariant();
+                if (id.Length == 0) continue;
+                if (!ids.Contains(id)) { if (!missing.Contains(id)) missing.Add(id); }
+                else if (!known.Contains(id)) known.Add(id);
+            }
+            return known;
+        }
+        var turnOn = Known(on);
+        var turnOff = Known(off);
+        var moved = Known(order);
+        unknown = missing;
+        var switched = current
+            .Select(s => new Sheet(s.Id, turnOff.Contains(s.Id) ? false : turnOn.Contains(s.Id) || s.On))
+            .ToList();
+        if (moved.Count == 0) return switched;
+        var at = switched.FindIndex(s => moved.Contains(s.Id));
+        var rest = switched.Where(s => !moved.Contains(s.Id)).ToList();
+        var before = switched.Take(at).Count(s => !moved.Contains(s.Id));
+        rest.InsertRange(before, moved.Select(id => switched.First(s => s.Id == id)));
+        return rest;
+    }
+
+    /// <summary>The set in one line: "Set: 7 sheets, facades off." The four facades off are "facades".</summary>
+    public static string Summary(IList<Sheet> set, int level = 0)
+    {
+        set = set ?? new List<Sheet>();
+        var on = set.Count(s => s.On);
+        var off = set.Where(s => !s.On).Select(s => s.Id).ToList();
+        var named = new List<string>();
+        if (Facades.All(off.Contains))
+        {
+            named.Add("facades");
+            off.RemoveAll(id => Facades.Contains(id));
+        }
+        named.AddRange(off.Select(id => Title(id, level)));
+        var text = "Set: " + on.ToString(CultureInfo.InvariantCulture) + (on == 1 ? " sheet" : " sheets");
+        if (named.Count == 0) return text + ".";
+        var list = named.Count == 1
+            ? named[0]
+            : string.Join(", ", named.Take(named.Count - 1)) + " and " + named[named.Count - 1];
+        return text + ", " + list + " off.";
+    }
+
     /// <summary>A sheet of tables and no detail: the front sheet and the lists. It has no scale.</summary>
     public static bool IsListSheet(string id)
     {

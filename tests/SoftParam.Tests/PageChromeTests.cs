@@ -139,6 +139,15 @@ public class PageChromeTests
         Assert.Equal("true", Eval("String(Forsk.fieldChecked({check:true, value:'1'}))"));
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({check:true, value:'0'}))"));
         Assert.Equal("false", Eval("String(Forsk.fieldChecked({value:'1'}))"));
+        // Choose sheets: ↑ on row 2 moves it first, and the pill posts that order with the values.
+        Assert.Equal("[\"b\",\"a\",\"c\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'b', -1))"));
+        Assert.Equal("[\"a\",\"c\",\"b\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'b', 1))"));
+        Assert.Equal("[\"a\",\"b\",\"c\"]", Eval("JSON.stringify(Forsk.moveKey(['a','b','c'], 'a', -1))"));
+        Assert.Equal("{\"kind\":\"card\",\"card\":\"c1\",\"pill\":\"print\",\"values\":{\"a\":\"1\",\"b\":\"0\"},\"order\":[\"b\",\"a\"]}",
+            Eval("JSON.stringify(Forsk.cardAction({id:'c1', fields:[{key:'a',order:true},{key:'b',order:true}]}, 'print', {a:'1',b:'0'}, Forsk.moveKey(['a','b'], 'b', -1)))"));
+        // A card without ordered rows posts no order.
+        Assert.Equal("{\"kind\":\"card\",\"card\":\"c2\",\"pill\":\"save\",\"values\":{\"project\":\"x\"}}",
+            Eval("JSON.stringify(Forsk.cardAction({id:'c2', fields:[{key:'project'}]}, 'save', {project:'x'}, ['project']))"));
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Daylight'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[]})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'planner'}})"));

@@ -118,6 +118,7 @@ namespace RhinoMCPPlugin.Forsk
             ["meta.title"] = "Title block",
             ["bridge.start"] = "Start bridge",
             ["print.one"] = "Print one sheet",
+            ["print.pages"] = "Choose sheets",
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
@@ -145,6 +146,8 @@ namespace RhinoMCPPlugin.Forsk
             ["meta.address"] = "Address",
             ["meta.revision"] = "Rev.",
             ["print.one.ask"] = "Which sheet?",
+            ["print.pages.ask"] = "Sheets in the set",
+            ["print.pages.fit"] = "Scale picked to fit · A3",
             ["sheet.section"] = "Section {letter}",
             ["print.clear.ask"] = "Clear the Forsk layouts and their drawings? The model stays.",
             ["sheets.clear.ask"] = "Clear the sheet cache on S-PLAN and S-ELEV? Print does not use it.",
@@ -158,6 +161,8 @@ namespace RhinoMCPPlugin.Forsk
             ["pdf.page.more"] = "Showing the first {n} pages.",
             ["word.done"] = "Done",
             ["word.save"] = "Save",
+            ["word.print"] = "Print",
+            ["word.reset"] = "Reset",
 
             // Words in a prefilled sentence.
             ["word.door"] = "door",
@@ -342,6 +347,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.dxf_import"] = "DXF",
             ["tool.layout_pack"] = "Sheets",
             ["tool.export_pdf"] = "PDF",
+            ["tool.print_pages"] = "Sheets",
             ["tool.clear_layouts"] = "Layouts",
             ["tool.clear_drawings"] = "Sheet cache",
             ["tool.sheet_pack"] = "Sheet cache",

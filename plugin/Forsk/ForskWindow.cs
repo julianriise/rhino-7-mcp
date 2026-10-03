@@ -148,7 +148,7 @@ namespace RhinoMCPPlugin.Forsk
                         Render();
                         return;
                     case "card":
-                        Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["values"] as JObject);
+                        Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["values"] as JObject, message["order"] as JArray);
                         return;
                     case "card.close":
                         CloseCard(message["card"]?.ToString());

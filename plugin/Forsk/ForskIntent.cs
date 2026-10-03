@@ -240,7 +240,27 @@ namespace RhinoMCPPlugin.Forsk
             if (IsDimensions(t)) return true;
             if (IsSection(t)) return true;
             if (IsProfile(t)) return true;
+            if (IsSetEdit(t)) return true;
             return t.Contains("sheet pack") || t.Contains("clear drawings");
+        }
+
+        /// <summary>
+        /// A change to the set Print writes: drop the facades from the set, ta
+        /// bort fasadene, fjern snitt A fra settet, rekkefølgen på arkene. A
+        /// verb alone (ta bort døra) is an edit; it needs a sheet word with it.
+        /// </summary>
+        static bool IsSetEdit(string t)
+        {
+            if (HasWord(t, "ark") || HasWord(t, "arket") || HasWord(t, "arkene")) return true;
+            if (t.Contains("rekkefølge") || t.Contains("rekkefolge")) return true;
+            if (HasWord(t, "settet") || (" " + t + " ").Contains(" the set ")) return true;
+            var verb = HasWord(t, "drop") || t.Contains("ta med") || t.Contains("ta bort") || HasWord(t, "fjern")
+                || HasWord(t, "include") || HasWord(t, "exclude") || HasWord(t, "skip") || HasWord(t, "put") || HasWord(t, "move");
+            if (!verb) return false;
+            return HasWord(t, "facade") || HasWord(t, "facades") || HasWord(t, "fasade") || HasWord(t, "fasader")
+                || HasWord(t, "fasadene") || HasWord(t, "elevation") || HasWord(t, "elevations")
+                || HasWord(t, "tegningsliste") || HasWord(t, "tegningslisten") || HasWord(t, "forside") || HasWord(t, "forsiden")
+                || ((HasWord(t, "put") || HasWord(t, "move")) && (t.Contains("before the plan") || t.Contains("after the plan")));
         }
 
         /// <summary>A DXF asked for: import plan.dxf, import a DXF. It comes before the plan image import, which "plan" would match.</summary>

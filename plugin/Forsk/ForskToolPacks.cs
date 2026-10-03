@@ -19,6 +19,8 @@ namespace RhinoMCPPlugin.Forsk
         public const string ImportTool = "plan_import";
         public const string ScaleTool = "plan_scale";
         public const string DebugTool = "debug_report";
+        /// <summary>The set's sheets, on/off and order. A window tool: no server tool, no contract.</summary>
+        public const string PrintPagesTool = "print_pages";
 
         /// <summary>Every turn reads the document and the selection.</summary>
         static readonly string[] Shared =
@@ -70,7 +72,8 @@ namespace RhinoMCPPlugin.Forsk
             "clear_layouts",
             "section_add",
             "section_clear",
-            "print_profile"
+            "print_profile",
+            PrintPagesTool
         };
 
         /// <summary>Paper only: the Make2D sheet cache is a sheets turn.</summary>
@@ -82,7 +85,8 @@ namespace RhinoMCPPlugin.Forsk
             "clear_layouts",
             "section_add",
             "section_clear",
-            "print_profile"
+            "print_profile",
+            PrintPagesTool
         };
 
         /// <summary>No rooms: rooms_detect. No windows: add_opening. area_stats is read only.</summary>
@@ -620,6 +624,15 @@ namespace RhinoMCPPlugin.Forsk
                     new JObject
                     {
                         ["letter"] = Str("A to Z. Omit for all.")
+                    }),
+                Fn(PrintPagesTool,
+                    "The set Print writes (the Choose sheets card): which sheets are on and their order. Sheets are front (Tegningsliste og arealer), plan, north, east, south, west (the facades), section_<letter>, schedules (the lists). Pass only what the user changed. drop the facades is off north, east, south, west; put section A before the plan is order section_a, plan (the others keep their places). reset forgets the user's set. Print prints the set.",
+                    new JObject
+                    {
+                        ["on"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch on." },
+                        ["off"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch off." },
+                        ["order"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids in the order they should print, from where the first of them stands." },
+                        ["reset"] = Bool("Forget the user's set: Forsk infers it again.")
                     }),
                 Fn("print_profile",
                     "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, grey lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",

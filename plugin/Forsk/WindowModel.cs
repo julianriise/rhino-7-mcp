@@ -144,6 +144,7 @@ namespace RhinoMCPPlugin.Forsk
                     if (!string.IsNullOrEmpty(field.Unit)) f["unit"] = field.Unit;
                     if (field.Check) f["check"] = true;
                     if (field.Long) f["long"] = true;
+                    if (field.Order) f["order"] = true;
                     if (field.Options != null && field.Options.Count > 0)
                         f["options"] = new JArray(field.Options);
                     fields.Add(f);

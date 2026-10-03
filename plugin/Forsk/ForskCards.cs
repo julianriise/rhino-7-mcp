@@ -20,6 +20,8 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> Options;
         /// <summary>A multi-line field.</summary>
         public bool Long;
+        /// <summary>The row moves with ↑ ↓, and the page posts the rows' order with the values.</summary>
+        public bool Order;
     }
 
     /// <summary>
@@ -55,6 +57,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "ink.set": return Ink(f);
                 case "meta.title": return TitleBlock(f);
                 case "print.one": return PrintOne(f);
+                case "print.pages": return Pages(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
@@ -132,6 +135,51 @@ namespace RhinoMCPPlugin.Forsk
                 card.Pills.Add(new CardPill(sheet.Id, SheetLine(sheet.Id, f)));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
+        }
+
+        /// <summary>
+        /// Choose sheets: one tick per sheet of the set, in set order, each
+        /// row movable. The note gives the scale once. Print saves and
+        /// prints, Save saves, Reset forgets the user's set. Null without walls.
+        /// </summary>
+        public static CardSpec Pages(FileFacts f)
+        {
+            if (f?.HasWalls != true) return null;
+            var card = new CardSpec
+            {
+                Kind = "print.pages",
+                Question = ForskText.Get("print.pages.ask"),
+                Fields = new List<CardField>(),
+                Depends = "model",
+                Note = f.PrintScale > 0
+                    ? "1:" + f.PrintScale.ToString(CultureInfo.InvariantCulture) + " · A3"
+                    : ForskText.Get("print.pages.fit"),
+                Pills =
+                {
+                    new CardPill("print", ForskText.Get("word.print")),
+                    new CardPill("save", ForskText.Get("word.save")),
+                    new CardPill("reset", ForskText.Get("word.reset"))
+                }
+            };
+            foreach (var sheet in Set(f))
+                card.Fields.Add(new CardField { Key = sheet.Id, Label = SheetLine(sheet.Id, f), Check = true, Order = true, Value = sheet.On ? "1" : "0" });
+            return card;
+        }
+
+        /// <summary>
+        /// The print_pages call a Choose sheets answer makes: Reset forgets the
+        /// set; Print and Save write the ticks and the rows' posted order.
+        /// </summary>
+        public static JObject PagesArgs(string pill, JObject values, JArray order)
+        {
+            if (pill == "reset") return new JObject { ["reset"] = true };
+            var on = new JArray();
+            var off = new JArray();
+            foreach (var pair in values ?? new JObject())
+                (pair.Value?.ToString() == "0" ? off : on).Add(pair.Key);
+            var args = new JObject { ["on"] = on, ["off"] = off };
+            if (order != null && order.Count > 0) args["order"] = new JArray(order.Select(t => t.ToString()));
+            return args;
         }
 
         /// <summary>

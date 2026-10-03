@@ -220,7 +220,26 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "rooms.list", "area.stats", "file.print", "print.one", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
+    }
+
+    [Fact]
+    public void ChooseSheets_IsOnTheCardWithWalls_NeverSlot1_AndPlotters()
+    {
+        foreach (var (name, make) in Docs.All)
+        {
+            var facts = FileClassifier.Read(make());
+            var onCard = ForskRegistry.Card(facts).Actions.Any(a => a.Id == "print.pages");
+            Assert.Equal(facts.HasWalls, onCard);
+            foreach (var role in Enum.GetValues<ForskRole>())
+            {
+                var bar = ForskRegistry.Bar(facts, role);
+                Assert.NotEqual("print.pages", bar.Slot1.Id);
+                Assert.DoesNotContain(bar.Context, a => a.Id == "print.pages");
+            }
+        }
+        Assert.Equal("Choose sheets", ForskRegistry.Find("print.pages")!.Label);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("print.pages"));
     }
 }

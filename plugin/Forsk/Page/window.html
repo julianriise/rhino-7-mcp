@@ -150,6 +150,13 @@ header.top {
 .card .field-label { flex: none; width: 118px; color: var(--meta); font-size: 12px; }
 .card .field-row.check .field-label { width: auto; }
 .card .field-row.check input { flex: none; width: 16px; height: 16px; padding: 0; box-shadow: none; background: transparent; }
+/* Choose sheets: ↑ ↓ move a row; the label takes the room between the tick and the arrows. */
+.card .field-row.check .field-label + .move { margin-left: auto; }
+.card .move {
+  font: inherit; font-size: 12px; line-height: 1; padding: 4px 7px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--meta); cursor: pointer;
+}
+.card .move:hover { background: var(--page); color: var(--ink); }
 .card select, .card textarea {
   font: inherit; font-size: 15px; margin: 0; flex: 1; min-width: 0; width: auto; padding: 6px 10px;
   border: 0; border-radius: 10px; background: var(--page); color: var(--ink); outline: none;

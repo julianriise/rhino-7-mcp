@@ -166,6 +166,26 @@
     return field.value !== '0' && field.value !== 'false';
   };
 
+  /* The keys with one moved a row up (-1) or down (+1). At an end it stays. No DOM, so it tests headless. */
+  Forsk.moveKey = function (order, key, delta) {
+    var next = (order || []).slice();
+    var at = next.indexOf(key);
+    var to = at + delta;
+    if (at < 0 || to < 0 || to >= next.length) return next;
+    next.splice(at, 1);
+    next.splice(to, 0, key);
+    return next;
+  };
+
+  /* A card answer: the pill, the values, and the rows' order when the card's rows move. No DOM. */
+  Forsk.cardAction = function (item, pillId, values, order) {
+    var action = { kind: 'card', card: item.id, pill: pillId };
+    var fields = item.fields || [];
+    if (fields.length) action.values = values;
+    if (fields.some(function (f) { return f.order; })) action.order = order;
+    return action;
+  };
+
   /* check, select, long, or a one-line text field. No DOM, so it tests headless. */
   Forsk.fieldKind = function (field) {
     if (field && field.check) return 'check';
@@ -361,6 +381,19 @@
       box.appendChild(list);
     }
     var inputs = [];
+    var order = (item.fields || []).map(function (f) { return f.key; });
+    var wraps = {};
+    function moveRow(key, delta) {
+      var next = Forsk.moveKey(order, key, delta);
+      if (next.join('\n') === order.join('\n')) return;
+      // The rows sit together after the question: lay them out again from the node before the first.
+      var after = wraps[order[0]].previousSibling;
+      order = next;
+      order.forEach(function (k) {
+        box.insertBefore(wraps[k], after ? after.nextSibling : box.firstChild);
+        after = wraps[k];
+      });
+    }
     (item.fields || []).forEach(function (field) {
       var kind = Forsk.fieldKind(field);
       var wrap = el('label', 'field-row' + (kind === 'check' ? ' check' : kind === 'long' ? ' long' : ''));
@@ -391,6 +424,19 @@
         wrap.appendChild(input);
         if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
       }
+      if (field.order) {
+        ['\u2191', '\u2193'].forEach(function (arrow, i) {
+          var move = el('button', 'move', arrow);
+          move.type = 'button';
+          move.setAttribute('aria-label', (i === 0 ? 'Up: ' : 'Down: ') + (field.label || field.key));
+          move.addEventListener('click', function (e) {
+            e.preventDefault();
+            moveRow(field.key, i === 0 ? -1 : 1);
+          });
+          wrap.appendChild(move);
+        });
+      }
+      wraps[field.key] = wrap;
       box.appendChild(wrap);
       inputs.push(input);
     });
@@ -404,9 +450,7 @@
     var pills = el('div', 'pills');
     (item.pills || []).forEach(function (p, index) {
       pills.appendChild(pill(p.label, index === 0, function () {
-        var action = { kind: 'card', card: item.id, pill: p.id };
-        if (inputs.length) action.values = values();
-        sender.send(action);
+        sender.send(Forsk.cardAction(item, p.id, values(), order));
       }));
     });
     box.appendChild(pills);
@@ -415,7 +459,7 @@
       input.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' || e.isComposing) return;
         e.preventDefault();
-        if (item.pills && item.pills.length) sender.send({ kind: 'card', card: item.id, pill: item.pills[0].id, values: values() });
+        if (item.pills && item.pills.length) sender.send(Forsk.cardAction(item, item.pills[0].id, values(), order));
       });
     });
     if (inputs.length) setTimeout(function () {
