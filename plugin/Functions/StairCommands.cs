@@ -162,7 +162,11 @@ public partial class RhinoMCPFunctions
         using (var profile = new PolylineCurve(points))
         {
             var surface = Surface.CreateExtrusion(profile, left * flight.Width);
-            var brep = surface?.ToBrep()?.CapPlanarHoles(tol);
+            var open = surface?.ToBrep();
+            if (open == null) return null;
+            // One face per riser and tread, so every nosing is an edge a section or a facade draws.
+            open.Faces.SplitKinkyFaces(RhinoMath.DefaultAngleTolerance, true);
+            var brep = open.CapPlanarHoles(tol);
             if (brep == null || !brep.IsValid || !brep.IsSolid) return null;
             if (brep.SolidOrientation == BrepSolidOrientation.Inward) brep.Flip();
             return brep;
