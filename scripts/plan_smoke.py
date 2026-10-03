@@ -6,6 +6,14 @@ import math
 import re
 
 FACE_PARTS = {"sill", "frame", "jamb"}
+# Every document gets this hidden clip plane. Fresh-copy counts leave it out.
+PLAN_CUT_NAME = "forsk-plan-cut"
+
+
+def without_plan_cut(count, objects) -> int:
+    """object_count minus the hidden forsk-plan-cut clip plane."""
+    cuts = sum(1 for row in objects or [] if str(row.get("name") or "") == PLAN_CUT_NAME)
+    return max(0, int(count or 0) - cuts)
 
 
 def _pairs(text) -> list:

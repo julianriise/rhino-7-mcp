@@ -172,7 +172,7 @@ def assert_office_dxf(path: Path) -> None:
         raise SmokeError(f"office DXF hash changed: {digest}")
 
 
-def require_fresh_copy(summary: dict) -> None:
+def require_fresh_copy(summary: dict, objects=None) -> None:
     meta = summary.get("meta_data") or {}
     units = str(meta.get("units") or "")
     if units.lower() not in ("millimeters", "millimetres"):
@@ -187,7 +187,7 @@ def require_fresh_copy(summary: dict) -> None:
         raise SmokeError(f"open a temp copy of the millimetre template, not {path or name}")
     if "template files" in lowered:
         raise SmokeError("refusing to open the millimetre template in place")
-    count = int(summary.get("object_count") or 0)
+    count = plan_smoke.without_plan_cut(summary.get("object_count"), objects)
     if count != 0:
         raise SmokeError(f"document is not a fresh template copy (objects={count})")
 
@@ -521,8 +521,12 @@ def main() -> int:
         meta = summary.get("meta_data") or {}
         units = str(meta.get("units") or "")
         doc_name = str(meta.get("name") or "")
-        print(f"==> document {doc_name} units={units} objects={summary.get('object_count')}")
-        require_fresh_copy(summary)
+        fresh = send_command(sock, "get_objects", {
+            "include_geometry": False, "include_hidden": True, "limit": 500,
+        }).get("objects") or []
+        count = plan_smoke.without_plan_cut(summary.get("object_count"), fresh)
+        print(f"==> document {doc_name} units={units} objects={count}")
+        require_fresh_copy(summary, fresh)
         if "office" not in doc_name.lower():
             raise SmokeError(
                 f"temp copy name {doc_name!r} must contain 'office' so the 77-opening check runs"

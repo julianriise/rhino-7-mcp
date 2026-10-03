@@ -45,10 +45,18 @@ def _fit_page(scale, need, fitted=True):
 def test_check_fit_takes_the_first_ladder_step_the_plan_fits(capsys):
     failures = []
     plan_smoke.check_fit(_fit_page(200, 118.4), "office fit", failures)
-    plan_smoke.check_fit(_fit_page(100, 31.0), "sheet", failures)
+    # Garage overhang ~9 x 5.3 m on A3 lands at 1:100, filling about a quarter.
+    plan_smoke.check_fit(_fit_page(100, 25.0), "sheet", failures)
     assert failures == []
     # The office's fill at 1:200 is under the old 0.6 floor and still passes.
-    assert capsys.readouterr().out == "    office fit plan fit 1:200 fill 0.53\n    sheet plan fit 1:100 fill 0.28\n"
+    assert capsys.readouterr().out == "    office fit plan fit 1:200 fill 0.53\n    sheet plan fit 1:100 fill 0.23\n"
+
+
+def test_a_fresh_count_ignores_the_plan_cut():
+    objects = [{"name": "forsk-plan-cut"}, {"name": "wall-01"}]
+    assert plan_smoke.without_plan_cut(2, objects) == 1
+    assert plan_smoke.without_plan_cut(1, [{"name": "forsk-plan-cut"}]) == 0
+    assert plan_smoke.without_plan_cut(0, None) == 0
 
 
 def test_check_fit_fails_off_the_ladder_or_when_the_plan_does_not_fit():

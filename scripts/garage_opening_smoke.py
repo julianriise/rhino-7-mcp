@@ -299,7 +299,7 @@ def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_th
     path_before = path_points(wall_attr().get("forsk:path"))
 
     def move(label: str, toward: str, expect_shift: float, faces: list | None) -> list | None:
-        reply = send_raw(sock, "move_wall", {"side": side, "toward": toward, "distance_mm": 500})
+        reply = send_raw(sock, "move_wall", {"id": host_id, "side": side, "toward": toward, "distance_mm": 500})
         if reply.get("status") == "error":
             print(f"    {label} move_wall: {reply.get('message')}")
             failures.append(f"wall {label} move_wall: {reply.get('message')}")
@@ -344,7 +344,9 @@ def wall_move(sock: socket.socket, host_id: str, door_id: str, wall_fid, wall_th
         across, toward, distance = ("west", "east", cx) if cx < 4000 else ("east", "west", 8000 - cx)
     else:
         across, toward, distance = ("south", "north", cy) if cy < 2000 else ("north", "south", 4000 - cy)
-    refused = send_raw(sock, "move_wall", {"side": across, "toward": toward, "distance_mm": round(distance)})
+    refused = send_raw(sock, "move_wall", {
+        "id": host_id, "side": across, "toward": toward, "distance_mm": round(distance),
+    })
     message = str(refused.get("message") or "")
     same = path_points(wall_attr().get("forsk:path")) == path_before
     print(f"    refused {across} {round(distance)} status={refused.get('status')} {message} path {'same' if same else 'changed'}")
@@ -369,12 +371,23 @@ FREE_WALL = {
 }
 
 
+def _next_wall_id(walls: list) -> str:
+    """The forsk:id add_wall stamps: one past the highest wNN still in the doc."""
+    nums = []
+    for row in walls:
+        fid = str((row.get("attributes") or {}).get("forsk:id") or "")
+        if len(fid) > 1 and fid[0] == "w" and fid[1:].isdigit():
+            nums.append(int(fid[1:]))
+    return f"w{(max(nums) if nums else 0) + 1:02d}"
+
+
 def walls_step(sock: socket.socket, failures: list) -> None:
-    """F3.2/F3.3 on the garage ring and its openings: a partition across the
-    room, added and deleted again; the wall with the openings deleted with
-    them; a delete that would split the walls refused; a wall standing on its
-    own added; a wall from it to the ring added as a record of its own, joined
-    to both (F2), and deleted whole; then the free wall deleted whole."""
+    """F3.2/F3.3 on the garage's four runs and its openings. A partition
+    across the room touches the south and north runs, so it is its own
+    record, and deleting it removes that record. The run that holds the
+    openings is deleted with them. A wall 2 m out is its own record, a wall
+    from it to the remaining run is its own record joined to both, and both
+    are deleted whole."""
 
     def call(cmd: str, params: dict) -> tuple[dict | None, str]:
         reply = send_raw(sock, cmd, params)
@@ -392,30 +405,37 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     def path_of(wall_id: str) -> str:
         return (send_command(sock, "get_object_info", {"id": wall_id}).get("attributes") or {}).get("forsk:path") or ""
 
-    def holes(path: str) -> int:
-        try:
-            return len(json.loads(path).get("holes") or [])
-        except ValueError:
-            return -1
-
     walls = kind_rows("A-WALL", "wall")
-    if len(walls) != 1:
-        failures.append(f"walls before: {len(walls)} wall records, expected 1")
+    if len(walls) != 4:
+        failures.append(f"walls before: {len(walls)} wall records, expected 4")
         return
-    host = walls[0]["id"]
-    path0 = path_of(host)
-    holes0 = holes(path0)
-    markers = [
-        row for row in kind_rows("A-OPEN", "opening_marker")
-        if str((row.get("attributes") or {}).get("forsk:host") or "").lower() == host.lower()
+    markers = kind_rows("A-OPEN", "opening_marker")
+    by_host: dict[str, int] = {}
+    for row in markers:
+        hid = str((row.get("attributes") or {}).get("forsk:host") or "").lower()
+        if hid:
+            by_host[hid] = by_host.get(hid, 0) + 1
+    if not by_host:
+        failures.append("walls: no opening host")
+        return
+    host_key = max(by_host, key=by_host.get)
+    host = next((w["id"] for w in walls if str(w["id"]).lower() == host_key), None)
+    if host is None:
+        failures.append(f"walls: opening host {host_key} is not a wall record")
+        return
+    host_fid = str((next(w for w in walls if w["id"] == host).get("attributes") or {}).get("forsk:id") or "")
+    paths0 = {w["id"]: path_points(path_of(w["id"])) for w in walls}
+    on_host = [
+        row for row in markers
+        if str((row.get("attributes") or {}).get("forsk:host") or "").lower() == host_key
     ]
-    centres = [center_of(row) for row in markers]
+    centres = [center_of(row) for row in on_host]
     per_side = {
         "south": sum(1 for _, y in centres if y < 300), "north": sum(1 for _, y in centres if y > 3700),
         "west": sum(1 for x, _ in centres if x < 300), "east": sum(1 for x, _ in centres if x > 7700),
     }
     # A partition clear of every opening on the south and north walls.
-    spans = [xy_box(row) for row in markers]
+    spans = [xy_box(row) for row in on_host]
     x = next((c for c in (4000, 3000, 5000, 2000, 6000, 1000, 7000)
               if all(not box or not (box[0] - 200 < c < box[2] + 200) for box in spans)), None)
     if x is None:
@@ -426,33 +446,41 @@ def walls_step(sock: socket.socket, failures: list) -> None:
     if added is None:
         failures.append(f"walls partition add: {err}")
         return
+    joins = [str(j) for j in (added.get("joins") or [])]
     print(
         f"    partition at x {x}: {added.get('message')} from {added.get('from')} to {added.get('to')} "
-        f"holes {added.get('holes')} openings={added.get('host_openings')} voids={added.get('host_voids')}"
+        f"holes {added.get('holes')} joins {','.join(joins)}"
     )
-    if added.get("joined") is not True or added.get("host_id") != host:
-        failures.append(f"walls partition joined={added.get('joined')} host {added.get('host_id')}")
+    # It touches the south run and the north run, so it stands as its own record.
+    if added.get("joined") is not False or len(joins) != 2 or host_fid not in joins:
+        failures.append(f"walls partition joined={added.get('joined')} joins {joins}, expected its own record joined to {host_fid}")
     ends = [added.get("from") or [], added.get("to") or []]
     if any(len(end) != 2 or abs(float(end[0]) - x) > 0.5 or abs(float(end[1]) - want) > 0.5
            for end, want in zip(ends, (200, 3800))):
         failures.append(f"walls partition ends {added.get('from')} {added.get('to')}, expected the faces at 200 and 3800")
-    if added.get("holes") != holes0 + 1:
-        failures.append(f"walls partition holes {added.get('holes')}, expected {holes0 + 1}")
-    if added.get("host_openings") != len(markers) or added.get("host_voids") != len(markers):
-        failures.append(f"walls partition openings={added.get('host_openings')} voids={added.get('host_voids')}, expected {len(markers)}")
+    if added.get("holes") != 0:
+        failures.append(f"walls partition holes {added.get('holes')}, expected 0")
+    if len(kind_rows("A-WALL", "wall")) != 5:
+        failures.append(f"walls partition count {len(kind_rows('A-WALL', 'wall'))}, expected 5")
+    still = [
+        row for row in kind_rows("A-OPEN", "opening_marker")
+        if str((row.get("attributes") or {}).get("forsk:host") or "").lower() == host_key
+    ]
+    if len(still) != len(on_host):
+        failures.append(f"walls partition openings {len(still)}, expected {len(on_host)}")
     if "updated" not in str(added.get("message") or ""):
         failures.append(f"walls partition receipt did not say what followed: {added.get('message')}")
 
-    gone, err = call("delete_wall", {"id": host, "at": [x, 2000]})
+    gone, err = call("delete_wall", {"id": added.get("host_id"), "at": [x, 2000]})
     if gone is None:
         failures.append(f"walls partition delete: {err}")
         return
-    same = path_points(path_of(host)) == path_points(path0)
-    print(f"    partition delete: {gone.get('message')} holes {gone.get('holes')} path {'same' if same else 'changed'}")
-    if gone.get("openings_deleted") or gone.get("record_deleted") is not False or gone.get("holes") != holes0 or not same:
+    same = all(path_points(path_of(wid)) == pts for wid, pts in paths0.items())
+    print(f"    partition delete: {gone.get('message')} record_deleted {gone.get('record_deleted')} path {'same' if same else 'changed'}")
+    if gone.get("openings_deleted") or gone.get("record_deleted") is not True or not same or len(kind_rows("A-WALL", "wall")) != 4:
         failures.append(
             f"walls partition delete deleted={gone.get('openings_deleted')} record={gone.get('record_deleted')} "
-            f"holes {gone.get('holes')} path {'same' if same else 'changed'}"
+            f"path {'same' if same else 'changed'}"
         )
 
     side = max(per_side, key=per_side.get)
@@ -461,59 +489,48 @@ def walls_step(sock: socket.socket, failures: list) -> None:
         failures.append(f"walls {side} delete: {err}")
         return
     deleted = len(taken.get("openings_deleted") or [])
-    left = len(markers) - per_side[side]
-    print(
-        f"    {side} delete: {taken.get('message')} deleted {deleted} "
-        f"openings={taken.get('host_openings')} voids={taken.get('host_voids')} holes {taken.get('holes')}"
-    )
-    if deleted != per_side[side] or taken.get("host_openings") != left or taken.get("host_voids") != left:
+    print(f"    {side} delete: {taken.get('message')} deleted {deleted} holes {taken.get('holes')}")
+    left = kind_rows("A-WALL", "wall")
+    others = [wid for wid in paths0 if str(wid).lower() != str(host).lower()]
+    left_ids = {str(row["id"]).lower() for row in left}
+    if deleted != per_side[side] or taken.get("record_deleted") is not True or taken.get("holes") != 0:
         failures.append(
             f"walls {side} delete deleted {deleted}, expected {per_side[side]}; "
-            f"openings={taken.get('host_openings')} voids={taken.get('host_voids')}, expected {left}"
+            f"record={taken.get('record_deleted')} holes {taken.get('holes')}"
         )
-    if taken.get("holes") != holes0 - 1:
-        failures.append(f"walls {side} delete holes {taken.get('holes')}, expected {holes0 - 1}")
+    if len(left) != 3 or any(str(wid).lower() not in left_ids for wid in others):
+        failures.append(f"walls {side} delete left {len(left)} records, expected the other 3")
     if "updated" not in str(taken.get("message") or ""):
         failures.append(f"walls {side} delete receipt did not say what followed: {taken.get('message')}")
 
     other = OPPOSITE[side]
-    u_path = path_points(path_of(host))
-    _, err = call("delete_wall", {"id": host, "side": other})
-    split = "separate pieces" in err
-    same = path_points(path_of(host)) == u_path
-    print(f"    split refused: {err or 'went through'} path {'same' if same else 'changed'}")
-    if not split or not same:
-        failures.append(f"walls split {err or 'went through'} path {'same' if same else 'changed'}")
-    if "updated" in err:
-        failures.append(f"walls split said updated: {err}")
-
     a, b, join_from, join_to = FREE_WALL[other]
+    expect_free = _next_wall_id(left)
     free, err = call("add_wall", {"from": a, "to": b})
     if free is None:
         failures.append(f"walls free add: {err}")
         return
     print(f"    free add: {free.get('message')} id {free.get('forsk_id')} joined {free.get('joined')}")
-    if free.get("joined") is not False or free.get("forsk_id") != "w02" or len(kind_rows("A-WALL", "wall")) != 2:
-        failures.append(f"walls free add joined={free.get('joined')} id {free.get('forsk_id')}, expected a new w02")
+    if free.get("joined") is not False or free.get("forsk_id") != expect_free or len(kind_rows("A-WALL", "wall")) != 4:
+        failures.append(f"walls free add joined={free.get('joined')} id {free.get('forsk_id')}, expected a new {expect_free}")
 
     # F2: a wall that touches two records stands as a record of its own, joined to both.
     link, err = call("add_wall", {"from": join_from, "to": join_to})
     if link is None:
         failures.append(f"walls join add: {err}")
         return
-    joins = [str(j) for j in (link.get("joins") or [])]
-    print(f"    join add: {link.get('message')} id {link.get('forsk_id')} joins {','.join(joins)}")
-    joined = link.get("joined") is False and len(joins) == 2 and free.get("forsk_id") in joins
-    if not joined or len(kind_rows("A-WALL", "wall")) != 3:
-        failures.append(f"walls join joined={link.get('joined')} joins {joins}, expected a new record joined to both")
-    # It goes whole again, and the two walls stand apart.
+    link_joins = [str(j) for j in (link.get("joins") or [])]
+    print(f"    join add: {link.get('message')} id {link.get('forsk_id')} joins {','.join(link_joins)}")
+    joined = link.get("joined") is False and len(link_joins) == 2 and free.get("forsk_id") in link_joins
+    if not joined or len(kind_rows("A-WALL", "wall")) != 5:
+        failures.append(f"walls join joined={link.get('joined')} joins {link_joins}, expected a new record joined to both")
     mid = [(join_from[0] + join_to[0]) / 2, (join_from[1] + join_to[1]) / 2]
     unlinked, err = call("delete_wall", {"id": link.get("host_id"), "at": mid})
     if unlinked is None:
         failures.append(f"walls join delete: {err}")
         return
     print(f"    join delete: {unlinked.get('message')} record_deleted {unlinked.get('record_deleted')}")
-    if unlinked.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 2:
+    if unlinked.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 4:
         failures.append(f"walls join delete record_deleted={unlinked.get('record_deleted')}")
 
     whole, err = call("delete_wall", {"id": free.get("host_id"), "at": [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]})
@@ -521,13 +538,13 @@ def walls_step(sock: socket.socket, failures: list) -> None:
         failures.append(f"walls free delete: {err}")
         return
     print(f"    free delete: {whole.get('message')} record_deleted {whole.get('record_deleted')}")
-    if whole.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 1:
+    if whole.get("record_deleted") is not True or len(kind_rows("A-WALL", "wall")) != 3:
         failures.append(f"walls free delete record_deleted={whole.get('record_deleted')}")
 
     print(
-        f"    walls summary partition holes {added.get('holes')}->{gone.get('holes')}, "
-        f"{side} deleted {deleted} openings {taken.get('host_openings')}/{taken.get('host_voids')} holes {taken.get('holes')}, "
-        f"split {'refused' if split else 'not refused'}, {free.get('forsk_id')} free added and deleted, "
+        f"    walls summary partition own record holes {added.get('holes')}, "
+        f"{side} deleted {deleted} openings record gone, "
+        f"{free.get('forsk_id')} free added and deleted, "
         f"{link.get('forsk_id')} {'joined both' if joined else 'did not join both'} and deleted"
     )
 
@@ -661,7 +678,10 @@ def main() -> int:
         summary = send_command(sock, "get_document_summary", {})
         meta = summary.get("meta_data") or {}
         units = str(meta.get("units") or "")
-        count = int(summary.get("object_count") or 0)
+        fresh = send_command(sock, "get_objects", {
+            "include_geometry": False, "include_hidden": True, "limit": 500,
+        }).get("objects") or []
+        count = plan_smoke.without_plan_cut(summary.get("object_count"), fresh)
         print(f"==> {meta.get('name')} units={units} objects={count}")
         if units.lower() not in ("millimeters", "millimetres"):
             raise SmokeError(f"units={units!r}")
@@ -1192,6 +1212,43 @@ def main() -> int:
         if (pdf.get("count") or 0) < 1 or "capture failed" in message.lower():
             failures.append(f"sheet export {message}")
         plan_smoke.check_pages_written(packed.get("pages") or [], pdf, "sheet", failures)
+
+        # The doors PDF stays plan then schedules. The set is its own PDF:
+        # south facade, Mengdeliste, front sheet last so the Tegningsliste lists the others.
+        set_packed = send_command(sock, "layout_pack", {
+            "views": ["south", "takeoff", "front"], "replace": True,
+        })
+        print(f"    set {set_packed.get('message')}")
+        set_pages = set_packed.get("pages") or []
+        by_view = {item.get("view"): item for item in set_pages}
+        front = by_view.get("front") or {}
+        facade = by_view.get("south") or {}
+        takeoff = by_view.get("takeoff") or {}
+        lists = (front.get("front") or {}).get("lists") or {}
+        drawing_title = str((lists.get("drawings") or {}).get("title") or "")
+        area_title = str((lists.get("area") or {}).get("title") or "")
+        ground = (facade.get("facade") or {}).get("ground_z")
+        print(
+            f"    set front {front.get('number')} {drawing_title} {area_title}, "
+            f"facade {facade.get('number')} ground {ground}, takeoff {takeoff.get('number')}"
+        )
+        if front.get("number") != "A-00-001":
+            failures.append(f"front sheet number {front.get('number')}")
+        if drawing_title != "Tegningsliste" or area_title != "Arealer":
+            failures.append(f"front lists {drawing_title!r} {area_title!r}, expected Tegningsliste and Arealer")
+        if facade.get("number") != "A-40-003":
+            failures.append(f"facade number {facade.get('number')}")
+        if ground is None:
+            failures.append("facade ground line missing")
+        if takeoff.get("number") != "A-00-050":
+            failures.append(f"takeoff number {takeoff.get('number')}")
+        set_pdf = send_command(sock, "export_pdf", {"path": "/tmp/forsk-f5-garage-set.pdf"})
+        set_message = str(set_pdf.get("message") or "")
+        print(f"    set export {set_message}")
+        if (set_pdf.get("count") or 0) < 1 or "capture failed" in set_message.lower():
+            failures.append(f"set export {set_message}")
+        plan_smoke.check_pages_written(set_pages, set_pdf, "set", failures)
+
         wall_end = (send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {})
         if wall_end.get("forsk:id") != wall_fid or wall_end.get("forsk:thickness") != wall_thick:
             failures.append("plan symbols changed the wall")
