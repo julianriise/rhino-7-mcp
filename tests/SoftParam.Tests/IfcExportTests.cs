@@ -162,3 +162,36 @@ public class IfcExportTests
             IfcExport.Receipt(Garage(), "/Users/jr/Desktop/Garage.ifc"));
     }
 }
+
+/// <summary>R5: the garage with a straight stair along its north wall, as IfcStair and its flight.</summary>
+public class IfcStairTests
+{
+    public const string StairPath = "/tmp/forsk-ifc-stair.ifc";
+
+    public static IfcExport.Model GarageWithStair()
+    {
+        var model = IfcExportTests.Garage();
+        model.Stairs.Add(new IfcExport.Stair { Id = "S01", X = 1000, Y = 3350, Base = 0, Dx = 1, Dy = 0, Flight = Stairs.Plan(2750, 180, 260, 900) });
+        return model;
+    }
+
+    [Fact]
+    public void Stair_IsAStraightRun_AggregatingItsFlight_WithTheFigures()
+    {
+        var db = IfcExport.Build(GarageWithStair());
+        Assert.True(db.WriteFile(StairPath));
+        var read = new DatabaseIfc(StairPath);
+        var stair = Assert.Single(read.OfType<IfcStair>());
+        Assert.Equal(IfcStairTypeEnum.STRAIGHT_RUN_STAIR, stair.PredefinedType);
+        Assert.Equal("S01", stair.Tag);
+        var flight = Assert.Single(read.OfType<IfcStairFlight>());
+        Assert.Equal(IfcStairFlightTypeEnum.STRAIGHT, flight.PredefinedType);
+        Assert.Equal(16, flight.NumberOfRiser);
+        Assert.Equal(15, flight.NumberOfTreads);
+        Assert.Equal(171.875, flight.RiserHeight, 6);
+        Assert.Equal(260, flight.TreadLength, 6);
+        Assert.Same(stair, flight.Decomposes?.RelatingObject);
+        Assert.NotNull(flight.Representation);
+        Assert.Contains("1 stair", IfcExport.Receipt(GarageWithStair(), StairPath));
+    }
+}

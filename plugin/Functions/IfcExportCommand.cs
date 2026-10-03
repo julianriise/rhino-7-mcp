@@ -53,6 +53,7 @@ public partial class RhinoMCPFunctions
             ["slabs"] = model?.Slabs.Count ?? 0,
             ["roofs"] = model?.Roofs.Count ?? 0,
             ["spaces"] = model?.Spaces.Count ?? 0,
+            ["stairs"] = model?.Stairs.Count ?? 0,
             ["message"] = message ?? ""
         };
     }
@@ -138,6 +139,20 @@ public partial class RhinoMCPFunctions
                 AreaM2 = area / 1e6,
                 Base = model.FloorTop,
                 Height = model.Walls.Count > 0 ? model.Walls.Max(w => w.Height) : 0
+            });
+        }
+        foreach (var obj in StairObjects(doc))
+        {
+            if (!TryStairAsBuilt(obj, out var spec, out var flight)) continue;
+            model.Stairs.Add(new IfcExport.Stair
+            {
+                Id = obj.Attributes.GetUserString("forsk:id"),
+                X = spec.X,
+                Y = spec.Y,
+                Base = spec.Z,
+                Dx = spec.Dx,
+                Dy = spec.Dy,
+                Flight = flight
             });
         }
         return model;

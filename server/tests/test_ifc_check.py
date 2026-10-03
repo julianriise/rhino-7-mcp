@@ -41,3 +41,22 @@ def test_garage_counts_are_minimums_but_one_storey_and_one_roof():
     assert "IfcBuildingStorey 2, want 1" in ifc_check.check(two, expect, shapes=False)
     three = model_with("IfcWall", "IfcWall", "IfcWall")
     assert "IfcWall 3, want 4 or more" in ifc_check.check(three, expect, shapes=False)
+
+
+def test_a_stair_without_its_flight_fails():
+    problems = ifc_check.stair_problems(model_with("IfcStair"), shapes=False)
+    assert any("0 flights" in p for p in problems), problems
+
+
+def test_the_stair_expectation_wants_exactly_one_stair():
+    expect = ifc_check.EXPECT["stair"]
+    none = model_with("IfcWall", "IfcWall", "IfcWall", "IfcWall", "IfcSlab", "IfcSlab", "IfcRoof",
+                      "IfcSpace", "IfcBuildingStorey", "IfcDoor")
+    assert "IfcStair 0, want 1" in ifc_check.check(none, expect, shapes=False)
+
+
+def test_the_written_stair_file_passes_when_present():
+    path = Path("/tmp/forsk-ifc-stair.ifc")
+    if not path.exists():
+        pytest.skip("IfcStairTests writes it")
+    assert ifc_check.check_path(path, "stair") == []

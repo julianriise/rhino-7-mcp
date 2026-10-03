@@ -776,14 +776,7 @@ public partial class RhinoMCPFunctions
         var added = 0;
         foreach (var obj in StairObjects(doc))
         {
-            var spec = ReadStairSpec(obj);
-            if (spec == null) continue;
-            // The rise the solid was last built with, so the symbol and the 3D agree.
-            var risers = ParseMm(obj.Attributes.GetUserString(Stairs.RisersKey)) ?? 0;
-            var riser = ParseMm(obj.Attributes.GetUserString(Stairs.RiserKey)) ?? 0;
-            Stairs.Flight flight;
-            try { flight = Stairs.Plan(spec, risers * riser); }
-            catch (ArgumentException) { continue; }
+            if (!TryStairAsBuilt(obj, out var spec, out var flight)) continue;
             var plane = new Plane(new Point3d(spec.X, spec.Y, 0), new Vector3d(spec.Dx, spec.Dy, 0), new Vector3d(-spec.Dy, spec.Dx, 0));
             var stairId = obj.Id.ToString();
             var baked = 0;

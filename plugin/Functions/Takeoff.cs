@@ -28,6 +28,7 @@ public static class Takeoff
     public const string Roofs = "Roof";
     public const string Doors = "Doors";
     public const string Windows = "Windows";
+    public const string StairsGroup = "Stairs";
     public const string Areas = "Areas";
     public const string Note = "Quantities are approximate, from the model. Wall area is net of openings, one side.";
     public const string NoteNb = "Mengder er ca.-tall fra modellen. Veggareal er netto av åpninger, én side.";
@@ -77,7 +78,8 @@ public static class Takeoff
     }
 
     public static Result Compute(
-        IList<Wall> walls, IList<Schedules.Opening> openings, IList<Slab> slabs, IList<Slab> roofs, AreaStats.Result area, double tol, bool norwegian = false)
+        IList<Wall> walls, IList<Schedules.Opening> openings, IList<Slab> slabs, IList<Slab> roofs, AreaStats.Result area, double tol, bool norwegian = false,
+        IList<Stairs.Flight> stairs = null)
     {
         walls = walls ?? new Wall[0];
         openings = openings ?? new Schedules.Opening[0];
@@ -93,6 +95,7 @@ public static class Takeoff
         foreach (var roof in roofs ?? new Slab[0]) AddSlab(result, Group(Roofs, "Tak", norwegian), SheetLang.Pick(norwegian, "Roof", "Tak"), roof);
         AddOpenings(result, openings.Where(o => o.Record?.Kind == "door"), Group(Doors, "Dører", norwegian), norwegian);
         AddOpenings(result, openings.Where(o => o.Record?.Kind == "window"), Group(Windows, "Vinduer", norwegian), norwegian);
+        AddStairs(result, stairs, norwegian);
         AddAreas(result, area, norwegian);
         result.Summary = Summarize(result, norwegian);
         return result;
@@ -298,6 +301,18 @@ public static class Takeoff
             });
     }
 
+    /// <summary>R5: the stairs by size: "Straight stair 16 × 180/260, 900 wide", and how many.</summary>
+    static void AddStairs(Result result, IList<Stairs.Flight> stairs, bool norwegian)
+    {
+        if (stairs == null) return;
+        var group = Group(StairsGroup, "Trapper", norwegian);
+        foreach (var size in stairs.Where(s => s != null)
+                     .GroupBy(s => SheetLang.Pick(norwegian, "Straight stair ", "Rett trapp ") + Stairs.Sizes(s) + ", "
+                         + Mm(s.Width) + SheetLang.Pick(norwegian, " wide", " bred"))
+                     .OrderBy(g => g.Key, StringComparer.Ordinal))
+            result.Lines.Add(new Line { Group = group, Label = size.Key, Name = size.Key, Count = size.Count() });
+    }
+
     /// <summary>BTA, BRA and Netto per floor, as area_stats gives them. A figure it left out stays out.</summary>
     static void AddAreas(Result result, AreaStats.Result area, bool norwegian)
     {
@@ -334,8 +349,10 @@ public static class Takeoff
         if (result.Lines.Any(l => l.Group == roofs)) parts.Add(SheetLang.Pick(norwegian, "roof ", "tak ") + Number(Sum(roofs, l => l.AreaM2)) + " m²");
         var doors = (int)Sum(doorsGroup, l => l.Count);
         var windows = (int)Sum(windowsGroup, l => l.Count);
+        var stairs = (int)Sum(Named(StairsGroup, "Trapper"), l => l.Count);
         if (doors > 0) parts.Add(doors.ToString(CultureInfo.InvariantCulture) + (doors == 1 ? SheetLang.Pick(norwegian, " door", " dør") : SheetLang.Pick(norwegian, " doors", " dører")));
         if (windows > 0) parts.Add(windows.ToString(CultureInfo.InvariantCulture) + (windows == 1 ? SheetLang.Pick(norwegian, " window", " vindu") : SheetLang.Pick(norwegian, " windows", " vinduer")));
+        if (stairs > 0) parts.Add(stairs.ToString(CultureInfo.InvariantCulture) + (stairs == 1 ? SheetLang.Pick(norwegian, " stair", " trapp") : SheetLang.Pick(norwegian, " stairs", " trapper")));
         if (parts.Count == 0) return SheetLang.Pick(norwegian, "No quantities: the model has no walls.", "Ingen mengder: modellen har ingen vegger.");
         return SheetLang.Pick(norwegian, "Quantities, approx.: ", "Mengder, ca.: ") + string.Join(", ", parts) + ".";
     }

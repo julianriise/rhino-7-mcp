@@ -223,7 +223,17 @@ public partial class RhinoMCPFunctions
             (slab ? slabs : roofs).Add(new Takeoff.Slab { AreaMm2 = volume / thickness, ThicknessMm = thickness });
         }
         var openings = OpeningRows(doc, null, out _);
-        return Takeoff.Compute(walls, openings, slabs, roofs, ReadAreaStats(doc), Math.Max(doc.ModelAbsoluteTolerance, 1.0));
+        return Takeoff.Compute(walls, openings, slabs, roofs, ReadAreaStats(doc), Math.Max(doc.ModelAbsoluteTolerance, 1.0),
+            stairs: StairFlights(doc));
+    }
+
+    /// <summary>R5: each stair as it was last built: its record's rise, risers and sizes.</summary>
+    private static List<Stairs.Flight> StairFlights(RhinoDoc doc)
+    {
+        var flights = new List<Stairs.Flight>();
+        foreach (var obj in StairObjects(doc))
+            if (TryStairAsBuilt(obj, out _, out var flight)) flights.Add(flight);
+        return flights;
     }
 
     /// <summary>A closed solid's volume in mm³, 0 when Rhino cannot measure it.</summary>

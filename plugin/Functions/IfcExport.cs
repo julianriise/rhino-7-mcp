@@ -77,6 +77,17 @@ public static class IfcExport
         public double Height;
     }
 
+    /// <summary>R5: a straight stair as built: its foot on the centre line, its climb and its flight.</summary>
+    public sealed class Stair
+    {
+        public string Id;
+        public double X, Y;
+        /// <summary>The floor it stands on, model Z.</summary>
+        public double Base;
+        public double Dx = 1, Dy;
+        public Stairs.Flight Flight;
+    }
+
     public sealed class Model
     {
         public string Project = "Forsk";
@@ -87,6 +98,7 @@ public static class IfcExport
         public List<Slab> Slabs = new List<Slab>();
         public List<Slab> Roofs = new List<Slab>();
         public List<Space> Spaces = new List<Space>();
+        public List<Stair> Stairs = new List<Stair>();
     }
 
     public static DatabaseIfc Build(Model model)
@@ -139,6 +151,9 @@ public static class IfcExport
             if (part != null && part.Decomposes == null) roof.AddAggregated(part);
         }
 
+        foreach (var stair in model.Stairs)
+            AddStair(db, storey, stair, z0);
+
         foreach (var room in model.Spaces)
         {
             if (room?.Ring == null || room.Ring.Count < 3 || room.Height <= 0) continue;
@@ -162,6 +177,7 @@ public static class IfcExport
         Add(model?.Openings.Count(o => o.Kind == "door") ?? 0, "door");
         Add(model?.Openings.Count(o => o.Kind == "window") ?? 0, "window");
         Add(model?.Spaces.Count ?? 0, "space");
+        Add(model?.Stairs.Count ?? 0, "stair");
         return "✓ Exported IFC · " + (parts.Count == 0 ? "nothing" : string.Join(", ", parts)) + " · " + Path.GetFileName(path ?? "");
     }
 
@@ -277,6 +293,58 @@ public static class IfcExport
         fill.Name = opening.Mark ?? opening.Id;
         fill.Tag = opening.Id;
         if (fill.FillsVoids == null) new IfcRelFillsElement(cut, fill);
+    }
+
+    /// <summary>
+    /// R5: IfcStair STRAIGHT_RUN_STAIR aggregating one IfcStairFlight STRAIGHT
+    /// with its risers, treads, riser height and tread length, and its body:
+    /// the sawtooth profile in the climb's vertical plane, extruded across the
+    /// width. Pset_StairCommon carries the same figures for viewers that read psets.
+    /// </summary>
+    static IfcStair AddStair(DatabaseIfc db, IfcBuildingStorey storey, Stair stair, double z0)
+    {
+        var f = stair?.Flight;
+        if (f == null || f.Treads < 1) return null;
+        var length = Math.Sqrt(stair.Dx * stair.Dx + stair.Dy * stair.Dy);
+        if (length < 1e-9) return null;
+        var dx = stair.Dx / length;
+        var dy = stair.Dy / length;
+        // The left side's foot: local X up the flight, local Y to its left, Z up.
+        var footX = stair.X - dy * f.Width / 2.0;
+        var footY = stair.Y + dx * f.Width / 2.0;
+        var placement = new IfcLocalPlacement(storey.ObjectPlacement, new IfcAxis2Placement3D(
+            new IfcCartesianPoint(db, footX, footY, stair.Base - z0), db.Factory.ZAxis, new IfcDirection(db, dx, dy, 0)));
+        var element = new IfcStair(storey, placement, null)
+        {
+            PredefinedType = IfcStairTypeEnum.STRAIGHT_RUN_STAIR,
+            Name = "Stair " + global::RhinoMCPPlugin.Functions.Stairs.Sizes(f),
+            Tag = stair.Id
+        };
+        var points = global::RhinoMCPPlugin.Functions.Stairs.Profile(f).Select(p => new IfcCartesianPoint(db, p.X, p.Y)).ToList();
+        points.Add(points[0]);
+        var profile = new IfcArbitraryClosedProfileDef("Flight", new IfcPolyline(points));
+        // The profile's X is the climb and its Y is up; it extrudes along -Y of the stair, its right side.
+        var position = new IfcAxis2Placement3D(new IfcCartesianPoint(db, 0, 0, 0), new IfcDirection(db, 0, -1, 0), new IfcDirection(db, 1, 0, 0));
+        var body = new IfcProductDefinitionShape(new IfcShapeRepresentation(new IfcExtrudedAreaSolid(profile, position, f.Width)));
+        var flight = new IfcStairFlight(element, new IfcLocalPlacement(placement, new IfcAxis2Placement3D(new IfcCartesianPoint(db, 0, 0, 0))), body)
+        {
+            PredefinedType = IfcStairFlightTypeEnum.STRAIGHT,
+            NumberOfRiser = f.Risers,
+            NumberOfTreads = f.Treads,
+            RiserHeight = f.Riser,
+            TreadLength = f.Going,
+            Name = "Flight",
+            Tag = stair.Id
+        };
+        if (flight.Decomposes == null) element.AddAggregated(flight);
+        new IfcPropertySet(element, "Pset_StairCommon", new List<IfcProperty>
+        {
+            new IfcPropertySingleValue(db, "NumberOfRiser", new IfcCountMeasure(f.Risers)),
+            new IfcPropertySingleValue(db, "NumberOfTreads", new IfcCountMeasure(f.Treads)),
+            new IfcPropertySingleValue(db, "RiserHeight", new IfcPositiveLengthMeasure(f.Riser)),
+            new IfcPropertySingleValue(db, "TreadLength", new IfcPositiveLengthMeasure(f.Going))
+        });
+        return element;
     }
 
     static IfcSlab AddSlab(DatabaseIfc db, IfcObjectDefinition host, Slab slab, double z0, IfcSlabTypeEnum kind)

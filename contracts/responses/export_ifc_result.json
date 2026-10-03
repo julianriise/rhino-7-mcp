@@ -12,6 +12,7 @@
     "slabs": { "type": "integer", "minimum": 0 },
     "roofs": { "type": "integer", "minimum": 0 },
     "spaces": { "type": "integer", "minimum": 0 },
+    "stairs": { "type": "integer", "minimum": 0 },
     "message": { "type": "string" }
   },
   "required": ["path", "walls", "doors", "windows", "slabs", "roofs", "spaces", "message"]

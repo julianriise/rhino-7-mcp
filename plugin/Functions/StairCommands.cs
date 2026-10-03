@@ -248,6 +248,23 @@ public partial class RhinoMCPFunctions
         return obj?.Attributes == null ? null : Stairs.Read(obj.Attributes.GetUserString);
     }
 
+    /// <summary>
+    /// The stair as its solid was last built: the record's spec, and the flight
+    /// from its stored risers × riser, so the plan, the takeoff and the IFC agree
+    /// with the 3D. False when the record does not read.
+    /// </summary>
+    private static bool TryStairAsBuilt(RhinoObject obj, out Stairs.Spec spec, out Stairs.Flight flight)
+    {
+        flight = null;
+        spec = ReadStairSpec(obj);
+        if (spec == null) return false;
+        var risers = ParseMm(obj.Attributes.GetUserString(Stairs.RisersKey)) ?? 0;
+        var riser = ParseMm(obj.Attributes.GetUserString(Stairs.RiserKey)) ?? 0;
+        try { flight = Stairs.Plan(spec, risers * riser); }
+        catch (ArgumentException) { return false; }
+        return true;
+    }
+
     /// <summary>id (a guid or S01), else the picked stairs, else the only stair. many: more than one may come back.</summary>
     private static List<RhinoObject> ResolveStairs(RhinoDoc doc, JObject parameters, bool many)
     {

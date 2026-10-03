@@ -159,6 +159,25 @@ public class TakeoffTests
     }
 
     [Fact]
+    public void Stairs_ALineBySize_AndInTheSummary()
+    {
+        var stairs = new[]
+        {
+            Stairs.Plan(2880, 180, 260, 900), Stairs.Plan(2880, 180, 260, 900), Stairs.Plan(2750, 180, 280, 1000)
+        };
+        var result = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, null, null, null, null, Tol, stairs: stairs);
+        var lines = result.Lines.Where(l => l.Group == "Stairs").ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Equal("Straight stair 16 × 172/280, 1000 wide · 1 no.", Takeoff.Row(lines[0]));
+        Assert.Equal("Straight stair 16 × 180/260, 900 wide · 2 no.", Takeoff.Row(lines[1]));
+        Assert.EndsWith(", 3 stairs.", result.Summary);
+        var nb = Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, null, null, null, null, Tol, norwegian: true, stairs: stairs.Take(1).ToList());
+        Assert.Equal("Rett trapp 16 × 180/260, 900 bred", nb.Lines.Single(l => l.Group == "Trapper").Name);
+        Assert.EndsWith(", 1 trapp.", nb.Summary);
+        Assert.DoesNotContain(Takeoff.Compute(new[] { Wall(WallJoinsTests.Garage()) }, null, null, null, null, Tol).Lines, l => l.Group == "Stairs");
+    }
+
+    [Fact]
     public void TheAreas_AreAreaStatsOwnFigures()
     {
         var area = AreaStats.Compute(new[] { new AreaStats.Room { Id = "a", Name = "Garasje", Level = "0", AreaMm2 = 27_360_000 } });

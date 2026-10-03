@@ -7,10 +7,14 @@ every standard wall has a material layer set usage; ifcopenshell.validate
 finds no errors; ifcopenshell.geom makes a shape for every wall. With
 --expect garage, the counts are at least the garage smoke's (4 walls, a
 floor slab and a roof slab, 1 space), exactly 1 roof and 1 storey, and at
-least one door or window.
+least one door or window. With --expect stair, the garage's counts plus
+exactly one IfcStair. Every IfcStair aggregates an IfcStairFlight with two
+risers or more, a riser height, a tread length, and a shape whose height
+is NumberOfRisers - 1 times the riser height (the top step is the floor).
 
 Usage:
   python3 scripts/ifc_check.py /tmp/forsk-ifc-garage.ifc --expect garage
+  python3 scripts/ifc_check.py /tmp/forsk-ifc-stair.ifc --expect stair
 Install first: python -m pip install ifcopenshell
 """
 
@@ -23,8 +27,9 @@ import sys
 # At least this many; the storey and the roof exactly.
 EXPECT = {
     "garage": {"IfcWall": 4, "IfcSlab": 2, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1},
+    "stair": {"IfcWall": 4, "IfcSlab": 2, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1, "IfcStair": 1},
 }
-EXACT = {"IfcRoof", "IfcBuildingStorey"}
+EXACT = {"IfcRoof", "IfcBuildingStorey", "IfcStair"}
 
 
 def check(model, expect: dict | None = None, shapes: bool = True) -> list[str]:
@@ -62,10 +67,55 @@ def check(model, expect: dict | None = None, shapes: bool = True) -> list[str]:
         if material is None or not material.is_a("IfcMaterialLayerSetUsage"):
             problems.append(f"standard wall {wall.Tag} has no layer set usage")
 
+    problems += stair_problems(model, shapes)
     problems += validate(model)
     if shapes:
         problems += walls_without_shape(model)
     return problems
+
+
+def stair_problems(model, shapes: bool = True) -> list[str]:
+    """R5: each stair is a straight run whose flight carries its figures and, with shapes, a body of the right height."""
+    import ifcopenshell.util.element as element
+
+    problems = []
+    for stair in model.by_type("IfcStair"):
+        flights = [p for p in element.get_decomposition(stair) if p.is_a("IfcStairFlight")]
+        if stair.PredefinedType != "STRAIGHT_RUN_STAIR":
+            problems.append(f"stair {stair.Tag} is {stair.PredefinedType}, want STRAIGHT_RUN_STAIR")
+        if len(flights) != 1:
+            problems.append(f"stair {stair.Tag} has {len(flights)} flights, want 1")
+            continue
+        flight = flights[0]
+        risers, riser, going = flight.NumberOfRisers, flight.RiserHeight, flight.TreadLength
+        if not risers or risers < 2 or not riser or riser <= 0 or not going or going <= 0:
+            problems.append(f"stair {stair.Tag} flight has risers {risers}, riser {riser}, going {going}")
+            continue
+        if shapes:
+            height = shape_height(model, flight)
+            want = (risers - 1) * riser
+            if height is None:
+                problems.append(f"no shape for stair {stair.Tag}")
+            elif abs(height - want) > 1.0:
+                problems.append(f"stair {stair.Tag} body is {height:.1f} high, want {want:.1f}")
+    return problems
+
+
+def shape_height(model, product) -> float | None:
+    """The product's body height in the file's length unit, or None when it has no shape."""
+    import ifcopenshell.geom
+    import ifcopenshell.util.unit as unit
+
+    settings = ifcopenshell.geom.settings()
+    try:
+        shape = ifcopenshell.geom.create_shape(settings, product)
+    except Exception:  # noqa: BLE001 - any failure is "no shape"
+        return None
+    zs = shape.geometry.verts[2::3]
+    if not zs:
+        return None
+    # The geometry comes back in metres; the figures are in the file's unit.
+    return (max(zs) - min(zs)) / unit.calculate_unit_scale(model)
 
 
 def check_path(path, expect: str | None = "garage") -> list[str]:
@@ -118,7 +168,7 @@ def main(argv: list[str]) -> int:
     except Exception as e:  # noqa: BLE001
         print(f"FAIL {args.path} does not open: {e}")
         return 1
-    counts = {cls: len(model.by_type(cls)) for cls in ("IfcWall", "IfcDoor", "IfcWindow", "IfcOpeningElement", "IfcSlab", "IfcSpace")}
+    counts = {cls: len(model.by_type(cls)) for cls in ("IfcWall", "IfcDoor", "IfcWindow", "IfcOpeningElement", "IfcSlab", "IfcSpace", "IfcStair")}
     problems = check(model, EXPECT.get(args.expect))
     print(" · ".join(f"{k[3:]} {v}" for k, v in counts.items()))
     for p in problems[:20]:
