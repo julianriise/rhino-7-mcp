@@ -134,8 +134,10 @@ public class SupportSendTests
         }
     }
 
-    [Fact]
-    public void A503_StaysQueued_AndTheNextPassSendsItOnce()
+    [Theory]
+    [InlineData("storage_unavailable", "Couldn't reach Forsk support right now — your report is saved and will be sent later.")]
+    [InlineData("email_not_configured", "Support email isn't set up yet — your report is saved and will be sent later.")]
+    public void A503_StaysQueued_AndTheNextPassSendsItOnce(string code, string sentence)
     {
         var box = Box();
         try
@@ -146,13 +148,14 @@ public class SupportSendTests
             {
                 n++;
                 return n == 1
-                    ? new SupportHttpResult { Status = 503, Body = "{\"ok\":false,\"error\":\"email_not_configured\"}" }
+                    ? new SupportHttpResult { Status = 503, Body = "{\"ok\":false,\"error\":\"" + code + "\"}" }
                     : Ok();
             };
             var first = ForskSupportSend.Deliver(Payload("the print is blank"), post, box, Now, "en");
             Assert.True(first.Retry);
             Assert.False(first.Accepted);
-            Assert.Equal("Support email isn't set up yet — your report is saved and will be sent later.", first.Text);
+            Assert.Equal(code, first.Code);
+            Assert.Equal(sentence, first.Text);
             Assert.Equal(1, JsonFiles(box));
 
             Assert.Equal(1, ForskSupportSend.Flush(post, box, Now.AddMinutes(1), "en"));
@@ -161,6 +164,35 @@ public class SupportSendTests
             Assert.Equal(0, JsonFiles(box));
             Assert.Equal(0, ForskSupportSend.Flush(post, box, Now.AddMinutes(2), "en"));
             Assert.Equal(2, post.Bodies.Count);
+        }
+        finally
+        {
+            Delete(box);
+        }
+    }
+
+    [Fact]
+    public void AReportLeftInTheOutbox_IsSentWhenRhinoOpens_AndOnTheNextSend()
+    {
+        var box = Box();
+        try
+        {
+            box.Enqueue(Payload("left behind"), Now);
+            var post = new FakePost();
+            Assert.Equal(1, ForskSupportSend.Flush(post, box, Now.AddMinutes(1), "en"));
+            Assert.Equal(new[] { "left behind" }, post.Bodies.Select(Message));
+            Assert.Equal(0, JsonFiles(box));
+            Assert.Equal(0, ForskSupportSend.Flush(post, box, Now.AddMinutes(2), "en"));
+            Assert.Single(post.Bodies);
+
+            box.Enqueue(Payload("still waiting"), Now.AddMinutes(3));
+            post.Bodies.Clear();
+            var outcome = ForskSupportSend.Deliver(Payload("the new one"), post, box, Now.AddMinutes(4), "en");
+            Assert.True(outcome.Accepted);
+            Assert.Equal("FS-1234ABCD", outcome.Id);
+            Assert.Equal("Sent. Reference FS-1234ABCD — we'll reply by email.", outcome.Text);
+            Assert.Equal(new[] { "still waiting", "the new one" }, post.Bodies.Select(Message));
+            Assert.Equal(0, JsonFiles(box));
         }
         finally
         {

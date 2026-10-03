@@ -32,13 +32,13 @@ public class SupportChatTests
     public void AQueuedReport_IsADash_AndARejectionIsACross()
     {
         var queued = new DocThread { Serial = 1 };
-        var later = ForskSupport.Parse(503, "{\"ok\":false,\"error\":\"email_not_configured\"}", null, "nb", Now);
+        var later = ForskSupport.Parse(503, "{\"ok\":false,\"error\":\"storage_unavailable\"}", null, "nb", Now);
         Assert.Equal("Sender…", ForskSupportChat.Sending("nb"));
         Assert.Equal("Lagret", ForskSupportChat.CardAnswer(later, "nb"));
         ForskSupportChat.Show(queued, later);
         var saved = Assert.Single(queued.Items);
         Assert.Null(saved["ok"]);
-        Assert.Equal("E-post til support er ikke satt opp ennå — rapporten er lagret og sendes senere.", saved["text"]!.ToString());
+        Assert.Equal("Fikk ikke kontakt med Forsk support akkurat nå — rapporten er lagret og sendes senere.", saved["text"]!.ToString());
 
         var rejected = new DocThread { Serial = 1 };
         var bad = ForskSupport.Parse(400, "{\"ok\":false,\"error\":\"invalid_reply_email\"}", null, "en", Now);

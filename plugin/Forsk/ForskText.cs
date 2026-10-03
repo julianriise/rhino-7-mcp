@@ -269,6 +269,8 @@ namespace RhinoMCPPlugin.Forsk
             ["support.sent.nb"] = "Sendt. Referanse {id} — vi svarer på e-post.",
             ["support.sent.plain"] = "Sent. We'll reply by email.",
             ["support.sent.plain.nb"] = "Sendt. Vi svarer på e-post.",
+            ["support.unavailable"] = "Couldn't reach Forsk support right now — your report is saved and will be sent later.",
+            ["support.unavailable.nb"] = "Fikk ikke kontakt med Forsk support akkurat nå — rapporten er lagret og sendes senere.",
             ["support.later"] = "Support email isn't set up yet — your report is saved and will be sent later.",
             ["support.later.nb"] = "E-post til support er ikke satt opp ennå — rapporten er lagret og sendes senere.",
             ["support.failed"] = "The report didn't go through — it's saved and will be sent later.",

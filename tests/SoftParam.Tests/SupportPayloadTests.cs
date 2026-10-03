@@ -160,6 +160,9 @@ public class SupportPayloadTests
     [Theory]
     [InlineData(200, "{\"ok\":true,\"id\":\"FS-1234ABCD\"}", null, "en", true, false, "Sent. Reference FS-1234ABCD — we'll reply by email.")]
     [InlineData(200, "{\"ok\":true,\"id\":\"fs-7k2m9qxd\"}", null, "nb", true, false, "Sendt. Referanse FS-7K2M9QXD — vi svarer på e-post.")]
+    [InlineData(503, "{\"ok\":false,\"error\":\"storage_unavailable\"}", null, "en", false, true, "Couldn't reach Forsk support right now — your report is saved and will be sent later.")]
+    [InlineData(503, "{\"ok\":false,\"error\":\"storage_unavailable\"}", null, "nb", false, true, "Fikk ikke kontakt med Forsk support akkurat nå — rapporten er lagret og sendes senere.")]
+    [InlineData(503, "{\"ok\":false}", null, "en", false, true, "Couldn't reach Forsk support right now — your report is saved and will be sent later.")]
     [InlineData(503, "{\"ok\":false,\"error\":\"email_not_configured\"}", null, "en", false, true, "Support email isn't set up yet — your report is saved and will be sent later.")]
     [InlineData(503, "{\"ok\":false,\"error\":\"email_not_configured\"}", null, "nb", false, true, "E-post til support er ikke satt opp ennå — rapporten er lagret og sendes senere.")]
     [InlineData(502, "{\"ok\":false,\"error\":\"email_send_failed\"}", null, "en", false, true, "The report didn't go through — it's saved and will be sent later.")]
@@ -220,10 +223,16 @@ public class SupportPayloadTests
     [Fact]
     public void Sentences_DoNotCarryTheResponseBody()
     {
-        var raw = "{\"ok\":false,\"error\":\"email_not_configured\",\"detail\":\"nope\"}";
+        var raw = "{\"ok\":false,\"error\":\"storage_unavailable\",\"detail\":\"nope\"}";
         var outcome = ForskSupport.Parse(503, raw, null, "en", Now);
+        Assert.Equal("storage_unavailable", outcome.Code);
+        Assert.True(outcome.Retry);
         Assert.DoesNotContain("detail", outcome.Text);
         Assert.DoesNotContain("nope", outcome.Text);
+        var legacy = ForskSupport.Parse(503, "{\"ok\":false,\"error\":\"email_not_configured\",\"detail\":\"nope\"}", null, "en", Now);
+        Assert.Equal("email_not_configured", legacy.Code);
+        Assert.True(legacy.Retry);
+        Assert.DoesNotContain("nope", legacy.Text);
         Assert.Null(JObject.Parse(raw)["website"]);
     }
 }

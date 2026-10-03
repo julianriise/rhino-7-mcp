@@ -16,6 +16,8 @@ Write a bug, or pick Support so the report card follows.
 
 ## S2 — the mail
 
+A 200 means the report is stored. The mail is sent only when Resend is configured, after that 200.
+
 Look in support@forsk.app.
 
 - The subject is `[Forsk bug]` plus the first line of the description.
@@ -33,12 +35,13 @@ Turn the network off. Send a report with a valid email.
 - A file older than 7 days is deleted on that pass and is not sent.
 - If Rhino quits after the server has accepted the report and before that file is deleted, the next launch sends it once more. A second mail can arrive.
 
-## S4 — 503 before Resend is configured
+## S4 — storage unavailable
 
-With `RESEND_API_KEY` unset, the server answers 503.
+When the database cannot take the report, the server answers 503 `storage_unavailable`.
 
-- The receipt is "Support email isn't set up yet — your report is saved and will be sent later." Norwegian: "E-post til support er ikke satt opp ennå — rapporten er lagret og sendes senere."
-- The report stays in `~/.forsk/outbox`. After Resend is configured, the next Send or the next launch delivers it, oldest first, and the mail in S2 arrives.
+- The receipt is "Couldn't reach Forsk support right now — your report is saved and will be sent later." Norwegian: "Fikk ikke kontakt med Forsk support akkurat nå — rapporten er lagret og sendes senere."
+- The report stays in `~/.forsk/outbox`. The next Send, or the next time Rhino opens, posts the queue oldest first. A 200 `{ok:true, id}` deletes that file. It is not sent again.
+- A report saved earlier, including one kept when the server used to answer `email_not_configured`, goes out on that same pass.
 - Too many reports answers "Too many reports just now — try again in N minutes." That one stays queued, and the rest of the queue waits.
 
 ## S5 — this list

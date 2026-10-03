@@ -140,7 +140,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             var code = CodeOf(status, json);
             var retry = status == 502 || status == 503 || status == 504 || status == 0
-                || code == "email_not_configured" || code == "email_send_failed" || code == "network";
+                || code == "storage_unavailable" || code == "email_not_configured" || code == "email_send_failed" || code == "network";
             string id = null;
             if (status == 200)
             {
@@ -231,6 +231,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             switch (code)
             {
+                case "storage_unavailable": return "support.unavailable";
                 case "email_not_configured": return "support.later";
                 case "email_send_failed":
                 case "network": return "support.failed";
@@ -249,7 +250,7 @@ namespace RhinoMCPPlugin.Forsk
             var error = json?["error"]?.Type == JTokenType.String ? json["error"].ToString() : null;
             if (!string.IsNullOrEmpty(error)) return error;
             if (status == 200) return "ok";
-            if (status == 503) return "email_not_configured";
+            if (status == 503) return "storage_unavailable";
             if (status == 502 || status == 504) return "email_send_failed";
             if (status == 429) return "rate_limited";
             if (status == 413) return "payload_too_large";
