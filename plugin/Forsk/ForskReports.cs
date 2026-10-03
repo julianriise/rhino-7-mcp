@@ -8,8 +8,8 @@ using Newtonsoft.Json.Linq;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// Where a report goes. The file delivery appends one JSON line.
-    /// Mail, a GitHub issue, or a web form can implement this later. No network here.
+    /// A JSON line on disk. The card posts to forsk.app. This writer stays
+    /// for that file shape. No network here.
     /// </summary>
     public interface IReportDelivery
     {

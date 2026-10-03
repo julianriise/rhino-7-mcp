@@ -307,4 +307,36 @@ namespace RhinoMCPPlugin.Forsk
             return json;
         }
     }
+
+    /// <summary>
+    /// What Send puts in the thread. The step line is the short status.
+    /// The receipt is the one sentence, including the FS- reference. No JSON.
+    /// </summary>
+    public static class ForskSupportChat
+    {
+        public static string Sending(string language)
+        {
+            return ForskText.Get(language == "nb" ? "support.sending.nb" : "support.sending");
+        }
+
+        /// <summary>The closed card's short answer. The receipt carries the full sentence.</summary>
+        public static string CardAnswer(ForskSupport.Outcome outcome, string language)
+        {
+            var nb = language == "nb";
+            if (outcome != null && outcome.Accepted) return ForskText.Get(nb ? "support.sent.short.nb" : "support.sent.short");
+            if (outcome != null && outcome.Retry) return ForskText.Get(nb ? "support.saved.short.nb" : "support.saved.short");
+            return ForskText.Get(nb ? "support.notsent.nb" : "support.notsent");
+        }
+
+        /// <summary>Clears the step line and adds the sentence as a Support receipt.</summary>
+        public static void Show(DocThread thread, ForskSupport.Outcome outcome)
+        {
+            if (thread == null || outcome == null || string.IsNullOrWhiteSpace(outcome.Text)) return;
+            thread.Busy = null;
+            bool? ok = outcome.Accepted ? true : outcome.Retry ? (bool?)null : false;
+            thread.BeginReply("Support");
+            thread.Add(new ForskReceipt { Ok = ok, Text = outcome.Text });
+            thread.EndReply();
+        }
+    }
 }

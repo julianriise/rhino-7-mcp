@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Eto.Forms;
 using Newtonsoft.Json.Linq;
@@ -24,7 +26,6 @@ namespace RhinoMCPPlugin.Forsk
         bool _helpOpen;
         long _prefillCount;
         long _turn;
-        readonly IReportDelivery _reports = ForskReports.FileDelivery();
 
         static void Post(Action action)
         {
@@ -360,7 +361,7 @@ namespace RhinoMCPPlugin.Forsk
                     ImportJob(thread, new JObject { ["pdf_path"] = card["data"]?["pdf_path"], ["page"] = page }, pill.Label);
                     break;
                 case "support.report":
-                    SaveReport(card, values, doc);
+                    SendReport(thread, card, values, doc);
                     break;
             }
             Models.Persist(thread);
@@ -521,26 +522,20 @@ namespace RhinoMCPPlugin.Forsk
             return "";
         }
 
-        /// <summary>The report card, sent. The debug report rides along when the box is ticked.</summary>
-        void SaveReport(JObject card, JObject values, RhinoDoc doc)
+        /// <summary>
+        /// Posts the report off the UI thread. The step line says Sending, then
+        /// the receipt carries the FS- reference. The debug report rides along
+        /// only when the box is ticked.
+        /// </summary>
+        void SendReport(DocThread thread, JObject card, JObject values, RhinoDoc doc)
         {
-            var fields = new JObject();
-            foreach (var field in card["fields"] as JArray ?? new JArray())
-            {
-                var key = field["key"]?.ToString();
-                if (string.IsNullOrEmpty(key)) continue;
-                var typed = values != null && values[key] != null ? values[key].ToString() : field["value"]?.ToString() ?? "";
-                field["value"] = typed;
-                if (key == "attach") continue;
-                fields[key] = typed;
-            }
-            // The card does not show the file. The report still names it.
-            if (card["data"]?["file"] != null) fields["file"] = card["data"]["file"].ToString();
-            else fields["file"] = FileName(doc);
-            if (ForskSupport.EmailOk(fields["email"]?.ToString()))
-                ForskReplyEmail.Remember(ForskReplyEmail.DefaultPath, fields["email"].ToString());
+            KeepTyped(card, values);
+            var type = Typed(card, "type");
+            var message = Typed(card, "description");
+            var email = Typed(card, "email");
+            if (ForskSupport.EmailOk(email)) ForskReplyEmail.Remember(ForskReplyEmail.DefaultPath, email);
             string debug = null;
-            var attach = values != null && values["attach"] != null ? values["attach"].ToString() : "1";
+            var attach = values != null && values["attach"] != null ? values["attach"].ToString() : Typed(card, "attach");
             if (ForskReports.WantsDebug(attach))
             {
                 try { debug = BuildDebugReport(doc); }
@@ -549,8 +544,69 @@ namespace RhinoMCPPlugin.Forsk
                     debug = ForskDebug.Redact("Debug report failed.\n" + e.GetType().Name + ": " + e.Message + "\n");
                 }
             }
-            _reports.Deliver(ForskReports.Record(fields, debug, DateTimeOffset.UtcNow));
-            card["answer"] = ForskText.Get("support.saved");
+            var sample = string.IsNullOrWhiteSpace(message) ? thread.LastUserText() : message;
+            var language = ForskPrefill.Language(sample);
+            var plugin = PluginVersion();
+            var rhino = RhinoVersion();
+            var os = OsDescription();
+            var sending = ForskSupportChat.Sending(language);
+            card["answer"] = sending;
+            card.Remove("note");
+            thread.Busy = sending;
+            thread.TurnMark = "Support";
+            _busy = true;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var outcome = PostReport(type, message, email, plugin, rhino, os, debug, language);
+                Post(() =>
+                {
+                    ForskSupportChat.Show(thread, outcome);
+                    card["answer"] = ForskSupportChat.CardAnswer(outcome, language);
+                    _busy = false;
+                    try { Log("support: " + (outcome.Accepted ? outcome.Id : outcome.Code)); }
+                    catch (Exception) { }
+                    Models.Persist(thread);
+                    Render();
+                });
+            });
+        }
+
+        /// <summary>The POST, and the outbox when the server does not take it. Not the UI thread.</summary>
+        static ForskSupport.Outcome PostReport(string type, string message, string email, string plugin, string rhino, string os, string debug, string language)
+        {
+            try
+            {
+                var built = ForskSupport.Build(type, message, email, plugin, rhino, os, debug);
+                if (!built.Ok)
+                {
+                    var status = built.Error == "payload_too_large" || built.Error == "debug_report_too_large" ? 413 : 400;
+                    return ForskSupport.Parse(status, "{\"ok\":false,\"error\":\"" + (built.Error ?? "rejected") + "\"}", null, language, DateTimeOffset.UtcNow);
+                }
+                return ForskSupportSend.Deliver(built.Json, ForskSupportHttp.Shared, ForskOutbox.Shared, DateTimeOffset.UtcNow, language);
+            }
+            catch (Exception)
+            {
+                return ForskSupport.Network(language);
+            }
+        }
+
+        static string PluginVersion()
+        {
+            var info = typeof(ForskSupport).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info)) return info;
+            return typeof(ForskSupport).Assembly.GetName().Version?.ToString() ?? "";
+        }
+
+        static string RhinoVersion()
+        {
+            try { return RhinoApp.Version == null ? "" : RhinoApp.Version.ToString(); }
+            catch (Exception) { return ""; }
+        }
+
+        static string OsDescription()
+        {
+            try { return RuntimeInformation.OSDescription ?? ""; }
+            catch (Exception) { return ""; }
         }
 
         /// <summary>A tool's receipt, and under it the wall review when more than the wall changed.</summary>
