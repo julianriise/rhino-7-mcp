@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_sheets.json",
+  "title": "ExportSheets Command",
+  "description": "Lay the sheet set out as Print does, then write one DWG or DXF per page into an absolute folder: paper millimetres at 1:1, named export layers, lineweights. No save dialog.",
+  "type": "object",
+  "properties": {
+    "folder": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute folder. It is made when missing. Files are named <project> <number> <title>.dwg."
+    },
+    "format": {
+      "type": "string",
+      "enum": ["dwg", "dxf"],
+      "default": "dwg",
+      "description": "dwg (default) or dxf."
+    }
+  },
+  "required": ["folder"],
+  "additionalProperties": false
+}

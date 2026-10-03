@@ -77,6 +77,7 @@
             "set_project_meta",
             "layout_pack",
             "export_pdf",
+            "export_sheets",
             "clear_layouts",
             "section_add",
             "section_pick",

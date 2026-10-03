@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_sheets_result.json",
+  "title": "ExportSheetsResult",
+  "description": "The files written, one per page in set order, and which writer wrote them (headless document, or the active document with the flat sheet selected). A refuse has count 0 and a message.",
+  "type": "object",
+  "properties": {
+    "folder": { "type": "string" },
+    "format": { "type": "string", "enum": ["dwg", "dxf"] },
+    "count": { "type": "integer", "minimum": 0 },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "writer": { "type": "string", "enum": ["", "headless", "active_doc"] },
+    "misc": { "type": "integer", "minimum": 0, "description": "Roles that had no export layer and went to A-ANNO-MISC." },
+    "misc_roles": { "type": "array", "items": { "type": "string" } },
+    "message": { "type": "string" }
+  },
+  "required": ["folder", "format", "count", "files", "writer", "misc", "message"]
+}

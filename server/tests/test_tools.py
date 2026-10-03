@@ -4332,3 +4332,48 @@ class TestPrintProfileTool:
         assert 'new JArray("default", "grey", "hatch")' in catalog
         commands = (root / "plugin" / "Functions" / "PrintProfileCommands.cs").read_text()
         assert '[McpCommand("print_profile")]' in commands
+
+
+class TestExportSheetsTool:
+    @patch("rhinomcp.tools.export_sheets.get_rhino_connection")
+    def test_sends_folder_and_format(self, mock_get_conn):
+        from rhinomcp.tools.export_sheets import export_sheets
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "folder": "/tmp/g/Garage DXF", "format": "dxf", "count": 2,
+            "files": ["Garage A-20-001 Plan.dxf", "Garage A-00-001 Front sheet.dxf"],
+            "writer": "headless", "misc": 0,
+            "message": "Exported 2 sheets as DXF to /tmp/g/Garage DXF.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = export_sheets(ctx=None, folder="/tmp/g/Garage DXF", format="DXF")
+
+        mock_conn.send_command.assert_called_once_with(
+            "export_sheets", {"folder": "/tmp/g/Garage DXF", "format": "dxf"}
+        )
+        assert result["success"] is True
+        assert result["count"] == 2
+
+    @patch("rhinomcp.tools.export_sheets.get_rhino_connection")
+    def test_refuses_before_calling_rhino(self, mock_get_conn):
+        from rhinomcp.tools.export_sheets import export_sheets
+
+        assert export_sheets(ctx=None, folder="relative/dir") == {
+            "success": False, "message": "export_sheets needs an absolute folder."}
+        assert export_sheets(ctx=None, folder="/tmp/x", format="pdf") == {
+            "success": False, "message": "format is dwg or dxf."}
+        mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.export_sheets.get_rhino_connection")
+    def test_a_failed_write_is_not_success(self, mock_get_conn):
+        from rhinomcp.tools.export_sheets import export_sheets
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "folder": "/tmp/g", "format": "dwg", "count": 1, "files": ["a.dwg"], "writer": "headless",
+            "misc": 0, "message": "Sheet export failed at b.dwg. 1 written.",
+        }
+        mock_get_conn.return_value = mock_conn
+        assert export_sheets(ctx=None, folder="/tmp/g")["success"] is False

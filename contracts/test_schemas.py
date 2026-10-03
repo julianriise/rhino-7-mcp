@@ -365,6 +365,8 @@ def test_new_commands():
         }),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf"}),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "layout": "plan"}),
+        ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DWG"}),
+        ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DXF", "format": "dxf"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -930,6 +932,22 @@ def test_responses():
     if not validate("responses/section_result.json", {"removed": ["A"], "sections": [], "message": "Removed section A."}):
         all_passed = False
 
+    print("  export_sheets_result:")
+    sheets_result = {
+        "folder": "/tmp/forsk-export-garage/Garage DWG", "format": "dwg", "count": 2,
+        "files": ["Garage A-20-001 Plan.dwg", "Garage A-00-001 Front sheet.dwg"],
+        "writer": "headless", "misc": 0, "misc_roles": [],
+        "message": "Exported 2 sheets as DWG to /tmp/forsk-export-garage/Garage DWG.",
+    }
+    if not validate("responses/export_sheets_result.json", sheets_result):
+        all_passed = False
+    sheets_refuse = {
+        "folder": "", "format": "dwg", "count": 0, "files": [], "writer": "", "misc": 0,
+        "message": "export_sheets needs an absolute folder.",
+    }
+    if not validate("responses/export_sheets_result.json", sheets_refuse):
+        all_passed = False
+
     print("  export_pdf_result:")
     pdf_result = {
         "path": "/tmp/forsk-plan.pdf",
@@ -1378,6 +1396,9 @@ def test_invalid_examples():
         ("commands/export_pdf.json", {}, "export_pdf missing path"),
         ("commands/export_pdf.json", {"path": ""}, "export_pdf empty path"),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),
+        ("commands/export_sheets.json", {}, "export_sheets missing folder"),
+        ("commands/export_sheets.json", {"folder": "/tmp/x", "format": "pdf"}, "export_sheets format not dwg or dxf"),
+        ("commands/export_sheets.json", {"folder": "/tmp/x", "path": "/tmp/x.dwg"}, "export_sheets unknown field"),
         ("commands/clear_layouts.json", {"views": ["section"]}, "clear_layouts unknown view"),
         ("commands/clear_layouts.json", {"dry_run": "yes"}, "clear_layouts dry_run not bool"),
         ("commands/clear_layouts.json", {"bogus": 1}, "clear_layouts unknown field"),

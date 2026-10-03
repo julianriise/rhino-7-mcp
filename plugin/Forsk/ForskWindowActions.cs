@@ -172,6 +172,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.print":
                     Print(thread, null);
                     return;
+                case "export.dwg":
+                    Export(thread, null, "dwg");
+                    return;
                 case "file.draw":
                     Draw(thread, action, doc);
                     return;
@@ -355,7 +358,13 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.pages":
                     var pagesArgs = ForskCards.PagesArgs(pill.Id, values, order);
-                    if (pill.Id == "print")
+                    if (pill.Id == "export")
+                        Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
+                        {
+                            sink.Tool("print_pages", pagesArgs);
+                            sink.Line(ForskPrint.Export(sink.Step, this, "dwg"));
+                        }, userText: pill.Label);
+                    else if (pill.Id == "print")
                         Job(thread, kind, ForskText.Label(kind), sink =>
                         {
                             sink.Tool("print_pages", pagesArgs);
@@ -437,6 +446,13 @@ namespace RhinoMCPPlugin.Forsk
             if (Sections.IsPickPhrase(text))
             {
                 SectionPick(thread, text, TurnMark(thread, text));
+                return;
+            }
+            // Before Print: "export dwg" names no print, and "eksporter dxf" is no DXF import.
+            var exportFormat = ForskIntentRouter.ExportFormat(text);
+            if (exportFormat != null)
+            {
+                Export(thread, text, exportFormat, TurnMark(thread, text));
                 return;
             }
             if (ForskPrint.IsRequest(text))
@@ -839,6 +855,13 @@ namespace RhinoMCPPlugin.Forsk
                 var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, view);
                 sink.Line(line);
             }, userText: userText, mark: mark);
+        }
+
+        /// <summary>R3: the set as files, one per sheet. The folder dialog is parented to this window.</summary>
+        void Export(DocThread thread, string userText, string format, string mark = null)
+        {
+            Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
+                sink.Line(ForskPrint.Export(sink.Step, this, format)), userText: userText, mark: mark);
         }
 
         /// <summary>

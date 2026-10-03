@@ -80,6 +80,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool ListenerUp = true;
         /// <summary>The last Forsk record is still the newest thing in this document (LastActionTracker).</summary>
         public bool UndoNewest;
+        /// <summary>The last action was a whole-set Print, on this document, and nothing changed since.</summary>
+        public bool JustPrinted;
     }
 
     /// <summary>The classifier's answer. One pure read of the rows; no RhinoCommon.</summary>
@@ -133,6 +135,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool KeyPresent;
         public bool ListenerUp = true;
         public bool UndoNewest;
+        /// <summary>A Print was the last action: the bar offers Export DWG next.</summary>
+        public bool JustPrinted;
         public bool Millimetres = true;
     }
 
@@ -161,6 +165,7 @@ namespace RhinoMCPPlugin.Forsk
                 KeyPresent = input.KeyPresent,
                 ListenerUp = input.ListenerUp,
                 UndoNewest = input.UndoNewest,
+                JustPrinted = input.JustPrinted,
                 Millimetres = input.Millimetres
             };
             var wallsRead = true;

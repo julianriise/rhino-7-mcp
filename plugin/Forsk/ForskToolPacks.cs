@@ -72,6 +72,7 @@ namespace RhinoMCPPlugin.Forsk
             "set_project_meta",
             "layout_pack",
             "export_pdf",
+            "export_sheets",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -85,6 +86,7 @@ namespace RhinoMCPPlugin.Forsk
             "set_project_meta",
             "layout_pack",
             "export_pdf",
+            "export_sheets",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -592,6 +594,13 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["path"] = Str("Omit in the panel. The save dialog sets an absolute .pdf path."),
                         ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page, in set order.")
+                    }),
+                Fn("export_sheets",
+                    "Write the sheet set as DWG or DXF, one file per sheet, in paper mm at 1:1 with named layers and lineweights. It lays the set out first, as Print does. In this panel, omit folder: a folder dialog supplies it. Use for export dwg, send dwg, eksporter dxf.",
+                    new JObject
+                    {
+                        ["folder"] = Str("Omit in the panel. The folder dialog sets it."),
+                        ["format"] = new JObject { ["type"] = "string", ["enum"] = new JArray("dwg", "dxf"), ["description"] = "dwg (default) or dxf." }
                     }),
                 Fn("clear_layouts",
                     "Delete Forsk Layout pages, their title blocks, and the greyscale S-DRAW curves. Does not delete clay, X-EXIST, or the S-PLAN / S-ELEV sheet cache. clear_generated also leaves layouts.",

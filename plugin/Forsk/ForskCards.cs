@@ -175,7 +175,8 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     new CardPill("print", ForskText.Get("word.print")),
                     new CardPill("save", ForskText.Get("word.save")),
-                    new CardPill("reset", ForskText.Get("word.reset"))
+                    new CardPill("reset", ForskText.Get("word.reset")),
+                    new CardPill("export", ForskText.Label("export.dwg"))
                 }
             };
             card.Fields.Add(new CardField

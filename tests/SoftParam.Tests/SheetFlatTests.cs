@@ -1,3 +1,4 @@
+using RhinoMCPPlugin.Forsk;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 
@@ -107,5 +108,92 @@ public class SheetFlatTests
         Assert.Equal("Hytte-Lia A-00-002 Door list.dwg", SheetFlat.FileName("Hytte/Lia", "A-00-002", "Door list", "dwg"));
         Assert.Equal("Holmen DWG", SheetFlat.FolderName(" Holmen ", "dwg"));
         Assert.Equal("Forsk DXF", SheetFlat.FolderName(null, "dxf"));
+    }
+}
+
+/// <summary>R3: what the export does with each sheet piece, and how it is weighted and set.</summary>
+public class SheetFlatPieceTests
+{
+    [Fact]
+    public void ARibbon_IsDrawnOnceAsItsStroke_AndOtherHatchesStayHatches()
+    {
+        // The first kept hatch of a ribbon carries the stroke; the rest of that ribbon go.
+        Assert.Equal(SheetFlat.Draw.Stroke, SheetFlat.HowToDraw(hatch: true, hasPen: true, hasStroke: true));
+        Assert.Equal(SheetFlat.Draw.Skip, SheetFlat.HowToDraw(hatch: true, hasPen: true, hasStroke: false));
+        // Poché, section fills and the scale bar's blocks have no pen: they are fills.
+        Assert.Equal(SheetFlat.Draw.AsIs, SheetFlat.HowToDraw(hatch: true, hasPen: false, hasStroke: false));
+        Assert.Equal(SheetFlat.Draw.AsIs, SheetFlat.HowToDraw(hatch: false, hasPen: false, hasStroke: false));
+    }
+
+    [Fact]
+    public void AStroke_TakesItsPen_ACurveItsPlotWeight_ElseTheLayer()
+    {
+        Assert.Equal(0.50, SheetFlat.Weight(SheetFlat.Draw.Stroke, 0.48, false, 0).Value, 3);
+        Assert.Equal(0.35, SheetFlat.Weight(SheetFlat.Draw.AsIs, 0, true, 0.36).Value, 3);
+        Assert.Null(SheetFlat.Weight(SheetFlat.Draw.AsIs, 0, false, 0.36));
+        Assert.Null(SheetFlat.Weight(SheetFlat.Draw.AsIs, 0, true, 0));
+        Assert.Null(SheetFlat.Weight(SheetFlat.Draw.Stroke, 0, false, 0));
+    }
+
+    [Theory]
+    [InlineData("Left", "Bottom", "BottomLeft")]
+    [InlineData("Center", "Middle", "MiddleCenter")]
+    [InlineData("Right", "Top", "TopRight")]
+    [InlineData("Center", "BottomOfTop", "TopCenter")]
+    [InlineData("Auto", "MiddleOfBottom", "BottomLeft")]
+    [InlineData(null, null, "BottomLeft")]
+    public void TextAlignment_MapsToOneJustification(string horizontal, string vertical, string expected)
+    {
+        Assert.Equal(expected, SheetFlat.Justification(horizontal, vertical));
+    }
+
+    /// <summary>Plan text 125 mm high in the model is 2.5 mm on paper at 1:50; page text keeps its size.</summary>
+    [Fact]
+    public void TextHeight_LandsAtItsPaperSize()
+    {
+        var plan = new SheetFlat.Affine { A = 1.0 / 50, E = 1.0 / 50 };
+        Assert.Equal(2.5, SheetFlat.TextMm(125, plan), 9);
+        Assert.Equal(3.5, SheetFlat.TextMm(3.5, SheetFlat.Affine.Identity), 9);
+        Assert.Equal(0, SheetFlat.TextMm(-1, plan), 9);
+    }
+}
+
+/// <summary>R3: the chat words for an export, the receipt, and the Choose sheets pill.</summary>
+public class SheetExportWindowTests
+{
+    [Theory]
+    [InlineData("export dwg", "dwg")]
+    [InlineData("Export DWG", "dwg")]
+    [InlineData("send dwg to the engineer", "dwg")]
+    [InlineData("export the sheets as dxf", "dxf")]
+    [InlineData("eksporter dwg", "dwg")]
+    [InlineData("eksporter dxf", "dxf")]
+    [InlineData("import plan.dxf", null)]
+    [InlineData("open the dwg", null)]
+    [InlineData("print", null)]
+    [InlineData("what is a dwg?", null)]
+    public void TheChatWords_PickTheFormat(string text, string format)
+    {
+        Assert.Equal(format, ForskIntentRouter.ExportFormat(text));
+    }
+
+    [Fact]
+    public void ImportingADxf_StillRoutesToTheDxfImport()
+    {
+        Assert.Equal(ForskIntent.Dxf, ForskIntentRouter.Classify("import plan.dxf"));
+    }
+
+    [Fact]
+    public void TheReceipt_IsOneLine_WithTheFolderNotAPath()
+    {
+        Assert.Equal("✓ Exported 7 sheets as DWG · Holmen DWG/", ForskReceipt.ExportLine(7, "dwg", "/Users/jr/Desktop/Holmen DWG"));
+        Assert.Equal("✓ Exported 1 sheet as DXF · Forsk DXF/", ForskReceipt.ExportLine(1, "dxf", "/tmp/Forsk DXF/"));
+    }
+
+    [Fact]
+    public void ChooseSheets_OffersExportDwg()
+    {
+        var card = ForskCards.Pages(Docs.Facts("house"));
+        Assert.Contains(card.Pills, p => p.Id == "export" && p.Label == "Export DWG");
     }
 }

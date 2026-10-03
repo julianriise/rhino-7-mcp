@@ -89,6 +89,15 @@ namespace RhinoMCPPlugin.Forsk
             return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + (blank ?? "");
         }
 
+        /// <summary>"✓ Exported 7 sheets as DWG · Holmen DWG/": the folder's name, never its path.</summary>
+        public static string ExportLine(int sheets, string format, string folder)
+        {
+            var name = System.IO.Path.GetFileName((folder ?? "").TrimEnd('/', '\\'));
+            return Done + "Exported " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + (sheets == 1 ? " sheet" : " sheets") + " as " + (format ?? "dwg").Trim().ToUpperInvariant()
+                + " · " + name + "/";
+        }
+
         /// <summary>A line that starts with this is a finished receipt as it stands.</summary>
         public const string Done = "✓ ";
 

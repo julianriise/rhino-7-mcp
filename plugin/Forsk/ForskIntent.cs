@@ -283,6 +283,25 @@ namespace RhinoMCPPlugin.Forsk
                 || ((HasWord(t, "put") || HasWord(t, "move")) && (t.Contains("before the plan") || t.Contains("after the plan")));
         }
 
+        /// <summary>
+        /// The sheet set asked for as files: "export dwg", "send dwg", "eksporter dxf".
+        /// dwg, dxf, or null. Importing or opening a DXF is the import's, and a question is Support's.
+        /// </summary>
+        public static string ExportFormat(string text)
+        {
+            var t = Normalize(text);
+            if (t.Length == 0 || t.Length > 160 || Question(t)) return null;
+            var dwg = HasWord(t, "dwg");
+            var dxf = HasWord(t, "dxf");
+            if (!dwg && !dxf) return null;
+            if (HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere")
+                || HasWord(t, "open") || HasWord(t, "åpne") || t.Contains("bring in")) return null;
+            var verb = HasWord(t, "export") || HasWord(t, "eksporter") || HasWord(t, "eksportere")
+                || HasWord(t, "send") || HasWord(t, "save") || HasWord(t, "lagre");
+            if (!verb) return null;
+            return dwg ? "dwg" : "dxf";
+        }
+
         /// <summary>A DXF asked for: import plan.dxf, import a DXF. It comes before the plan image import, which "plan" would match.</summary>
         static bool IsDxf(string t)
         {

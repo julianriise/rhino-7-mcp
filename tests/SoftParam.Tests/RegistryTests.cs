@@ -241,7 +241,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 
@@ -269,5 +269,24 @@ public class RegistryTests
             Assert.Equal(facts.HasWalls, ForskRegistry.Card(facts).Actions.Any(a => a.Id == "takeoff"));
         }
         Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("print.pages"));
+    }
+
+    /// <summary>R3: Export DWG is on the card with walls, and the bar's next step right after a Print.</summary>
+    [Fact]
+    public void ExportDwg_IsOnTheCard_AndFirstOnTheBarAfterAPrint()
+    {
+        var house = Docs.Facts("house");
+        Assert.Contains(ForskRegistry.Card(house).Actions, a => a.Id == "export.dwg");
+        Assert.DoesNotContain(ForskRegistry.Bar(house).Context, a => a.Id == "export.dwg");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("empty")).Actions, a => a.Id == "export.dwg");
+
+        var printed = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.JustPrinted = true));
+        Assert.True(printed.JustPrinted);
+        Assert.Equal("export.dwg", ForskRegistry.Bar(printed).Context[0].Id);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("export.dwg"));
+
+        // A pick after the Print is about the pick.
+        var picked = FileClassifier.Read(Docs.Of(Docs.House(wallSelected: true)).With(d => d.JustPrinted = true));
+        Assert.DoesNotContain(ForskRegistry.Bar(picked).Context, a => a.Id == "export.dwg");
     }
 }

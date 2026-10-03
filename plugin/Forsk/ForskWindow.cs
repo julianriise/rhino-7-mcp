@@ -185,6 +185,7 @@ namespace RhinoMCPPlugin.Forsk
             input.KeyPresent = _keyPresent;
             input.ListenerUp = _listenerUp;
             input.UndoNewest = Tracker.UndoNewest(doc.RuntimeSerialNumber);
+            input.JustPrinted = Tracker.Was("file.print", doc.RuntimeSerialNumber);
             return FileClassifier.Read(input);
         }
 

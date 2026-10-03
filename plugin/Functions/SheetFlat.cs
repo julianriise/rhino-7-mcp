@@ -99,6 +99,53 @@ public static class SheetFlat
         return best;
     }
 
+    /// <summary>What the export does with one sheet piece.</summary>
+    public enum Draw
+    {
+        /// <summary>Copied as it is: a curve, a fill, a text.</summary>
+        AsIs,
+        /// <summary>A ribbon's first hatch: its centreline is drawn instead, at the pen.</summary>
+        Stroke,
+        /// <summary>The rest of a ribbon: its stroke was drawn once already.</summary>
+        Skip
+    }
+
+    /// <summary>A hatch with a pen is a stroke ribbon. Only the one carrying the stroke is drawn, as lines.</summary>
+    public static Draw HowToDraw(bool hatch, bool hasPen, bool hasStroke)
+    {
+        if (!hatch || !hasPen) return Draw.AsIs;
+        return hasStroke ? Draw.Stroke : Draw.Skip;
+    }
+
+    /// <summary>
+    /// The piece's own lineweight in mm, or null to print at its layer's.
+    /// A stroke prints at its pen; a curve at the plot weight it was given.
+    /// </summary>
+    public static double? Weight(Draw how, double penMm, bool fromObject, double plotWeightMm)
+    {
+        if (how == Draw.Stroke) return penMm > 0 ? Snap(penMm) : (double?)null;
+        if (fromObject && plotWeightMm > 0) return Snap(plotWeightMm);
+        return null;
+    }
+
+    /// <summary>Rhino's two text alignments as one justification name ("BottomLeft", "MiddleCenter", "TopRight").</summary>
+    public static string Justification(string horizontal, string vertical)
+    {
+        var v = vertical ?? "";
+        // BottomOfTop and MiddleOfTop sit on the top line; MiddleOfBottom on the bottom one.
+        var row = v.StartsWith("Top", StringComparison.Ordinal) || v.EndsWith("OfTop", StringComparison.Ordinal) ? "Top"
+            : v == "Middle" ? "Middle"
+            : "Bottom";
+        var column = horizontal == "Center" ? "Center" : horizontal == "Right" ? "Right" : "Left";
+        return row + column;
+    }
+
+    /// <summary>A text's height on paper: the drawing's styles are 1:1, so the map's scale is all there is.</summary>
+    public static double TextMm(double height, Affine map)
+    {
+        return height > 0 ? height * map.Scale : 0;
+    }
+
     /// <summary>A straight piece (x0 y0 x1 y1) or a three-point arc (start, a point on it, end).</summary>
     public sealed class Seg
     {
@@ -159,6 +206,9 @@ public static class SheetFlat
     public struct Affine
     {
         public double A, B, C, D, E, F;
+
+        /// <summary>Page objects: already paper millimetres.</summary>
+        public static Affine Identity => new Affine { A = 1, E = 1 };
 
         public void Apply(double x, double y, out double ox, out double oy)
         {

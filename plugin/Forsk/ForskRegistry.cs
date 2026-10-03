@@ -179,6 +179,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("print.one", Runs.Card, "group.print", f => f.HasWalls),
             new ForskAction("print.pages", Runs.Card, "group.print", f => f.HasWalls),
+            // R3: the set as DWG, one file per sheet. Also a pill on Choose sheets, and the bar's next step after a Print.
+            new ForskAction("export.dwg", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
             new ForskAction("takeoff", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),
@@ -249,6 +251,7 @@ namespace RhinoMCPPlugin.Forsk
 
         static IEnumerable<ForskAction> Candidates(FileFacts f, ForskAction slot1)
         {
+            if (f.JustPrinted && f.Picked == Picked.None) yield return Find("export.dwg");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");
             if (f.Picked == Picked.Wall) yield return Find("wall.move");

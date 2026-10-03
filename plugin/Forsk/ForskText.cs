@@ -119,6 +119,7 @@ namespace RhinoMCPPlugin.Forsk
             ["bridge.start"] = "Start bridge",
             ["print.one"] = "Print one sheet",
             ["print.pages"] = "Choose sheets",
+            ["export.dwg"] = "Export DWG",
             ["takeoff"] = "Takeoff",
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",

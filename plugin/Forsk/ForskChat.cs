@@ -790,6 +790,15 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 callArgs = args == null ? new JObject() : (JObject)args.DeepClone();
                 callArgs["path"] = path;
             }
+            if (name == "export_sheets")
+            {
+                // The model names no folder: the user picks one, and the files go in "<project> DWG" inside it.
+                var format = args?["format"]?.ToString() == "dxf" ? "dxf" : "dwg";
+                var line = ForskPrint.Export(null, parent, format);
+                return line.StartsWith(ForskReceipt.Done, StringComparison.Ordinal)
+                    ? new JObject { ["status"] = "success", ["result"] = new JObject { ["message"] = line } }
+                    : ForskTools.Fail(line);
+            }
             // No DXF path to open as it stands: the user picks the file.
             if (name == ForskDxf.Tool && ForskDxf.NeedsPick(args?["path"]?.ToString()))
             {
@@ -1262,6 +1271,57 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
             var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
             return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank);
+        }
+
+        /// <summary>
+        /// R3: the set as DWG or DXF. A folder dialog parented to the window, then
+        /// export_sheets into "<project> DWG" inside it: it lays the set out as
+        /// Print does and writes one file per sheet. One line back.
+        /// </summary>
+        public static string Export(Action<string> progress, Window parent, string format)
+        {
+            var label = format == "dxf" ? "Export DXF" : "Export DWG";
+            var units = UnitsProblem();
+            if (units != null)
+                return label + " · error · " + units;
+
+            Report(progress, "Choose a folder for the files.");
+            var picked = PickFolderFromBackground(parent, label);
+            if (string.IsNullOrEmpty(picked))
+                return label + " · cancelled";
+
+            var folder = Path.Combine(picked, SheetFlat.FolderName(StoredMeta("project"), format));
+            Report(progress, "Laying out and writing the sheets.");
+            var envelope = Call("export_sheets", new JObject { ["folder"] = folder, ["format"] = format });
+            var result = envelope?["result"] as JObject;
+            var count = result?["count"]?.Value<int>() ?? 0;
+            var message = result?["message"]?.ToString() ?? envelope?["message"]?.ToString() ?? "";
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)
+                || count == 0 || !message.StartsWith("Exported", StringComparison.Ordinal))
+                return label + " · error · " + ForskTools.Clip(string.IsNullOrWhiteSpace(message) ? "Export failed." : message);
+            return ForskReceipt.ExportLine(count, format, result?["folder"]?.ToString() ?? folder);
+        }
+
+        static string PickFolderFromBackground(Window parent, string title)
+        {
+            string path = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try
+                    {
+                        var dialog = new SelectFolderDialog { Title = title };
+                        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                        if (!string.IsNullOrEmpty(desktop) && Directory.Exists(desktop)) dialog.Directory = desktop;
+                        if (dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) == DialogResult.Ok)
+                            path = dialog.Directory;
+                    }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            return string.IsNullOrWhiteSpace(path) ? null : path;
         }
 
         static void Report(Action<string> progress, string status)
