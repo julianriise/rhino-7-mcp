@@ -716,7 +716,8 @@ public static class Sections
     /// level from LevelGapMm past the building's right edge, a triangle with
     /// its tip on the line, the value above the line. ys maps a model height
     /// to drawing Y; width measures a value's paper width. A value that
-    /// would touch the one below steps right past it.
+    /// would touch the one below steps right past it. Two values on the same
+    /// level (1. etg and terreng both at ±0) stack, the next above the first.
     /// </summary>
     public static List<LevelMark> PlaceLevels(
         IList<Level> levels, Func<double, double> ys, double right, int scale, Func<string, double> width)
@@ -733,13 +734,18 @@ public static class Sections
             var y = ys(level.Z);
             var w = Math.Max(width?.Invoke(level.Text) ?? 0, 0.6 * ValueMm * level.Text.Length) * scale;
             var column = x0 + tri + gap;
+            var row = y + gap;
             Box box;
             while (true)
             {
-                box = new Box(column, y + gap, column + w, y + gap + text);
+                box = new Box(column, row, column + w, row + text);
                 var hit = placed.Where(p => Schedules.Overlaps(box, p, 0.4 * scale)).ToList();
                 if (hit.Count == 0) break;
-                column = hit.Max(p => p.MaxX) + 2 * gap;
+                // Same level line: lift the text. A near level keeps the sideways step.
+                if (hit.Any(p => Math.Abs(p.MinY - row) <= 0.01))
+                    row = hit.Max(p => p.MaxY) + gap;
+                else
+                    column = hit.Max(p => p.MaxX) + 2 * gap;
             }
             placed.Add(box);
             var tipX = x0 + 0.5 * tri;

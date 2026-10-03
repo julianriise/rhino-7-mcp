@@ -205,6 +205,22 @@ public class SectionsTests
     }
 
     [Fact]
+    public void Floor_and_ground_at_zero_stack()
+    {
+        // A garage with no slab has both marks at 0. Side by side they read as one line.
+        var levels = Sections.Levels(new[] { 0.0 }, 0.0, 3000, 3000);
+        var marks = Sections.PlaceLevels(levels, z => z, 8000, 100, text => 0.6 * Sections.ValueMm * text.Length);
+        var zero = marks.Where(m => m.Level.Z == 0).ToList();
+        Assert.Equal(2, zero.Count);
+        Assert.Equal(new[] { "floor", "ground" }, zero.Select(m => m.Level.Kind));
+        Assert.Equal(zero[0].TextBox.MinX, zero[1].TextBox.MinX, 6);
+        Assert.True(zero[1].TextBox.MinY >= zero[0].TextBox.MaxY);
+        Assert.False(Schedules.Overlaps(zero[0].TextBox, zero[1].TextBox, 0));
+        Assert.All(zero, m => Assert.Equal(0, m.Y, 6));
+        Assert.All(zero, m => Assert.Equal(m.Y, m.LineA.Y, 6));
+    }
+
+    [Fact]
     public void Sections_round_trip_through_the_document_string()
     {
         var defs = new List<Sections.Def>

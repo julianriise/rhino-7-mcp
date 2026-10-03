@@ -952,7 +952,8 @@ def main() -> int:
                 failures.append(f"{label} scale={page.get('scale')}")
             if page.get("symbols") != openings:
                 failures.append(f"{label} symbols={page.get('symbols')} openings={openings}")
-            if page.get("fills") != 61:
+            # The window added back is cut on the centreline, so the plan cut splits that wall into two poché hatches.
+            if page.get("fills") != 62:
                 failures.append(f"{label} fills={page.get('fills')}")
             if page.get("symbol_arcs") != int(baked.get("door_cuts") or 0):
                 failures.append(
