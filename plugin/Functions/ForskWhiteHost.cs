@@ -34,6 +34,7 @@ internal static class ForskWhiteHost
     {
         if (_hooked) return;
         _hooked = true;
+        ForskPlanCutHost.Start();
         RhinoView.Create += ViewCreated;
         RhinoDoc.NewDocument += DocCreated;
         RhinoDoc.EndOpenDocumentInitialViewUpdate += DocOpened;
@@ -50,6 +51,7 @@ internal static class ForskWhiteHost
         RhinoDoc.NewDocument -= DocCreated;
         RhinoDoc.EndOpenDocumentInitialViewUpdate -= DocOpened;
         Command.EndCommand -= CommandEnded;
+        ForskPlanCutHost.Stop();
     }
 
     internal static bool Enabled()
@@ -79,19 +81,22 @@ internal static class ForskWhiteHost
         {
             var on = Enabled();
             var target = on ? Ensure() : Shaded();
-            if (target == null) return;
-            var changed = false;
-            foreach (var view in doc.Views)
+            if (target != null)
             {
-                if (view == null || view is RhinoPageView) continue;
-                var viewport = view.MainViewport;
-                if (viewport == null) continue;
-                var current = viewport.DisplayMode?.EnglishName;
-                if (!ForskWhite.NeedsAssign(on, current, view.GetType().Name)) continue;
-                viewport.DisplayMode = target;
-                changed = true;
+                var changed = false;
+                foreach (var view in doc.Views)
+                {
+                    if (view == null || view is RhinoPageView) continue;
+                    var viewport = view.MainViewport;
+                    if (viewport == null) continue;
+                    var current = viewport.DisplayMode?.EnglishName;
+                    if (!ForskWhite.NeedsAssign(on, current, view.GetType().Name)) continue;
+                    viewport.DisplayMode = target;
+                    changed = true;
+                }
+                if (changed) doc.Views.Redraw();
             }
-            if (changed) doc.Views.Redraw();
+            ForskPlanCutHost.Apply(doc, on);
         }
         catch (Exception ex)
         {

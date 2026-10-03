@@ -65,6 +65,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />
     <Compile Include="..\..\plugin\Functions\ForskWhite.cs" Link="ForskWhite.cs" />
     <Compile Include="..\..\plugin\Functions\ForskChrome.cs" Link="ForskChrome.cs" />
+    <Compile Include="..\..\plugin\Functions\ForskPlanCut.cs" Link="ForskPlanCut.cs" />
   </ItemGroup>
 
   <ItemGroup>
