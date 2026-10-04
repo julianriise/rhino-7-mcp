@@ -358,6 +358,8 @@ public static class PlanDims
             var chain = NewChain("user", user.Id, user.Origin, user.Dir, user.Out, result.Chains.Count);
             chain.Id = user.Id;
             chain.CrossesWalls = true;
+            // Its stops are wall faces the plan already draws: ticks mark them, a witness would lie on the face line.
+            chain.Witness = false;
             for (var i = 0; i < user.Stops.Count; i++)
                 AddStop(chain, user.Stops[i], i < user.StopIds.Count ? user.StopIds[i] : null);
             Place(chain, BothWays(user.Reach, StepMm * s), taken, walls, s, scene.Measure, false);

@@ -412,6 +412,23 @@ public class PlanDimsTests
     }
 
     [Fact]
+    public void UserChain_IsPlaced_WhenTheWallFacesItMeasuresAreDrawnLines()
+    {
+        // The plan draws each wall face as a thin line; the user chain's stops sit on them.
+        var scene = Garage(50);
+        foreach (var y in new[] { 0.0, 200.0, 3800.0, 4000.0 })
+            scene.Taken.Add(new PlanDims.Obstacle(new Box(0, y - 4, 8000, y + 4), PlanDims.Kind.Dim));
+        scene.User.Add(AcrossTheGarage());
+        var user = PlanDims.Layout(scene).Chains.Single(c => c.Kind == "user");
+
+        Assert.True(user.Placed);
+        Assert.Equal(new[] { 200, 3600, 200 }, Values(user));
+        // Ticks mark the faces; a witness would only retrace the wall's own line.
+        Assert.Single(user.Lines);
+        Assert.Equal(4, user.Ticks.Count);
+    }
+
+    [Fact]
     public void UserChain_ComesAfterTheOutsideChains_AndBeforeTheRooms()
     {
         var scene = Garage(30);
