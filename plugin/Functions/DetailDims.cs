@@ -19,7 +19,7 @@ public static class DetailDims
 
     /// <summary>
     /// A plan detail's chains. A wall: on each face, row 1 from the face's
-    /// start through each opening's jambs to its end, and row 2 the face's
+    /// start through the jambs its plan cuts to its end, and row 2 the face's
     /// length when row 1 has more than two stops; then its thickness across,
     /// at the end farther from any opening. An opening: on each face, its
     /// width from jamb to jamb, with the wall's end when that lies inside the
@@ -36,7 +36,7 @@ public static class DetailDims
             if (facts.IsWall)
             {
                 stops.Add(lo);
-                foreach (var hosted in facts.Openings)
+                foreach (var hosted in Details.PlanOpenings(facts))
                 {
                     stops.Add(hosted.U - hosted.Opening.Width / 2.0);
                     stops.Add(hosted.U + hosted.Opening.Width / 2.0);
@@ -252,9 +252,10 @@ public static class DetailDims
         if (!facts.IsWall)
             return facts.Opening.U - facts.Opening.Opening.Width / 2.0 - ThicknessInsetMm;
         Details.FaceExtent(facts, false, out var lo, out var hi);
-        if (facts.Openings.Count == 0) return hi - ThicknessInsetMm;
-        var first = facts.Openings.Min(o => o.U - o.Opening.Width / 2.0);
-        var last = facts.Openings.Max(o => o.U + o.Opening.Width / 2.0);
+        var openings = Details.PlanOpenings(facts);
+        if (openings.Count == 0) return hi - ThicknessInsetMm;
+        var first = openings.Min(o => o.U - o.Opening.Width / 2.0);
+        var last = openings.Max(o => o.U + o.Opening.Width / 2.0);
         return hi - last >= first - lo ? hi - ThicknessInsetMm : lo + ThicknessInsetMm;
     }
 

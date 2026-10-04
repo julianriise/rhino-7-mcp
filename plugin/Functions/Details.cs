@@ -507,9 +507,16 @@ public static class Details
         public double Y;
     }
 
+    /// <summary>The openings a plan detail draws and dimensions: those its cut passes through, sill below it and head above.</summary>
+    public static List<Hosted> PlanOpenings(Facts facts)
+    {
+        var cut = facts.FloorTop + ForskPlanCut.AboveFloorMm;
+        return facts.Openings.Where(h => facts.Base + h.Opening.Sill < cut && facts.Base + h.Opening.Head > cut).ToList();
+    }
+
     /// <summary>
     /// A wall plan's breaks, when its crop lo..hi (u) is longer than 1:20
-    /// allows: kept around both faces' ends and every jamb. Null when none.
+    /// allows: kept around both faces' ends and the jambs it cuts. Null when none.
     /// </summary>
     public static DetailBreaks.Plan WallBreaks(Facts facts, double lo, double hi)
     {
@@ -520,7 +527,7 @@ public static class Details
             stops.Add(U(facts, a));
             stops.Add(U(facts, b));
         }
-        foreach (var hosted in facts.Openings)
+        foreach (var hosted in PlanOpenings(facts))
         {
             stops.Add(U(facts, hosted.U - hosted.Opening.Width / 2.0));
             stops.Add(U(facts, hosted.U + hosted.Opening.Width / 2.0));
@@ -531,13 +538,23 @@ public static class Details
 
     /// <summary>
     /// Where a wall's section cuts it, as u in its plan: beside the largest
-    /// break (its u0) when the plan breaks, else the middle of its longest
-    /// stretch clear of openings.
+    /// break (its u0, else its u1 when u0 is in an opening) when the plan
+    /// breaks, else the middle of its longest stretch clear of openings.
     /// </summary>
     public static double CutU(Facts facts, DetailBreaks.Plan breaks)
     {
-        if (breaks == null || breaks.Breaks.Count == 0) return U(facts, SectionAlong(facts));
-        return breaks.Breaks.OrderByDescending(b => b.U1 - b.U0).ThenBy(b => b.U0).First().U0;
+        var clear = U(facts, SectionAlong(facts));
+        if (breaks == null || breaks.Breaks.Count == 0) return clear;
+        bool InOpening(double u) => facts.Openings.Any(h =>
+        {
+            var a = U(facts, h.U - h.Opening.Width / 2.0);
+            var b = U(facts, h.U + h.Opening.Width / 2.0);
+            return u > Math.Min(a, b) && u < Math.Max(a, b);
+        });
+        foreach (var b in breaks.Breaks.OrderByDescending(b => b.U1 - b.U0).ThenBy(b => b.U0))
+            foreach (var u in new[] { b.U0, b.U1 })
+                if (!InOpening(u)) return u;
+        return clear;
     }
 
     /// <summary>Paper below the slab and above the top a section's crop keeps, and below the floor in an elevation.</summary>

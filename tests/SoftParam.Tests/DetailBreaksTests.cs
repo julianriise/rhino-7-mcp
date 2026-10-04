@@ -86,6 +86,61 @@ public class DetailBreaksTests
         Assert.Equal(3050, Assert.Single(plan.Marks).At.X, 6);
     }
 
+    static Details.Drawing SmokeSouthPlan(out Details.Facts facts)
+    {
+        facts = DetailFixtures.Facts(DetailFixtures.SmokeGarage(), wall: "w01");
+        return Details.Frame(facts, Details.Plan);
+    }
+
+    [Fact]
+    public void TheSmokeSouthWall_BreaksPastTheHighWindow_AndStaysAt1To20()
+    {
+        // The high window is above the plan cut: its jambs are not drawn, so they keep no zone.
+        var plan = SmokeSouthPlan(out var facts);
+        Assert.Equal(new[] { "D01", "D02", "D03", "D04" }, Details.PlanOpenings(facts).Select(h => h.Opening.Mark));
+        var b = Assert.Single(plan.Breaks.Breaks);
+        Assert.Equal(4450, b.U0, 6);
+        Assert.Equal(6230, b.U1, 6);
+        Assert.Equal(7020, plan.Width, 6);
+        Assert.False(plan.Breaks.TooLong);
+        Assert.Equal(20, Details.ScaleOf(Details.Drawings(facts)));
+    }
+
+    [Fact]
+    public void TheSmokeSouthWall_DimensionsWhatItsPlanCuts()
+    {
+        var plan = SmokeSouthPlan(out var facts);
+        var outer = DetailDims.PlanChains(facts, plan).Single(c => c.Kind == "outer");
+        Assert.Equal(new[] { 750, 900, 200, 900, 200, 900, 2980, 900, 270 }, DetailDims.Values(outer));
+        Assert.Equal(new[] { false, false, false, false, false, false, true, false, false }, outer.Underline);
+    }
+
+    [Fact]
+    public void TheSmokeSouthWall_SectionCut_IsBesideTheBreak_ClearOfTheHighWindow()
+    {
+        // The break's u0 (4450) is in the high window, 4200..5400; its u1 is plain wall.
+        var plan = SmokeSouthPlan(out var facts);
+        Assert.Equal(6230, Details.CutU(facts, plan.Breaks), 6);
+        Assert.Equal(6230, Assert.Single(plan.Marks).At.X, 6);
+        var section = Details.Frame(facts, Details.Cut);
+        Assert.Equal(6230, Math.Abs(section.Depth), 6);
+    }
+
+    [Fact]
+    public void TheSmokeGarage_WallAndDoor_TakeThreeSheetsAt1To20()
+    {
+        // The broken wall plan is 7020 / 20 + 30 = 381 mm: its 80 mm section fits neither beside it (471) nor under it (82 + 10 + 242).
+        var model = DetailFixtures.SmokeGarage();
+        var wall = Details.Resolve(new Details.Record { Id = "DET01", Wall = "w01" }, model, DetailFixtures.Tol);
+        var door = Details.Resolve(new Details.Record { Id = "DET02", Opening = "o-d01" }, model, DetailFixtures.Tol);
+        var sheets = DetailSheet.Plan(DetailSheet.Items(new[] { wall, door }));
+        Assert.Equal(new[] { "detail_20_1", "detail_20_2", "detail_20_3" }, sheets.Select(s => s.Id));
+        Assert.Equal(new[] { "DET01 plan" }, sheets[0].Drawings.Select(p => p.Drawing.Facts.Record.Id + " " + p.Drawing.View));
+        Assert.Equal(new[] { "DET01 section" }, sheets[1].Drawings.Select(p => p.Drawing.Facts.Record.Id + " " + p.Drawing.View));
+        Assert.Equal(3, sheets[2].Drawings.Count);
+        Assert.Equal(381, DetailSheet.BoxWidth(sheets[0].Drawings[0].Drawing, 20), 6);
+    }
+
     [Fact]
     public void AnEndWall_DoesNotBreak()
     {

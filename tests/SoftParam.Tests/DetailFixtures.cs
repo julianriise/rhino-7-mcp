@@ -54,6 +54,32 @@ static class DetailFixtures
         return model;
     }
 
+    static IfcExport.Opening South(string id, string kind, string mark, double lo, double hi, double sill = 0, double head = 2100) => new()
+    {
+        Id = id, Host = "w01", Kind = kind, Mark = mark,
+        Centre = new Pt((lo + hi) / 2, 100), Along = new Pt(1, 0), Width = hi - lo, Sill = sill, Head = head
+    };
+
+    /// <summary>
+    /// The garage smoke's model at Print (scripts/garage_opening_smoke.py):
+    /// the south wall holds D01 750..1650, a flipped door 1850..2750, a
+    /// sliding one 2950..3850, the high window 4200..5400 (sill 1300, above
+    /// the plan cut) and a pocket door 6830..7730; a 200 roof on the walls
+    /// overhangs 500.
+    /// </summary>
+    public static IfcExport.Model SmokeGarage()
+    {
+        var model = Garage();
+        model.Openings.Clear();
+        model.Openings.Add(South("o-d01", "door", "D01", 750, 1650));
+        model.Openings.Add(South("o-d02", "door", "D02", 1850, 2750));
+        model.Openings.Add(South("o-d03", "door", "D03", 2950, 3850));
+        model.Openings.Add(South("o-w01", "window", "W01", 4200, 5400, 1300, 2100));
+        model.Openings.Add(South("o-d04", "door", "D04", 6830, 7730));
+        model.Roofs.Add(new() { Id = "roof", Rings = Box(-500, -500, 8500, 4500), Thickness = 200, Base = 3000 });
+        return model;
+    }
+
     public static Details.Facts Facts(IfcExport.Model model, string wall = null, string opening = null) =>
         Details.Resolve(new Details.Record { Id = "DET01", Wall = wall, Opening = opening }, model, Tol);
 }
