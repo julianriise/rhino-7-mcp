@@ -234,7 +234,7 @@ internal static class ForskPlanCutHost
         return map;
     }
 
-    static List<double> FloorTops(RhinoDoc doc)
+    internal static List<double> FloorTops(RhinoDoc doc)
     {
         var tops = new List<double>();
         foreach (var obj in Listed(doc))
@@ -261,7 +261,8 @@ internal static class ForskPlanCutHost
         return list;
     }
 
-    static IEnumerable<RhinoObject> Listed(RhinoDoc doc)
+    /// <summary>Every live object, hidden and locked ones too.</summary>
+    internal static IEnumerable<RhinoObject> Listed(RhinoDoc doc)
     {
         var settings = new ObjectEnumeratorSettings
         {
