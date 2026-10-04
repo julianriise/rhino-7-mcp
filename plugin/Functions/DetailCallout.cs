@@ -106,6 +106,75 @@ public static class DetailCallout
         return new Pt(run.Dir.X * u + run.Normal.X * c, run.Dir.Y * u + run.Normal.Y * c);
     }
 
+    /// <summary>Paper mm a mark's arrow reaches past its bubble.</summary>
+    public const double MarkArrowMm = 2.0;
+    /// <summary>Half the square a mark keeps clear: its bubble and the arrow past it.</summary>
+    public const double MarkHalfMm = MarkMm / 2.0 + MarkArrowMm;
+
+    /// <summary>A companion mark where it is drawn, drawing mm: the point it marks, its bubble's centre, moved off the point (then a leader runs back).</summary>
+    public sealed class PlacedMark
+    {
+        public Details.Mark Mark;
+        public Pt At;
+        public Pt Centre;
+        public bool Moved;
+    }
+
+    /// <summary>
+    /// A plan detail's marks in drawing mm (frame u through Map, then
+    /// shifted): each bubble on its point when it clears what is drawn
+    /// (taken: the dimensions as LayoutFixed laid them) and the poché, else
+    /// at the nearest clear spot inside the drawing's band that
+    /// PlanDims.PlaceLeader finds, else on its point. Each joins taken.
+    /// </summary>
+    public static List<PlacedMark> PlaceMarks(Details.Drawing d, Pt shift, int scale, List<PlanDims.Obstacle> taken,
+        List<List<List<Pt>>> walls)
+    {
+        var placed = new List<PlacedMark>();
+        if (d == null || scale < 1) return placed;
+        taken = taken ?? new List<PlanDims.Obstacle>();
+        walls = walls ?? new List<List<List<Pt>>>();
+        var s = (double)scale;
+        var h = MarkHalfMm * s;
+        var clear = PlanDims.ClearMm * s;
+        var band = Details.BandMm * s;
+        var x0 = d.Map(d.U0) + shift.X - band;
+        var x1 = d.Map(d.U0) + d.Width + shift.X + band;
+        var y0 = d.V0 + shift.Y - band;
+        var y1 = d.V1 + shift.Y + band;
+        var far = (PlanDims.LeaderReachMm + MarkHalfMm) * s * 2;
+        var outside = new[]
+        {
+            new RoomDetect.Box(x0 - far, y0 - far, x0, y1 + far),
+            new RoomDetect.Box(x1, y0 - far, x1 + far, y1 + far),
+            new RoomDetect.Box(x0 - far, y0 - far, x1 + far, y0),
+            new RoomDetect.Box(x0 - far, y1, x1 + far, y1 + far)
+        }.Select(b => new PlanDims.Obstacle(b, PlanDims.Kind.Line));
+        RoomDetect.Box Square(Pt c, double half) => new RoomDetect.Box(c.X - half, c.Y - half, c.X + half, c.Y + half);
+        foreach (var mark in d.Marks)
+        {
+            var at = new Pt(d.Map(mark.At.X) + shift.X, mark.At.Y + shift.Y);
+            var drawn = outside.Concat(taken).ToList();
+            var centre = at;
+            var moved = false;
+            if (drawn.Any(o => Schedules.Overlaps(Square(at, h), o.Box, clear)) || Schedules.OnWalls(Square(at, h + clear), walls))
+            {
+                var dot = new List<Pt>
+                {
+                    new Pt(at.X - clear, at.Y - clear), new Pt(at.X + clear, at.Y - clear),
+                    new Pt(at.X + clear, at.Y + clear), new Pt(at.X - clear, at.Y + clear)
+                };
+                moved = PlanDims.PlaceLeader(at, dot, h, h, scale, drawn, walls, out var spot, out _);
+                if (moved) centre = spot;
+            }
+            taken.Add(new PlanDims.Obstacle(Square(centre, h), PlanDims.Kind.Text));
+            if (moved)
+                taken.Add(new PlanDims.Obstacle(PlanDims.SegBox(new PlanDims.Seg(at, LeaderStart(centre, at, MarkMm / 2.0, scale))), PlanDims.Kind.Line));
+            placed.Add(new PlacedMark { Mark = mark, At = at, Centre = centre, Moved = moved });
+        }
+        return placed;
+    }
+
     /// <summary>The leader from the bubble's edge to the target.</summary>
     public static Pt LeaderStart(Pt centre, Pt target, double radius, int scale)
     {

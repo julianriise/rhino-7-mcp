@@ -84,7 +84,7 @@ public partial class RhinoMCPFunctions
             try
             {
                 fills += BakeDetailDrawing(doc, layer, view, d, shift, scale, baseProfile, sources, wallSolids, members,
-                    pattern, tol, ref box, ref index, ref count, notes);
+                    plan, pattern, tol, ref box, ref index, ref count, notes);
             }
             catch (Exception ex)
             {
@@ -94,7 +94,6 @@ public partial class RhinoMCPFunctions
             try
             {
                 BakeDetailTitle(doc, layer, view, item, origin, scale, pattern, tol, ref box, ref index, ref count);
-                BakeDetailMarks(doc, layer, view, item, shift, plan, scale, pattern, tol, ref box, ref index, ref count);
             }
             catch (Exception ex)
             {
@@ -145,24 +144,37 @@ public partial class RhinoMCPFunctions
             true, "detail_title", stamp, ref box, ref index, ref count);
     }
 
-    /// <summary>A plan detail's marks for its companion drawings: a 9 mm bubble, number over sheet number, and an arrow its way.</summary>
-    private void BakeDetailMarks(RhinoDoc doc, Layer layer, string view, Details.Placed item, Pt shift, List<DetailSheet.Sheet> plan,
-        int scale, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
+    /// <summary>
+    /// A plan detail's marks for its companion drawings: a 9 mm bubble,
+    /// number over sheet number, and an arrow its way; one moved off its
+    /// point has a leader back ending in a dot.
+    /// </summary>
+    private void BakeDetailMarks(RhinoDoc doc, Layer layer, string view, Details.Drawing d, List<DetailCallout.PlacedMark> marks,
+        List<DetailSheet.Sheet> plan, int scale, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
     {
-        var d = item.Drawing;
         var ids = plan.Select(sh => sh.Id).ToList();
-        foreach (var mark in d.Marks)
+        foreach (var placed in marks)
         {
+            var mark = placed.Mark;
             if (!DetailSheet.Find(plan, d.Facts.Record.Id, mark.View, out var sheet, out var target)) continue;
-            var centre = new Point3d(d.Map(mark.At.X) + shift.X, mark.At.Y + shift.Y, 0);
+            var centre = new Point3d(placed.Centre.X, placed.Centre.Y, 0);
             var look = new Vector3d(mark.Look.X, mark.Look.Y, 0);
             var stamp = DetailStamp(view, d);
             stamp.Extra["forsk:detail_target"] = mark.View;
             BakeBubble(doc, layer, centre, DetailCallout.MarkMm, target.Number, DetailSheet.Number(sheet.Id, ids), scale, "detail_marker",
                 stamp, pattern, tol, ref box, ref index, ref count);
+            if (placed.Moved)
+            {
+                var start = DetailCallout.LeaderStart(placed.Centre, placed.At, DetailCallout.MarkMm / 2.0, scale);
+                var at = new Point3d(placed.At.X, placed.At.Y, 0);
+                using (var leader = new LineCurve(new Point3d(start.X, start.Y, 0), at))
+                    AddStroke(doc, layer, leader, PenThin, scale, false, pattern, tol, "detail_marker", "leader", null, null,
+                        ref box, ref index, ref count, stamp);
+                AddLeaderDot(doc, layer, at, scale, pattern, tol, stamp.Extra, ref box, ref index, ref count, "detail_marker");
+            }
             if (!look.Unitize()) continue;
             var r = DetailCallout.MarkMm / 2.0 * scale;
-            var tip = centre + look * (r + 2.0 * scale);
+            var tip = centre + look * (r + DetailCallout.MarkArrowMm * scale);
             var side = new Vector3d(-look.Y, look.X, 0) * (1.2 * scale);
             using (var arrow = new PolylineCurve(new[] { centre + look * r + side, tip, centre + look * r - side }))
                 AddStroke(doc, layer, arrow, PenThin, scale, false, pattern, tol, "detail_marker", "arrow", null, null,
@@ -359,7 +371,7 @@ public partial class RhinoMCPFunctions
     private int BakeDetailDrawing(
         RhinoDoc doc, Layer layer, string view, Details.Drawing d, Pt shift, int scale, PrintProfile baseProfile,
         List<RhinoObject> sources, Dictionary<Guid, Brep> wallSolids, Dictionary<Guid, List<RhinoObject>> members,
-        int pattern, double tol, ref BoundingBox box, ref int index, ref int count, List<string> notes)
+        List<DetailSheet.Sheet> plan, int pattern, double tol, ref BoundingBox box, ref int index, ref int count, List<string> notes)
     {
         var rect = new DetailClip.Rect(d.U0, d.V0, d.U1, d.V1);
         // Each stretch a break keeps, and how far along u it moves to be drawn.
@@ -527,7 +539,8 @@ public partial class RhinoMCPFunctions
                 widths[text] = paper = ModelTextWidth(doc, text, PlanDims.TextMm * scale) / scale;
             return paper;
         };
-        foreach (var chain in PlanDims.LayoutFixed(chains, scale, new List<PlanDims.Obstacle>(), walls, measure))
+        var taken = new List<PlanDims.Obstacle>();
+        foreach (var chain in PlanDims.LayoutFixed(chains, scale, taken, walls, measure))
         {
             if (!chain.Placed)
             {
@@ -572,6 +585,8 @@ public partial class RhinoMCPFunctions
         }
         foreach (var level in DetailDims.Levels(d.Facts, d))
             added += BakeDetailLevel(doc, layer, level, shift, scale, pattern, tol, ref box, ref index, ref count, stamp);
+        BakeDetailMarks(doc, layer, view, d, DetailCallout.PlaceMarks(d, shift, scale, taken, walls), plan, scale, pattern, tol,
+            ref box, ref index, ref count);
         return fills;
     }
 
