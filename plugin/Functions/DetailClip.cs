@@ -80,6 +80,46 @@ public static class DetailClip
         return edges;
     }
 
+    /// <summary>
+    /// A clipped ring's cut outline: its edges less those on the crop, as
+    /// open runs, each starting where a crop edge ends. A ring the crop does
+    /// not touch is one closed run.
+    /// </summary>
+    public static List<List<Pt>> CutRuns(IList<Pt> ring, Rect rect, double tol)
+    {
+        var runs = new List<List<Pt>>();
+        if (ring == null || ring.Count < 3) return runs;
+        var n = ring.Count;
+        bool Crop(int i) => OnCrop(ring[i], ring[(i + 1) % n], rect, tol);
+        var start = -1;
+        for (var i = 0; i < n && start < 0; i++)
+            if (Crop(i)) start = (i + 1) % n;
+        if (start < 0)
+        {
+            var closed = new List<Pt>(ring) { ring[0] };
+            runs.Add(closed);
+            return runs;
+        }
+        List<Pt> run = null;
+        for (var k = 0; k < n; k++)
+        {
+            var i = (start + k) % n;
+            if (Crop(i))
+            {
+                run = null;
+                continue;
+            }
+            if (Length(ring[i], ring[(i + 1) % n]) <= tol) continue;
+            if (run == null)
+            {
+                run = new List<Pt> { ring[i] };
+                runs.Add(run);
+            }
+            run.Add(ring[(i + 1) % n]);
+        }
+        return runs;
+    }
+
     /// <summary>Paper mm a break line runs past the wall it breaks, at each end.</summary>
     public const double BreakOverMm = 2.0;
     /// <summary>The break's zigzag: its height and width, paper mm.</summary>

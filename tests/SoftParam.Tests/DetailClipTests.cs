@@ -53,6 +53,47 @@ public class DetailClipTests
         Assert.Equal(20, line.Max(p => p.Y) - 500, 6);
     }
 
+    static double Length(List<Pt> run) =>
+        run.Zip(run.Skip(1), (a, b) => Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y))).Sum();
+
+    [Fact]
+    public void AClippedRing_CutsAlongItsFaces_NotAlongTheCrop()
+    {
+        var ring = DetailClip.Ring(new List<Pt> { new(0, 0), new(200, 0), new(200, 4000), new(0, 4000) }, SouthCrop);
+        var run = Assert.Single(DetailClip.CutRuns(ring, SouthCrop, 0.5));
+        Assert.Equal(1200, Length(run), 6);
+        Assert.DoesNotContain(run.Zip(run.Skip(1)), e => DetailClip.OnCrop(e.First, e.Second, SouthCrop, 0.5));
+    }
+
+    [Fact]
+    public void ARingCutAtBothEnds_CutsAlongEachFace()
+    {
+        var ring = DetailClip.Ring(new List<Pt> { new(-1000, 0), new(9000, 0), new(9000, 200), new(-1000, 200) }, SouthCrop);
+        var runs = DetailClip.CutRuns(ring, SouthCrop, 0.5);
+        Assert.Equal(2, runs.Count);
+        Assert.All(runs, r => Assert.Equal(8600, Length(r), 6));
+    }
+
+    [Fact]
+    public void ARingInsideTheCrop_CutsAllRound()
+    {
+        var ring = new List<Pt> { new(1000, 0), new(1200, 0), new(1200, 200), new(1000, 200) };
+        var run = Assert.Single(DetailClip.CutRuns(ring, SouthCrop, 0.5));
+        Assert.Equal(run[0], run[^1]);
+        Assert.Equal(800, Length(run), 6);
+    }
+
+    [Fact]
+    public void TheDetailBake_StrokesThePocheAsCut_AndDropsTheLinesOnIt()
+    {
+        // The bake trims the solids itself, so no HLD segment is a section cut: the poché outline is.
+        var source = File.ReadAllText(Path.Combine(FunctionsDir(), "DetailBake.cs"));
+        Assert.DoesNotContain("IsSectionCut", source);
+        Assert.Contains("DetailClip.CutRuns(ring, part.Rect,", source);
+        Assert.Matches(@"PenCut, scale, false, pattern, tol,\s*""cut""", source);
+        Assert.Contains("Sections.IsCut(", source);
+    }
+
     [Fact]
     public void TheDetailBake_TrimsBySectionSideForTheCropPlanes()
     {

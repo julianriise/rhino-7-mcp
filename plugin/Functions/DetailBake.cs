@@ -14,8 +14,10 @@ namespace RhinoMCPPlugin.Functions;
 /// A detail sheet's drawings, baked on S-DRAW::Details 20-1 in the sheet's
 /// own model region. Each drawing is the model trimmed by its cut and its
 /// four crop planes, seen from its look, then clipped to the crop in 2D so
-/// nothing outside it survives a trim that failed. Lines on the crop are
-/// where it cuts the model and draw as break lines. Pens are the profile at
+/// nothing outside it survives a trim that failed. The trim leaves no HLD
+/// section cut, so the cut line is the poché's outline (the profile's Cut
+/// pen); its edges on the crop are where it cuts the model and draw as
+/// break lines. Pens are the profile at
 /// the sheet's scale; dimensions keep their paper size.
 /// </summary>
 public partial class RhinoMCPFunctions
@@ -403,6 +405,7 @@ public partial class RhinoMCPFunctions
 
         var added = 0;
         var clipped2d = 0;
+        var seen = new List<KeyValuePair<List<Pt>, PrintPen>>();
         HiddenLineDrawing hld = null;
         try
         {
@@ -430,16 +433,11 @@ public partial class RhinoMCPFunctions
                 foreach (var seg in hld.Segments)
                 {
                     if (!KeepGreyscaleSegment(seg) || seg.CurveGeometry == null) continue;
-                    var cut = IsSectionCut(seg);
-                    var pen = cut ? PenCut : seg.IsSceneSilhouette ? PenSilhouette : PenBeyond;
+                    var pen = seg.IsSceneSilhouette ? PenSilhouette : PenBeyond;
                     var points = CurvePoints(seg.CurveGeometry, tol).Select(toFrame).ToList();
                     foreach (var part in keep)
                     foreach (var run in ClipRuns(points, part.Rect, tol, ref clipped2d))
-                    {
-                        using (var curve = new PolylineCurve(run.Select(p => Sheet(new Pt(p.X + part.Du, p.Y)))))
-                            added += AddStroke(doc, layer, curve, pen, scale, false, pattern, tol,
-                                cut ? "cut" : "beyond", null, null, null, ref box, ref index, ref count, stamp);
-                    }
+                        seen.Add(new KeyValuePair<List<Pt>, PrintPen>(run.Select(p => new Pt(p.X + part.Du, p.Y)).ToList(), pen));
                 }
             }
         }
@@ -451,6 +449,7 @@ public partial class RhinoMCPFunctions
         if (clipped2d > 0) notes.Add(d.Title + ": " + clipped2d.ToString(CultureInfo.InvariantCulture) + " lines clipped in 2D");
 
         var rings = new List<List<Pt>>();
+        var cutRuns = new List<List<Pt>>();
         var breakEdges = new List<KeyValuePair<Pt, Pt>>();
         var fills = 0;
         if (d.Clipped)
@@ -473,6 +472,8 @@ public partial class RhinoMCPFunctions
                             if (ring.Count < 3) continue;
                             breakEdges.AddRange(DetailClip.CropEdges(ring, part.Rect, Math.Max(tol, 0.5)).Select(e =>
                                 new KeyValuePair<Pt, Pt>(new Pt(e.Key.X + part.Du, e.Key.Y), new Pt(e.Value.X + part.Du, e.Value.Y))));
+                            cutRuns.AddRange(DetailClip.CutRuns(ring, part.Rect, Math.Max(tol, 0.5)).Select(r =>
+                                r.Select(p => new Pt(p.X + part.Du, p.Y)).ToList()));
                             ring = ring.Select(p => new Pt(p.X + part.Du, p.Y)).ToList();
                             rings.Add(ring);
                             var closed = ring.Select(Sheet).ToList();
@@ -489,6 +490,22 @@ public partial class RhinoMCPFunctions
                 DisposeFillGroups(groups);
                 DisposeFillGroups(sheetGroups);
             }
+        }
+
+        // The poché's outline is the cut line; a line seen on it would double it thinner.
+        foreach (var line in seen)
+        {
+            var samples = line.Key.Concat(line.Key.Zip(line.Key.Skip(1), (a, b) => new Pt((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0))).ToList();
+            if (Sections.IsCut(samples, rings, DetailCutOnMm)) continue;
+            using (var curve = new PolylineCurve(line.Key.Select(Sheet)))
+                added += AddStroke(doc, layer, curve, line.Value, scale, false, pattern, tol,
+                    "beyond", null, null, null, ref box, ref index, ref count, stamp);
+        }
+        foreach (var run in cutRuns)
+        {
+            using (var curve = new PolylineCurve(run.Select(Sheet)))
+                added += AddStroke(doc, layer, curve, PenCut, scale, false, pattern, tol,
+                    "cut", null, null, null, ref box, ref index, ref count, stamp);
         }
 
         foreach (var edge in breakEdges)
@@ -587,6 +604,9 @@ public partial class RhinoMCPFunctions
         if (AddDimensionText(doc, layer, label, scale, values, ref box, ref index, ref count)) added++;
         return added;
     }
+
+    /// <summary>Model mm a seen line may lie off the poché's outline and still be on it.</summary>
+    private const double DetailCutOnMm = 2.0;
 
     /// <summary>The source's box meets the drawing's crop, in the frame.</summary>
     private static bool MeetsCrop(RhinoObject obj, Details.Drawing d, DetailClip.Rect rect)
