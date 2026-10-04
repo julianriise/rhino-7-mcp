@@ -101,7 +101,7 @@ internal static class ForskTechnicalHost
         if (existing == null || ForskTechnical.NeedsReimport(StoredSignature(), _profile))
         {
             var profile = _profile;
-            if (ForskWhiteHost.Import(ForskTechnical.ModeName, exported => ForskTechnical.Patch(exported, profile)))
+            if (ForskWhiteHost.Import(ForskTechnical.ModeName, exported => ForskTechnical.Patch(exported, profile), DisplayModeDescription.WireframeId))
                 StoreSignature(signature);
             existing = ForskWhiteHost.Find(ForskTechnical.ModeName);
         }

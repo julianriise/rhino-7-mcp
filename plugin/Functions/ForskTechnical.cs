@@ -7,13 +7,12 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// Forsk Technical, the plan and elevation look. A parallel view looking
 /// straight down is a plan; a parallel view looking level is an elevation;
-/// every other view keeps Forsk White. The mode is a patched Shaded export,
-/// the way Forsk White is: white ground, flat white surfaces, no materials,
-/// no shadows, edges at the beyond pen, the plan cut filled with the poché
-/// and outlined at the cut pen. The door and window symbols, the stair and
-/// the elevation ground line are drawn over it from the pieces the plan and
-/// facade sheets print (ForskTechnicalHost). Pens come from the document's
-/// print profile, so screen and paper agree.
+/// every other view keeps Forsk White. The mode is a patched Wireframe: lines
+/// only, no surfaces and no shading. The cut is a heavy outline, not a filled
+/// cap. The door and window symbols, the stair and the elevation ground line
+/// are drawn over it from the pieces the plan and facade sheets print
+/// (ForskTechnicalHost). Pens come from the document's print profile, so
+/// screen and paper agree.
 /// </summary>
 public static class ForskTechnical
 {
@@ -22,7 +21,7 @@ public static class ForskTechnical
     public const string SettingKey = "ForskTechnical";
     /// <summary>Plugin setting that holds <see cref="Signature"/> of the last import.</summary>
     public const string SignatureKey = "ForskTechnicalSignature";
-    public const int ModeRevision = 1;
+    public const int ModeRevision = 2;
     /// <summary>The paper weight one screen pixel stands for: the default beyond pen.</summary>
     public const double MmPerPx = 0.18;
     public const int MaxPx = 6;
@@ -155,7 +154,7 @@ public static class ForskTechnical
             ForskWhite.Bool("View settings", "DrawWorldAxes", false),
             ForskWhite.Bool("View settings", "DrawZAxis", false),
             ForskWhite.Bool("View settings", "ShowClippingPlanes", false),
-            ForskWhite.Bool("View settings", "ClippingShowXSurface", true),
+            ForskWhite.Bool("View settings", "ClippingShowXSurface", false),
             ForskWhite.Bool("View settings", "ClippingShowXEdges", true),
             ForskWhite.Int("View settings", "ClippingSurfaceUsage", ForskWhite.ClipFillUsage),
             ForskWhite.Int("View settings", "ClippingEdgesUsage", ForskWhite.ClipEdgeUsage),
@@ -163,9 +162,9 @@ public static class ForskTechnical
             ForskWhite.Rgb("View settings", "ClippingEdgeColor", cut.Color.R, cut.Color.G, cut.Color.B),
             ForskWhite.Int("View settings", "ClippingEdgeThickness", Px(cut.Mm)),
             ForskWhite.Bool("Shading", "ShadeVertexColors", false),
-            ForskWhite.Bool("Shading", "ShadeSurface", true),
+            ForskWhite.Bool("Shading", "ShadeSurface", false),
             ForskWhite.Bool("Shading", "UseObjectMaterial", false),
-            ForskWhite.Bool("Shading\\Material\\Front Material", "FlatShaded", true),
+            ForskWhite.Bool("Shading\\Material\\Front Material", "FlatShaded", false),
             ForskWhite.Bool("Shading\\Material\\Front Material", "OverrideObjectColor", true),
             ForskWhite.Bool("Shading\\Material\\Front Material", "OverrideObjectTransparency", true),
             ForskWhite.Rgb("Shading\\Material\\Front Material", "Diffuse", 255, 255, 255),
@@ -173,7 +172,7 @@ public static class ForskTechnical
             ForskWhite.Rgb("Shading\\Material\\Front Material", "Specular", 0, 0, 0),
             ForskWhite.Int("Shading\\Material\\Front Material", "ShineIntensity", 0),
             ForskWhite.Int("Shading\\Material\\Front Material", "Transparency", 0),
-            ForskWhite.Bool("Shading\\Material\\Back Material", "FlatShaded", true),
+            ForskWhite.Bool("Shading\\Material\\Back Material", "FlatShaded", false),
             ForskWhite.Bool("Shading\\Material\\Back Material", "OverrideObjectColor", true),
             ForskWhite.Rgb("Shading\\Material\\Back Material", "Diffuse", 255, 255, 255),
             ForskWhite.Rgb("Shading\\Material\\Back Material", "Specular", 0, 0, 0),

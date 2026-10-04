@@ -168,8 +168,23 @@ internal static class ForskWhiteHost
     /// </summary>
     internal static bool Import(string name, Func<string, string> patch)
     {
+        return Import(name, patch, DisplayModeDescription.ShadedId, true);
+    }
+
+    /// <summary>
+    /// Same import, copied from <paramref name="parent"/> (Wireframe for
+    /// Forsk Technical). No shaded embed: a failed copy must not install Shaded.
+    /// </summary>
+    internal static bool Import(string name, Func<string, string> patch, Guid parent)
+    {
+        return Import(name, patch, parent, false);
+    }
+
+    static bool Import(string name, Func<string, string> patch, Guid parent, bool embedded)
+    {
         DropCopies(name);
-        return TryImport(name, patch, () => LiveExport(name)) || TryImport(name, patch, EmbeddedExport);
+        if (TryImport(name, patch, () => LiveExport(name, parent))) return true;
+        return embedded && TryImport(name, patch, EmbeddedExport);
     }
 
     static bool TryImport(string name, Func<string, string> patch, Func<string> source)
@@ -191,9 +206,9 @@ internal static class ForskWhiteHost
         }
     }
 
-    static string LiveExport(string name)
+    static string LiveExport(string name, Guid parent)
     {
-        var copied = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.ShadedId, name);
+        var copied = DisplayModeDescription.CopyDisplayMode(parent, name);
         var mode = copied == Guid.Empty ? null : DisplayModeDescription.GetDisplayMode(copied);
         if (mode == null || !Named(mode, name))
         {
@@ -228,7 +243,7 @@ internal static class ForskWhiteHost
     {
         var named = DisplayModeDescription.FindByName(name);
         if (named == null || !Named(named, name)) return null;
-        if (named.Id == DisplayModeDescription.ShadedId) return null;
+        if (Kept(named.Id)) return null;
         return DisplayModeDescription.GetDisplayMode(named.Id) ?? named;
     }
 
@@ -240,7 +255,7 @@ internal static class ForskWhiteHost
 
     static void DropId(Guid id, string name)
     {
-        if (id == Guid.Empty || id == DisplayModeDescription.ShadedId) return;
+        if (Kept(id)) return;
         var mode = DisplayModeDescription.GetDisplayMode(id);
         if (!Named(mode, name)) return;
         try { DisplayModeDescription.DeleteDisplayMode(id); }
@@ -249,11 +264,19 @@ internal static class ForskWhiteHost
 
     static void DropCopy(Guid id, string name)
     {
-        if (id == Guid.Empty || id == DisplayModeDescription.ShadedId) return;
+        if (Kept(id)) return;
         var copyName = DisplayModeDescription.GetDisplayMode(id)?.EnglishName ?? "";
         if (!copyName.StartsWith(name, StringComparison.Ordinal)) return;
         try { DisplayModeDescription.DeleteDisplayMode(id); }
         catch (Exception) { }
+    }
+
+    /// <summary>Rhino's own modes. A copy must never delete or replace these.</summary>
+    static bool Kept(Guid id)
+    {
+        return id == Guid.Empty
+            || id == DisplayModeDescription.ShadedId
+            || id == DisplayModeDescription.WireframeId;
     }
 
     static bool Named(DisplayModeDescription mode, string name)

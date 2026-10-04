@@ -65,6 +65,7 @@ public class ForskTechnicalTests
         Assert.Equal("ForskTechnical", ForskTechnical.SettingKey);
         var host = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "ForskTechnicalHost.cs"));
         Assert.Contains("GetBool(ForskTechnical.SettingKey, true)", host, StringComparison.Ordinal);
+        Assert.Contains("DisplayModeDescription.WireframeId", host, StringComparison.Ordinal);
         var command = File.ReadAllText(Path.Combine(PluginDir(), "Commands", "ForskTechnicalCommand.cs"));
         Assert.Contains("EnglishName => \"ForskTechnical\"", command, StringComparison.Ordinal);
         Assert.Contains("ForskWhiteHost.ApplyActive()", command, StringComparison.Ordinal);
@@ -92,14 +93,15 @@ public class ForskTechnicalTests
         Assert.Equal("255,255,255", ForskWhite.Read(ini, "View settings", "SolidColor"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "DrawGrid"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ShowClippingPlanes"));
-        Assert.Equal("3", ForskWhite.Read(ini, "View settings", "ClippingSurfaceUsage"));
-        Assert.Equal("0,0,0", ForskWhite.Read(ini, "View settings", "ClippingSurfaceColor"));
+        Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ClippingShowXSurface"));
+        Assert.Equal("y", ForskWhite.Read(ini, "View settings", "ClippingShowXEdges"));
         Assert.Equal("1", ForskWhite.Read(ini, "View settings", "ClippingEdgesUsage"));
         Assert.Equal("0,0,0", ForskWhite.Read(ini, "View settings", "ClippingEdgeColor"));
         Assert.Equal("3", ForskWhite.Read(ini, "View settings", "ClippingEdgeThickness"));
         Assert.Equal("n", ForskWhite.Read(ini, "Shading", "UseObjectMaterial"));
         Assert.Equal("n", ForskWhite.Read(ini, "Shading", "ShadeVertexColors"));
-        Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "FlatShaded"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading", "ShadeSurface"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "FlatShaded"));
         Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "OverrideObjectColor"));
         Assert.Equal("255,255,255", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "Diffuse"));
         Assert.Equal("255,255,255", ForskWhite.Read(ini, "Lighting", "AmbientColor"));
@@ -115,17 +117,18 @@ public class ForskTechnicalTests
     public void Technical_ini_follows_the_grey_and_hatched_profiles()
     {
         var grey = Patched(PrintProfiles.Grey);
-        Assert.Equal("150,150,150", ForskWhite.Read(grey, "View settings", "ClippingSurfaceColor"));
+        Assert.Equal("n", ForskWhite.Read(grey, "Shading", "ShadeSurface"));
         Assert.Equal("30,30,30", ForskWhite.Read(grey, "View settings", "ClippingEdgeColor"));
         Assert.Equal("110,110,110", ForskWhite.Read(grey, "Objects\\Surfaces", "EdgeColor"));
 
         var hatch = Patched(PrintProfiles.Hatched);
-        Assert.Equal("206,206,206", ForskWhite.Read(hatch, "View settings", "ClippingSurfaceColor"));
+        Assert.Equal("n", ForskWhite.Read(hatch, "View settings", "ClippingShowXSurface"));
         Assert.Equal("2", ForskWhite.Read(hatch, "View settings", "ClippingEdgeThickness"));
 
-        Assert.Equal("1:default", ForskTechnical.Signature(PrintProfiles.Default));
-        Assert.False(ForskTechnical.NeedsReimport("1:default", PrintProfiles.Default));
-        Assert.True(ForskTechnical.NeedsReimport("1:default", PrintProfiles.Grey));
+        Assert.Equal("2:default", ForskTechnical.Signature(PrintProfiles.Default));
+        Assert.False(ForskTechnical.NeedsReimport("2:default", PrintProfiles.Default));
+        Assert.True(ForskTechnical.NeedsReimport("1:default", PrintProfiles.Default));
+        Assert.True(ForskTechnical.NeedsReimport("2:default", PrintProfiles.Grey));
         Assert.True(ForskTechnical.NeedsReimport(null, PrintProfiles.Default));
     }
 
@@ -304,7 +307,7 @@ public class ForskTechnicalTests
         Assert.Equal(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
         var ini = Patched(PrintProfiles.Hatched);
         Assert.Equal("2", ForskWhite.Read(ini, "View settings", "ClippingEdgeThickness"));
-        Assert.Equal("1:hatch", ForskTechnical.Signature(PrintProfiles.Hatched));
+        Assert.Equal("2:hatch", ForskTechnical.Signature(PrintProfiles.Hatched));
         Assert.Equal(2, ForskTechnical.Px(0.35));
     }
 
