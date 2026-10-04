@@ -44,6 +44,56 @@ public class SheetFlatTests
         Assert.Equal("A-ANNO-TTLB", SheetFlat.LayerFor("title_cell"));
     }
 
+    /// <summary>The roles a detail sheet and the plan's callouts bake.</summary>
+    static readonly string[] DetailRoles =
+    {
+        "cut", "beyond", "section_fill", "break_line", "dimension", "level", "detail_title", "detail_marker", "callout",
+        "scale_bar", "scale_bar_label", "title_block", "title_cell"
+    };
+
+    [Fact]
+    public void EveryDetailRole_HasALayer()
+    {
+        foreach (var role in DetailRoles)
+            Assert.NotEqual(SheetFlat.Misc, SheetFlat.LayerFor(role));
+        Assert.Equal("A-SYMB", SheetFlat.LayerFor("callout"));
+        Assert.Equal("A-SYMB", SheetFlat.LayerFor("detail_marker"));
+        Assert.Equal("A-ANNO-TEXT", SheetFlat.LayerFor("detail_title"));
+        Assert.Equal("A-ELEV", SheetFlat.LayerFor("break_line"));
+        Assert.Equal("A-ANNO-TEXT", SheetFlat.LayerFor("level"));
+    }
+
+    [Fact]
+    public void EveryRoleTheDetailBakeStamps_IsADetailRole()
+    {
+        var source = File.ReadAllText(Path.Combine(FunctionsDir(), "DetailBake.cs"));
+        var stamped = System.Text.RegularExpressions.Regex.Matches(source, @"(?:tol|scale|false|true),\s*""([a-z_]+)"",")
+            .Select(m => m.Groups[1].Value).Distinct().ToList();
+        Assert.NotEmpty(stamped);
+        Assert.All(stamped, role => Assert.Contains(role, DetailRoles));
+    }
+
+    [Fact]
+    public void ADetailSheet_At1To20_KeepsItsWeightsAndSize()
+    {
+        Assert.Equal(0.70, SheetFlat.Snap(0.70), 6);
+        Assert.Equal(0.70, SheetFlat.Snap(PrintProfiles.AtScale(PrintProfiles.Default, 20).Cut.Mm), 6);
+        var page = new SheetFlat.Affine { A = 1.0 / 20, E = 1.0 / 20, C = 25, F = 40 };
+        var wall = SheetFlat.Map(SheetFlat.Seg.Line(1000, 0, 1000, 200), page).P;
+        Assert.Equal(10, wall[3] - wall[1], 9);
+        Assert.Equal("Garage A-50-001 Details 1-20.dwg", SheetFlat.FileName("Garage", "A-50-001", Details.SheetTitle(20), "dwg"));
+    }
+
+    static string FunctionsDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", "Functions");
+            if (Directory.Exists(path)) return path;
+        }
+        throw new DirectoryNotFoundException("plugin/Functions above " + AppContext.BaseDirectory);
+    }
+
     [Fact]
     public void TheLayers_CarryTheirWeights()
     {

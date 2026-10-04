@@ -10,14 +10,21 @@ exist, not be empty, and start with AC10. Either must be AutoCAD 2004
 (AC1018) or later. Hatches and lineweights exist from AutoCAD 2000; only
 R12 (AC1009) drops them.
 
+With --expect detail a DXF is a detail sheet (A-50-…): layers A-WALL-CUT,
+A-ANNO-DIMS and A-ANNO-TTLB, a 0.70 mm lineweight on an entity, a dimension
+value 200 on A-ANNO-DIMS, its number (from the file name, else A-50-001) on
+A-ANNO-TTLB, and extents inside the A3 sheet.
+
 Usage:
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DXF/Garage A-20-001 Plan.dxf"
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DWG/Garage A-20-001 Plan.dwg"
+  python3 scripts/dxf_check.py --expect detail "/tmp/forsk-export-garage/Garage DXF/Garage A-50-001 Details 1-20.dxf"
 Install first: python -m pip install ezdxf
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -36,6 +43,10 @@ PAPER_TEXT_MM = 12.0
 HEAVY = 50  # 0.50 mm in DXF hundredths
 MODERN = "AC1018"  # AutoCAD 2004
 MODERN_NAME = "AutoCAD 2004"
+DETAIL_LAYERS = ("A-WALL-CUT", "A-ANNO-DIMS", "A-ANNO-TTLB")
+DETAIL_HEAVY = 70  # the cut pen at 1:20
+DETAIL_VALUE = "200"  # the garage wall's thickness
+DETAIL_NUMBER = re.compile(r"A-50-\d{3}")
 
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
@@ -68,6 +79,36 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
 
     problems.extend(check_fit(doc))
     return problems
+
+
+def check_detail(doc, number: str = "A-50-001") -> list[str]:
+    """What is wrong with a detail sheet DXF. Empty when it passes."""
+    problems = []
+    names = {layer.dxf.name.upper() for layer in doc.layers}
+    missing = [name for name in DETAIL_LAYERS if name not in names]
+    if missing:
+        problems.append("missing layers: " + ", ".join(missing))
+
+    msp = doc.modelspace()
+    if not any(e.dxf.get("lineweight", -1) == DETAIL_HEAVY for e in msp):
+        problems.append("no entity has lineweight 0.70 mm")
+    values = [_text(e).strip() for e in msp
+              if e.dxftype() in ("TEXT", "MTEXT") and e.dxf.get("layer", "0").upper() == "A-ANNO-DIMS"]
+    if DETAIL_VALUE not in values:
+        problems.append(f"A-ANNO-DIMS has no value {DETAIL_VALUE}")
+    texts = [_text(e) for e in msp
+             if e.dxftype() in ("TEXT", "MTEXT") and e.dxf.get("layer", "0").upper() == "A-ANNO-TTLB"]
+    if not any(number in t for t in texts):
+        problems.append(f"A-ANNO-TTLB has no text {number}")
+
+    problems.extend(check_fit(doc))
+    return problems
+
+
+def sheet_number(name: str, default: str = "A-50-001") -> str:
+    """The detail sheet's number in its file name."""
+    found = DETAIL_NUMBER.search(name)
+    return found.group(0) if found else default
 
 
 def check_text(doc) -> list[str]:
@@ -176,21 +217,31 @@ def check_dwg(path) -> list[str]:
     return []
 
 
-def check_file(path, number: str = "A-20-001") -> list[str]:
+def check_file(path, number: str = "A-20-001", expect: str = "plan") -> list[str]:
     path = Path(path)
     if path.suffix.lower() == ".dwg":
         return check_dwg(path)
     doc, why = read_dxf(path)
-    return [why] if why else check_plan(doc, number)
+    if why:
+        return [why]
+    if expect == "detail":
+        return check_detail(doc, sheet_number(path.name))
+    return check_plan(doc, number)
 
 
 def main(argv: list[str]) -> int:
+    expect = "plan"
+    if argv[:1] == ["--expect"]:
+        if len(argv) < 2 or argv[1] not in ("plan", "detail"):
+            print("--expect is plan or detail")
+            return 1
+        expect, argv = argv[1], argv[2:]
     if not argv:
         print(__doc__.strip().splitlines()[0])
         return 1
     failed = False
     for arg in argv:
-        problems = check_file(arg)
+        problems = check_file(arg, expect=expect)
         print(("FAIL " if problems else "ok   ") + Path(arg).name + ("" if not problems else ": " + "; ".join(problems)))
         failed = failed or bool(problems)
     return 1 if failed else 0

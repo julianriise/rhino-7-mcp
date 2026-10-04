@@ -8,18 +8,20 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 | D2 plan detail | `0e35401` | done headless; bake unverified |
 | D2b break lines for long walls | `f58fa08` | done headless; bake unverified |
 | D3 wall section, opening elevation and section | `4740c2e` | done headless; bake unverified |
-| D4 detail sheets and callouts | see `git log` (`feat(print): D4 …`) | done headless; bake unverified |
+| D4 detail sheets and callouts | `ff87673` | done headless; bake unverified |
+| D5 detail sheets in DWG | see `git log` (`feat(export): D5 …`) | done headless; export unverified |
 
 ## Gates (last run, Linux container)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
-- `dotnet test tests/SoftParam.Tests`: exit 0, 2001 passed, 1 skipped (D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed).
-- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 499 passed, 2 skipped (D2 499, D1 498; base 500: the two `check_user_dims` tests went).
+- `dotnet test tests/SoftParam.Tests`: exit 0, 2004 passed, 1 skipped (D4 2001, D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed).
+- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 510 passed, 2 skipped (D4 499, D2 499, D1 498; base 500: the two `check_user_dims` tests went). `test_dxf_check.py` runs with `ezdxf` 1.4.4 in the venv.
 - `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
 - Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
 
 ## Unverified (needs Rhino)
 
+- D5: that `export_sheets` writes `Garage A-50-001 Details 1-20.dwg`/`.dxf` with the cut strokes at 0.70 on `A-WALL-CUT`, the values on `A-ANNO-DIMS`, the bubbles and marks on `A-SYMB`, no `misc_roles`, and the detail page's affine at 1:20; `export_smoke.py`'s `details add` on the live garage (door marker `forsk:host_id` as the wall) and its remove at the end.
 - D4: the plan callouts (12 mm bubble, divider, number over `A-50-00n`, leader and 0.8 dot) placed by `PlanDims.PlaceLeader` clear of the poché and what is on the plan layer, and `callouts`/`callouts_blocked` in the plan page record; the view titles (circle, title, 1:20, the 0.35 rule) and the companion marks inside each plan detail; the packed positions on `S-DRAW::Details 20-1`; the footer's Scale cell and scale bar at 1:20; the sheet order in the PDF and the Drawing list rows; the `forsk/user_dims` delete; the receipt's ", details at 1:20".
 - D1: `details add` from a live selection (walls by `forsk:id`, markers by `forsk:id`), and the card names, which come from `ReadIfcModel` on the live document at every window refresh.
 - D3: the vertical bakes: the section cut and fills on the wall cluster and the slab (and roof), the frame cut outlined only (`IsSkippedFillKind` skips `opening`), the elevation's depth band keeping only the host wall's band, the HLD map with up = Z, and the level marks (a 10 mm thin line out of the crop, a small triangle, the text). The level text goes through `AddDimensionText`, so it carries role `dimension` plus `forsk:level`.
@@ -51,9 +53,13 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 - D4 `TitleBlock.ScaleBar` is true on detail sheets too (their detail is locked at the sheet scale).
 - D4 the receipt puts ", details at 1:20" (", details at 1:20 and 1:25" for two scales) right after "on A3", before the revision; `Details.DroppedLine` ends the line after " · ".
 
+- D5 `SheetFlat.FileName` already turned `:` into `-`; only pinned. `export_smoke.py` reads the door and its wall off the door marker (`forsk:id`, `forsk:host_id`) through `plan_smoke.opening_markers`, lists the details before adding, and removes only the ones it added when it ends, so the garage stays as the earlier smokes left it. A missing door fails the step and still exports.
+- D5 `dxf_check.py --expect detail` takes the sheet number from the file name (`A-50-00n`), else `A-50-001`; the 0.70 weight must be on an entity (the cut layer's own weight stays 0.50).
+
 ## Left
 
-- D5.
+- Nothing of D1–D5 is left headless. All bakes and exports wait for the live checklist.
+- Not built: a denser packer (one A3 per detailed element), swing arcs in the plan detail, a log line for `DetailBreaks.Plan.TooLong`.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 
@@ -61,9 +67,15 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 - `docs/SMOKE.md`: replace the R2 "Add dimensions" line with the Add detail line.
 - ROADMAP: R2 "Add dimensions" is replaced by "Add detail" (v4 Detail drawings, step 1).
 
-## Live checklist
+## Live checklist (about 2 minutes, one Print, one export)
 
-Filled in at the last slice.
+Garage from `smoke_garage`, plugin built from `cursor/add-detail-2118`.
+
+1. Click the south wall, Shift+click door D01 in it: "1 wall, 1 door", first pill **Add detail**. Click it: "✓ 2 details added · they print on a detail sheet." **?** → **Your details**: South wall · plan, section; Door D01 · plan, elevation, section.
+2. **⋯** → **Choose sheets**: `A-50-001 Details 1:20` and `A-50-002 Details 1:20` between the sections and the lists. Close, press **Print** once. The receipt reads "… on A3, details at 1:20 · Garage.pdf".
+3. In the PDF: the plan has two callouts (1 over `A-50-001`, 1 over `A-50-002`) with leaders and dots, no new chain; the Drawing list has both A-50 rows at 1:20; `A-50-001` holds the wall plan with one zigzag break (values across it underlined) and the wall section; `A-50-002` holds the door plan, elevation and section in one row; titles like "1 Door D01 — Plan 1:20"; title block `A-50-00n`, Scale `1:20`, a scale bar; cut lines heavier than on the plan.
+4. **Export DWG** once. Open `Garage A-50-001 Details 1-20.dwg`: cut on `A-WALL-CUT` at 0.70, values on `A-ANNO-DIMS`, bubbles on `A-SYMB`.
+5. Type "remove the details": one line back; **Choose sheets** no longer lists the A-50 sheets. Do not print again.
 
 # Night log: v3 release slices on `night-v3`
 

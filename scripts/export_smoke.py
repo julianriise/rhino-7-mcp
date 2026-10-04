@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""R3/R4 smoke: export the garage's sheet set as DXF and as DWG, and the
-model as IFC, then check them.
+"""R3/R4/D5 smoke: add a detail of a garage door and its wall, export the
+sheet set as DXF and as DWG, and the model as IFC, then check them.
 
 Run after the garage smoke has built the garage (forsk scripts/smoke_garage.sh
 calls it). Writes /tmp/forsk-export-garage/Garage DXF/, .../Garage DWG/ and
 .../Garage.ifc; checks every DXF for paper-size text and the A3 sheet
 (dxf_check.py), the plan for its layers, every elevation for facade lines,
-every DWG's header, and the IFC with ifc_check.py (ifcopenshell), which also
-proves the IFC library loads in Rhino. Stdout at most 25 lines; exit 0 when
-all pass.
+the detail sheets (A-50-…) for their cut weight, a 200 value and their
+number, every DWG's header, and the IFC with ifc_check.py (ifcopenshell),
+which also proves the IFC library loads in Rhino. The details it added are
+removed again. Stdout at most 25 lines; exit 0 when all pass.
 
 Usage:
   RHINO_MCP_TIMEOUT=300 python3 scripts/export_smoke.py
@@ -26,12 +27,14 @@ from pathlib import Path
 
 import dxf_check
 import ifc_check
+import plan_smoke
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "300"))
 ROOT = Path("/tmp/forsk-export-garage")
 PLAN_NUMBER = "A-20-001"
+DETAIL_PREFIX = " A-50-"
 
 
 def plan_file(names: list[str]) -> str | None:
@@ -39,9 +42,41 @@ def plan_file(names: list[str]) -> str | None:
     return next((n for n in names if PLAN_NUMBER in n), None)
 
 
+def add_details(send) -> tuple[list[str], list[str]]:
+    """A detail of the first door and of its host wall, by their forsk:ids.
+    Returns the report lines and the ids it added, to remove at the end."""
+    door = next((
+        m for m in plan_smoke.opening_markers(send)
+        if (m.get("attributes") or {}).get("forsk:opening_kind") == "door"
+        and (m.get("attributes") or {}).get("forsk:host_id")
+        and (m.get("attributes") or {}).get("forsk:id")
+    ), None)
+    if door is None:
+        return ["FAIL details: no door with a host wall"], []
+    attrs = door["attributes"]
+    refs = [{"wall": attrs["forsk:host_id"]}, {"opening": attrs["forsk:id"]}]
+    before = {row.get("id") for row in send("details", {"action": "list"}).get("details") or []}
+    result = send("details", {"action": "add", "refs": refs})
+    added = [row.get("id") for row in result.get("details") or [] if row.get("id") not in before]
+    line = f"details: {len(added)} added ({refs[0]['wall']}, {refs[1]['opening']})"
+    if not result.get("details"):
+        return [line, f"FAIL details: {result.get('message')}"], added
+    return [line], added
+
+
 def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bool]:
     """send(cmd, params) -> result. Returns the report lines and whether all passed."""
-    lines: list[str] = []
+    lines, added = add_details(send)
+    ok = not any(line.startswith("FAIL") for line in lines)
+    try:
+        ok = _export(send, root, check_ifc, lines) and ok
+    finally:
+        if added:
+            send("details", {"action": "remove", "ids": added})
+    return lines[:24], ok
+
+
+def _export(send, root: Path, check_ifc, lines: list[str]) -> bool:
     ok = True
     for fmt in ("dxf", "dwg"):
         folder = root / f"Garage {fmt.upper()}"
@@ -82,8 +117,18 @@ def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bo
                 if problems:
                     ok = False
                     lines.append(f"FAIL {name}: " + "; ".join(problems))
-            # Front sheet and schedule are neither the plan nor A-40. Same text scale.
-            rest = [name for name in files if name != plan and name not in elevations]
+            details = [name for name in files if DETAIL_PREFIX in f" {name}"]
+            if not details:
+                lines.append("FAIL dxf: no detail sheet (A-50-…)")
+                ok = False
+            for name in details:
+                doc, why = dxf_check.read_dxf(folder / name)
+                problems = [why] if why else dxf_check.check_detail(doc, dxf_check.sheet_number(name))
+                if problems:
+                    ok = False
+                    lines.append(f"FAIL {name}: " + "; ".join(problems))
+            # Front sheet and schedule are neither the plan, A-40 nor A-50. Same text scale.
+            rest = [name for name in files if name != plan and name not in elevations and name not in details]
             for name in rest:
                 doc, why = dxf_check.read_dxf(folder / name)
                 problems = [why] if why else dxf_check.check_fit(doc)
@@ -109,7 +154,7 @@ def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bo
             lines.append(f"FAIL ifc: {problem}")
         ok = ok and not problems
         lines.append(f"  {path}")
-    return lines[:24], ok
+    return ok
 
 
 def main() -> int:
