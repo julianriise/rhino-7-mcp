@@ -349,7 +349,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             return new JArray
             {
-                AttentionRow("meta.title", ProjectNameMissing(facts))
+                AttentionRow("meta.title", ForskCards.InfoMissing(facts))
             };
         }
 
@@ -361,14 +361,6 @@ namespace RhinoMCPPlugin.Forsk
                 ["label"] = ForskText.Label(id),
                 ["needs"] = needs
             };
-        }
-
-        /// <summary>Project details count as filled once the project name is stored.</summary>
-        static bool ProjectNameMissing(FileFacts facts)
-        {
-            string name = null;
-            facts?.Meta?.TryGetValue("project", out name);
-            return string.IsNullOrWhiteSpace(name);
         }
     }
 

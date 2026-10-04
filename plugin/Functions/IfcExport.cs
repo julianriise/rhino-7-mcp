@@ -90,7 +90,8 @@ public static class IfcExport
 
     public sealed class Model
     {
-        public string Project = "Forsk";
+        /// <summary>The project, site and building names and Forsk_ProjectInfo, from ProjectInfo.IfcInfo.</summary>
+        public ProjectInfo.Ifc Info = ProjectInfo.IfcInfo(null);
         /// <summary>The storey's floor top, model Z.</summary>
         public double FloorTop;
         public List<Wall> Walls = new List<Wall>();
@@ -106,9 +107,22 @@ public static class IfcExport
         model = model ?? new Model();
         var db = new DatabaseIfc(ModelView.Ifc4NotAssigned);
         db.Factory.Options.GenerateOwnerHistory = false;
-        var site = new IfcSite(db, "Site");
-        var project = new IfcProject(site, string.IsNullOrWhiteSpace(model.Project) ? "Forsk" : model.Project.Trim(), IfcUnitAssignment.Length.Millimetre);
-        var building = new IfcBuilding(site, string.IsNullOrWhiteSpace(model.Project) ? "Building" : model.Project.Trim());
+        var info = model.Info ?? ProjectInfo.IfcInfo(null);
+        var site = new IfcSite(db, info.SiteName);
+        if (!string.IsNullOrEmpty(info.Address))
+        {
+            var postal = new IfcPostalAddress(db);
+            postal.AddressLines.Add(info.Address);
+            // IFC4 has IfcSite.SiteAddress; only IFC4X3 deprecates it, and this file is IFC4.
+#pragma warning disable CS0618
+            site.SiteAddress = postal;
+#pragma warning restore CS0618
+        }
+        new IfcProject(site, info.ProjectName, IfcUnitAssignment.Length.Millimetre) { LongName = info.ProjectLongName };
+        var building = new IfcBuilding(site, info.BuildingName);
+        if (info.Properties.Count > 0)
+            new IfcPropertySet(building, "Forsk_ProjectInfo",
+                info.Properties.Select(p => (IfcProperty)new IfcPropertySingleValue(db, p.Key, new IfcLabel(p.Value))).ToList());
         var storey = new IfcBuildingStorey(building, "Ground floor", model.FloorTop);
         var z0 = model.FloorTop;
 

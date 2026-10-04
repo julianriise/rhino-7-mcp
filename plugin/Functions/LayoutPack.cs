@@ -148,11 +148,8 @@ public partial class RhinoMCPFunctions
         if (doc == null)
             throw new InvalidOperationException("No active document.");
 
-        MaybeStoreMeta(doc, parameters, "project");
-        MaybeStoreMeta(doc, parameters, "client");
-        MaybeStoreMeta(doc, parameters, "address");
-        MaybeStoreMeta(doc, parameters, "revision");
-        MaybeStoreMeta(doc, parameters, "date");
+        foreach (var key in ProjectInfo.Keys)
+            MaybeStoreMeta(doc, parameters, key);
         MaybeStoreMeta(doc, parameters, "scale_label");
         return ProjectMetaRecord(doc);
     }

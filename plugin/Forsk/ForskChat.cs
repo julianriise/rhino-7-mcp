@@ -263,7 +263,7 @@ Roof or openings before walls: Walls first. Call walls_from_layer before roof_fl
 
 Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. make this a sliding door, top-hung window, flip swing, and change hand are one set_opening_type. Two or more selected openings are one call and no id. make all windows fixed is one set_opening_type with that type and all true. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed Door D02. or Removed 2 windows. Do not repeat a marker id.
 
-Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
+Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores the project info (project, project number, client, address, architect, date, revision). layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
 Do not call Grasshopper tools or execute code. Reply in at most two sentences: one past-tense status line, then at most three short facts. No Target block on success. The panel prints one row per tool.";
 
@@ -761,7 +761,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 + "Do not call capture_viewport unless the user asks to see the view.";
             if (intent == ForskIntent.Print || intent == ForskIntent.Sheets)
             {
-                text += " When the user states a project, client, or address, call set_project_meta. "
+                text += " When the user states project info (name, number, client, address, architect, date, revision), call set_project_meta. "
                     + "The set prints at one scale, the largest of " + SheetScale.LadderText + " at which every sheet fits A3. Naming one of those (layout_pack scale 200 means 1:200) keeps it for the next Print, and the whole set steps up the list if a sheet does not fit. Fit the scale again is layout_pack scale 0. "
                     + "For a PDF, call layout_pack if the pages are not already there, then export_pdf with path omitted. "
                     + "The panel opens a save dialog. Do not invent a path and do not ask the user to type one. "
@@ -1213,12 +1213,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
     /// </summary>
     public static class ForskPrint
     {
-        const string MetaSection = "forsk";
-
-        static readonly string[] MetaKeys =
-        {
-            "project", "client", "address"
-        };
+        const string MetaSection = ProjectInfo.Section;
 
         public static bool IsRequest(string text)
         {
@@ -1260,13 +1255,6 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var units = UnitsProblem();
             if (units != null)
                 return "Print PDF · error · " + units;
-
-            var meta = KnownMeta();
-            if (meta != null)
-            {
-                var stored = Call("set_project_meta", meta);
-                if (!Ok(stored)) return FailLine(stored);
-            }
 
             var pack = Call("layout_pack", view == null ? new JObject() : new JObject { ["views"] = new JArray(view) });
             if (!Ok(pack)) return FailLine(pack);
@@ -1469,25 +1457,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return AbsolutePdf(dialog.FileName, dialog.Directory);
         }
 
-        static JObject KnownMeta()
+        /// <summary>The architect saved on this Mac, which prefills an empty Architect on the Project info card.</summary>
+        public static string FirmArchitect()
         {
-            JObject meta = null;
-            RhinoApp.InvokeOnUiThread(new Action(() =>
-            {
-                var doc = RhinoDoc.ActiveDoc;
-                if (doc == null) return;
-                var obj = new JObject();
-                var any = false;
-                foreach (var key in MetaKeys)
-                {
-                    var value = doc.Strings.GetValue(MetaSection, key);
-                    if (string.IsNullOrWhiteSpace(value)) continue;
-                    obj[key] = value.Trim();
-                    any = true;
-                }
-                if (any) meta = obj;
-            }));
-            return meta;
+            try { return global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.GetString(ProjectInfo.ArchitectSetting, "") ?? ""; }
+            catch (Exception) { return ""; }
+        }
+
+        /// <summary>Each Save of the Project info card keeps its architect for the next file. Empty keeps the last one.</summary>
+        public static void SaveFirmArchitect(string architect)
+        {
+            if (string.IsNullOrWhiteSpace(architect)) return;
+            try { global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.SetString(ProjectInfo.ArchitectSetting, architect.Trim()); }
+            catch (Exception) { }
         }
 
         /// <summary>A title block value stored on the document, or null.</summary>

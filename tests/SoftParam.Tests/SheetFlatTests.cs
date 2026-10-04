@@ -330,4 +330,15 @@ public class SheetExportWindowTests
         Assert.False(SheetFlat.InDrawing("A-WALL", "S-DRAW::North"));
         Assert.False(SheetFlat.InDrawing(null, "S-DRAW::North"));
     }
+
+    /// <summary>N1: every title block cell, the new Project no. and Architect too, goes to A-ANNO-TTLB by its role, never misc.</summary>
+    [Fact]
+    public void TheNewTitleCells_MapToTheTitleBlockLayer()
+    {
+        var cells = TitleBlock.Cells(new TitleBlock.Fields { Drawing = "Plan", Number = "A-20-001", ProjectNo = "2026-07", Architect = "Riise Arkitekter" });
+        Assert.Contains("project_no", cells.Select(c => c.Key));
+        Assert.Contains("architect", cells.Select(c => c.Key));
+        Assert.Equal("A-ANNO-TTLB", SheetFlat.LayerFor("title_cell"));
+        Assert.NotEqual(SheetFlat.Misc, SheetFlat.LayerFor("title_cell"));
+    }
 }

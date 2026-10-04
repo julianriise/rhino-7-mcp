@@ -113,7 +113,7 @@ public class CardTests
     }
 
     [Fact]
-    public void TheTitleBlock_HasProjectClientAddressAndRev_AndIgnoresStoredDateAndScale()
+    public void TheProjectInfoCard_HasTheSevenFields_AndIgnoresTheScaleLabel()
     {
         var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
         {
@@ -124,16 +124,56 @@ public class CardTests
             ["scale_label"] = "1:50"
         }));
         var card = ForskCards.For("meta.title", facts)!;
-        Assert.Equal(new[] { "project", "client", "address", "revision" }, card.Fields!.Select(f => f.Key));
+        Assert.Equal(new[] { "project", "project_no", "client", "address", "architect", "date", "revision" }, card.Fields!.Select(f => f.Key));
         Assert.Equal("Tilbygg Holmen", card.Fields![0].Value);
-        Assert.Equal("Project name", card.Fields![0].Placeholder);
-        Assert.Equal("", card.Fields![2].Value);
-        Assert.Equal("Address", card.Fields![2].Placeholder);
-        Assert.Equal("Rev.", card.Fields![3].Label);
-        Assert.Null(card.Fields![3].Placeholder);
-        Assert.Equal("B", card.Fields![3].Value);
+Assert.Equal("Project name", card.Fields![0].Placeholder);
+        Assert.Equal("", card.Fields![3].Value);
+        Assert.Equal("Address", card.Fields![3].Placeholder);
+        Assert.Equal("Rev.", card.Fields![6].Label);
+        Assert.Null(card.Fields![6].Placeholder);
+        Assert.Equal("B", card.Fields![6].Value);
+        Assert.Equal("2020-01-01", card.Fields![5].Value);
         Assert.Null(card.Note);
-        Assert.Equal("save", card.Pills[0].Id);
+        Assert.Null(card.Data);
+        Assert.Equal(new[] { "save", "cancel" }, card.Pills.Select(p => p.Id));
+    }
+
+    static FileFacts House(Dictionary<string, string> meta, string firm = null) =>
+        FileClassifier.Read(Docs.Of(Docs.House()).With(d => { d.Meta = meta; d.FirmArchitect = firm; }));
+
+    /// <summary>N1: no project name and never asked: Print posts the Project info card first, with the action it stands in front of.</summary>
+    [Fact]
+    public void APrint_WithNoProjectAndNoFlag_AsksForTheProjectInfo_First()
+    {
+        var card = ForskCards.AskInfoFirst(House(new()), "file.print")!;
+        Assert.Equal("meta.title", card.Kind);
+        Assert.Equal("Project info for the title blocks. Asked once.", card.Question);
+        Assert.Equal(7, card.Fields!.Count);
+        Assert.Equal(new[] { "Save and print", "Print without", "Cancel" }, card.Pills.Select(p => p.Label));
+        Assert.Equal(new[] { "save", "skip", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("file.print", card.Data!["pending"]!.ToString());
+
+        var one = ForskCards.AskInfoFirst(House(new()), "print.one", "plan")!;
+        Assert.Equal("plan", one.Data!["view"]!.ToString());
+        var export = ForskCards.AskInfoFirst(House(new()), "export.dwg")!;
+        Assert.Equal(new[] { "Save and export", "Export without", "Cancel" }, export.Pills.Select(p => p.Label));
+    }
+
+    [Fact]
+    public void APrint_RunsDirectly_WithAProjectName_OrOnceAsked()
+    {
+        Assert.Null(ForskCards.AskInfoFirst(House(new() { ["project"] = "Garage" }), "file.print"));
+        Assert.Null(ForskCards.AskInfoFirst(House(new() { ["info_asked"] = "1" }), "file.print"));
+        Assert.Null(ForskCards.AskInfoFirst(House(new() { ["info_asked"] = "1" }), "export.dwg"));
+        Assert.NotNull(ForskCards.AskInfoFirst(House(new() { ["client"] = "Holmen" }), "file.print"));
+    }
+
+    [Fact]
+    public void TheArchitect_PrefillsFromTheFirm_UnlessTheFileHasOne()
+    {
+        string Architect(CardSpec card) => card.Fields!.Single(f => f.Key == "architect").Value;
+        Assert.Equal("Riise Arkitekter", Architect(ForskCards.AskInfoFirst(House(new(), "Riise Arkitekter"), "file.print")!));
+        Assert.Equal("Holmen Ark", Architect(ForskCards.For("meta.title", House(new() { ["architect"] = "Holmen Ark" }, "Riise Arkitekter"))!));
     }
 
     [Fact]
@@ -357,9 +397,9 @@ public class CardTests
     {
         var thread = new DocThread();
         var item = thread.AddCard(ForskCards.TitleBlock(Docs.Facts("house"))!, Docs.Facts("house"));
-        Assert.Equal(new[] { "Project", "Client", "Address", "Rev." }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
+Assert.Equal(new[] { "Project", "Project no.", "Client", "Address", "Architect", "Date", "Rev." }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
         Assert.Equal("Project name", item["fields"]![0]!["placeholder"]!.ToString());
-        Assert.True(item["fields"]![3]!["placeholder"] == null);
+        Assert.True(item["fields"]![6]!["placeholder"] == null);
         Assert.Equal("Project", item["fields"]![0]!["label"]!.ToString());
         Assert.Equal("none", item["depends"]!.ToString());
         var review = thread.AddCard(ForskCards.Review(Docs.Facts("scaled, reviewed"))!, null);

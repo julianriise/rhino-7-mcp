@@ -3756,6 +3756,25 @@ class TestSetProjectMetaTool:
         )
 
     @patch("rhinomcp.tools.set_project_meta.get_rhino_connection")
+    def test_forwards_project_no_architect_and_revision(self, mock_get_conn):
+        from rhinomcp.tools.set_project_meta import set_project_meta
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "project": "Garage", "project_no": "2026-07", "client": "", "address": "",
+            "architect": "Riise Arkitekter", "date": "2026-10-04", "revision": "B", "scale_label": "1:100",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = set_project_meta(ctx=None, project_no="2026-07", architect="Riise Arkitekter", revision="B")
+        assert result["success"] is True
+        assert (result["project_no"], result["architect"], result["revision"]) == ("2026-07", "Riise Arkitekter", "B")
+        mock_conn.send_command.assert_called_once_with(
+            "set_project_meta",
+            {"project_no": "2026-07", "architect": "Riise Arkitekter", "revision": "B"},
+        )
+
+    @patch("rhinomcp.tools.set_project_meta.get_rhino_connection")
     def test_rejects_non_string(self, mock_get_conn):
         from rhinomcp.tools.set_project_meta import set_project_meta
 

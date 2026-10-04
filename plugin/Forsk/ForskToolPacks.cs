@@ -592,12 +592,15 @@ namespace RhinoMCPPlugin.Forsk
                         }
                     }),
                 Fn("set_project_meta",
-                    "Store project, client, address and revision for the Layout title block. Omitted keys stay. An empty string clears that key. Call when the user states project, client, address, or a revision (Revision B). The sheet prints today's date, and its scale is the detail's own scale. No revision, no Rev. cell.",
+                    "Store the project info every title block, the PDF, the takeoff CSV and the IFC read. Omitted keys stay. An empty string clears that key. Call when the user states project info: name, project number, client, address, architect, date or a revision (Revision B). With no date stored the sheet prints the day it is printed. No revision, no Rev. cell.",
                     new JObject
                     {
                         ["project"] = Str("Project name."),
+                        ["project_no"] = Str("Project number, such as 2026-07."),
                         ["client"] = Str("Client (byggherre) name."),
                         ["address"] = Str("Site address."),
+                        ["architect"] = Str("Architect or firm."),
+                        ["date"] = Str("The date the title blocks print, yyyy-MM-dd. An empty string prints the day of the Print."),
                         ["revision"] = Str("Revision letter or number, such as B. An empty string removes the Rev. cell.")
                     }),
                 Fn("layout_pack",

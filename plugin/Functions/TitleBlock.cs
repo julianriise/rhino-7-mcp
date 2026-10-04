@@ -20,9 +20,10 @@ public static class SheetLang
 /// <summary>
 /// v3 P3: the sheet's title block. One flat row of cells along the footer
 /// band, each a caption over its value. English is the default: Drawing,
-/// Drawing no., Scale, Format, Date, Rev. (only when set), Project, Client,
-/// Address. Pass norwegian for Tegning, Tegningsnr., Målestokk, Format, Dato,
-/// Rev., Prosjekt, Byggherre, Adresse. A cell's key is English either way and
+/// Drawing no., Scale, Format, Date, Rev., Project no., Project, Client,
+/// Address, Architect. Pass norwegian for Tegning, Tegningsnr., Målestokk,
+/// Format, Dato, Rev., Prosjektnr., Prosjekt, Byggherre, Adresse, Arkitekt.
+/// The project's captions are ProjectInfo's. A cell's key is English either way and
 /// stays the forsk:cell stamp the smokes read. An empty value drops its cell,
 /// never a dash. Also which footer parts a sheet gets. Pure, no Rhino
 /// document, so it tests headless. Sizes are paper millimetres.
@@ -46,9 +47,11 @@ public static class TitleBlock
         public string Format;
         public string Date;
         public string Revision;
+        public string ProjectNo;
         public string Project;
         public string Client;
         public string Address;
+        public string Architect;
     }
 
     public sealed class Cell
@@ -75,12 +78,44 @@ public static class TitleBlock
         Add("number", SheetLang.Pick(norwegian, "Drawing no.", "Tegningsnr."), fields.Number, HeadMm);
         Add("scale", SheetLang.Pick(norwegian, "Scale", "Målestokk"), fields.Scale, ValueMm);
         Add("sheet", "Format", fields.Format, ValueMm);
-        Add("date", SheetLang.Pick(norwegian, "Date", "Dato"), fields.Date, ValueMm);
-        Add("revision", "Rev.", fields.Revision, ValueMm);
-        Add("project", SheetLang.Pick(norwegian, "Project", "Prosjekt"), fields.Project, ValueMm);
-        Add("client", SheetLang.Pick(norwegian, "Client", "Byggherre"), fields.Client, ValueMm);
-        Add("address", SheetLang.Pick(norwegian, "Address", "Adresse"), fields.Address, ValueMm);
+        void Info(string key, string value) => Add(key, ProjectInfo.Caption(key, norwegian), value, ValueMm);
+        Info(ProjectInfo.Date, fields.Date);
+        Info(ProjectInfo.Revision, fields.Revision);
+        Info(ProjectInfo.ProjectNo, fields.ProjectNo);
+        Info(ProjectInfo.Project, fields.Project);
+        Info(ProjectInfo.Client, fields.Client);
+        Info(ProjectInfo.Address, fields.Address);
+        Info(ProjectInfo.Architect, fields.Architect);
         return cells;
+    }
+
+    /// <summary>The second row's value height: smaller, as it holds the project number and the architect.</summary>
+    public const double SecondValueMm = 2.0;
+    /// <summary>The second row's height at the bottom of the band, when there is one.</summary>
+    public const double SecondRowMm = 7.0;
+    /// <summary>The cells that move to the second row when the first does not hold every cell.</summary>
+    public static readonly IReadOnlyList<string> SecondRowKeys = new[] { ProjectInfo.ProjectNo, ProjectInfo.Architect };
+
+    /// <summary>
+    /// The band's rows. One row when every cell's caption and value fit in
+    /// total. Otherwise Project no. and Architect move to a second, smaller
+    /// row (value SecondValueMm) and the rest keep the first; a cell is
+    /// never squeezed below its text when a second row can take it.
+    /// </summary>
+    public static List<List<Cell>> Rows(IList<Cell> cells, double total, Func<string, double, double> measure)
+    {
+        var rows = new List<List<Cell>>();
+        if (cells == null || cells.Count == 0) return rows;
+        var wants = cells.Sum(c => Math.Max(CaptionWidth(c, measure), TextWidth(c.Value, c.Mm, measure) + 2 * PadMm));
+        var second = cells.Where(c => SecondRowKeys.Contains(c.Key)).ToList();
+        if (wants <= total || second.Count == 0)
+        {
+            rows.Add(cells.ToList());
+            return rows;
+        }
+        rows.Add(cells.Where(c => !SecondRowKeys.Contains(c.Key)).ToList());
+        rows.Add(second.Select(c => new Cell { Key = c.Key, Caption = c.Caption, Value = c.Value, Mm = SecondValueMm }).ToList());
+        return rows;
     }
 
     /// <summary>The narrowest a cell may be: its caption and the padding.</summary>

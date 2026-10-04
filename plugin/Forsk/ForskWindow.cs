@@ -192,6 +192,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             var input = RhinoMCPFunctions.ReadDocInput(doc);
             input.KeyPresent = _keyPresent;
+            input.FirmArchitect = ForskPrint.FirmArchitect();
             input.ListenerUp = _listenerUp;
             input.UndoNewest = Tracker.UndoNewest(doc.RuntimeSerialNumber);
             input.JustPrinted = Tracker.Was("file.print", doc.RuntimeSerialNumber);

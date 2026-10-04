@@ -37,7 +37,7 @@ static class DetailFixtures
     {
         var model = new IfcExport.Model
         {
-            Project = "Garage",
+            Info = ProjectInfo.IfcInfo(null, "Garage"),
             FloorTop = 0,
             Walls =
             {

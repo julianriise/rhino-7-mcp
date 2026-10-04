@@ -369,7 +369,23 @@ namespace RhinoMCPPlugin.Forsk
                         field["value"] = typed;
                         meta[key] = typed.Trim();
                     }
-                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta), userText: pill.Label);
+                    var save = pill.Id == "save";
+                    if (save) ForskPrint.SaveFirmArchitect(meta[ProjectInfo.Architect]?.ToString());
+                    var pending = card["data"]?["pending"]?.ToString();
+                    if (string.IsNullOrEmpty(pending))
+                    {
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta), userText: pill.Label);
+                        break;
+                    }
+                    // Asked once: either pill, then the action the card stood in front of.
+                    doc?.Strings.SetString(ProjectInfo.Section, ProjectInfo.AskedKey, "1");
+                    var pendingView = card["data"]?["view"]?.ToString();
+                    var pendingId = PendingJobId(pending);
+                    Job(thread, pendingId, ForskText.Label(pendingId), sink =>
+                    {
+                        if (save) sink.Tool("set_project_meta", meta);
+                        RunPending(sink, pending, pendingView);
+                    }, userText: pill.Label);
                     break;
                 case "print.one":
                     Print(thread, pill.Label, pill.Id);
@@ -891,22 +907,73 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>Print, or one sheet of it (view). The save dialog is parented to this window.</summary>
         void Print(DocThread thread, string userText, string view = null, string mark = null)
         {
-            var label = ForskText.Label(view == null ? "file.print" : "print.one");
-            Job(thread, view == null ? "file.print" : "print.one", label, sink =>
-            {
-                sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
-                var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, view);
-                sink.Line(line);
-            }, userText: userText, mark: mark);
+            var id = view == null ? "file.print" : "print.one";
+            if (AskInfoFirst(thread, id, view, userText, mark)) return;
+            Job(thread, id, ForskText.Label(id), sink => PrintSteps(sink, view), userText: userText, mark: mark);
+        }
+
+        void PrintSteps(JobSink sink, string view)
+        {
+            sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
+            var line = ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, view);
+            sink.Line(line);
         }
 
         /// <summary>R3: the set as files, one per sheet. The folder dialog is parented to this window.</summary>
         void Export(DocThread thread, string userText, string format, string mark = null)
         {
-            var id = format == "ifc" ? "export.ifc" : "export.dwg";
-            Job(thread, id, ForskText.Label(id), sink =>
-                sink.Line(format == "ifc" ? ForskPrint.ExportIfc(sink.Step, this) : ForskPrint.Export(sink.Step, this, format)),
-                userText: userText, mark: mark);
+            var pending = "export." + format;
+            var id = PendingJobId(pending);
+            if (format != "ifc" && AskInfoFirst(thread, pending, null, userText, mark)) return;
+            Job(thread, id, ForskText.Label(id), sink => RunPending(sink, pending, null), userText: userText, mark: mark);
+        }
+
+        /// <summary>The registry id a pending action runs under: DXF is the DWG pill's.</summary>
+        static string PendingJobId(string pending)
+        {
+            return pending == "export.dxf" ? "export.dwg" : pending;
+        }
+
+        /// <summary>The work of a Print or an Export, after the Project info card or without it.</summary>
+        void RunPending(JobSink sink, string pending, string view)
+        {
+            switch (pending)
+            {
+                case "file.print":
+                    PrintSteps(sink, null);
+                    return;
+                case "print.one":
+                    PrintSteps(sink, view);
+                    return;
+                case "export.ifc":
+                    sink.Line(ForskPrint.ExportIfc(sink.Step, this));
+                    return;
+                case "export.dwg":
+                case "export.dxf":
+                    sink.Line(ForskPrint.Export(sink.Step, this, pending.Substring("export.".Length)));
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// v3: the first Print or Export of a file with no project name posts
+        /// the Project info card instead, once. The card's answer runs pending.
+        /// </summary>
+        bool AskInfoFirst(DocThread thread, string pending, string view, string userText, string mark)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc == null) return false;
+            var facts = ReadFacts(doc);
+            var spec = ForskCards.AskInfoFirst(facts, pending, view);
+            if (spec == null) return false;
+            var id = PendingJobId(pending);
+            thread.Add("user", userText ?? ForskText.Label(id));
+            thread.BeginReply(mark ?? ForskRoles.MarkForAction(id));
+            thread.AddCard(spec, facts);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+            return true;
         }
 
         /// <summary>

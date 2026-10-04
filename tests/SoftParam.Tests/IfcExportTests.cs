@@ -25,7 +25,7 @@ public class IfcExportTests
     /// <summary>The garage smoke's garage: 8 × 4 m outside, 200 mm walls 3 m high, a door and a window in the south wall.</summary>
     public static IfcExport.Model Garage() => new()
     {
-        Project = "Garage",
+        Info = ProjectInfo.IfcInfo(null, "Garage"),
         Walls =
         {
             Wall("w01", Box(0, 0, 8000, 200)),
@@ -48,6 +48,44 @@ public class IfcExportTests
         var db = IfcExport.Build(model);
         Assert.True(db.WriteFile(path), "write " + path);
         return new DatabaseIfc(path);
+    }
+
+    /// <summary>N1: the project info names the IfcProject, the IfcSite with its postal address, and Forsk_ProjectInfo on the building.</summary>
+    [Fact]
+    public void TheProjectInfo_NamesTheProjectSiteAndBuilding()
+    {
+        var model = Garage();
+        model.Info = ProjectInfo.IfcInfo(ProjectInfoTests.Read(ProjectInfoTests.Smoke), "garage-file");
+        var db = WriteAndRead(model, "/tmp/forsk-ifc-garage-info.ifc");
+        var project = db.OfType<IfcProject>().Single();
+        Assert.Equal("2026-07", project.Name);
+        Assert.Equal("Garage", project.LongName);
+        var site = db.OfType<IfcSite>().Single();
+        Assert.Equal("Storgata 1, 0150 Oslo", site.Name);
+#pragma warning disable CS0618 // IFC4 has SiteAddress; IFC4X3 deprecates it.
+        Assert.Equal(new[] { "Storgata 1, 0150 Oslo" }, site.SiteAddress.AddressLines.ToArray());
+#pragma warning restore CS0618
+        var building = db.OfType<IfcBuilding>().Single();
+        Assert.Equal("Garage", building.Name);
+        string Value(string name) => ((building.FindProperty(name) as IfcPropertySingleValue)?.NominalValue as IfcLabel)?.Value?.ToString();
+        Assert.NotNull(building.FindPropertySet("Forsk_ProjectInfo"));
+        Assert.Equal("Ola Nordmann", Value("Client"));
+        Assert.Equal("Riise Arkitekter", Value("Architect"));
+        Assert.Equal("2026-07", Value("ProjectNumber"));
+        Assert.Equal("B", Value("Revision"));
+        Assert.Equal("2026-10-04", Value("Date"));
+    }
+
+    [Fact]
+    public void NoProjectInfo_KeepsTheFileName_AndAPlainSite()
+    {
+        var db = IfcExport.Build(Garage());
+        Assert.Equal("Garage", db.OfType<IfcProject>().Single().Name);
+        Assert.Equal("Site", db.OfType<IfcSite>().Single().Name);
+#pragma warning disable CS0618
+        Assert.Null(db.OfType<IfcSite>().Single().SiteAddress);
+#pragma warning restore CS0618
+        Assert.Null(db.OfType<IfcBuilding>().Single().FindPropertySet("Forsk_ProjectInfo"));
     }
 
     [Fact]
