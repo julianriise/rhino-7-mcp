@@ -46,6 +46,8 @@ namespace RhinoMCPPlugin.Forsk
         readonly PageChannel _channel;
         readonly UITimer _boundsTimer;
         bool _ready;
+        /// <summary>A leave arrived with the button down. Idle hands focus back once the drag ends outside.</summary>
+        bool _hoverLeave;
         FileFacts _facts;
         uint _factsDoc;
 
@@ -156,6 +158,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "role":
                         PickRole(message["role"]?.ToString());
                         return;
+                    case "hover":
+                        OnHover(message["edge"]?.ToString(), message["typing"]?.Value<bool>() ?? false, message["dragging"]?.Value<bool>() ?? false);
+                        return;
                 }
             }
             catch (Exception e)
@@ -214,6 +219,7 @@ namespace RhinoMCPPlugin.Forsk
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
                 model = WindowView.Build(thread, Facts(doc), _helpOpen);
+            model["hoverFocus"] = HoverOn();
             var count = model["thread"] is JArray items ? items.Count : 0;
             Log("render · " + count + " items");
             Script("Forsk.render", model);
@@ -319,6 +325,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Poll(force: false);
                 var open = _open;
+                open?.FinishHover();
                 if (open == null || !_dirty || open._busy) return;
                 open.Render();
             };
@@ -361,6 +368,130 @@ namespace RhinoMCPPlugin.Forsk
             catch (Exception e)
             {
                 Log("focus " + e.Message);
+            }
+        }
+
+        /// <summary>Plugin setting ForskHoverFocus. Missing settings, and a missing key, are on.</summary>
+        static bool HoverOn()
+        {
+            try
+            {
+                var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
+                if (settings == null) return true;
+                return settings.GetBool(ForskHover.SettingKey, true);
+            }
+            catch (Exception e)
+            {
+                Log("hover setting " + e.Message);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// The pointer entered or left the page. Enter makes this window key and
+        /// focuses the composer. Leave gives the keyboard back to Rhino, unless
+        /// the pointer is still over this window (its title bar).
+        /// </summary>
+        void OnHover(string edge, bool typing, bool dragging)
+        {
+            if (Mouse.Buttons != MouseButtons.None) dragging = true;
+            var decision = ForskHover.Decide(HoverOn(), edge, typing, dragging);
+            if (decision == ForskHover.None)
+            {
+                _hoverLeave = edge == "leave" && dragging && !typing;
+                return;
+            }
+            _hoverLeave = false;
+            if (decision == ForskHover.Chat)
+            {
+                MakeChatKey();
+                return;
+            }
+            if (PointerInside())
+            {
+                Log("hover leave · still over the window");
+                return;
+            }
+            Log("hover leave · rhino");
+            HandToRhino();
+        }
+
+        /// <summary>The drag that left the page has ended. Outside, Rhino takes the keyboard; inside, the chat does.</summary>
+        void FinishHover()
+        {
+            if (!_hoverLeave || Mouse.Buttons != MouseButtons.None) return;
+            _hoverLeave = false;
+            if (PointerInside())
+            {
+                MakeChatKey();
+                return;
+            }
+            Log("hover leave · rhino");
+            HandToRhino();
+        }
+
+        /// <summary>Makes the Eto window the key window, then the web view, then the composer.</summary>
+        void MakeChatKey()
+        {
+            try
+            {
+                MakeKey(ControlObject);
+                Focus();
+                _web.Focus();
+                if (_ready) RunScript("Forsk.focus()", "focus");
+                Log("hover enter · chat");
+            }
+            catch (Exception e)
+            {
+                Log("hover focus " + e.Message);
+            }
+        }
+
+        static bool _keyMissing;
+
+        /// <summary>AppKit's makeKeyWindow, so a hover keys the panel without a click. False when this build has no such method.</summary>
+        static bool MakeKey(object native)
+        {
+            if (native == null) return false;
+            try
+            {
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
+                for (var type = native.GetType(); type != null; type = type.BaseType)
+                {
+                    var method = type.GetMethod("MakeKeyWindow", flags, null, Type.EmptyTypes, null);
+                    if (method == null || method.DeclaringType != type) continue;
+                    method.Invoke(native, null);
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                if (_keyMissing) return false;
+                _keyMissing = true;
+                Log("hover key · " + e.GetBaseException().Message + "; Focus() is the fallback");
+                return false;
+            }
+            if (!_keyMissing)
+            {
+                _keyMissing = true;
+                Log("hover key · MakeKeyWindow is not on this window; Focus() is the fallback");
+            }
+            return false;
+        }
+
+        /// <summary>The pointer is inside the window frame, title bar included.</summary>
+        bool PointerInside()
+        {
+            try
+            {
+                var p = Mouse.Position;
+                return p.X >= Location.X && p.Y >= Location.Y
+                    && p.X < Location.X + Size.Width && p.Y < Location.Y + Size.Height;
+            }
+            catch (Exception e)
+            {
+                Log("hover pointer " + e.Message);
+                return false;
             }
         }
 
