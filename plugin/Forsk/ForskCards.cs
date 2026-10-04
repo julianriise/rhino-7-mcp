@@ -22,6 +22,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool Long;
         /// <summary>The row moves with ↑ ↓, and the page posts the rows' order with the values.</summary>
         public bool Order;
+        /// <summary>Grey hint shown while Value is empty. The page does not submit it.</summary>
+        public string Placeholder;
     }
 
     /// <summary>
@@ -244,9 +246,48 @@ namespace RhinoMCPPlugin.Forsk
             {
                 string value = null;
                 f?.Meta?.TryGetValue(key, out value);
-                card.Fields.Add(new CardField { Key = key, Label = ForskText.Get("meta." + key), Value = value ?? "" });
+                card.Fields.Add(new CardField
+                {
+                    Key = key,
+                    Label = ForskText.Get("meta." + key),
+                    Value = MetaValue(key, value),
+                    Placeholder = MetaPlaceholder(key)
+                });
             }
             return card;
+        }
+
+        /// <summary>
+        /// A stored Norwegian seed is the old empty hint, not a saved name.
+        /// The field stays blank and the English hint shows.
+        /// </summary>
+        static string MetaValue(string key, string value)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length == 0) return "";
+            return string.Equals(text, MetaSeed(key), StringComparison.Ordinal) ? "" : text;
+        }
+
+        static string MetaPlaceholder(string key)
+        {
+            switch (key)
+            {
+                case "project": return "Project name";
+                case "client": return "Client";
+                case "address": return "Address";
+                default: return null;
+            }
+        }
+
+        static string MetaSeed(string key)
+        {
+            switch (key)
+            {
+                case "project": return "Min tittel";
+                case "client": return "Klient";
+                case "address": return "Adresse";
+                default: return null;
+            }
         }
 
         /// <summary>Every sheet of the set in set order, those switched off too: one sheet prints on its own.</summary>

@@ -126,11 +126,34 @@ public class CardTests
         var card = ForskCards.For("meta.title", facts)!;
         Assert.Equal(new[] { "project", "client", "address", "revision" }, card.Fields!.Select(f => f.Key));
         Assert.Equal("Tilbygg Holmen", card.Fields![0].Value);
+        Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Equal("", card.Fields![2].Value);
+        Assert.Equal("Address", card.Fields![2].Placeholder);
         Assert.Equal("Rev.", card.Fields![3].Label);
+        Assert.Null(card.Fields![3].Placeholder);
         Assert.Equal("B", card.Fields![3].Value);
         Assert.Null(card.Note);
         Assert.Equal("save", card.Pills[0].Id);
+    }
+
+    [Fact]
+    public void TheTitleBlock_ShowsEnglishHints_AndTreatsTheNorwegianSeedsAsEmpty()
+    {
+        var empty = ForskCards.For("meta.title", Docs.Facts("empty"))!;
+        Assert.Equal(new[] { "", "", "", "" }, empty.Fields!.Select(f => f.Value));
+        Assert.Equal(new[] { "Project name", "Client", "Address", null }, empty.Fields!.Select(f => f.Placeholder));
+
+        var seeded = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
+        {
+            ["project"] = "Min tittel",
+            ["client"] = "Klient",
+            ["address"] = "Adresse"
+        }));
+        var card = ForskCards.For("meta.title", seeded)!;
+        Assert.Equal(new[] { "", "", "", "" }, card.Fields!.Select(f => f.Value));
+        Assert.Equal("Project name", card.Fields![0].Placeholder);
+        Assert.Equal("Client", card.Fields![1].Placeholder);
+        Assert.Equal("Address", card.Fields![2].Placeholder);
     }
 
     [Fact]
@@ -335,6 +358,8 @@ public class CardTests
         var thread = new DocThread();
         var item = thread.AddCard(ForskCards.TitleBlock(Docs.Facts("house"))!, Docs.Facts("house"));
         Assert.Equal(new[] { "Project", "Client", "Address", "Rev." }, ((JArray)item["fields"]!).Select(f => f!["label"]!.ToString()));
+        Assert.Equal("Project name", item["fields"]![0]!["placeholder"]!.ToString());
+        Assert.True(item["fields"]![3]!["placeholder"] == null);
         Assert.Equal("Project", item["fields"]![0]!["label"]!.ToString());
         Assert.Equal("none", item["depends"]!.ToString());
         var review = thread.AddCard(ForskCards.Review(Docs.Facts("scaled, reviewed"))!, null);

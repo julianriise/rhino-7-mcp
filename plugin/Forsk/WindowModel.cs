@@ -154,6 +154,7 @@ namespace RhinoMCPPlugin.Forsk
                     if (field.Order) f["order"] = true;
                     if (field.Options != null && field.Options.Count > 0)
                         f["options"] = new JArray(field.Options);
+                    if (!string.IsNullOrEmpty(field.Placeholder)) f["placeholder"] = field.Placeholder;
                     fields.Add(f);
                 }
                 item["fields"] = fields;
