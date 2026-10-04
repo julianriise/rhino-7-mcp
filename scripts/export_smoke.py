@@ -43,18 +43,20 @@ def plan_file(names: list[str]) -> str | None:
 
 
 def add_details(send) -> tuple[list[str], list[str]]:
-    """A detail of the first door and of its host wall, by their forsk:ids.
-    Returns the report lines and the ids it added, to remove at the end."""
-    door = next((
+    """A detail of door D01 (else the lowest mark) and of its host wall.
+    The opening goes by its marker's forsk:id, else the marker's object id,
+    as the plugin names a picked one. Returns the report lines and the ids
+    it added, to remove at the end."""
+    doors = sorted((
         m for m in plan_smoke.opening_markers(send)
         if (m.get("attributes") or {}).get("forsk:opening_kind") == "door"
         and (m.get("attributes") or {}).get("forsk:host_id")
-        and (m.get("attributes") or {}).get("forsk:id")
-    ), None)
-    if door is None:
+        and ((m.get("attributes") or {}).get("forsk:id") or m.get("id"))
+    ), key=lambda m: (m["attributes"].get("forsk:mark") != "D01", str(m["attributes"].get("forsk:mark") or "~")))
+    if not doors:
         return ["FAIL details: no door with a host wall"], []
-    attrs = door["attributes"]
-    refs = [{"wall": attrs["forsk:host_id"]}, {"opening": attrs["forsk:id"]}]
+    attrs = doors[0]["attributes"]
+    refs = [{"wall": attrs["forsk:host_id"]}, {"opening": attrs.get("forsk:id") or doors[0]["id"]}]
     before = {row.get("id") for row in send("details", {"action": "list"}).get("details") or []}
     result = send("details", {"action": "add", "refs": refs})
     added = [row.get("id") for row in result.get("details") or [] if row.get("id") not in before]

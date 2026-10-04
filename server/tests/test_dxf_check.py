@@ -111,8 +111,14 @@ def test_the_plan_file_is_found_by_its_number():
     assert export_smoke.plan_file(["x.dxf"]) is None
 
 
-DOOR = {"attributes": {"forsk:kind": "opening_marker", "forsk:opening_kind": "door",
-                        "forsk:id": "o-door", "forsk:host_id": "w01"}}
+def marker(object_id, mark, kind="door", **attrs):
+    """An opening marker as get_objects lists the garage's: OpeningsFromLayer
+    stamps no forsk:id, so the plugin names the opening by its object id."""
+    return {"id": object_id, "attributes": {"forsk:kind": "opening_marker", "forsk:opening_kind": kind,
+                                            "forsk:mark": mark, "forsk:host_id": "w01", **attrs}}
+
+
+DOOR = marker("o-door", "D01")
 
 
 class FakeRhino:
@@ -354,6 +360,31 @@ def test_the_export_smoke_adds_a_detail_and_checks_its_sheet(tmp_path):
     assert calls[-1] == {"action": "remove", "ids": ["DET02", "DET03"]}
     assert rhino.details == [{"id": "DET01", "wall": "w02"}]
     assert "details: 2 added (w01, o-door)" in lines
+
+
+def detail_refs(markers):
+    rhino = FakeRhino(lambda fmt: [], markers=markers)
+    export_smoke.add_details(rhino)
+    return next(c[1]["refs"] for c in rhino.calls if c[0] == "details" and c[1]["action"] == "add")
+
+
+def test_the_export_smoke_details_d01_by_its_object_id_when_it_has_no_forsk_id():
+    garage = [marker("9c1e-d04", "D04"), marker("77aa-w01", "W01", kind="window"), marker("3b2f-d01", "D01")]
+    assert detail_refs(garage) == [{"wall": "w01"}, {"opening": "3b2f-d01"}]
+
+
+def test_the_export_smoke_takes_a_forsk_id_before_the_object_id():
+    assert detail_refs([marker("3b2f-d01", "D01", **{"forsk:id": "o-d01"})]) == [{"wall": "w01"}, {"opening": "o-d01"}]
+
+
+def test_the_export_smoke_without_d01_takes_the_lowest_mark():
+    assert detail_refs([marker("a", "D04"), marker("b", "D02")]) == [{"wall": "w01"}, {"opening": "b"}]
+
+
+def test_the_export_smoke_skips_a_door_without_a_host_wall():
+    lone = marker("3b2f-d01", "D01")
+    del lone["attributes"]["forsk:host_id"]
+    assert detail_refs([lone, marker("9c1e-d04", "D04")]) == [{"wall": "w01"}, {"opening": "9c1e-d04"}]
 
 
 def test_the_export_smoke_fails_on_a_detail_sheet_without_its_value(tmp_path):
