@@ -1285,6 +1285,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var message = result?["message"]?.ToString() ?? "";
             var blankAt = message.IndexOf("Blank preview:", StringComparison.Ordinal);
             var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
+            // N3: the vector write failed and the page previews stood in.
+            if (result?["vector"]?.Type == JTokenType.Boolean && !result["vector"].Value<bool>()) blank = " (raster fallback)" + blank;
             var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
             var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
             var detailScales = (packed?["detail_scales"] as JArray)?.Select(s => s.Value<int>()).ToList();

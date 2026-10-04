@@ -19,12 +19,6 @@ public class PrintInkTests
     };
 
     [Fact]
-    public void Pdf_output_uses_print_colour()
-    {
-        Assert.Equal("PrintColor", PrintInk.OutputColorMode);
-    }
-
-    [Fact]
     public void Every_Forsk_layer_prints_grey_and_daylight_stays_off()
     {
         Assert.Equal(Expected.OrderBy(n => n), PrintInk.Names.OrderBy(n => n));

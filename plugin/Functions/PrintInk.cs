@@ -7,13 +7,10 @@ namespace RhinoMCPPlugin.Functions;
 /// What a Forsk layer or object prints. Display colour stays the modelling
 /// colour. Print colour is this table (layers) or the sheet's own pen
 /// (drawings). A-ANALYSE and X-PLAN stay off the sheet (plot weight below 0).
-/// PDF output uses <see cref="OutputColorMode"/> (ViewCaptureSettings.ColorMode).
+/// The vector PDF writes each object's print colour as grey.
 /// </summary>
 public static class PrintInk
 {
-    /// <summary>ViewCaptureSettings.ColorMode name the PDF path parses.</summary>
-    public const string OutputColorMode = "PrintColor";
-
     public readonly struct Spec
     {
         public Spec(byte r, byte g, byte b, double weightMm)

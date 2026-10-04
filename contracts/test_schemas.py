@@ -1027,6 +1027,8 @@ def test_responses():
         "count": 1,
         "pages": ["Forsk — Plan"],
         "message": "Wrote 1 page(s) to /tmp/forsk-plan.pdf.",
+        "vector": True,
+        "hatch_fallback": 0,
     }
     if not validate("responses/export_pdf_result.json", pdf_result):
         all_passed = False

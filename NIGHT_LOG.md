@@ -1,11 +1,12 @@
-# Night log: v3b project info, CSV, vector PDF on `night-v3b`
+# Night log: v3b project info, CSV, vector PDF on `claude/forsk-night-v3b-235eob`
 
 Base: main `de87b2a` (per the launch note; the brief was written at `6a2a456`). This cloud session's designated branch is `claude/forsk-night-v3b-235eob`, so the work is there, not on `night-v3b`; nothing is pushed to `main`.
 
 | Slice | Commit | State |
 |---|---|---|
 | N1 project info entered once | `83281d7` | done headless; title block, card and IFC unverified live |
-| N2 takeoff CSV and Export CSV | (this commit) | done headless; the CSV beside the PDF/DWG and the dialog unverified live |
+| N2 takeoff CSV and Export CSV | `2898eac` | done headless; the CSV beside the PDF/DWG and the dialog unverified live |
+| N3 vector PDF and `pdf_check` | (this commit) | done headless; the live Print through `SheetPdf` unverified |
 
 ## Gates
 
@@ -13,9 +14,11 @@ Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pyte
 
 - N1: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2209 passed (+21), 1 skipped (nb-NO); pytest exit 0, 518 passed (+1), 2 skipped; `contracts/test_schemas.py` exit 0.
 - N2: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2228 passed (+19), 1 skipped; pytest exit 0, 520 passed (+2), 2 skipped; contracts exit 0 (it first failed "write commands with no ModelView": `export_csv` is `ReadOnly = true`, as `export_ifc`).
+- N3: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2239 passed (+11), 1 skipped; pytest exit 0, 527 passed (+7), 2 skipped, with pypdf 6.19.0 in the venv (`test_pdf_check.py` 7 cases including the golden; without pypdf they skip); contracts exit 0. Against the base: dotnet 2188 → 2239 (+51), pytest 517 → 527 (+10).
 
 ## Unverified (needs Rhino)
 
+- N3: the live Print through `SheetPdf` (`FlattenPage` on each page after `layout_pack`, `ToPolyline` at 0.05 mm, solid hatches through `Get3dCurves`, patterned hatches through `Explode`, the print colour as grey, text height as Helvetica cap height), how it looks against the old 150 dpi print, the Print time, the raster fallback (only when the vector write throws), and `pdf_check` on the live PDF. The golden fixture passes `pdf_check --expect-meta --expect-text Garage` (`ok 1 page vector`).
 - N2: `export_csv` on the live garage (the document walk in `ReadTakeoffInputs`, `forsk:host_id` on the markers, `forsk:level` on the walls, the stairs' `forsk:id`, room perimeters from `PlanRoom.Outline`); the CSV beside the PDF after Print and in the DWG folder after Export; the Export CSV save dialog; Numbers/Excel opening the file with æøå intact.
 - N1: the Project info card in the window (seven fields, Save and print / Print without, the pending Print or Export running after the answer, `info_asked` set on the file, the gear dot clearing); `forsk.architect` in the plug-in settings across files; the two-row title block on paper (the first row in the top 11 mm, Project no. and Architect in the bottom 7 mm at 2.0, a full-width rule between) with Rhino's text measure; the IFC project, site address and `Forsk_ProjectInfo` from the live document.
 
@@ -33,9 +36,16 @@ Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pyte
 - N2 the Room rows are area_stats' tagged rooms in its order (largest first); a wall row's Level is the record's `forsk:level` (empty when the record has none).
 - N2 the takeoff card's rows were pinned first (`TheTakeoffCardRows_AreByteIdenticalToBefore`: the smoke garage with slab, roof, openings and a stair, and two rooms with an existing shed, to six decimals) and stayed identical after `Takeoff.Runs` went public.
 
+- N3 `PdfInfo`'s Title takes the first and last sheet numbers from the pages' footers (`forsk:sheet_no`).
+- N3 the raster fallback is used on any OS when the vector write throws (it was the Mac's only path); Windows' `ViewCaptureSettings` branch, `PdfOutputColor` and `PrintInk.OutputColorMode` are gone (only that branch used them). `TestPrintGuards` in `test_tools.py` pinned the old engine (ViewCapture, `RunningOnOSX`); it now pins the vector writer and no OS switch.
+- N3 `SheetPdf.Text` has `Vertical` (bottom/middle/top) besides `Align`, because the flat pieces carry Rhino's full justification; several lines stack at 1.6 × the height. Bold text uses Helvetica-Bold but is measured with Helvetica's widths (only left-aligned title-block values are bold today). Text height is Rhino's cap height, so the PDF size is height ÷ 0.718.
+- N3 the golden test compares the inflated content and the Info, not the file bytes: deflate output can differ between zlib builds (Linux vs the Mac).
+- N3 the result gains `vector` and `hatch_fallback`; the log line also counts `off_page` pieces, non-Arial texts and unmapped characters.
+
 ## Left
 
-- PDF metadata pending N3.
+- After Julian's live green: delete the capture machinery (`PreviewFrame`, `PaintWatch`, `WakePagePreview`, `ExportMacPreviewPdf`) or keep it as the fallback; the brief says delete only after the live green.
+- `server/uv.lock` is untouched: `pypdf` is in `server/pyproject.toml` `dev` extras, so run `uv lock` on the Mac.
 - N2 nb-NO CSV dialect (Julian's call, not built): Norwegian Excel's list separator is `;` and its decimal mark `,`, so a double-click may put each row in one cell. Data → From Text/CSV (UTF-8, comma, English locale) reads it, and Numbers and LibreOffice ask on open. No `sep=,` line (Excel then drops the BOM and breaks æøå). A later `locale: "nb"` could write `;` with decimal commas.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
@@ -43,7 +53,20 @@ Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pyte
 - ROADMAP v3 gate: tick "Project info once for all title blocks" after the live check.
 - `docs/SMOKE.md`: the title block has Project no. and Architect (second row when the first is full).
 - ROADMAP v3 gate: tick "Schedule export to CSV/XLSX" (CSV only; XLSX stays out) after the live check.
+- `scripts/smoke_garage.sh`: after the Print step, run `python3 scripts/pdf_check.py "$PDF" --expect-meta --expect-text Garage` (exit 1 fails the smoke); `smoke_ensure_pdfpng` stays for the PNGs.
+- ROADMAP v3 gate: tick "Vector PDF check" after the live check.
+- `docs/SMOKE.md`: the garage Print line expects `ok N pages vector` and `+ Takeoff CSV` on the receipt.
 - `scripts/smoke_garage.sh` could check that `<project> Takeoff.csv` lands in the DWG folder after `export_sheets` (the smoke calls `export_sheets` directly, so it writes no CSV unless it calls `export_csv` too).
+
+## Live checklist (about 2 minutes: one Print, one Export)
+
+Garage from `smoke_garage`, plugin built from `claude/forsk-night-v3b-235eob`.
+
+1. ⋯ → **Project info**: clear Project, Save (the gear gets its dot). Press **Print**: the **Project info** card asks first ("Asked once."), Architect prefilled if saved before. Fill Project `Test house`, Project no. `2026-07`, Client, Address, Architect; leave Date empty; **Save and print**. The dialog offers `Test house.pdf`; the receipt ends "· Test house.pdf + Takeoff CSV"; the gear dot is gone.
+2. In Preview: the plan at 800 % stays sharp; the title block's text selects (Drawing … Rev., Project, Client, Address in the top row; Project no. and Architect in the smaller bottom row; Date today); ⌘I shows Title and Author; one detail sheet looks like the 150 dpi print with heavier cut lines; Print is faster than before.
+3. Terminal: `python3 ~/Documents/hobby/rhino-7-mcp/scripts/pdf_check.py ~/Desktop/"Test house.pdf" --expect-meta --expect-text "Test house"` prints `ok N pages vector` (`pip3 install pypdf` first if missing).
+4. Open `Test house Takeoff.csv` in Numbers or Excel (Excel: Data → From Text/CSV): the header block, then Room, Wall, Door, Window, Stair rows with æøå intact; a wall's length matches the Takeoff card's sum; D01's Wall column names its wall.
+5. **Export DWG** once (no card): `Test house DWG/` holds the sheets and `Test house Takeoff.csv`; `… A-20-001 Plan.dwg`'s title block reads `2026-07` and `Test house`. Do not print again. The IFC project and site are headless only.
 
 # Night log: v4 detail slices on `cursor/add-detail-2118`
 

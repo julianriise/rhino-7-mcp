@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "export_pdf_result.json",
   "title": "ExportPdfResult",
-  "description": "PDF written by FilePdf, or a refuse message when the path, layouts, or detail ink is missing. Rhino 7 Mac writes raster pages.",
+  "description": "The PDF written, or a refuse message when the path, layouts, or detail ink is missing. v3: vector pages (lines and real text) from the flat sheets the DWG is written from; vector false means the vector write failed and the page previews were captured as raster pages instead.",
   "type": "object",
   "properties": {
     "path": { "type": "string" },
@@ -11,7 +11,9 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "message": { "type": "string" }
+    "message": { "type": "string" },
+    "vector": { "type": "boolean", "description": "True for the vector writer, false for the raster fallback." },
+    "hatch_fallback": { "type": "integer", "minimum": 0, "description": "Patterned hatches drawn as their boundary because they would not explode." }
   },
   "required": ["path", "count", "pages", "message"]
 }

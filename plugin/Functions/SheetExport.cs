@@ -48,6 +48,8 @@ public partial class RhinoMCPFunctions
         public double TextMm;
         public string Justify;
         public string Font;
+        /// <summary>The object's resolved print colour: the PDF writes it as grey. Black by default.</summary>
+        public System.Drawing.Color Color = System.Drawing.Color.Black;
     }
 
     [McpCommand("export_sheets", ModelView = true)]
@@ -207,6 +209,7 @@ public partial class RhinoMCPFunctions
         var affine = new SheetFlat.Affine { A = map.M00, B = map.M01, C = map.M03, D = map.M10, E = map.M11, F = map.M13 };
         var fromObject = attr.PlotWeightSource == ObjectPlotWeightSource.PlotWeightFromObject;
         var geometry = obj.Geometry;
+        var colour = PrintColour(doc, attr);
 
         if (geometry is TextEntity text)
         {
@@ -223,7 +226,8 @@ public partial class RhinoMCPFunctions
                 TextPlane = plane,
                 TextMm = SheetFlat.TextMm(text.TextHeight, affine),
                 Justify = SheetFlat.Justification(text.TextHorizontalAlignment.ToString(), text.TextVerticalAlignment.ToString()),
-                Font = text.Font?.QuartetName
+                Font = text.Font?.QuartetName,
+                Color = colour
             });
             return;
         }
@@ -249,7 +253,7 @@ public partial class RhinoMCPFunctions
                         curve.Dispose();
                         continue;
                     }
-                    pieces.Add(new FlatPiece { Layer = layer, Weight = weight, Geometry = curve });
+                    pieces.Add(new FlatPiece { Layer = layer, Weight = weight, Geometry = curve, Color = colour });
                 }
                 return;
             }
@@ -261,7 +265,8 @@ public partial class RhinoMCPFunctions
                 Layer = layer,
                 Weight = SheetFlat.Weight(how, 0, fromObject, attr.PlotWeight),
                 Geometry = copy,
-                HatchPattern = doc.HatchPatterns.FindIndex(hatch.PatternIndex)?.Name ?? "Solid"
+                HatchPattern = doc.HatchPatterns.FindIndex(hatch.PatternIndex)?.Name ?? "Solid",
+                Color = colour
             });
             return;
         }
@@ -275,7 +280,8 @@ public partial class RhinoMCPFunctions
             {
                 Layer = layer,
                 Weight = SheetFlat.Weight(SheetFlat.Draw.AsIs, 0, fromObject, attr.PlotWeight),
-                Geometry = copy
+                Geometry = copy,
+                Color = colour
             });
         }
     }
