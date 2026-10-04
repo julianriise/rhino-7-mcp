@@ -516,6 +516,20 @@ public static class RoomDetect
         return best ?? UnnamedRoom(norwegian);
     }
 
+    /// <summary>A closed ring's perimeter: the sum of its edges, the last back to the first.</summary>
+    public static double Perimeter(IList<Pt> ring)
+    {
+        if (ring == null || ring.Count < 2) return 0;
+        var sum = 0.0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            sum += Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+        }
+        return sum;
+    }
+
     public static double Area(IList<Pt> ring)
     {
         if (ring == null || ring.Count < 3) return 0;

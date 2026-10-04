@@ -812,6 +812,13 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     ? new JObject { ["status"] = "success", ["result"] = new JObject { ["message"] = line } }
                     : ForskTools.Fail(line);
             }
+            if (name == "export_csv" && string.IsNullOrWhiteSpace(args?["path"]?.ToString()))
+            {
+                var line = ForskPrint.ExportCsv(null, parent);
+                return line.StartsWith(ForskReceipt.Done, StringComparison.Ordinal)
+                    ? new JObject { ["status"] = "success", ["result"] = new JObject { ["message"] = line } }
+                    : ForskTools.Fail(line);
+            }
             if (name == "export_sheets")
             {
                 // The model names no folder: the user picks one, and the files go in "<project> DWG" inside it.
@@ -1281,8 +1288,65 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
             var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
             var detailScales = (packed?["detail_scales"] as JArray)?.Select(s => s.Value<int>()).ToList();
+            // N2: the whole set's Print writes the takeoff beside the PDF. One sheet does not.
+            string csv = null;
+            if (view == null)
+                csv = WriteCsv(Path.Combine(Path.GetDirectoryName(written) ?? "", TakeoffCsv.FileName(Path.GetFileNameWithoutExtension(written))));
             return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank,
-                detailScales, packed?["details_dropped"]?.Value<int>() ?? 0);
+                detailScales, packed?["details_dropped"]?.Value<int>() ?? 0, csv);
+        }
+
+        /// <summary>export_csv at path: "" when written, else why not. A failed CSV never fails the Print or the export.</summary>
+        static string WriteCsv(string path)
+        {
+            try
+            {
+                var envelope = Call("export_csv", new JObject { ["path"] = path });
+                if (Ok(envelope) && !string.IsNullOrWhiteSpace((envelope["result"] as JObject)?["path"]?.ToString())) return "";
+                var message = (envelope?["result"] as JObject)?["message"]?.ToString() ?? envelope?["message"]?.ToString();
+                return string.IsNullOrWhiteSpace(message) ? "export failed" : message;
+            }
+            catch (Exception e)
+            {
+                return e.Message;
+            }
+        }
+
+        /// <summary>N2: the takeoff as a CSV. A save dialog named "&lt;project&gt; Takeoff.csv", then export_csv. One line back.</summary>
+        public static string ExportCsv(Action<string> progress, Window parent)
+        {
+            Report(progress, "Choose where to save the CSV.");
+            string path = null;
+            using (var done = new System.Threading.ManualResetEvent(false))
+            {
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    try
+                    {
+                        var dialog = new Eto.Forms.SaveFileDialog
+                        {
+                            Title = "Export CSV",
+                            FileName = TakeoffCsv.FileName(Sanitize(StoredMeta("project"))),
+                            CheckFileExists = false
+                        };
+                        dialog.Filters.Add(new FileFilter("CSV", ".csv"));
+                        TrySetDesktop(dialog);
+                        if (dialog.ShowDialog(parent ?? RhinoEtoApp.MainWindow) == DialogResult.Ok)
+                            path = AbsoluteWith(dialog.FileName, dialog.Directory, ".csv");
+                    }
+                    finally { done.Set(); }
+                });
+                done.WaitOne();
+            }
+            if (string.IsNullOrEmpty(path))
+                return "Export CSV · cancelled";
+            Report(progress, "Writing the CSV.");
+            var envelope = Call("export_csv", new JObject { ["path"] = path });
+            var result = envelope?["result"] as JObject;
+            var message = result?["message"]?.ToString() ?? envelope?["message"]?.ToString() ?? "";
+            if (!Ok(envelope) || string.IsNullOrWhiteSpace(result?["path"]?.ToString()))
+                return "Export CSV · error · " + ForskTools.Clip(string.IsNullOrWhiteSpace(message) ? "Export failed." : message);
+            return message;
         }
 
         /// <summary>
@@ -1311,7 +1375,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)
                 || count == 0 || !message.StartsWith("Exported", StringComparison.Ordinal))
                 return label + " · error · " + ForskTools.Clip(string.IsNullOrWhiteSpace(message) ? "Export failed." : message);
-            return ForskReceipt.ExportLine(count, format, result?["folder"]?.ToString() ?? folder);
+            var written = result?["folder"]?.ToString() ?? folder;
+            // N2: the takeoff goes into the same folder.
+            var csv = WriteCsv(Path.Combine(written, TakeoffCsv.FileName(Sanitize(StoredMeta("project")))));
+            return ForskReceipt.ExportLine(count, format, written, csv);
         }
 
         /// <summary>R4: the model as IFC. A save dialog parented to the window, then export_ifc. One line back.</summary>

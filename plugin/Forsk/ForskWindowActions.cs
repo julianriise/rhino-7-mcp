@@ -178,6 +178,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "export.ifc":
                     Export(thread, null, "ifc");
                     return;
+                case "export.csv":
+                    Export(thread, null, "csv");
+                    return;
                 case "detail.add":
                     Job(thread, action.Id, label, sink => sink.Tool("details", new JObject { ["action"] = "add" }));
                     return;
@@ -394,6 +397,8 @@ namespace RhinoMCPPlugin.Forsk
                     var pagesArgs = ForskCards.PagesArgs(pill.Id, values, order);
                     if (pill.Id == "export_ifc")
                         Export(thread, pill.Label, "ifc");
+                    else if (pill.Id == "export_csv")
+                        Export(thread, pill.Label, "csv");
                     else if (pill.Id == "export")
                         Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
                         {
@@ -947,6 +952,9 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 case "export.ifc":
                     sink.Line(ForskPrint.ExportIfc(sink.Step, this));
+                    return;
+                case "export.csv":
+                    sink.Line(ForskPrint.ExportCsv(sink.Step, this));
                     return;
                 case "export.dwg":
                 case "export.dxf":

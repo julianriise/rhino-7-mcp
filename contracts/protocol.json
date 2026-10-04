@@ -83,6 +83,7 @@
             "export_sheets",
             "details",
             "export_ifc",
+            "export_csv",
             "clear_layouts",
             "section_add",
             "section_pick",

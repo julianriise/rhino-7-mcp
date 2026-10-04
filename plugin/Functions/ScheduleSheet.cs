@@ -153,7 +153,8 @@ public partial class RhinoMCPFunctions
                 Y = box.Center.Y,
                 Width = ParseMm(marker.Attributes.GetUserString("forsk:width")) ?? 0,
                 Sill = ParseMm(marker.Attributes.GetUserString("forsk:sill")) ?? 0,
-                Head = ParseMm(marker.Attributes.GetUserString("forsk:head")) ?? 0
+                Head = ParseMm(marker.Attributes.GetUserString("forsk:head")) ?? 0,
+                HostId = marker.Attributes.GetUserString("forsk:host_id")
             };
             if (rooms != null && TrySymbolFrame(doc, marker, out _, out var plane, out var frame))
                 opening.Rooms = OpeningRooms(rooms, plane, frame.HalfThick);

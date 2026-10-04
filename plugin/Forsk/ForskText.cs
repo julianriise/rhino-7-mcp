@@ -127,6 +127,8 @@ namespace RhinoMCPPlugin.Forsk
             ["print.pages"] = "Choose sheets",
             ["export.dwg"] = "Export DWG",
             ["export.ifc"] = "Export IFC",
+            ["export.csv"] = "Export CSV",
+            ["export.csv.nb"] = "Eksporter CSV",
             ["detail.add"] = "Add detail",
             ["detail.add.nb"] = "Legg til detalj",
             ["detail.list"] = "Your details",

@@ -236,7 +236,7 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Equal("1", card.Fields![2].Value);
         Assert.Equal("1:200 · A3", card.Note);
         // Print is filled (the first pill); then Save and Reset.
-        Assert.Equal(new[] { "print", "save", "reset", "export", "export_ifc" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "print", "save", "reset", "export", "export_ifc", "export_csv" }, card.Pills.Select(p => p.Id));
         // No coordinates and no ids beyond the sheet number.
         Assert.DoesNotContain(card.Fields!, f => f.Label.Contains("section_") || f.Label.Contains("("));
     }

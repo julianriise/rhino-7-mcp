@@ -262,6 +262,10 @@ public class SheetExportWindowTests
     [InlineData("export ifc", "ifc")]
     [InlineData("eksporter IFC", "ifc")]
     [InlineData("send the model as ifc", "ifc")]
+    [InlineData("export csv", "csv")]
+    [InlineData("export schedule", "csv")]
+    [InlineData("eksporter csv", "csv")]
+    [InlineData("import plan.csv", null)]
     [InlineData("import plan.dxf", null)]
     [InlineData("open the dwg", null)]
     [InlineData("print", null)]
@@ -284,12 +288,24 @@ public class SheetExportWindowTests
         Assert.Equal("✓ Exported 1 sheet as DXF · Forsk DXF/", ForskReceipt.ExportLine(1, "dxf", "/tmp/Forsk DXF/"));
     }
 
+    /// <summary>N2: the CSV rides on the PDF's and the DWG folder's receipt; a failed one says why and fails nothing.</summary>
     [Fact]
-    public void ChooseSheets_OffersExportDwg()
+    public void TheReceipts_SayTheCsvWentAlong_OrWhyNot()
+    {
+        Assert.Equal("✓ Exported 7 sheets as DWG · Garage DWG/ + CSV", ForskReceipt.ExportLine(7, "dwg", "/Users/jr/Desktop/Garage DWG", ""));
+        Assert.Equal("✓ Printed 9 sheets at 1:100 on A3 · Garage.pdf + Takeoff CSV", ForskReceipt.PrintLine(9, 100, "/Users/jr/Desktop/Garage.pdf", null, null, null, csv: ""));
+        Assert.Equal("✓ Printed 9 sheets at 1:100 on A3 · Garage.pdf · CSV not written: Access denied",
+            ForskReceipt.PrintLine(9, 100, "/x/Garage.pdf", null, null, null, csv: "Access denied."));
+        Assert.Equal("✓ Printed 1 sheet on A3 · Garage.pdf", ForskReceipt.PrintLine(1, 0, "/x/Garage.pdf", null, null, null));
+    }
+
+    [Fact]
+    public void ChooseSheets_OffersExportDwgIfcAndCsv()
     {
         var card = ForskCards.Pages(Docs.Facts("house"));
         Assert.Contains(card.Pills, p => p.Id == "export" && p.Label == "Export DWG");
         Assert.Contains(card.Pills, p => p.Id == "export_ifc" && p.Label == "Export IFC");
+        Assert.Equal(new[] { "Export DWG", "Export IFC", "Export CSV" }, card.Pills.Where(p => p.Id.StartsWith("export")).Select(p => p.Label));
     }
 
     [Fact]

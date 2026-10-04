@@ -68,6 +68,8 @@ public static class AreaStats
         public string Level;
         /// <summary>Net area in mm², the same figure as the plan tag.</summary>
         public double AreaMm2;
+        /// <summary>The room outline's perimeter in mm, 0 when not known.</summary>
+        public double PerimeterMm;
         /// <summary>When set, the group. Otherwise the name map.</summary>
         public string Use;
     }
@@ -79,6 +81,7 @@ public static class AreaStats
         public string Level;
         public string Use;
         public double AreaMm2;
+        public double PerimeterMm;
     }
 
     /// <summary>One floor (forsk:level) or one use. AreaMm2 is the sum of the rooms in it.</summary>
@@ -163,7 +166,8 @@ public static class AreaStats
                     Name = string.IsNullOrWhiteSpace(room.Name) ? RoomDetect.UnnamedRoom(norwegian) : room.Name.Trim(),
                     Level = string.IsNullOrWhiteSpace(room.Level) ? "0" : room.Level.Trim(),
                     Use = string.IsNullOrWhiteSpace(room.Use) ? UseOf(room.Name) : room.Use.Trim(),
-                    AreaMm2 = room.AreaMm2
+                    AreaMm2 = room.AreaMm2,
+                    PerimeterMm = room.PerimeterMm
                 };
                 result.Rooms.Add(line);
                 result.NetMm2 += line.AreaMm2;
@@ -541,16 +545,8 @@ public static class AreaStats
     static bool IsInnerFace(List<Pt> outer, List<Pt> hole, double thickness)
     {
         if (!TryInset(outer, thickness, out var inset, out _)) return false;
-        var slop = Math.Max(Perimeter(outer) * thickness, 1);
+        var slop = Math.Max(RoomDetect.Perimeter(outer) * thickness, 1);
         return Math.Abs(Math.Abs(RoomDetect.Area(inset)) - Math.Abs(RoomDetect.Area(hole))) <= slop;
-    }
-
-    static double Perimeter(List<Pt> ring)
-    {
-        var sum = 0.0;
-        for (var i = 0; i < ring.Count; i++)
-            sum += Len(Sub(ring[(i + 1) % ring.Count], ring[i]));
-        return sum;
     }
 
     static bool OneThickness(List<Wall> walls, double tol, out double thickness, out string why)

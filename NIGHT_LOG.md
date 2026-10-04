@@ -4,16 +4,19 @@ Base: main `de87b2a` (per the launch note; the brief was written at `6a2a456`). 
 
 | Slice | Commit | State |
 |---|---|---|
-| N1 project info entered once | (this commit) | done headless; title block, card and IFC unverified live |
+| N1 project info entered once | `83281d7` | done headless; title block, card and IFC unverified live |
+| N2 takeoff CSV and Export CSV | (this commit) | done headless; the CSV beside the PDF/DWG and the dialog unverified live |
 
 ## Gates
 
 Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pytest 517 passed, 2 skipped; contracts exit 0.
 
 - N1: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2209 passed (+21), 1 skipped (nb-NO); pytest exit 0, 518 passed (+1), 2 skipped; `contracts/test_schemas.py` exit 0.
+- N2: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2228 passed (+19), 1 skipped; pytest exit 0, 520 passed (+2), 2 skipped; contracts exit 0 (it first failed "write commands with no ModelView": `export_csv` is `ReadOnly = true`, as `export_ifc`).
 
 ## Unverified (needs Rhino)
 
+- N2: `export_csv` on the live garage (the document walk in `ReadTakeoffInputs`, `forsk:host_id` on the markers, `forsk:level` on the walls, the stairs' `forsk:id`, room perimeters from `PlanRoom.Outline`); the CSV beside the PDF after Print and in the DWG folder after Export; the Export CSV save dialog; Numbers/Excel opening the file with æøå intact.
 - N1: the Project info card in the window (seven fields, Save and print / Print without, the pending Print or Export running after the answer, `info_asked` set on the file, the gear dot clearing); `forsk.architect` in the plug-in settings across files; the two-row title block on paper (the first row in the top 11 mm, Project no. and Architect in the bottom 7 mm at 2.0, a full-width rule between) with Rhino's text measure; the IFC project, site address and `Forsk_ProjectInfo` from the live document.
 
 ## Changes from the brief
@@ -25,14 +28,22 @@ Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pyte
 - N1 the ask-once card: Print, Print one, Export DWG/DXF (bar, card pill or typed) ask; the Choose sheets card's own Print/Export pills do not (they run `print_pages` first, and that card is already the deliberate path). Export IFC does not ask (not in the brief's list).
 - N1 the field labels come from `ProjectInfo.Caption`; the `meta.project|client|address|revision` strings are gone.
 
+- N2 Print one sheet writes no CSV (only the whole set's Print does); the CSV is the model's, not the sheet's.
+- N2 `export_csv` is also a chat tool (sheets, print and takeoff packs), with a save dialog when the path is omitted, as `export_ifc`; the window's tool catalog needs it to be callable at all.
+- N2 the Room rows are area_stats' tagged rooms in its order (largest first); a wall row's Level is the record's `forsk:level` (empty when the record has none).
+- N2 the takeoff card's rows were pinned first (`TheTakeoffCardRows_AreByteIdenticalToBefore`: the smoke garage with slab, roof, openings and a stair, and two rooms with an existing shed, to six decimals) and stayed identical after `Takeoff.Runs` went public.
+
 ## Left
 
 - PDF metadata pending N3.
+- N2 nb-NO CSV dialect (Julian's call, not built): Norwegian Excel's list separator is `;` and its decimal mark `,`, so a double-click may put each row in one cell. Data → From Text/CSV (UTF-8, comma, English locale) reads it, and Numbers and LibreOffice ask on open. No `sep=,` line (Excel then drops the BOM and breaks æøå). A later `locale: "nb"` could write `;` with decimal commas.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 
 - ROADMAP v3 gate: tick "Project info once for all title blocks" after the live check.
 - `docs/SMOKE.md`: the title block has Project no. and Architect (second row when the first is full).
+- ROADMAP v3 gate: tick "Schedule export to CSV/XLSX" (CSV only; XLSX stays out) after the live check.
+- `scripts/smoke_garage.sh` could check that `<project> Takeoff.csv` lands in the DWG folder after `export_sheets` (the smoke calls `export_sheets` directly, so it writes no CSV unless it calls `export_csv` too).
 
 # Night log: v4 detail slices on `cursor/add-detail-2118`
 

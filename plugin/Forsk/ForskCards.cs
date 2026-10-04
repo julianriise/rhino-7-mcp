@@ -371,7 +371,8 @@ if (string.IsNullOrWhiteSpace(value) && key == ProjectInfo.Architect) value = f?
                     new CardPill("save", ForskText.Get("word.save")),
                     new CardPill("reset", ForskText.Get("word.reset")),
                     new CardPill("export", ForskText.Label("export.dwg")),
-                    new CardPill("export_ifc", ForskText.Label("export.ifc"))
+                    new CardPill("export_ifc", ForskText.Label("export.ifc")),
+                    new CardPill("export_csv", ForskText.Label("export.csv"))
                 }
             };
             card.Fields.Add(new CardField

@@ -286,7 +286,8 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// The sheet set asked for as files: "export dwg", "send dwg", "eksporter dxf"; or the
-        /// model as IFC: "export ifc". dwg, dxf, ifc, or null. Importing or opening a file is the
+        /// model as IFC: "export ifc"; or the takeoff as CSV: "export csv", "export schedule".
+        /// dwg, dxf, ifc, csv, or null. Importing or opening a file is the
         /// import's, and a question is Support's.
         /// </summary>
         public static string ExportFormat(string text)
@@ -296,13 +297,15 @@ namespace RhinoMCPPlugin.Forsk
             var dwg = HasWord(t, "dwg");
             var dxf = HasWord(t, "dxf");
             var ifc = HasWord(t, "ifc");
-            if (!dwg && !dxf && !ifc) return null;
+            // N2: the takeoff as a spreadsheet: export csv, export schedule, eksporter csv.
+            var csv = HasWord(t, "csv") || HasWord(t, "schedule");
+            if (!dwg && !dxf && !ifc && !csv) return null;
             if (HasWord(t, "import") || HasWord(t, "importer") || HasWord(t, "importere")
                 || HasWord(t, "open") || HasWord(t, "åpne") || t.Contains("bring in")) return null;
             var verb = HasWord(t, "export") || HasWord(t, "eksporter") || HasWord(t, "eksportere")
                 || HasWord(t, "send") || HasWord(t, "save") || HasWord(t, "lagre");
             if (!verb) return null;
-            return ifc ? "ifc" : dwg ? "dwg" : "dxf";
+            return ifc ? "ifc" : dwg ? "dwg" : dxf ? "dxf" : "csv";
         }
 
         /// <summary>A DXF asked for: import plan.dxf, import a DXF. It comes before the plan image import, which "plan" would match.</summary>
