@@ -151,7 +151,8 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// One page as flat pieces in paper mm: the page's own objects, then the
-    /// detail's drawing layer through the detail's world-to-page map.
+    /// detail's drawing layer and the role layers under it (an elevation's
+    /// lines) through the detail's world-to-page map.
     /// Roles with no export layer are added to <paramref name="misc"/>.
     /// </summary>
     private static List<FlatPiece> FlattenPage(RhinoDoc doc, RhinoPageView page, ISet<string> misc)
@@ -179,11 +180,15 @@ public partial class RhinoMCPFunctions
         if (drawLayer != null)
         {
             var map = toMm * detail.WorldToPageTransform;
-            foreach (var obj in doc.Objects.FindByLayer(drawLayer) ?? new RhinoObject[0])
+            foreach (var layer in doc.Layers)
             {
-                if (obj == null || !IsPrintDrawing(doc, obj) || obj.IsHidden) continue;
-                if (obj.Attributes.Space != ActiveSpace.ModelSpace) continue;
-                AddFlat(doc, obj, map, pieces, misc);
+                if (layer == null || layer.IsDeleted || !SheetFlat.InDrawing(layer.FullPath, drawLayer.FullPath)) continue;
+                foreach (var obj in doc.Objects.FindByLayer(layer) ?? new RhinoObject[0])
+                {
+                    if (obj == null || !IsPrintDrawing(doc, obj) || obj.IsHidden) continue;
+                    if (obj.Attributes.Space != ActiveSpace.ModelSpace) continue;
+                    AddFlat(doc, obj, map, pieces, misc);
+                }
             }
         }
         return pieces;

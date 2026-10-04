@@ -264,6 +264,14 @@ public static class SheetFlat
         return Math.Round(value, 3).ToString("0.###", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>A layer of a view's drawing: the view's S-DRAW layer, or a role layer under it (an elevation's).</summary>
+    public static bool InDrawing(string layerPath, string drawPath)
+    {
+        if (string.IsNullOrEmpty(layerPath) || string.IsNullOrEmpty(drawPath)) return false;
+        return layerPath.Equals(drawPath, StringComparison.OrdinalIgnoreCase)
+            || layerPath.StartsWith(drawPath + "::", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// The export scheme the sheets are written with. Rhino 7's standard
     /// schemes are Default, 2007 …, R12 … and CAM …; Default is the only one

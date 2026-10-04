@@ -69,6 +69,17 @@ def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bo
             if problems:
                 ok = False
                 lines.append(f"FAIL {name}: " + "; ".join(problems))
+        if fmt == "dxf":
+            elevations = [name for name in files if " A-40-" in f" {name}"]
+            if not elevations:
+                lines.append("FAIL dxf: no elevation sheet (A-40-…)")
+                ok = False
+            for name in elevations:
+                doc, why = dxf_check.read_dxf(folder / name)
+                problems = [why] if why else dxf_check.check_elevation(doc)
+                if problems:
+                    ok = False
+                    lines.append(f"FAIL {name}: " + "; ".join(problems))
         lines.append(f"  {folder}/")
 
     path = root / "Garage.ifc"

@@ -119,7 +119,8 @@ class FakeRhino:
 def test_the_export_step_passes_on_a_right_set(tmp_path):
     def files(fmt):
         if fmt == "dxf":
-            return [("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p))]
+            return [("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p)),
+                    ("Garage A-40-001 North.dxf", lambda p: elevation_doc().saveas(p))]
         return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1027" + b"\0" * 10))]
 
     rhino = FakeRhino(files)
@@ -130,7 +131,29 @@ def test_the_export_step_passes_on_a_right_set(tmp_path):
     assert [c[1]["format"] for c in rhino.calls[:2]] == ["dxf", "dwg"]
     assert checked == [tmp_path / "Garage.ifc"]
     assert len(lines) <= 25
-    assert "dxf: 1 files · writer active_doc · AC1032" in lines
+    assert "dxf: 2 files · writer active_doc · AC1032" in lines
+
+
+def elevation_doc(lines=True):
+    doc = ezdxf.new("R2018")
+    doc.layers.add("A-ELEV")
+    doc.layers.add("A-ANNO-TTLB")
+    doc.modelspace().add_line((0, 0), (420, 0), dxfattribs={"layer": "A-ANNO-TTLB"})
+    if lines:
+        doc.modelspace().add_line((50, 50), (250, 50), dxfattribs={"layer": "A-ELEV"})
+    return doc
+
+
+def test_an_elevation_with_only_its_title_block_fails(tmp_path):
+    def files(fmt):
+        if fmt == "dxf":
+            return [("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p)),
+                    ("Garage A-40-001 North.dxf", lambda p: elevation_doc(lines=False).saveas(p))]
+        return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1027" + b"\0" * 10))]
+
+    lines, ok = export_smoke.run(FakeRhino(files), tmp_path, check_ifc=lambda p: [])
+    assert not ok
+    assert "FAIL Garage A-40-001 North.dxf: no facade lines on A-ELEV" in lines
 
 
 def test_the_export_step_fails_on_a_bad_ifc(tmp_path):

@@ -226,4 +226,17 @@ public class SheetExportWindowTests
         Assert.Equal("_-Export \"/tmp/a b/Holmen A-20-001 Plan.dwg\" _Scheme \"Default\" _Enter",
             SheetFlat.ExportScript("/tmp/a b/Holmen A-20-001 Plan.dwg"));
     }
+
+    [Fact]
+    public void AViewsDrawing_IsItsLayerAndTheRoleLayersUnderIt()
+    {
+        // An elevation bakes its lines on role sublayers: S-DRAW::North::facade-line.
+        Assert.True(SheetFlat.InDrawing("S-DRAW::North", "S-DRAW::North"));
+        Assert.True(SheetFlat.InDrawing("S-DRAW::North::facade-line", "S-DRAW::North"));
+        Assert.True(SheetFlat.InDrawing("s-draw::north::Facade-Ground", "S-DRAW::North"));
+        Assert.False(SheetFlat.InDrawing("S-DRAW::Northwest", "S-DRAW::North"));
+        Assert.False(SheetFlat.InDrawing("S-DRAW::Plan", "S-DRAW::North"));
+        Assert.False(SheetFlat.InDrawing("A-WALL", "S-DRAW::North"));
+        Assert.False(SheetFlat.InDrawing(null, "S-DRAW::North"));
+    }
 }

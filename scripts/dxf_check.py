@@ -72,6 +72,23 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
     return problems
 
 
+def check_elevation(doc) -> list[str]:
+    """An elevation sheet DXF (A-40-…) has its facade: lines on A-ELEV."""
+    if not any(e.dxf.get("layer", "0").upper() == "A-ELEV" for e in doc.modelspace()):
+        return ["no facade lines on A-ELEV"]
+    return []
+
+
+def read_dxf(path):
+    """The DXF document, or the one-line reason it does not read."""
+    import ezdxf
+
+    try:
+        return ezdxf.readfile(str(path)), None
+    except (OSError, ezdxf.DXFError) as e:
+        return None, f"{Path(path).name} does not read: {e}"
+
+
 def _text(entity) -> str:
     if entity.dxftype() == "MTEXT":
         return entity.plain_text()
@@ -97,13 +114,8 @@ def check_file(path, number: str = "A-20-001") -> list[str]:
     path = Path(path)
     if path.suffix.lower() == ".dwg":
         return check_dwg(path)
-    import ezdxf
-
-    try:
-        doc = ezdxf.readfile(str(path))
-    except (OSError, ezdxf.DXFError) as e:
-        return [f"{path.name} does not read: {e}"]
-    return check_plan(doc, number)
+    doc, why = read_dxf(path)
+    return [why] if why else check_plan(doc, number)
 
 
 def main(argv: list[str]) -> int:
