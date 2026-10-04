@@ -104,7 +104,7 @@ public class RegistryTests
     public void AnOpeningPick_SuggestsMove_ThenChangeType()
     {
         var f = Docs.Facts("house, door selected");
-        Assert.Equal(new[] { "opening.move", "opening.type" }, ForskRegistry.Bar(f).Context.Select(a => a.Id));
+        Assert.Equal(new[] { "opening.move", "opening.type", "detail.add" }, ForskRegistry.Bar(f).Context.Select(a => a.Id));
         Assert.Equal("Change type", ForskRegistry.Find("opening.type")!.Label);
         Assert.Contains(ForskRegistry.Card(f).Actions, a => a.Id == "opening.resize");
     }
@@ -158,7 +158,7 @@ public class RegistryTests
         Assert.True(card.IndexOf("wall.move") < card.IndexOf("wall.drag"));
         Assert.True(card.IndexOf("wall.drag") < card.IndexOf("wall.delete"));
         Assert.Contains(card, id => id == "opening.add_door");
-        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag", "detail.add" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
         foreach (var role in Enum.GetValues(typeof(ForskRole)).Cast<ForskRole>())
         {
             var boosted = ForskRegistry.Bar(one, role);
@@ -175,7 +175,7 @@ public class RegistryTests
         var whole = Docs.Facts("one whole wall record selected");
         Assert.Null(ForskPick.OneRunWall(whole.Selected));
         Assert.Contains(ForskRegistry.Card(whole).Actions, a => a.Id == "wall.drag");
-        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door" }, ForskRegistry.Bar(whole).Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "opening.add_door", "detail.add" }, ForskRegistry.Bar(whole).Slots.Select(a => a.Id));
 
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "wall.drag");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, room selected")).Actions, a => a.Id == "wall.drag");
@@ -212,11 +212,12 @@ public class RegistryTests
 
     [Theory]
     [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
-    public void TheBar_IsSlot1AndAtMostTwoMore_NeverTheHelpCard(string name)
+    public void TheBar_IsSlot1AndAtMostTwoMore_AThirdSlotIsAddDetail(string name)
     {
         var bar = ForskRegistry.Bar(Docs.Facts(name));
         Assert.NotNull(bar.Slot1);
-        Assert.InRange(bar.Context.Count, 0, 2);
+        Assert.InRange(bar.Context.Count, 0, 3);
+        if (bar.Context.Count == 3) Assert.Equal("detail.add", bar.Context[2].Id);
         Assert.DoesNotContain(bar.Slots, a => a.Id == "help.card");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts(name)).Actions, a => a.Id == "help.card");
         Assert.False(string.IsNullOrWhiteSpace(bar.Reason));
@@ -291,9 +292,8 @@ public class RegistryTests
     }
 
     /// <summary>
-    /// Add detail for any pick of walls, doors and windows. It is the bar's
-    /// first pill for walls with openings and the second for two or more walls;
-    /// one wall or one opening keeps its bar, and Add detail is on the card.
+    /// Add detail sits with the suggestions for one wall, door or window, and
+    /// stays the bar's first pill for a mixed pick and the second for two walls.
     /// </summary>
     [Fact]
     public void AddDetail_IsOnTheBar_ForWallsPickedTogether_AndOnTheCardForOne()
@@ -307,10 +307,14 @@ public class RegistryTests
         Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("detail.add"));
 
         var wall = Docs.Facts("house, wall selected");
-        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, ForskRegistry.Bar(wall).Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag", "detail.add" }, ForskRegistry.Bar(wall).Slots.Select(a => a.Id));
         Assert.Contains(ForskRegistry.Card(wall).Actions, a => a.Id == "detail.add");
         var door = Docs.Facts("house, door selected");
-        Assert.Equal(new[] { "file.print", "opening.move", "opening.type" }, ForskRegistry.Bar(door).Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "opening.move", "opening.type", "detail.add" }, ForskRegistry.Bar(door).Slots.Select(a => a.Id));
+        var window = FileClassifier.Read(Docs.Of(Docs.House().Append(Row.Window(selected: true)).ToArray()));
+        Assert.Equal(Picked.Opening, window.Picked);
+        Assert.Equal(1, window.PickedCount);
+        Assert.Equal(new[] { "file.print", "opening.move", "opening.type", "detail.add" }, ForskRegistry.Bar(window).Slots.Select(a => a.Id));
         Assert.Contains(ForskRegistry.Card(door).Actions, a => a.Id == "detail.add");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "detail.add");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, room selected")).Actions, a => a.Id == "detail.add");

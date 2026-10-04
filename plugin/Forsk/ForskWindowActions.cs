@@ -82,7 +82,7 @@ namespace RhinoMCPPlugin.Forsk
             return ForskRegistry.Bar(Facts(doc), Active()?.Override ?? ForskRole.None);
         }
 
-        /// <summary>Cmd+1..3: that slot of the bar as it is drawn now.</summary>
+        /// <summary>Cmd+1..4: that slot of the bar as it is drawn now.</summary>
         void Slot(int n)
         {
             var doc = RhinoDoc.ActiveDoc;

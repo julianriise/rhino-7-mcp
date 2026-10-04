@@ -46,7 +46,7 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
-    /// <summary>The pinned bar: slot 1, up to two contextual slots, then "⋯". One reason line under it.</summary>
+    /// <summary>The pinned bar: slot 1, up to two contextual slots, then Add detail when a wall, door or window is picked and it is not already there, then "⋯". One reason line under it.</summary>
     public sealed class BarView
     {
         public ForskAction Slot1;
@@ -258,6 +258,10 @@ namespace RhinoMCPPlugin.Forsk
                 var boosted = role == ForskRole.None ? null : eligible.Skip(1).FirstOrDefault(a => ForskRoles.OfAction(a.Id) == role);
                 bar.Context.Add(boosted ?? eligible[1]);
             }
+            // One wall, door or window keeps Move and Drag (or Change type). Add detail sits beside them.
+            var detail = Find("detail.add");
+            if (detail.Shows(f) && bar.Context.Count < 3 && !bar.Context.Contains(detail))
+                bar.Context.Add(detail);
             bar.Reason = Reason(f, bar);
             return bar;
         }

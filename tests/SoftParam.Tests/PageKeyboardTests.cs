@@ -44,7 +44,7 @@ static class PageScript
 
 /// <summary>
 /// D0: the keyboard contract, headless. Enter sends, Shift+Enter breaks the
-/// line, Cmd+1..3 and Cmd+/ are wired, Esc closes a card. A mapped key is
+/// line, Cmd+1..4 and Cmd+/ are wired, Esc closes a card. A mapped key is
 /// eaten in the page and becomes one Forsk action, so it never reaches Rhino.
 /// Every other key, æ ø å and a dead key included, is left to the field.
 /// </summary>
@@ -54,6 +54,7 @@ public class PageKeyboardTests
     [InlineData("1", 1)]
     [InlineData("2", 2)]
     [InlineData("3", 3)]
+    [InlineData("4", 4)]
     public void CmdDigit_FiresThatSlot(string key, int slot)
     {
         var engine = PageScript.Load();
@@ -108,7 +109,6 @@ public class PageKeyboardTests
     [InlineData("v", "meta")]
     [InlineData("x", "meta")]
     [InlineData("z", "meta")]
-    [InlineData("4", "meta")]
     [InlineData("1", "ctrl")]
     [InlineData("1", "meta+alt")]
     [InlineData("1", "meta+shift")]

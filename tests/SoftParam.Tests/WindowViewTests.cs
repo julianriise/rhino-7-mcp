@@ -6,7 +6,7 @@ namespace SoftParam.Tests;
 
 /// <summary>
 /// D1: the view model the window draws, on the F1.1 fixtures. The pinned bar
-/// replaces the chips: slot 1 from the file, two contextual slots, then "⋯".
+/// replaces the chips: slot 1 from the file, up to three contextual slots, then "⋯".
 /// </summary>
 public class WindowViewTests
 {
@@ -45,7 +45,8 @@ public class WindowViewTests
         var view = View("house, door selected");
         var slots = (JArray)view["bar"]!["slots"]!;
         Assert.Equal("Print PDF", slots[0]["label"]!.ToString());
-        Assert.Equal(new[] { "prefill", "card" }, slots.Skip(1).Select(s => s["runs"]!.ToString()));
+        Assert.Equal(new[] { "prefill", "card", "run" }, slots.Skip(1).Select(s => s["runs"]!.ToString()));
+        Assert.Equal("Add detail", slots[3]["label"]!.ToString());
         Assert.DoesNotContain(slots.Take(2), s => s["label"]!.ToString() == "Delete");
     }
 

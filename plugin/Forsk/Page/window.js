@@ -13,7 +13,7 @@
    * state.card: the id of the open card, if any. Returns the action, or null
    * to leave the key to the field, so letters, æ ø å, a dead key and an IME
    * composition always type. Enter sends, Shift+Enter breaks the line,
-   * Cmd+1..3 fire the slots, Cmd+/ opens "What can I do here?", Esc closes a card.
+   * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?", Esc closes a card.
    */
   Forsk.keyAction = function (e, state) {
     if (!e) return null;
@@ -25,7 +25,7 @@
     }
     if (e.key === 'Escape') return state.card ? { kind: 'card.close', card: state.card } : null;
     if (e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (!e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3')) return { kind: 'slot', slot: Number(e.key) };
+      if (!e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) return { kind: 'slot', slot: Number(e.key) };
       // Slash is Shift+7 on a Norwegian keyboard, so Shift does not matter here.
       if (e.key === '/') return { kind: 'help' };
     }

@@ -102,7 +102,7 @@ public class FileClassifierTests
         Assert.Equal(Picked.Opening, f.Picked);
         Assert.Equal("door", f.PickedOpeningKind);
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "opening.move", "opening.type" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "opening.move", "opening.type", "detail.add" }, bar.Slots.Select(a => a.Id));
         Assert.Equal(Runs.Prefill, bar.Context[0].Runs);
         Assert.Equal(Runs.Card, bar.Context[1].Runs);
     }
@@ -192,7 +192,7 @@ public class FileClassifierTests
         // S4: a wall baked one per run is one wall.
         var f = Docs.Facts("house, wall selected");
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag", "detail.add" }, bar.Slots.Select(a => a.Id));
         Assert.Equal("The click selects one wall.", bar.Reason);
     }
 
@@ -235,7 +235,7 @@ public class FileClassifierTests
     public void ASelectedWallWithNoKey_SuggestsDrag_NotAFileLevelAction()
     {
         var bar = ForskRegistry.Bar(Docs.Facts("house, wall selected, no key"));
-        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag", "detail.add" }, bar.Slots.Select(a => a.Id));
     }
 
     [Fact]
