@@ -162,7 +162,9 @@ public class SheetScaleTests
     public void TheSetScale_IgnoresTheDetailSheets()
     {
         // The pack sets the detail sheets aside before it builds the spans Pick reads.
-        var source = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"));
+        var source = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"))
+            + File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMac.cs"))
+            + File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMore.cs"));
         var aside = source.IndexOf("detailViews.Add(viewName);\n                continue;", StringComparison.Ordinal);
         var spans = source.IndexOf("sheets.Add(sheet);", StringComparison.Ordinal);
         var pick = source.IndexOf("SheetScale.Pick(sheets.Select(PackSpan).ToList()", StringComparison.Ordinal);

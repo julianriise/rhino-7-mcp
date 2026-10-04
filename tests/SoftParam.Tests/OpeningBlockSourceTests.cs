@@ -69,7 +69,9 @@ public class OpeningBlockSourceTests
         Assert.True(made >= 0 && shown > made);
         Assert.Contains("HideOpeningMarker", openings, StringComparison.Ordinal);
 
-        var layout = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"));
+        var layout = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"))
+            + File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMac.cs"))
+            + File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMore.cs"));
         Assert.Contains("layer.Name.Equals(\"A-OPEN\", StringComparison.OrdinalIgnoreCase)", layout, StringComparison.Ordinal);
         var ink = File.ReadAllText(Path.Combine(FunctionsDir(), "PrintInk.cs"));
         Assert.Contains("[\"A-OPEN\"] = new Spec(70, 70, 70, 0.18)", ink, StringComparison.Ordinal);
