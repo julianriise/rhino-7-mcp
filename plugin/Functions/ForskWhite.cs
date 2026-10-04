@@ -6,14 +6,15 @@ using System.Text;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Forsk White, the demo display mode. The patch rewrites an exported Shaded
+/// Forsk White, the perspective look. The patch rewrites an exported Shaded
 /// ini and adds nothing: a key ExportToFile did not write is left absent, and
 /// a colour keeps the component count it arrived with. Import the result and
 /// do not call UpdateDisplayMode afterwards; that drops the ini-only keys.
 /// An earlier import is replaced by a new import on load, not retuned in place.
-/// Technical lines stay off (TechnicalMask is not raised). Cast shadows stay
-/// off. A small x-ray transparency is not applied: glass and the daylight ramp
-/// are unproven until the live check, so materials stay opaque.
+/// Faces are flat custom white. Lighting, shadows, the ground plane, materials,
+/// textures, decals, the environment map, transparency and curvature hair are
+/// off. Edges are black, one pixel. Technical lines stay off. The export has
+/// no ambient-occlusion key, so none is written.
 /// </summary>
 public static class ForskWhite
 {
@@ -22,10 +23,10 @@ public static class ForskWhite
     public const string PageViewType = "RhinoPageView";
     public const string DetailType = "DetailViewObject";
     /// <summary>
-    /// 1 is this import: cast shadows off. A missing plugin setting is 0,
-    /// so a Forsk White from an earlier build is replaced on load.
+    /// 2 is flat white, lighting and the ground plane off. 1 was cast shadows
+    /// off. A missing plugin setting is 0, so an earlier import is replaced.
     /// </summary>
-    public const int ModeRevision = 1;
+    public const int ModeRevision = 2;
 
     public const int GroundR = 245;
     public const int GroundG = 245;
@@ -37,8 +38,7 @@ public static class ForskWhite
     public const int ClipFillUsage = 3;
     /// <summary>Clipping edge usage. 1 is solid colour. This is not the surface-edge enum.</summary>
     public const int ClipEdgeUsage = 1;
-    public const int Ambient = 200;
-    public const int SpecularNearBlack = 8;
+    public const int Ambient = 255;
     public const int ShadowMap = 1024;
     public const int ShadowSamples = 2;
     public const int ShadowBlur = 4;
@@ -205,6 +205,8 @@ public static class ForskWhite
             Text("", "Name", ModeName),
             Rgb("View settings", "SolidColor", GroundR, GroundG, GroundB),
             Int("View settings", "FillMode", 2),
+            Int("View settings", "GroundPlaneUsage", 0),
+            Bool("View settings", "CustomGroundPlaneShow", false),
             Bool("View settings", "UseDocumentGrid", false),
             Bool("View settings", "DrawGrid", false),
             Bool("View settings", "DrawAxes", false),
@@ -218,22 +220,37 @@ public static class ForskWhite
             Rgb("View settings", "ClippingSurfaceColor", 255, 255, 255),
             Rgb("View settings", "ClippingEdgeColor", 0, 0, 0),
             Int("View settings", "ClippingEdgeThickness", EdgePx),
-            Bool("Shading", "ShadeVertexColors", true),
+            Bool("", "DisableTransparency", true),
+            Bool("", "IgnoreHighlights", true),
+            Bool("Shading", "CullBackfaces", true),
+            Bool("Shading", "ShadeVertexColors", false),
             Bool("Shading", "ShadeSurface", true),
-            Bool("Shading", "UseObjectMaterial", true),
-            Bool("Shading\\Material\\Front Material", "FlatShaded", false),
-            Bool("Shading\\Material\\Front Material", "OverrideObjectColor", false),
-            Bool("Shading\\Material\\Front Material", "OverrideObjectTransparency", false),
+            Bool("Shading", "UseObjectMaterial", false),
+            Bool("Shading", "UseObjectBFMaterial", false),
+            Bool("Shading", "BakeTextures", false),
+            Bool("Shading", "ShowDecals", false),
+            Bool("Shading\\Material\\Front Material", "FlatShaded", true),
+            Bool("Shading\\Material\\Front Material", "OverrideObjectColor", true),
+            Bool("Shading\\Material\\Front Material", "OverrideObjectTransparency", true),
             Rgb("Shading\\Material\\Front Material", "Diffuse", 255, 255, 255),
             Int("Shading\\Material\\Front Material", "Shine", 0),
-            Rgb("Shading\\Material\\Front Material", "Specular", SpecularNearBlack, SpecularNearBlack, SpecularNearBlack),
+            Rgb("Shading\\Material\\Front Material", "Specular", 0, 0, 0),
             Int("Shading\\Material\\Front Material", "ShineIntensity", 0),
+            Int("Shading\\Material\\Front Material", "Transparency", 0),
+            Bool("Shading\\Material\\Front Material\\EmapTexture", "TextureOn", false),
+            Bool("Shading\\Material\\Back Material", "FlatShaded", true),
+            Bool("Shading\\Material\\Back Material", "OverrideObjectColor", true),
+            Rgb("Shading\\Material\\Back Material", "Diffuse", 255, 255, 255),
+            Bool("Lighting", "ShowLights", false),
+            Int("Lighting", "LightingScheme", 0),
             Rgb("Lighting", "AmbientColor", Ambient, Ambient, Ambient),
             Bool("Lighting", "CastShadows", false),
+            Int("Lighting", "SkylightShadowQuality", 0),
             Int("Lighting", "ShadowMapSize", ShadowMap),
             Int("Lighting", "NumSamples", ShadowSamples),
             Int("Lighting", "ShadowBlur", ShadowBlur),
             Bool("Lighting", "PerPixelLighting", false),
+            Bool("Objects\\Surfaces", "SurfaceKappaHair", false),
             Bool("Objects\\Surfaces", "ShowIsocurves", false),
             Bool("Objects\\Surfaces", "ShowTangentEdges", false),
             Bool("Objects\\Surfaces", "ShowTangentSeams", false),
@@ -245,6 +262,7 @@ public static class ForskWhite
             Rgb("Objects\\Surfaces", "EdgeColor", 0, 0, 0),
             Rgb("Objects\\Surfaces", "NakedEdgeColor", 0, 0, 0),
             Bool("Objects\\Meshes", "ShowMeshWires", false),
+            Bool("Objects\\Curves", "ShowCurvatureHair", false),
             Rgb("Objects\\Technical", "TSiColor", 0, 0, 0),
             Int("Objects\\Technical", "TSiThickness", EdgePx)
         });

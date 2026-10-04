@@ -29,19 +29,34 @@ public class ForskWhiteTests
         Assert.Equal("0,0,0", ForskWhite.Read(ini, "Objects\\Surfaces", "NakedEdgeColor"));
         Assert.Equal("2", ForskWhite.Read(ini, "Objects\\Surfaces", "EdgeColorUsage"));
         Assert.Equal("1", ForskWhite.Read(ini, "Objects\\Surfaces", "EdgeThickness"));
-        Assert.Equal("y", ForskWhite.Read(ini, "Shading", "ShadeVertexColors"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading", "ShadeSurface"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading", "ShadeVertexColors"));
         Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Surfaces", "ShowIsocurves"));
         Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Meshes", "ShowMeshWires"));
         Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Surfaces", "ShowTangentEdges"));
         Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Surfaces", "ShowTangentSeams"));
-        Assert.Equal("y", ForskWhite.Read(ini, "Shading", "UseObjectMaterial"));
-        Assert.Equal("n", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "OverrideObjectTransparency"));
-        Assert.Equal("n", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "FlatShaded"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading", "UseObjectMaterial"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading", "BakeTextures"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading", "ShowDecals"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading", "CullBackfaces"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "OverrideObjectColor"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "OverrideObjectTransparency"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "FlatShaded"));
         Assert.Equal("255,255,255", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Diffuse"));
         Assert.Equal("0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Shine"));
-        Assert.Equal("8,8,8", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Specular"));
-        Assert.Equal("200,200,200", ForskWhite.Read(ini, "Lighting", "AmbientColor"));
+        Assert.Equal("0,0,0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Specular"));
+        Assert.Equal("0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Transparency"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Shading\\Material\\Front Material\\EmapTexture", "TextureOn"));
+        Assert.Equal("255,255,255", ForskWhite.Read(ini, "Lighting", "AmbientColor"));
+        Assert.Equal("0", ForskWhite.Read(ini, "Lighting", "LightingScheme"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Lighting", "ShowLights"));
         Assert.Equal("n", ForskWhite.Read(ini, "Lighting", "CastShadows"));
+        Assert.Equal("0", ForskWhite.Read(ini, "Lighting", "SkylightShadowQuality"));
+        Assert.Equal("0", ForskWhite.Read(ini, "View settings", "GroundPlaneUsage"));
+        Assert.Equal("n", ForskWhite.Read(ini, "View settings", "CustomGroundPlaneShow"));
+        Assert.Equal("y", ForskWhite.Read(ini, "", "DisableTransparency"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Surfaces", "SurfaceKappaHair"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Curves", "ShowCurvatureHair"));
         Assert.Equal("1024", ForskWhite.Read(ini, "Lighting", "ShadowMapSize"));
         Assert.Equal("n", ForskWhite.Read(ini, "Lighting", "PerPixelLighting"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ShowClippingPlanes"));
@@ -51,11 +66,12 @@ public class ForskWhiteTests
         Assert.Equal("0,0,0", ForskWhite.Read(ini, "View settings", "ClippingEdgeColor"));
         Assert.Equal("0,0,0", ForskWhite.Read(ini, "Objects\\Technical", "TSiColor"));
         Assert.Equal("1", ForskWhite.Read(ini, "Objects\\Technical", "TSiThickness"));
-        // Technical lines stay off. The back material and the x-ray flag stay as exported.
+        // Technical lines and x-ray stay off. Back faces are the same flat white.
         Assert.Equal("0", ForskWhite.Read(ini, "Objects\\Technical", "TechnicalMask"));
-        Assert.Equal("145,213,205", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "Diffuse"));
+        Assert.Equal("255,255,255", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "Diffuse"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "FlatShaded"));
         Assert.Equal("n", ForskWhite.Read(ini, "", "XrayAllObjects"));
-        Assert.Equal("n", ForskWhite.Read(ini, "", "IgnoreHighlights"));
+        Assert.Equal("y", ForskWhite.Read(ini, "", "IgnoreHighlights"));
         Assert.Equal("0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Transparency"));
     }
 
@@ -95,7 +111,7 @@ public class ForskWhiteTests
     [Fact]
     public void White_replaces_an_older_import_and_keeps_shadows_off()
     {
-        Assert.Equal(1, ForskWhite.ModeRevision);
+        Assert.Equal(2, ForskWhite.ModeRevision);
         Assert.True(ForskWhite.NeedsReimport(0));
         Assert.False(ForskWhite.NeedsReimport(ForskWhite.ModeRevision));
         Assert.True(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "RhinoView", false));
