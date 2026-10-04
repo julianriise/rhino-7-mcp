@@ -39,6 +39,25 @@ public class ForskHoverTests
         Assert.Contains("MakeKeyWindow", window, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ACommandThatIsReadingKeys_KeepsThem()
+    {
+        Assert.Equal(ForskHover.None, ForskHover.Decide(true, "enter", false, false, true));
+        Assert.Equal(ForskHover.None, ForskHover.Decide(true, "leave", false, false, true));
+        Assert.Equal(ForskHover.Chat, ForskHover.Decide(true, "enter", false, false, false));
+    }
+
+    [Fact]
+    public void TheChat_AcceptsTheClickThatActivatesIt_AndKeysOnEnterUnlessACommandIsRunning()
+    {
+        var window = File.ReadAllText(Path.Combine(ForskDir(), "ForskWindow.cs"));
+        var aqua = File.ReadAllText(Path.Combine(ForskDir(), "ForskAqua.cs"));
+        Assert.Contains("acceptsFirstMouse:", aqua, StringComparison.Ordinal);
+        Assert.Contains("ArmClick", window, StringComparison.Ordinal);
+        Assert.Contains("MouseEnter", window, StringComparison.Ordinal);
+        Assert.Contains("Command.InCommand()", window, StringComparison.Ordinal);
+    }
+
     static string ForskDir()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)

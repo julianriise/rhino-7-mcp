@@ -104,6 +104,8 @@ namespace RhinoMCPPlugin.Forsk
             Log("open · channel " + _channel.Origin + " · window "
                 + (ForskAqua.Pin(ControlObject) ? "pinned to Aqua" : "appearance not pinned"));
             ForskAqua.Pin(_web.ControlObject);
+            _web.MouseEnter += (s, e) => KeyOnEnter();
+            ForskAqua.ArmClick(_web.ControlObject);
             Poll(force: true);
             LoadPage();
         }
@@ -135,6 +137,7 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     case "ready":
                         _ready = true;
+                        ForskAqua.ArmClick(_web.ControlObject);
                         Log("page ready · " + NativeClass());
                         Render();
                         if (HasFocus) FocusComposer();
@@ -401,7 +404,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             if (edge == "enter") ClearViewHover();
             if (Mouse.Buttons != MouseButtons.None) dragging = true;
-            var decision = ForskHover.Decide(HoverOn(), edge, typing, dragging);
+            var decision = ForskHover.Decide(HoverOn(), edge, typing, dragging, CommandRunning());
             if (decision == ForskHover.None)
             {
                 _hoverLeave = edge == "leave" && dragging && !typing;
@@ -434,6 +437,20 @@ namespace RhinoMCPPlugin.Forsk
             }
             Log("hover leave · rhino");
             HandToRhino();
+        }
+
+        /// <summary>The pointer entered the chat. Key it, unless a command is reading the keyboard.</summary>
+        void KeyOnEnter()
+        {
+            ForskAqua.ArmClick(_web.ControlObject);
+            if (ForskHover.Decide(HoverOn(), "enter", false, false, CommandRunning()) != ForskHover.Chat) return;
+            MakeChatKey();
+        }
+
+        static bool CommandRunning()
+        {
+            try { return Rhino.Commands.Command.InCommand(); }
+            catch (Exception) { return false; }
         }
 
         /// <summary>Makes the Eto window the key window, then the web view, then the composer.</summary>
