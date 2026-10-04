@@ -56,6 +56,18 @@ public class DrawToolsWindowTests
         Assert.Equal("wall.draw", ForskRegistry.ByDrawPhrase(text)?.Id);
     }
 
+    [Fact]
+    public void DrawAWall_OnAnEmptyBar_IsDrawWall_NotThePolyline()
+    {
+        var bar = ForskRegistry.Bar(Docs.Facts("empty"));
+        Assert.Contains(bar.Slots, a => a.Id == "file.draw");
+        Assert.Equal("Trace walls", ForskRegistry.Find("file.draw").Label);
+        Assert.Null(ForskRegistry.ByLabel(bar, "Draw a wall"));
+        var hit = ForskRegistry.ByLabel(bar, "Draw a wall") ?? ForskRegistry.ByDrawPhrase("Draw a wall");
+        Assert.Equal("wall.draw", hit.Id);
+        Assert.Equal("file.draw", ForskRegistry.ByLabel(bar, "Trace walls").Id);
+    }
+
     [Theory]
     [InlineData("draw stair")]
     [InlineData("Draw a stair.")]

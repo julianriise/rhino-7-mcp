@@ -30,7 +30,7 @@ namespace RhinoMCPPlugin.Forsk
             ["file.print.stale"] = "Sheets are older than the model.",
             ["file.print.map"] = "The sheet leaves the map off.",
             ["file.check"] = "Check the plan",
-            ["file.draw"] = "Draw a wall",
+            ["file.draw"] = "Trace walls",
             ["help.card"] = "What can I do here?",
             ["daylight.rooms"] = "Make rooms",
             ["daylight.window"] = "Add a window",
@@ -260,7 +260,7 @@ namespace RhinoMCPPlugin.Forsk
             ["prompt.section"] = "Pick the start of the section in the viewport, then its end. Esc cancels.",
             ["prompt.stair"] = "Click the foot of the stair in the plan, then where it ends. Type a length, or W for the width. Esc cancels.",
             ["prompt.wall"] = "Click the corners of the walls in the plan. Type a length and Enter, C closes, Enter finishes, Esc steps back. Shift turns the angle snap off.",
-            ["prompt.draw"] = "Draw the wall in the viewport, on the wall layer. Enter finishes, Esc cancels.",
+            ["prompt.draw"] = "Trace the walls in the viewport, on the wall layer. Enter finishes, Esc cancels.",
 
             // Lines in the thread.
             ["window.nofile"] = "No file open",

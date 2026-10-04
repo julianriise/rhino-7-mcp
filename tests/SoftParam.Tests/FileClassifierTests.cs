@@ -46,7 +46,7 @@ public class FileClassifierTests
     {
         var f = Docs.Facts("empty");
         Assert.Equal(FileKind.Empty, f.Kind);
-        Assert.Equal(new[] { "Import a plan", "Draw a wall" }, Bar(f));
+        Assert.Equal(new[] { "Import a plan", "Trace walls" }, Bar(f));
         Assert.Equal("Nothing is in this file yet.", ForskRegistry.Bar(f).Reason);
         Assert.Equal("\u22ef", ForskRegistry.Bar(f).ToJson()["help"]!["label"]!.ToString());
     }
@@ -74,7 +74,7 @@ public class FileClassifierTests
     {
         var f = Docs.Facts("unscaled");
         Assert.Equal(FileKind.Unscaled, f.Kind);
-        Assert.Equal(new[] { "Set scale", "Generate 3D", "Draw a wall" }, Bar(f));
+        Assert.Equal(new[] { "Set scale", "Generate 3D", "Trace walls" }, Bar(f));
         Assert.Equal("The scale is not confirmed.", ForskRegistry.Bar(f).Reason);
     }
 
@@ -82,7 +82,7 @@ public class FileClassifierTests
     public void AnUnscaledUnderlayWithNoCurves_HasNoGenerateBesideSetScale()
     {
         var f = Docs.Facts("unscaled, no curves");
-        Assert.Equal(new[] { "Set scale", "Draw a wall" }, Bar(f));
+        Assert.Equal(new[] { "Set scale", "Trace walls" }, Bar(f));
     }
 
     [Fact]
