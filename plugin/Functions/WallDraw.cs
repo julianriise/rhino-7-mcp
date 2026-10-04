@@ -198,16 +198,109 @@ public static class WallDraw
         return text;
     }
 
-    /// <summary>"Drew 4 walls, 200 mm thick, 14.2 m in all, closed." No ids.</summary>
+    /// <summary>Where Draw wall puts a wall: a record with an id when the 3D model stands, else a closed outline on the plan's wall layer.</summary>
+    public interface IWallStore
+    {
+        /// <summary>True when the file has 3D walls. False: only the flat plan, and the walls get ids at Generate 3D.</summary>
+        bool Solid { get; }
+
+        /// <summary>Opens the one undo record for the whole run. False when a record is already open: the caller's holds it.</summary>
+        bool OpenRecord();
+
+        void CloseRecord();
+
+        /// <summary>One segment as one wall of its own. Id is its forsk:id in the 3D model, null in the plan. Error is set when it was refused.</summary>
+        Placed Place(Segment segment, double thickness);
+    }
+
+    public readonly struct Placed
+    {
+        public readonly string Id;
+        public readonly string Error;
+
+        public Placed(string id, string error)
+        {
+            Id = id;
+            Error = error;
+        }
+
+        public bool Ok => string.IsNullOrEmpty(Error);
+    }
+
+    /// <summary>What a Draw wall run did: the walls placed, their ids, how far it got.</summary>
+    public sealed class Outcome
+    {
+        public int Drawn;
+        public int Planned;
+        public double Length;
+        /// <summary>The new walls' ids, in drawing order. Empty in the plan.</summary>
+        public readonly List<string> Ids = new List<string>();
+        /// <summary>The first refusal, which ended the run, or null.</summary>
+        public string Stopped;
+        /// <summary>The walls went to the plan only: no 3D model stood.</summary>
+        public bool Plan;
+    }
+
+    /// <summary>
+    /// Every segment becomes its own wall, inside one undo record however many
+    /// there are. The first refusal ends the run; the walls already placed stay.
+    /// </summary>
+    public static Outcome Commit(IWallStore store, IList<Segment> segments, double thickness, bool ownUndo)
+    {
+        var outcome = new Outcome { Planned = segments?.Count ?? 0, Plan = !store.Solid };
+        if (outcome.Planned == 0) return outcome;
+        var opened = ownUndo && store.OpenRecord();
+        try
+        {
+            foreach (var segment in segments)
+            {
+                var placed = store.Place(segment, thickness);
+                if (!placed.Ok)
+                {
+                    outcome.Stopped = placed.Error;
+                    break;
+                }
+                outcome.Drawn++;
+                outcome.Length += segment.Length;
+                if (!string.IsNullOrEmpty(placed.Id)) outcome.Ids.Add(placed.Id);
+            }
+        }
+        finally
+        {
+            if (opened) store.CloseRecord();
+        }
+        return outcome;
+    }
+
+    /// <summary>The closed outline a wall has on the plan's wall layer: the band add_wall would lay down.</summary>
+    public static List<Pt> PlanRing(Segment segment, double thickness) => Band(segment.From, segment.To, thickness);
+
+    /// <summary>"Drew 4 walls, 200 mm thick, 14.2 m in all, closed."</summary>
     public static string Receipt(int drawn, int planned, double thickness, double totalMm, bool closed)
     {
+        return Receipt(new Outcome { Drawn = drawn, Planned = planned, Length = totalMm }, thickness, closed);
+    }
+
+    /// <summary>
+    /// "Drew 3 walls (w05, w06, w07), 200 mm thick, 9.8 m in all." Each new
+    /// wall's id is named. In the plan there are none yet, and the line says
+    /// the walls are in the plan and Generate 3D builds them. A run a wall
+    /// stopped says why, as its second sentence.
+    /// </summary>
+    public static string Receipt(Outcome outcome, double thickness, bool closed)
+    {
+        var drawn = outcome.Drawn;
         if (drawn <= 0) return "No walls drawn.";
-        var metres = (totalMm / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + " m";
+        var metres = (outcome.Length / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + " m";
+        var ids = outcome.Ids.Count == 0 ? "" : " (" + string.Join(", ", outcome.Ids) + ")";
+        var place = outcome.Plan ? " in the plan" : "";
         var text = drawn == 1
-            ? "Drew a " + TypeName(thickness) + " wall, " + metres + " long"
-            : "Drew " + drawn.ToString(CultureInfo.InvariantCulture) + " walls, " + TypeName(thickness) + " thick, " + metres + " in all";
-        if (closed && drawn == planned) text += ", closed";
-        return text + ".";
+            ? "Drew a " + TypeName(thickness) + " wall" + (outcome.Ids.Count == 1 ? " " + outcome.Ids[0] : "") + place + ", " + metres + " long"
+            : "Drew " + drawn.ToString(CultureInfo.InvariantCulture) + " walls" + ids + place + ", " + TypeName(thickness) + " thick, " + metres + " in all";
+        if (closed && drawn == outcome.Planned) text += ", closed";
+        text += outcome.Plan ? "; Generate 3D builds them." : ".";
+        if (!string.IsNullOrWhiteSpace(outcome.Stopped)) text += " Stopped: " + outcome.Stopped;
+        return text;
     }
 
     internal static Pt Unit(Pt a, Pt b)

@@ -301,6 +301,82 @@ public partial class RhinoMCPFunctions
     [McpCommand("add_wall", ModelView = true, Map = MapEdit.Wall)]
     public JObject AddWall(JObject parameters)
     {
+        return AddWallRecord(parameters, own: false);
+    }
+
+    /// <summary>
+    /// Draw wall's wall in the 3D model: add_wall's core, but the wall is
+    /// always a record of its own, so each straight run has its own id and
+    /// is picked, dragged and deleted alone. It shares its ends with the
+    /// records it touches. Not a bridge command; the window wraps it as a tool call.
+    /// </summary>
+    public JObject AddDrawnWall(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        var result = AddWallRecord(parameters, own: true);
+        MarkMapAfterEdit(doc, MapEdit.Wall);
+        return result;
+    }
+
+    /// <summary>
+    /// Draw wall's wall in a flat plan, before Generate 3D: the wall's band as a
+    /// closed outline on the plan's wall layer, as walls traced by hand sit
+    /// there. walls_from_layer merges the outlines that touch and builds the
+    /// run as it builds any wall. No 3D object is made, so the file stays a plan.
+    /// </summary>
+    public JObject AddPlanWall(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc;
+        ReadWallLine(doc, parameters, out var from, out var to);
+        var thickness = ReadOptionalDouble(parameters, "thickness") ?? WallDraw.DefaultThicknessMm;
+        if (thickness <= 0 || thickness > WallEdit.MaxThickMm)
+            throw new ArgumentException("thickness is above 0 and at most " + FormatMm(WallEdit.MaxThickMm) + " mm.");
+        var segment = new WallDraw.Segment { From = from, To = to, Start = from, Length = Math.Sqrt((to.X - from.X) * (to.X - from.X) + (to.Y - from.Y) * (to.Y - from.Y)) };
+        if (segment.Length <= thickness)
+            throw new InvalidOperationException(WallDraw.TooShort);
+        var layer = EnsureLayer(doc, PlanWallLayerName, Color.FromArgb(30, 30, 30));
+        var number = NextDrawnPlanWall(doc, layer);
+        var attr = new ObjectAttributes
+        {
+            Name = PlanWallNamePrefix + number.ToString("D2", CultureInfo.InvariantCulture),
+            LayerIndex = layer.Index
+        };
+        var id = doc.Objects.AddCurve(RoomOutline(WallDraw.PlanRing(segment, thickness), 0), attr);
+        if (id == Guid.Empty)
+            throw new InvalidOperationException("Wall not added. Rhino did not take the outline.");
+        doc.Views.Redraw();
+        return new JObject
+        {
+            ["id"] = id.ToString(),
+            ["name"] = attr.Name,
+            ["plan"] = true,
+            ["from"] = new JArray(from.X, from.Y),
+            ["to"] = new JArray(to.X, to.Y),
+            ["length_mm"] = segment.Length,
+            ["thickness"] = thickness,
+            ["ok"] = true
+        };
+    }
+
+    /// <summary>The wall layer walls_from_layer reads, and the names Draw wall gives its outlines there.</summary>
+    internal const string PlanWallLayerName = "wall";
+    private const string PlanWallNamePrefix = "drawn-wall-";
+
+    private static int NextDrawnPlanWall(RhinoDoc doc, Layer layer)
+    {
+        var max = 0;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            var name = obj.Attributes.Name ?? "";
+            if (!name.StartsWith(PlanWallNamePrefix, StringComparison.Ordinal) || !ObjectOnLayer(doc, obj, layer)) continue;
+            if (int.TryParse(name.Substring(PlanWallNamePrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+                max = Math.Max(max, n);
+        }
+        return max + 1;
+    }
+
+    private JObject AddWallRecord(JObject parameters, bool own)
+    {
         var doc = RhinoDoc.ActiveDoc;
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         ReadWallLine(doc, parameters, out var from, out var to);
@@ -328,7 +404,7 @@ public partial class RhinoMCPFunctions
         // A new wall takes the nearest wall's thickness, height and level unless told otherwise.
         var thickness = ReadOptionalDouble(parameters, "thickness")
             ?? ParseMm(nearest?.Attributes.GetUserString("forsk:thickness")) ?? 200.0;
-        if (!WallEdit.TryAdd(records, from, to, thickness, tol, out var added, out var why))
+        if (!WallEdit.TryAdd(records, from, to, thickness, tol, out var added, out var why, own))
             throw new InvalidOperationException(why);
 
         JObject result;
@@ -336,12 +412,7 @@ public partial class RhinoMCPFunctions
         {
             var host = ReadHostWall(doc, walls[added.Joined].Id, requireVertical: true);
             var forskId = host.Attributes?.GetUserString("forsk:id");
-            foreach (var marker in MarkersOnHost(doc, host.Id, forskId))
-            {
-                var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
-                if (box.IsValid && WallEdit.InTheWay(added, thickness, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), tol))
-                    throw new InvalidOperationException("Not added: " + MarkerLabel(marker) + " is in the way.");
-            }
+            RefuseOpeningInTheWay(doc, host.Id, forskId, added, thickness, tol);
             var undo = SnapshotWholeHost(doc, host.Id);
             var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
             JObject rebuilt;
@@ -373,6 +444,8 @@ public partial class RhinoMCPFunctions
             if (height <= 0)
                 throw new ArgumentException("height must be positive.");
             var level = nearest?.Attributes.GetUserString("forsk:level");
+            foreach (var i in added.Touches)
+                RefuseOpeningInTheWay(doc, walls[i].Id, walls[i].Attributes.GetUserString("forsk:id"), added, thickness, tol);
             var path = WallEdit.Path(added.Rings);
             var warnings = new JArray();
             var solid = PrepareFreshSolid(ExtrudeFromPath(path, height, tol, warnings), tol, out var diagnostic);
@@ -414,7 +487,7 @@ public partial class RhinoMCPFunctions
             var joins = new JArray();
             foreach (var i in added.Touches) joins.Add(walls[i].Attributes.GetUserString("forsk:id") ?? "");
             result["joins"] = joins;
-            var where = joins.Count > 1
+            var where = joins.Count > 0
                 ? " joined to " + string.Join(" and ", joins.Select(j => j.ToString())) + ", "
                 : " standing on its own, ";
             result["message"] = "Added " + forskId + ", a " + FormatMm(Math.Round(thickness)) + " mm wall" + where
@@ -423,6 +496,16 @@ public partial class RhinoMCPFunctions
         }
         doc.Views.Redraw();
         return result;
+    }
+
+    private static void RefuseOpeningInTheWay(RhinoDoc doc, Guid hostId, string forskId, WallEdit.Added added, double thickness, double tol)
+    {
+        foreach (var marker in MarkersOnHost(doc, hostId, forskId))
+        {
+            var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+            if (box.IsValid && WallEdit.InTheWay(added, thickness, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), tol))
+                throw new InvalidOperationException("Not added: " + MarkerLabel(marker) + " is in the way.");
+        }
     }
 
     /// <summary>

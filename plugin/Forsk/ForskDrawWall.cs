@@ -36,7 +36,7 @@ namespace RhinoMCPPlugin.Forsk
                 var thickness = WallDraw.DefaultThickness(context.Thicknesses, RhinoMCPFunctions.LastDrawnThickness(doc));
                 var sketch = Pick(WallDraw.TargetsFrom(context.Records), thickness);
                 if (sketch == null) return ForskTools.Fail("Wall cancelled.");
-                return Store(doc, sketch, ownUndo);
+                return Store(doc, sketch, context.Solid, ownUndo);
             }
             catch (Exception e)
             {
@@ -78,44 +78,60 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        static JObject Store(RhinoDoc doc, WallSketch sketch, bool ownUndo)
+        static JObject Store(RhinoDoc doc, WallSketch sketch, bool solid, bool ownUndo)
         {
             var segments = sketch.Segments();
-            var calls = WallDraw.ToolCalls(segments, sketch.Thickness);
-            if (calls.Count == 0) return ForskTools.Fail("Wall cancelled.");
-            uint record = 0;
-            ownUndo = ownUndo && !doc.UndoRecordingIsActive;
-            if (ownUndo) record = doc.BeginUndoRecord("Forsk: draw_wall");
-            var drawn = 0;
-            var length = 0.0;
-            string stopped = null;
-            try
-            {
-                for (var i = 0; i < calls.Count; i++)
-                {
-                    var envelope = ForskTools.ExecuteAllowed("add_wall", calls[i]);
-                    if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
-                    {
-                        stopped = WallDrag.Plain(envelope?["message"]?.ToString());
-                        break;
-                    }
-                    drawn++;
-                    length += segments[i].Length;
-                }
-            }
-            finally
-            {
-                if (ownUndo) doc.EndUndoRecord(record);
-            }
-            if (drawn == 0) return ForskTools.Fail(string.IsNullOrWhiteSpace(stopped) ? "No walls drawn." : stopped);
+            if (segments.Count == 0) return ForskTools.Fail("Wall cancelled.");
+            var outcome = WallDraw.Commit(new DocWalls(doc, solid), segments, sketch.Thickness, ownUndo);
+            if (outcome.Drawn == 0)
+                return ForskTools.Fail(string.IsNullOrWhiteSpace(outcome.Stopped) ? "No walls drawn." : outcome.Stopped);
             RhinoMCPFunctions.RememberDrawnThickness(doc, sketch.Thickness);
-            var message = WallDraw.Receipt(drawn, calls.Count, sketch.Thickness, length, sketch.Closed);
-            if (stopped != null) message += " Stopped: " + stopped;
             return new JObject
             {
                 ["status"] = "success",
-                ["result"] = new JObject { ["message"] = message, ["count"] = drawn }
+                ["result"] = new JObject
+                {
+                    ["message"] = WallDraw.Receipt(outcome, sketch.Thickness, sketch.Closed),
+                    ["count"] = outcome.Drawn,
+                    ["forsk_ids"] = new JArray(outcome.Ids)
+                }
             };
+        }
+
+        /// <summary>The document as Draw wall's store: one add per segment, each through the tool path.</summary>
+        sealed class DocWalls : WallDraw.IWallStore
+        {
+            readonly RhinoDoc _doc;
+            readonly RhinoMCPFunctions _functions = new RhinoMCPFunctions();
+            uint _record;
+
+            public DocWalls(RhinoDoc doc, bool solid)
+            {
+                _doc = doc;
+                Solid = solid;
+            }
+
+            public bool Solid { get; }
+
+            public bool OpenRecord()
+            {
+                if (_doc.UndoRecordingIsActive) return false;
+                _record = _doc.BeginUndoRecord("Forsk: draw_wall");
+                return true;
+            }
+
+            public void CloseRecord() => _doc.EndUndoRecord(_record);
+
+            public WallDraw.Placed Place(WallDraw.Segment segment, double thickness)
+            {
+                var args = WallDraw.ToolCalls(new[] { segment }, thickness)[0];
+                var envelope = Solid
+                    ? ForskTools.Write("add_wall", () => _functions.AddDrawnWall(args))
+                    : ForskTools.Write("add_wall", () => _functions.AddPlanWall(args));
+                if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                    return new WallDraw.Placed(null, WallDrag.Plain(envelope?["message"]?.ToString()));
+                return new WallDraw.Placed(envelope["result"]?["forsk_id"]?.ToString(), null);
+            }
         }
 
         static bool Shift()

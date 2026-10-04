@@ -193,17 +193,31 @@ namespace RhinoMCPPlugin.Forsk
                     parameters["limit"] = 30;
             }
 
+            return Invoke(name, entry.ReadOnly, () => entry.Handler(parameters));
+        }
+
+        /// <summary>
+        /// A write that is no bridge command, as a tool envelope inside the call's undo
+        /// record (or the window's, when one is open). UI thread.
+        /// </summary>
+        public static JObject Write(string name, Func<JObject> run)
+        {
+            return Invoke(name, false, run);
+        }
+
+        static JObject Invoke(string name, bool readOnly, Func<JObject> run)
+        {
             var doc = RhinoDoc.ActiveDoc;
             if (doc == null) return Fail("No active document.");
 
             uint record = 0;
             // One record per pill or answer: while the window's record is open, this call writes into it.
-            var undo = !entry.ReadOnly && !doc.UndoRecordingIsActive;
+            var undo = !readOnly && !doc.UndoRecordingIsActive;
             if (undo) record = doc.BeginUndoRecord("Forsk: " + name);
             ForskCalls.Enter();
             try
             {
-                var result = entry.Handler(parameters);
+                var result = run();
                 return new JObject
                 {
                     ["status"] = "success",
