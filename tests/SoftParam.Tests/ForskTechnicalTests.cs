@@ -290,7 +290,8 @@ public class ForskTechnicalTests
         Assert.Equal(Sections.GroundPen(PrintProfiles.Grey).Color, ForskTechnical.PenFor("ground_line", null, PrintProfiles.Grey).Color);
         Assert.Equal(Color.FromArgb(130, 130, 130).ToArgb(), ForskTechnical.Ink(PrintProfiles.Grey.Thin, true, PrintProfiles.Grey).ToArgb());
 
-        var plan = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "PlanSymbols.cs"));
+        var plan = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "PlanSymbols.cs"))
+            + File.ReadAllText(Path.Combine(PluginDir(), "Functions", "PlanSymbolsRooms.cs"));
         Assert.Contains("ForskTechnical.PenFor(\"symbol\"", plan, StringComparison.Ordinal);
         Assert.Contains("ForskTechnical.PenFor(\"stair\"", plan, StringComparison.Ordinal);
         Assert.Contains("ForskTechnical.Ink(", plan, StringComparison.Ordinal);
