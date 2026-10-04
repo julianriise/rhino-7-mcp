@@ -102,10 +102,10 @@ public class DetailFrameTests
     {
         var facts = DetailFixtures.Facts(DetailFixtures.Garage(), opening: "o-door");
         var placed = Details.Row(Details.Drawings(facts), 20);
-        var plan = Assert.Single(placed);
-        Assert.Equal(1, plan.Number);
-        Assert.Equal(Details.BandMm, plan.X, 6);
-        Assert.Equal(Details.TitleBandMm + Details.BandMm, plan.Y, 6);
+        Assert.Equal(new[] { 1, 2, 3 }, placed.Select(p => p.Number));
+        // Boxes of 135, 135 and 80 mm: each drawing at 1:20 plus its band either side.
+        Assert.Equal(new[] { 15.0, 150.0, 285.0 }, placed.Select(p => p.X));
+        Assert.All(placed, p => Assert.Equal(Details.TitleBandMm + Details.BandMm, p.Y, 6));
     }
 
     [Fact]
@@ -113,5 +113,76 @@ public class DetailFrameTests
     {
         var facts = DetailFixtures.Facts(DetailFixtures.Garage(), wall: "w01");
         Assert.Null(Details.Frame(facts, Details.Elevation));
+    }
+
+    [Fact]
+    public void TheDoorsDrawings_AllFit1To20()
+    {
+        var drawings = Details.Drawings(DetailFixtures.Facts(DetailFixtures.Garage(), opening: "o-door"));
+        Assert.Equal(new[] { Details.Plan, Details.Elevation, Details.Cut }, drawings.Select(d => d.View));
+        Assert.Equal(20, Details.ScaleOf(drawings));
+        Assert.Equal(10, Details.ScaleOf(drawings.Take(1)));
+    }
+
+    [Fact]
+    public void TheWallSection_CrossesTheSouthWall_BesideTheBreak_1000By3800()
+    {
+        var facts = DetailFixtures.Facts(DetailFixtures.Garage(window: true), wall: "w01");
+        var cut = Details.Frame(facts, Details.Cut);
+        Assert.True(cut.Vertical && cut.Clipped);
+        Assert.Equal("South wall — Section", cut.Title);
+        Assert.Equal(1, cut.Look.X, 6);
+        Assert.Equal(0, cut.Look.Y, 6);
+        Assert.Equal(3050, cut.Depth, 6);
+        Assert.Equal(1000, cut.Width, 6);
+        Assert.Equal(3800, cut.Height, 6);
+        Assert.Equal(-600, cut.V0, 6);
+        Assert.Equal(20, Details.ScaleOf(new[] { cut }));
+    }
+
+    [Fact]
+    public void TheWindowSection_PassesThroughItsCentre_AlongTheNorthWallsDir()
+    {
+        var facts = DetailFixtures.Facts(DetailFixtures.Garage(window: true), opening: "o-window");
+        var cut = Details.Frame(facts, Details.Cut);
+        Assert.Equal(facts.Run.Dir.X, cut.Look.X, 6);
+        Assert.Equal(facts.Run.Dir.Y, cut.Look.Y, 6);
+        Assert.Equal(4000, cut.Depth, 6);
+        Assert.Equal(1000, cut.Width, 6);
+        Assert.Equal(3800, cut.Height, 6);
+        // Both faces lie inside the crop, so the cut plane crosses both: each is a cut line.
+        foreach (var across in new[] { facts.Run.Near, facts.Run.Far })
+        {
+            var u = Details.FaceU(facts, cut, across);
+            Assert.InRange(u, cut.U0 + 1, cut.U1 - 1);
+        }
+        Assert.Equal(20, Details.ScaleOf(Details.Drawings(facts)));
+    }
+
+    [Fact]
+    public void WithARoof_TheWindowSectionCrop_Is4100High_Still1To20()
+    {
+        var facts = DetailFixtures.Facts(DetailFixtures.Garage(window: true, roof: true), opening: "o-window");
+        var cut = Details.Frame(facts, Details.Cut);
+        Assert.Equal(3300, facts.RoofTop);
+        Assert.Equal(4100, cut.Height, 6);
+        Assert.Equal(20, Details.ScaleOf(new[] { cut }));
+    }
+
+    [Fact]
+    public void TheElevation_LooksAtTheOuterSide()
+    {
+        var door = Details.Frame(DetailFixtures.Facts(DetailFixtures.Garage(), opening: "o-door"), Details.Elevation);
+        Assert.False(door.Clipped);
+        Assert.Equal("Door D01 — Elevation", door.Title);
+        Assert.Equal(0, door.Look.X, 6);
+        Assert.Equal(1, door.Look.Y, 6);
+        Assert.Equal(2100, door.Width, 6);
+        Assert.Equal(-200, door.V0, 6);
+        Assert.Equal(2500, door.V1, 6);
+        Assert.Equal(-1, door.DepthLo.Value, 6);
+        Assert.Equal(201, door.DepthHi.Value, 6);
+        var window = Details.Frame(DetailFixtures.Facts(DetailFixtures.Garage(window: true), opening: "o-window"), Details.Elevation);
+        Assert.Equal(-1, window.Look.Y, 6);
     }
 }

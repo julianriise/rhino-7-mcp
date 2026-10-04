@@ -68,6 +68,11 @@ public static class Details
         public double Height;
         public double Base;
         public double FloorTop;
+        /// <summary>The underside of the slab under the run's middle; the floor top when there is none.</summary>
+        public double SlabBottom;
+        /// <summary>The top of a roof that sits on the wall, over the run's middle. Null when none does.</summary>
+        public double? RoofTop;
+        public double WallTop => Base + Height;
         public int Outer = 1;
         public bool Exterior;
         /// <summary>The openings on the run, by U.</summary>
@@ -249,6 +254,8 @@ public static class Details
         public double U0, U1, V0, V1;
         public double CutZ;
         public double Depth;
+        /// <summary>An elevation draws only what meets this band along its look (its host wall). Null: everything in the crop.</summary>
+        public double? DepthLo, DepthHi;
         public bool Clipped;
         public string Title;
         public List<Mark> Marks = new List<Mark>();
@@ -366,7 +373,7 @@ public static class Details
         if (facts?.Run == null || !Views(facts.Record).Contains(view)) return null;
         var run = facts.Run;
         var title = (name ?? Name(facts)) + " — " + char.ToUpperInvariant(view[0]) + view.Substring(1);
-        if (view != Plan) return null;
+        if (view != Plan) return Vertical(facts, view, title);
         var x = PlanX(run);
         var drawing = new Drawing
         {
@@ -547,6 +554,66 @@ public static class Details
         return breaks.Breaks.OrderByDescending(b => b.U1 - b.U0).ThenBy(b => b.U0).First().U0;
     }
 
+    /// <summary>Paper below the slab and above the top a section's crop keeps, and below the floor in an elevation.</summary>
+    public const double BelowMm = 200;
+    /// <summary>An elevation's crop above the head.</summary>
+    public const double AboveHeadMm = 400;
+
+    /// <summary>
+    /// A vertical drawing. A section cuts across the run (its plane's normal
+    /// the run's Dir, looking along it): a wall's beside its largest plan
+    /// break or in its longest plain stretch, an opening's through its
+    /// centre; it crops thickness + 2 × AcrossMm by the slab's underside −
+    /// BelowMm to the wall or roof top + BelowMm. An elevation looks at the
+    /// host's outer face (the Normal side for an inner wall), is not cut,
+    /// crops the opening ± (width/2 + OpeningAlongMm) by the floor − BelowMm
+    /// to the head + AboveHeadMm, and draws only the host wall's band.
+    /// </summary>
+    static Drawing Vertical(Facts facts, string view, string title)
+    {
+        var run = facts.Run;
+        var elevation = view == Elevation;
+        if (elevation && facts.Opening == null) return null;
+        var look = elevation ? new Pt(-facts.Outer * run.Normal.X, -facts.Outer * run.Normal.Y) : run.Dir;
+        var x = new Pt(look.Y, -look.X);
+        var drawing = new Drawing { Facts = facts, View = view, X = x, Vertical = true, Clipped = !elevation, Title = title };
+        double UOf(double along, double across) => Dot(At(run, along, across), x);
+        double DepthOf(double along, double across) => Dot(At(run, along, across), look);
+        if (elevation)
+        {
+            var o = facts.Opening.Opening;
+            var half = o.Width / 2.0 + OpeningAlongMm;
+            var a = UOf(facts.Opening.U - half, OuterV(facts));
+            var b = UOf(facts.Opening.U + half, OuterV(facts));
+            drawing.U0 = Math.Min(a, b);
+            drawing.U1 = Math.Max(a, b);
+            drawing.V0 = facts.FloorTop - BelowMm;
+            drawing.V1 = o.Head + AboveHeadMm;
+            var near = DepthOf(facts.Opening.U, run.Near);
+            var far = DepthOf(facts.Opening.U, run.Far);
+            drawing.DepthLo = Math.Min(near, far) - 1.0;
+            drawing.DepthHi = Math.Max(near, far) + 1.0;
+            return drawing;
+        }
+        var along = facts.IsWall ? U(facts, CutU(facts, Frame(facts, Plan)?.Breaks)) : facts.Opening.U;
+        drawing.Depth = DepthOf(along, 0);
+        var u0 = UOf(along, run.Near - AcrossMm);
+        var u1 = UOf(along, run.Far + AcrossMm);
+        drawing.U0 = Math.Min(u0, u1);
+        drawing.U1 = Math.Max(u0, u1);
+        drawing.V0 = facts.SlabBottom - BelowMm;
+        drawing.V1 = (facts.RoofTop ?? facts.WallTop) + BelowMm;
+        return drawing;
+    }
+
+    /// <summary>A face's u in a vertical drawing across the run: across × the Normal's share of X.</summary>
+    public static double FaceU(Facts facts, Drawing drawing, double across) =>
+        across * Dot(facts.Run.Normal, drawing.X);
+
+    /// <summary>A point along the run (at its outer face) as u in a vertical drawing along it.</summary>
+    public static double AlongU(Facts facts, Drawing drawing, double along) =>
+        Dot(At(facts.Run, along, OuterV(facts)), drawing.X);
+
     /// <summary>The Print receipt's clause for details that dropped. Empty for none.</summary>
     public static string DroppedLine(int count)
     {
@@ -610,6 +677,12 @@ public static class Details
             FloorTop = model.FloorTop
         };
         OuterSide(facts, WallJoins.Outlines(records, tol), tol);
+        var middle = At(run, (run.Lo + run.Hi) / 2.0, (run.Near + run.Far) / 2.0);
+        var under = model.Slabs.Where(sl => sl.Rings != null && sl.Rings.Any(r => RoomDetect.Contains(r, middle))).ToList();
+        facts.SlabBottom = under.Count > 0 ? under.Min(sl => sl.Base) : model.FloorTop;
+        var roofs = model.Roofs.Where(r => r.Rings != null && Math.Abs(r.Base - facts.WallTop) <= Math.Max(tol, 1.0)
+            && r.Rings.Any(ring => RoomDetect.Contains(ring, middle))).ToList();
+        facts.RoofTop = roofs.Count > 0 ? roofs.Max(r => r.Base + r.Thickness) : (double?)null;
         return facts;
     }
 

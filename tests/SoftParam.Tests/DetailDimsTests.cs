@@ -91,4 +91,81 @@ public class DetailDimsTests
         Assert.Equal(new[] { 200 }, DetailDims.Values(Chain(chains, "thickness")));
         Assert.DoesNotContain(chains, c => c.Row == 2);
     }
+
+    static List<PlanDims.FixedChain> Of(string view, string wall = null, string opening = null, bool roof = false)
+    {
+        var facts = DetailFixtures.Facts(DetailFixtures.Garage(window: true, roof: roof), wall, opening);
+        return DetailDims.Chains(facts, Details.Frame(facts, view));
+    }
+
+    static int[] V(List<PlanDims.FixedChain> chains, string kind) => DetailDims.Values(Chain(chains, kind)).ToArray();
+
+    [Fact]
+    public void TheWallSection_Reads200Across_400And3000_Then3400()
+    {
+        var chains = Of(Details.Cut, wall: "w01");
+        Assert.Equal(new[] { 200 }, V(chains, "thickness"));
+        Assert.Equal(new[] { 400, 3000 }, V(chains, "height"));
+        Assert.Equal(new[] { 3400 }, V(chains, "height_overall"));
+    }
+
+    [Fact]
+    public void TheDoorElevation_Reads900_And2100_WithNoSillStop()
+    {
+        var chains = Of(Details.Elevation, opening: "o-door");
+        Assert.Equal(new[] { 900 }, V(chains, "width"));
+        Assert.Equal(new[] { 2100 }, V(chains, "height"));
+        Assert.DoesNotContain(chains, c => c.Kind == "height_overall");
+    }
+
+    [Fact]
+    public void TheWindowElevation_Reads900And1200_Then2100()
+    {
+        var chains = Of(Details.Elevation, opening: "o-window");
+        Assert.Equal(new[] { 1200 }, V(chains, "width"));
+        Assert.Equal(new[] { 900, 1200 }, V(chains, "height"));
+        Assert.Equal(new[] { 2100 }, V(chains, "height_overall"));
+    }
+
+    [Fact]
+    public void TheWindowSection_Reads200Across_WithNoRevealStop_AndItsHeights()
+    {
+        var chains = Of(Details.Cut, opening: "o-window");
+        Assert.Equal(new[] { 200 }, V(chains, "thickness"));
+        Assert.Equal(new[] { 400, 900, 1200, 900 }, V(chains, "height"));
+        Assert.Equal(new[] { 3400 }, V(chains, "height_overall"));
+    }
+
+    [Fact]
+    public void TheDoorSection_HasNoSillStop()
+    {
+        var chains = Of(Details.Cut, opening: "o-door");
+        Assert.Equal(new[] { 400, 2100, 900 }, V(chains, "height"));
+        Assert.Equal(new[] { 3400 }, V(chains, "height_overall"));
+    }
+
+    [Fact]
+    public void WithARoof_TheWindowSectionRow1_EndsWithTheRoof()
+    {
+        var chains = Of(Details.Cut, opening: "o-window", roof: true);
+        Assert.Equal(new[] { 400, 900, 1200, 900, 300 }, V(chains, "height"));
+        Assert.Equal(new[] { 3400 }, V(chains, "height_overall"));
+    }
+
+    [Fact]
+    public void TheLevelMarks_StandAwayFromTheHeights()
+    {
+        var facts = DetailFixtures.Facts(DetailFixtures.Garage(window: true), opening: "o-window");
+        var cut = Details.Frame(facts, Details.Cut);
+        var levels = DetailDims.Levels(facts, cut);
+        Assert.Equal(new[] { "±0", "+900", "+2100" }, levels.Select(l => l.Text));
+        var heights = Chain(DetailDims.Chains(facts, cut), "height");
+        Assert.All(levels, l => Assert.Equal(heights.Out.X > 0 ? cut.U0 : cut.U1, l.U, 6));
+        Assert.All(levels, l => Assert.Equal(heights.Out.X > 0 ? -1 : 1, l.Side));
+        var wall = DetailFixtures.Facts(DetailFixtures.Garage(), wall: "w01");
+        Assert.Equal(new[] { "±0", "+3000" }, DetailDims.Levels(wall, Details.Frame(wall, Details.Cut)).Select(l => l.Text));
+        var door = DetailFixtures.Facts(DetailFixtures.Garage(), opening: "o-door");
+        Assert.Equal(new[] { "±0", "+2100" }, DetailDims.Levels(door, Details.Frame(door, Details.Cut)).Select(l => l.Text));
+        Assert.Equal("-400", DetailDims.LevelText(-400));
+    }
 }

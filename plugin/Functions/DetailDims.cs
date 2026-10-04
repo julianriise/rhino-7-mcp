@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
@@ -80,6 +81,165 @@ public static class DetailDims
         for (var i = 0; i + 1 < chain.Stops.Count; i++)
             chain.Underline.Add(breaks.Spans(chain.Stops[i], chain.Stops[i + 1]));
         chain.Stops = chain.Stops.Select(breaks.Map).ToList();
+    }
+
+    /// <summary>Stops closer than this are one: a frame set 1 mm into the wall shows only the thickness.</summary>
+    public const double MergeMm = 5;
+
+    /// <summary>A drawing's chains, by its view.</summary>
+    public static List<PlanDims.FixedChain> Chains(Details.Facts facts, Details.Drawing drawing)
+    {
+        if (facts?.Run == null || drawing == null) return new List<PlanDims.FixedChain>();
+        if (drawing.View == Details.Plan) return PlanChains(facts, drawing);
+        if (drawing.View == Details.Elevation) return ElevationChains(facts, drawing);
+        return facts.IsWall ? SectionChains(facts, drawing) : OpeningSectionChains(facts, drawing);
+    }
+
+    /// <summary>
+    /// A wall section's chains: its thickness across, below the slab; up its
+    /// outer face, row 1 slab underside → floor top → wall top (→ roof top),
+    /// row 2 the overall.
+    /// </summary>
+    public static List<PlanDims.FixedChain> SectionChains(Details.Facts facts, Details.Drawing drawing)
+    {
+        var heights = new List<double> { facts.SlabBottom, facts.FloorTop, facts.WallTop };
+        if (facts.RoofTop.HasValue) heights.Add(facts.RoofTop.Value);
+        return Vertical(facts, drawing, "section", Across(facts, drawing, false), heights, new[] { facts.SlabBottom, heights.Max() });
+    }
+
+    /// <summary>
+    /// An opening section's chains: across, below the slab, outer face →
+    /// frame outer → frame inner → inner face; up its outer face, row 1 slab
+    /// underside → floor top → sill → head → wall top (→ roof top), row 2
+    /// slab underside → wall top.
+    /// </summary>
+    public static List<PlanDims.FixedChain> OpeningSectionChains(Details.Facts facts, Details.Drawing drawing)
+    {
+        var o = facts.Opening.Opening;
+        var heights = new List<double> { facts.SlabBottom, facts.FloorTop, o.Sill, o.Head, facts.WallTop };
+        if (facts.RoofTop.HasValue) heights.Add(facts.RoofTop.Value);
+        return Vertical(facts, drawing, "section", Across(facts, drawing, true), heights, new[] { facts.SlabBottom, facts.WallTop });
+    }
+
+    /// <summary>
+    /// An opening elevation's chains: its width below the floor line; beside
+    /// it, row 1 floor top → sill → head, row 2 floor top → head when row 1
+    /// has a sill stop.
+    /// </summary>
+    public static List<PlanDims.FixedChain> ElevationChains(Details.Facts facts, Details.Drawing drawing)
+    {
+        var o = facts.Opening.Opening;
+        var a = Details.AlongU(facts, drawing, facts.Opening.U - o.Width / 2.0);
+        var b = Details.AlongU(facts, drawing, facts.Opening.U + o.Width / 2.0);
+        var chains = new List<PlanDims.FixedChain>
+        {
+            Line(facts, "width", new Pt(0, facts.FloorTop), new Pt(1, 0), new Pt(0, -1), new[] { a, b }, 1)
+        };
+        var side = new Pt(Math.Max(a, b), 0);
+        var row1 = Line(facts, "height", side, new Pt(0, 1), new Pt(1, 0), new[] { facts.FloorTop, o.Sill, o.Head }, 1);
+        chains.Add(row1);
+        if (row1.Stops.Count > 2)
+            chains.Add(Line(facts, "height_overall", side, new Pt(0, 1), new Pt(1, 0), new[] { facts.FloorTop, o.Head }, 2));
+        return chains;
+    }
+
+    /// <summary>A level mark on a vertical drawing: "±0", "+2100", at z, on the side away from the dimensions.</summary>
+    public sealed class Level
+    {
+        public string Text;
+        public double Z;
+        public double U;
+        /// <summary>+1 when the mark points to +u from U, −1 to −u.</summary>
+        public int Side;
+    }
+
+    /// <summary>
+    /// A vertical drawing's level marks: ±0 and the wall top on a wall
+    /// section; ±0, the sill (when above the floor) and the head on an
+    /// opening section; ±0 on an elevation. They stand at the crop's edge
+    /// away from the height chains, pointing out of it.
+    /// </summary>
+    public static List<Level> Levels(Details.Facts facts, Details.Drawing drawing)
+    {
+        var levels = new List<Level>();
+        if (facts?.Run == null || drawing == null || !drawing.Vertical) return levels;
+        var heights = new List<double> { facts.FloorTop };
+        if (drawing.View == Details.Cut && facts.IsWall) heights.Add(facts.WallTop);
+        else if (drawing.View == Details.Cut)
+        {
+            var o = facts.Opening.Opening;
+            if (o.Sill - facts.FloorTop >= MergeMm) heights.Add(o.Sill);
+            heights.Add(o.Head);
+        }
+        var dims = Chains(facts, drawing).First(c => Math.Abs(c.Dir.Y) > 0.5);
+        var side = dims.Out.X > 0 ? -1 : 1;
+        var u = side > 0 ? drawing.U1 : drawing.U0;
+        foreach (var z in heights)
+            levels.Add(new Level { Text = LevelText(z - facts.FloorTop), Z = z, U = u, Side = side });
+        return levels;
+    }
+
+    /// <summary>"±0", "+2100", "-400": mm from the floor top.</summary>
+    public static string LevelText(double mm)
+    {
+        var n = (int)Math.Round(mm, MidpointRounding.AwayFromZero);
+        if (n == 0) return "±0";
+        return (n > 0 ? "+" : "-") + Math.Abs(n).ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The faces' u across a vertical drawing, outer first; an opening's frame faces between them.</summary>
+    static List<double> Across(Details.Facts facts, Details.Drawing drawing, bool frame)
+    {
+        var outer = Details.FaceU(facts, drawing, Details.OuterV(facts));
+        var inner = Details.FaceU(facts, drawing, Details.InnerV(facts));
+        var list = new List<double> { outer };
+        if (frame && OpeningElement.FrameInsetMm >= MergeMm)
+        {
+            var step = Math.Sign(inner - outer) * OpeningElement.FrameInsetMm;
+            list.Add(outer + step);
+            list.Add(inner - step);
+        }
+        list.Add(inner);
+        return list;
+    }
+
+    /// <summary>A section's chains: across below the slab, and up the outer face in two rows.</summary>
+    static List<PlanDims.FixedChain> Vertical(Details.Facts facts, Details.Drawing drawing, string kind,
+        List<double> across, List<double> heights, IList<double> overall)
+    {
+        var outer = across[0];
+        var outward = outer >= across[across.Count - 1] ? 1 : -1;
+        var side = new Pt(outer, 0);
+        var row1 = Line(facts, "height", side, new Pt(0, 1), new Pt(outward, 0), heights, 1);
+        var chains = new List<PlanDims.FixedChain>
+        {
+            Line(facts, "thickness", new Pt(0, facts.SlabBottom), new Pt(1, 0), new Pt(0, -1), across, 1),
+            row1
+        };
+        if (row1.Stops.Count > 2)
+            chains.Add(Line(facts, "height_overall", side, new Pt(0, 1), new Pt(outward, 0), overall, 2));
+        return chains;
+    }
+
+    /// <summary>A chain along dir from origin, its stops sorted and those closer than MergeMm made one.</summary>
+    static PlanDims.FixedChain Line(Details.Facts facts, string kind, Pt origin, Pt dir, Pt outward, IEnumerable<double> stops, int row)
+    {
+        var chain = new PlanDims.FixedChain
+        {
+            Kind = kind,
+            Id = facts.Record?.Id + "." + kind,
+            Origin = origin,
+            Dir = dir,
+            Out = outward,
+            Row = row
+        };
+        foreach (var t in stops.OrderBy(t => t))
+        {
+            if (chain.Stops.Count > 0 && t - chain.Stops[chain.Stops.Count - 1] < MergeMm) continue;
+            chain.Stops.Add(t);
+            chain.StopIds.Add(null);
+        }
+        return chain;
     }
 
     /// <summary>

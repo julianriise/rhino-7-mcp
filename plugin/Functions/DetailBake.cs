@@ -340,7 +340,7 @@ public partial class RhinoMCPFunctions
                     "break_line", null, null, null, ref box, ref index, ref count, stamp);
         }
 
-        var chains = d.View == Details.Plan ? DetailDims.PlanChains(d.Facts, d) : new List<PlanDims.FixedChain>();
+        var chains = DetailDims.Chains(d.Facts, d);
         foreach (var chain in chains)
             chain.Origin = new Pt(chain.Origin.X + shift.X, chain.Origin.Y + shift.Y);
         var walls = rings.Select(r => new List<List<Pt>> { r.Select(p => new Pt(p.X + shift.X, p.Y + shift.Y)).ToList() }).ToList();
@@ -394,7 +394,39 @@ public partial class RhinoMCPFunctions
                         "dimension", "underline", null, null, ref box, ref index, ref count, dimStamp);
             }
         }
+        foreach (var level in DetailDims.Levels(d.Facts, d))
+            added += BakeDetailLevel(doc, layer, level, shift, scale, pattern, tol, ref box, ref index, ref count, stamp);
         return fills;
+    }
+
+    /// <summary>Paper mm of a level mark's line out of the crop, and of its triangle.</summary>
+    private const double DetailLevelMm = 10.0;
+    private const double DetailLevelMarkMm = 1.5;
+
+    /// <summary>A level mark: a thin line out from the crop's edge at its height, a small triangle on it, its text above.</summary>
+    private int BakeDetailLevel(RhinoDoc doc, Layer layer, DetailDims.Level level, Pt shift, int scale, int pattern, double tol,
+        ref BoundingBox box, ref int index, ref int count, SymbolStamp stamp)
+    {
+        var at = new Point3d(level.U + shift.X, level.Z + shift.Y, 0);
+        var end = at + new Vector3d(level.Side * DetailLevelMm * scale, 0, 0);
+        var added = 0;
+        using (var line = new LineCurve(at, end))
+            added += AddStroke(doc, layer, line, PenThin, scale, false, pattern, tol,
+                "level", "line", null, null, ref box, ref index, ref count, stamp);
+        var m = DetailLevelMarkMm * scale;
+        var tip = at + new Vector3d(level.Side * m * 2, 0, 0);
+        using (var mark = new PolylineCurve(new[] { tip, tip + new Vector3d(-m / 2, m, 0), tip + new Vector3d(m / 2, m, 0), tip }))
+            added += AddStroke(doc, layer, mark, PenThin, scale, false, pattern, tol,
+                "level", "mark", null, null, ref box, ref index, ref count, stamp);
+        var label = new PlanDims.Label
+        {
+            Text = level.Text,
+            Reading = new Pt(1, 0),
+            Centre = new Pt((tip.X + end.X) / 2.0 + level.Side * m, at.Y + PlanDims.TextMm * scale)
+        };
+        var values = new Dictionary<string, string>(stamp.Extra) { ["forsk:level"] = level.Text };
+        if (AddDimensionText(doc, layer, label, scale, values, ref box, ref index, ref count)) added++;
+        return added;
     }
 
     /// <summary>The source's box meets the drawing's crop, in the frame.</summary>
@@ -412,6 +444,12 @@ public partial class RhinoMCPFunctions
             v1 = Math.Max(v1, p.Y);
         }
         if (!d.Vertical && d.Clipped && bbox.Min.Z > d.CutZ) return false;
+        if (d.DepthLo.HasValue && d.DepthHi.HasValue)
+        {
+            var look = new Vector3d(d.Look.X, d.Look.Y, 0);
+            var depths = bbox.GetCorners().Select(c => c.X * look.X + c.Y * look.Y).ToList();
+            if (depths.Max() < d.DepthLo.Value || depths.Min() > d.DepthHi.Value) return false;
+        }
         return u1 >= rect.U0 && u0 <= rect.U1 && v1 >= rect.V0 && v0 <= rect.V1;
     }
 

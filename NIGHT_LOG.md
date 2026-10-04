@@ -6,12 +6,13 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 |---|---|---|
 | D1 Add detail replaces Add dimensions | `679a547` | done headless |
 | D2 plan detail | `0e35401` | done headless; bake unverified |
-| D2b break lines for long walls | see `git log` (`feat(print): D2b …`) | done headless; bake unverified |
+| D2b break lines for long walls | `f58fa08` | done headless; bake unverified |
+| D3 wall section, opening elevation and section | see `git log` (`feat(print): D3 …`) | done headless; bake unverified |
 
 ## Gates (last run, Linux container)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
-- `dotnet test tests/SoftParam.Tests`: exit 0, 1974 passed, 1 skipped (D2 1967, D1 1946; base 1926 passed).
+- `dotnet test tests/SoftParam.Tests`: exit 0, 1986 passed, 1 skipped (D2b 1974, D2 1967, D1 1946; base 1926 passed).
 - `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 499 passed, 2 skipped (D2 499, D1 498; base 500: the two `check_user_dims` tests went).
 - `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
 - Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
@@ -19,6 +20,7 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 ## Unverified (needs Rhino)
 
 - D1: `details add` from a live selection (walls by `forsk:id`, markers by `forsk:id`), and the card names, which come from `ReadIfcModel` on the live document at every window refresh.
+- D3: the vertical bakes: the section cut and fills on the wall cluster and the slab (and roof), the frame cut outlined only (`IsSkippedFillKind` skips `opening`), the elevation's depth band keeping only the host wall's band, the HLD map with up = Z, and the level marks (a 10 mm thin line out of the crop, a small triangle, the text). The level text goes through `AddDimensionText`, so it carries role `dimension` plus `forsk:level`.
 - D2b: that the 2D pass clips the HLD lines and the poché to each kept stretch and shifts them by `Map` with no slivers, the two zigzags 10 paper mm apart at each break, and the underline under 5550, 8000, 5350 and 7600.
 - D2: the whole detail bake (`DetailBake.cs`): that `KeepSectionSide` trims the unioned wall cluster by the cut and the four crop planes (the 2D clip counts what it had to shorten and the page record's `note` says "N lines clipped in 2D"), that the HLD-to-frame map puts the drawing the right way up, the poché at the cut, the break lines where the crop cuts the end walls, the dimension text size, the heavier pens at 1:20, and that `layout_pack views ["detail_20_1"]` frames the page at 1:20 with the footer's Scale cell reading it.
 
@@ -30,17 +32,20 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 - Single wall or single opening: Add detail is on the "?" card only. Two or more walls: slot 2. Walls with openings: slot 1.
 - D2 plan detail draws doors and windows as their solids cut at 1200 (frames in section), not the 1:100 plan symbols; no swing arcs yet.
 - D2 lays a sheet out per sheet, not per drawing: each detail sheet has its own model region at `(25000·k, −60000)` (k from the scale's ladder index and n), wide enough for the 400 mm area at 1:50 (20000). Drawings sit in it at their paper place × scale. D2 puts every detail of a scale on sheet 1 in a plain row (`Details.Row`); D4's packer replaces that.
-- "The door's drawings give 20": the door's plan alone fits 1:10 (2100 × 1000). The pin uses the plan plus its 1000 × 3800 section crop; D3 switches it to the section frame.
+- "The door's drawings give 20": the door's plan alone fits 1:10 (2100 × 1000). D3's `TheDoorsDrawings_AllFit1To20` pins it on the three real frames (the elevation, 2100 × 2700, and the section, 1000 × 3800, need 1:20).
 - The detail page is built by its own `AddDetailSheetPage` after the drawing sheets; it reuses `AddClayDetail` over the whole detail area box and `AddSheetFooter`. Its sheet number stays empty until D4 numbers `A-50-00n`.
 - Companion marks (section marker, elevation arrow) are placed by `Details.Frame` but drawn in D4 with their numbers.
 - D2b fixture: "an 8400 wall with six 1000 windows at 1500 centres" does not fit (six at 1500 span 8500 + 1000). The test uses centres 1400 apart from 700 (no gap ≥ 1000 between keep zones), which keeps the point: no break, `TooLong`, and the 9000 crop steps to 1:25.
 - D2b: when every candidate gap is gone and the plan is still too long, the breaks found stay and `Scale` steps on the drawn length; `DetailBreaks.Plan.TooLong` says so (the log line comes with D4's page record).
 - D2b: `PlanDims.FixedChain`/`Chain` carry `Values` and `Underline` (true values over mapped stops); `Place` prints the given values.
+- D3 level marks are their own small mark (`DetailDims.Levels`, `BakeDetailLevel`), not `Sections.Levels`/`PlaceLevels`, which are laid out for a whole building section; the ground line is not drawn on details.
+- D3 opening section, horizontally: frame stops come in only when `OpeningElement.FrameInsetMm` (1 mm today) reaches `MergeMm` 5, so the chain is outer face → inner face, as the brief expects. Vertical chains merge stops closer than 5 mm (a door's sill at the floor).
+- D3 vertical dimensions run up the outer face (pointing out); the level marks stand at the opposite crop edge.
 - `layout_pack` accepts `detail_<5|10|20|25|50>_<n>` (contract pattern, server wrapper).
 
 ## Left
 
-- D3, D4, D5.
+- D4, D5.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 
