@@ -332,4 +332,34 @@ public class PageChromeTests
         Assert.Contains("minmax(0, 1fr)", html);
         Assert.Contains("max-width: 100%", html.Substring(html.IndexOf(".role-sub {", StringComparison.Ordinal), 220));
     }
+
+    /// <summary>
+    /// The reader stays on the newest line until they scroll away. A card's
+    /// field takes focus without pulling that line off the screen. WebKit only
+    /// tabs to a button that has tabindex, and the ring has to show for that.
+    /// Secondary text is #66707A, 4.66:1 on #F5F6F8.
+    /// </summary>
+    [Fact]
+    public void TheNewestLine_StaysPut_AndButtonsTakeTheKeyboard()
+    {
+        var html = Html();
+        Assert.Contains("tabindex=\"0\"", html);
+        Assert.Contains("-webkit-tap-highlight-color: transparent", html);
+        Assert.Contains("button:focus { outline: 2px solid var(--brand);", html);
+        Assert.Contains(".field:focus-within", html);
+        Assert.Contains("--meta: #66707A", html);
+        Assert.Contains("-webkit-user-select: none; user-select: none;", html);
+
+        var engine = PageScript.Load();
+        Assert.Equal("true", engine.Evaluate("String(Forsk.nearEnd(100, 80, 20))").ToString());
+        Assert.Equal("true", engine.Evaluate("String(Forsk.nearEnd(100, 41, 20))").ToString());
+        Assert.Equal("false", engine.Evaluate("String(Forsk.nearEnd(100, 40, 20))").ToString());
+        Assert.Equal("false", engine.Evaluate("String(Forsk.nearEnd(1000, 0, 100))").ToString());
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("var follow = followLatest || Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);", script);
+        Assert.Contains("else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);", script);
+        Assert.Contains("root.addEventListener('resize'", script);
+        Assert.Contains("focus.focus({ preventScroll: true })", script);
+        Assert.Contains("node.tabIndex = 0", script);
+    }
 }

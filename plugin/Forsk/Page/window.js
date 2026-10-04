@@ -351,11 +351,19 @@
   var sender = null;
   var barHovered = false;
   var lastPrefill = 0;
+  /* The render in progress is keeping the reader on the newest line. */
+  var followLatest = true;
+
+  Forsk.nearEnd = function (scrollHeight, scrollTop, clientHeight) {
+    return scrollHeight - scrollTop - clientHeight < 40;
+  };
 
   function el(tag, cls, text) {
     var node = document.createElement(tag);
     if (cls) node.className = cls;
     if (text != null) node.textContent = text;
+    // WebKit leaves a button out of the tab order unless it has tabindex.
+    if (tag === 'button') node.tabIndex = 0;
     return node;
   }
 
@@ -501,10 +509,13 @@
       });
     });
     if (inputs.length) setTimeout(function () {
+      // A reader who left the newest line keeps their place. select() would pull the field up.
+      if (!followLatest) return;
       var focus = inputs[0];
       for (var i = 0; i < inputs.length; i++) if (inputs[i].type !== 'checkbox') { focus = inputs[i]; break; }
-      focus.focus();
+      focus.focus({ preventScroll: true });
       if (focus.tagName !== 'SELECT' && focus.type !== 'checkbox' && focus.select) focus.select();
+      document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight;
     }, 0);
     return box;
   }
@@ -640,12 +651,14 @@
     var name = document.getElementById('role-name');
     var shown = Forsk.shownRole(model);
     name.textContent = optionLabel(role, shown);
-    document.getElementById('file').textContent = Forsk.roleSubtitle(model);
+    var fileEl = document.getElementById('file');
+    fileEl.textContent = Forsk.roleSubtitle(model);
+    fileEl.title = fileEl.textContent;
     setFace(shown);
     pill.className = 'role-pill' + (role && role.value && role.value !== 'auto' ? ' set' : '');
     pill.title = (role && role.title) || '';
     var spoken = (role && role.label ? role.label + ', ' : '') + name.textContent;
-    var sub = document.getElementById('file').textContent;
+    var sub = fileEl.textContent;
     if (sub) spoken += ', ' + sub;
     pill.setAttribute('aria-label', spoken);
     if (role && role.label) menu.setAttribute('aria-label', role.label);
@@ -769,6 +782,7 @@
       var reason = el('div', 'reason');
       reason.appendChild(el('b', null, bar.because || ''));
       reason.appendChild(document.createTextNode(' ' + bar.reason));
+      reason.title = reason.textContent;
       nav.appendChild(reason);
     }
   }
@@ -803,13 +817,23 @@
   Forsk.render = function (next) {
     model = next || {};
     var thread = document.getElementById('thread');
-    var atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
     document.getElementById('target').textContent = model.target || '';
     document.getElementById('status').textContent = model.status || '';
+    // A reader who has not moved stays with the newest line, including after a resize.
+    var follow = followLatest || Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
+    followLatest = follow;
     while (thread.firstChild) thread.removeChild(thread.firstChild);
     (model.thread || []).forEach(function (entry) { thread.appendChild(item(entry)); });
     if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
-    if (atEnd) thread.scrollTop = thread.scrollHeight;
+    if (follow) thread.scrollTop = thread.scrollHeight;
+    var placed = thread.scrollTop;
+    // The write above lands about 15px short. Layout has finished on the next turn.
+    if (follow) root.setTimeout(function () {
+      if (Math.abs(thread.scrollTop - placed) > 2) return;
+      thread.scrollTop = thread.scrollHeight;
+      followLatest = true;
+    }, 0);
+    else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
     renderRole(model);
@@ -966,9 +990,18 @@
     });
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
     // One thread per file. There is no separate history list, so this scrolls that thread.
+    var threadEl = document.getElementById('thread');
+    threadEl.addEventListener('scroll', function () {
+      followLatest = Forsk.nearEnd(threadEl.scrollHeight, threadEl.scrollTop, threadEl.clientHeight);
+    });
+    // Shrinking the panel does not fire a scroll. A reader who was on the newest line still is.
+    root.addEventListener('resize', function () {
+      if (!followLatest) return;
+      threadEl.scrollTop = threadEl.scrollHeight;
+    });
     document.getElementById('history').addEventListener('click', function () {
-      var thread = document.getElementById('thread');
-      thread.scrollTop = 0;
+      followLatest = false;
+      threadEl.scrollTop = 0;
     });
     var pill = document.getElementById('role-pill');
     var more = document.getElementById('more');
