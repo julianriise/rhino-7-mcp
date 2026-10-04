@@ -26,10 +26,11 @@ namespace RhinoMCPPlugin.Functions;
 /// horizontal cut 1200 mm above the floor. Details show that drawing layer
 /// only, in a Top view (the curves are flat in XY), Wireframe, so the Mac
 /// preview is black lines on white. The model
-/// viewport keeps the clay. PDF is Rhino.FileIO.FilePdf. Vector output uses
-/// ViewCaptureSettings with RasterMode false. On Rhino 7 Mac that capture
-/// wrote a white sheet, so Mac export activates each layout, redraws, waits,
-/// then draws GetPreviewImage into the PDF. A blank frame is a paint race:
+/// viewport keeps the clay. v3 N3: the PDF is SheetPdf's vector file from the
+/// flat sheets the DWG is written from, on every OS. ViewCapture wrote a
+/// white sheet on Rhino 7 Mac; when the vector write throws, the old Mac
+/// path is the fallback: it activates each layout, redraws, waits, then
+/// draws GetPreviewImage into a FilePdf. A blank frame is a paint race:
 /// that page is activated and read again until it paints or its read budget
 /// (PreviewFrame.ReadAgain) runs out. Pages that
 /// have ink are still written. Each export appends a line to
@@ -602,53 +603,31 @@ public partial class RhinoMCPFunctions
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        // ViewCaptureSettings on this Mac wrote a white page (no title block,
-        // no clay). The page preview of the same layout has the drawing.
-        if (Rhino.Runtime.HostUtils.RunningOnOSX)
-            return ExportMacPreviewPdf(doc, pages, full);
-
-        var names = new JArray();
-        var captures = new List<ViewCaptureSettings>();
+        // v3 N3: the PDF is drawn from the flat sheets the DWG is written from:
+        // real lines and text on every OS. ViewCapture wrote white pages on
+        // Rhino 7 Mac, so the page-preview capture stays only as the fallback.
+        string reason;
         try
         {
-            var pdf = FilePdf.Create();
-            foreach (var page in pages)
-            {
-                ApplyPageDrawingDisplay(doc, page);
-                var settings = new ViewCaptureSettings(page, PdfDpi)
-                {
-                    RasterMode = false,
-                    OutputColor = PdfOutputColor(),
-                    DrawGrid = false,
-                    DrawAxis = false,
-                    DrawMargins = false,
-                    DrawWallpaper = false,
-                    DefaultPrintWidthMillimeters = 0.18
-                };
-                captures.Add(settings);
-                pdf.AddPage(settings);
-                names.Add(page.PageName ?? "");
-            }
-
-            pdf.Write(full);
-            LogPrint(full, names.Count, "vector " + GreyscaleMake2dNote(doc));
-            return ExportPdfResult(full, names, $"Wrote {names.Count} page(s) to {full}.");
+            var sheets = WriteVectorPdf(doc, pages, full, out var unmapped);
+            var notes = new List<string>();
+            if (sheets.HatchFallback > 0) notes.Add("hatch_fallback " + sheets.HatchFallback);
+            if (sheets.OffPage > 0) notes.Add("off_page " + sheets.OffPage);
+            if (sheets.OtherFonts > 0) notes.Add("non-Arial texts in Helvetica " + sheets.OtherFonts);
+            if (unmapped > 0) notes.Add("unmapped " + unmapped);
+            LogPrint(full, sheets.Names.Count, "vector " + string.Join(" ", notes) + " " + GreyscaleMake2dNote(doc));
+            var result = ExportPdfResult(full, sheets.Names, $"Wrote {sheets.Names.Count} page(s) to {full}.");
+            result["vector"] = true;
+            result["hatch_fallback"] = sheets.HatchFallback;
+            return result;
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            return ExportPdfResult(path, names, PdfWriteFailedMessage);
+            reason = e.GetType().Name + ": " + e.Message;
         }
-        finally
-        {
-            foreach (var settings in captures)
-                settings.Dispose();
-        }
-    }
-
-    /// <summary>PrintColor, the name <see cref="PrintInk.OutputColorMode"/> pins.</summary>
-    private static ViewCaptureSettings.ColorMode PdfOutputColor()
-    {
-        return (ViewCaptureSettings.ColorMode)Enum.Parse(
-            typeof(ViewCaptureSettings.ColorMode), PrintInk.OutputColorMode, false);
+        LogPrint(full, 0, "raster fallback " + reason);
+        var raster = ExportMacPreviewPdf(doc, pages, full);
+        raster["vector"] = false;
+        return raster;
     }
 }

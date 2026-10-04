@@ -4127,9 +4127,10 @@ class TestPrintGuards:
         src = self._text("plugin", "Functions", "LayoutPack.cs")
         assert "AddPageView" in src
         assert "AddDetailView" in src
+        # v3 N3: the vector PDF from the flat sheets; FilePdf only in the raster fallback, no ViewCapture.
+        assert "WriteVectorPdf(" in src
         assert "FilePdf.Create" in src
-        assert "new ViewCaptureSettings" in src
-        assert "RasterMode = false" in src
+        assert "new ViewCaptureSettings" not in src
         assert "pdf.Write" in src
         assert "ActiveSpace.PageSpace" in src
         assert "DisplayModeDescription.WireframeId" in src
@@ -4151,10 +4152,7 @@ class TestPrintGuards:
         assert "spec.Look" not in pan
         assert "-Vector3d.ZAxis" in pan
         assert "TechId" not in src
-        assert "OutputColor = PdfOutputColor()" in src
         assert "BlackAndWhite" not in src
-        ink = self._text("plugin", "Functions", "PrintInk.cs")
-        assert 'public const string OutputColorMode = "PrintColor"' in ink
         assert "doc.Layers.Count" in src
         assert src.index("CommitViewportChanges") < src.index("SetScale")
         assert "Nothing to lay out. Bake walls first." in src
@@ -4204,7 +4202,8 @@ class TestPrintGuards:
         assert "SetPerViewportColor" not in src
         assert "ApplyDocumentPrintInk" in src
         assert "SetPerViewportVisible" in src
-        assert "RunningOnOSX" in src
+        # v3 N3: no OS switch; the preview capture is the vector writer's fallback.
+        assert "RunningOnOSX" not in src
         assert "GetPreviewImage" in src
         assert "DrawBitmap" in src
         assert "forsk-print.log" in src

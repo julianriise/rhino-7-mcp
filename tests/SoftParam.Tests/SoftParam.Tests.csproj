@@ -49,6 +49,7 @@
     <Compile Include="..\..\plugin\Functions\ProjectInfo.cs" Link="ProjectInfo.cs" />
     <Compile Include="..\..\plugin\Functions\Takeoff.cs" Link="Takeoff.cs" />
     <Compile Include="..\..\plugin\Functions\TakeoffCsv.cs" Link="TakeoffCsv.cs" />
+    <Compile Include="..\..\plugin\Functions\SheetPdf.cs" Link="SheetPdf.cs" />
     <Compile Include="..\..\plugin\Functions\Stairs.cs" Link="Stairs.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />
