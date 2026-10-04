@@ -306,4 +306,30 @@ public class PageChromeTests
         Assert.Contains("id=\"send\"", html);
         Assert.Contains("class=\"send\"", html);
     }
+
+    /// <summary>
+    /// A layer name and a file path have no spaces. The bubble is a flex child,
+    /// so it needs min-width 0 or the word paints past the panel. Card chips wrap.
+    /// The bar still ellipsizes, and the header column cannot grow the page.
+    /// </summary>
+    [Fact]
+    public void UnbreakableText_WrapsInsideThePanel()
+    {
+        var html = Html();
+        Assert.Contains("overflow-wrap: anywhere", html);
+        var bubbleAt = html.IndexOf(".bubble {", StringComparison.Ordinal);
+        var bubble = html.Substring(bubbleAt, html.IndexOf('}', bubbleAt) - bubbleAt);
+        Assert.Contains("min-width: 0", bubble);
+        Assert.Contains("overflow-wrap: anywhere", bubble);
+        var pillAt = html.IndexOf(".pill {", StringComparison.Ordinal);
+        var pill = html.Substring(pillAt, html.IndexOf('}', pillAt) - pillAt);
+        Assert.Contains("max-width: 100%", pill);
+        Assert.Contains("overflow-wrap: anywhere", pill);
+        Assert.DoesNotContain("white-space: nowrap", pill);
+        var slotAt = html.IndexOf(".slot {", StringComparison.Ordinal);
+        var slot = html.Substring(slotAt, html.IndexOf('}', slotAt) - slotAt);
+        Assert.Contains("white-space: nowrap", slot);
+        Assert.Contains("minmax(0, 1fr)", html);
+        Assert.Contains("max-width: 100%", html.Substring(html.IndexOf(".role-sub {", StringComparison.Ordinal), 220));
+    }
 }
