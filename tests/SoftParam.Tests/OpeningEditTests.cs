@@ -1,3 +1,5 @@
+using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Forsk;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 
@@ -130,6 +132,68 @@ public class OpeningEditTests
         Assert.Equal("Removed 1 door.", SoftParamPlan.RemovalLine(0, 1, 1));
         Assert.Equal("Removed 3 openings from 2 walls.", SoftParamPlan.RemovalLine(2, 1, 2));
         Assert.Equal("Removed 0 openings.", SoftParamPlan.RemovalLine(0, 0, 0));
+    }
+
+    [Fact]
+    public void RemovalLine_NamesAMarkedOpening_AndKeepsTheCountWhenItHasNone()
+    {
+        var door = new SoftParamPlan.RemovedName("door", "D02");
+        var window = new SoftParamPlan.RemovedName("window", "V01");
+        var english = new SoftParamPlan.RemovedName("window", "W01");
+        Assert.Equal("Removed Door D02.", SoftParamPlan.RemovalLine(new[] { door }, 1));
+        Assert.Equal("Removed Window V01.", SoftParamPlan.RemovalLine(new[] { window }, 1));
+        Assert.Equal("Removed Window W01.", SoftParamPlan.RemovalLine(new[] { english }, 1));
+        Assert.Equal("Removed Door D02 and Window V01.", SoftParamPlan.RemovalLine(new[] { door, window }, 1));
+        Assert.Equal(
+            "Removed Door D02, Window V01 and Window W01.",
+            SoftParamPlan.RemovalLine(new[] { door, window, english }, 2));
+
+        // Before Print there is no forsk:mark. The count line stays, and a marker
+        // name or a Rhino id is not a label.
+        Assert.Equal("Removed 2 windows.", SoftParamPlan.RemovalLine(new[]
+        {
+            new SoftParamPlan.RemovedName("window", ""),
+            new SoftParamPlan.RemovedName("window", null)
+        }, 1));
+        Assert.Equal("Removed 1 door.", SoftParamPlan.RemovalLine(
+            new[] { new SoftParamPlan.RemovedName("door", "door-02") }, 1));
+        Assert.Equal("Removed 1 door.", SoftParamPlan.RemovalLine(
+            new[] { new SoftParamPlan.RemovedName("door", "a1b2c3d4-e5f6-7890-abcd-ef1234567890") }, 1));
+        Assert.DoesNotContain("a1b2c3d4", SoftParamPlan.RemovalLine(
+            new[] { new SoftParamPlan.RemovedName("door", "a1b2c3d4-e5f6-7890-abcd-ef1234567890") }, 1));
+    }
+
+    [Fact]
+    public void ADeleteReceipt_NamesTheDoor_AndNotTheMarkerId()
+    {
+        var message = SoftParamPlan.RemovalLine(new[] { new SoftParamPlan.RemovedName("door", "D02") }, 1);
+        var envelope = new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject
+            {
+                ["message"] = message,
+                ["deleted_marker_id"] = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                ["host_id"] = "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+                ["ok"] = true
+            }
+        };
+        var receipt = ForskReceipt.From("delete_opening", envelope);
+        Assert.True(receipt.Ok);
+        Assert.Equal("D02", receipt.Subject);
+        Assert.Contains("Door D02", receipt.Text);
+        Assert.DoesNotContain("a1b2c3d4", receipt.Text);
+
+        var window = ForskReceipt.From("delete_opening", new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject
+            {
+                ["message"] = SoftParamPlan.RemovalLine(new[] { new SoftParamPlan.RemovedName("window", "W01") }, 1)
+            }
+        });
+        Assert.Equal("W01", window.Subject);
+        Assert.Contains("Window W01", window.Text);
     }
 
     // South wall 8 m, east wall 6 m. The edited opening is on the south run.

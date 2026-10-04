@@ -486,7 +486,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["all"] = Bool("With type: every door or every window of that type's kind. No id.")
                     }),
                 Fn("delete_opening",
-                    "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the selection, including two or more openings. One id removes that opening. Refuses X-EXIST. If the rebuild fails, the openings return and the wall stays.",
+                    "Remove each selected opening (marker, frame, and record) and rebuild each host wall once from its path. No filler plate. Id omitted uses the selection, including two or more openings. One id removes that opening. Refuses X-EXIST. If the rebuild fails, the openings return and the wall stays. The message names a marked opening, such as Removed Door D02., and otherwise Removed 2 windows. Do not repeat a marker id.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker GUID. Omit to use the selection.")

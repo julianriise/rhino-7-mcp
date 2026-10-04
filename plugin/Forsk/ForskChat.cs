@@ -261,7 +261,7 @@ Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake 
 Never edit an opening on X-EXIST or forsk:kind=existing. Refuse: Existing underlay is not a Forsk host wall.
 Roof or openings before walls: Walls first. Call walls_from_layer before roof_flat_from_walls. Or the openings / add_opening line with the same shape.
 
-Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. make this a sliding door, top-hung window, flip swing, and change hand are one set_opening_type. Two or more selected openings are one call and no id. make all windows fixed is one set_opening_type with that type and all true. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed 2 windows.
+Delete or remove a door or window, including these windows when two or more are selected, is one delete_opening with no id. Add is add_opening. Both rebuild the host from its path. No filler plate. Move millimetres along the wall is move_opening delta_mm. Set width, sill, or head on the selected opening is set_opening. make this a sliding door, top-hung window, flip swing, and change hand are one set_opening_type. Two or more selected openings are one call and no id. make all windows fixed is one set_opening_type with that type and all true. Do not call clear_generated. Do not call delete_object for an opening. Do not use the last opening created. The delete status line is the tool message, such as Removed Door D02. or Removed 2 windows. Do not repeat a marker id.
 
 Sheets prefers Layout pages and a PDF. Print, make PDF, or skriv ut opens a save dialog. Do not invent a file path. set_project_meta stores project, client, and address. layout_pack bakes black S-DRAW curves and makes the pages. clear_layouts removes those pages and the S-DRAW curves. Sheet cache on S-PLAN and S-ELEV stays: sheet_pack, make2d_view, clear_drawings. Never clear_generated for drawings or layouts.
 
@@ -347,7 +347,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Two or more selected openings are one set_opening_type with no id. "
                     + "make all windows fixed is one set_opening_type with that type and all true. "
                     + "Two or more selected windows are one delete_opening with no id. "
-                    + "Status line for that call: Removed 2 windows. "
+                    + "Status line for that call: Removed Door D02., or Removed 2 windows. Do not repeat a marker id. "
                     + "Move a wall is move_wall: side for an outer wall or at [x, y], toward, distance_mm. With neither, ask which wall. "
                     + "Delete a wall is delete_wall, named the same way; its openings go with it. "
                     + "Add a wall is add_wall: from and to [x, y], or line_id for a drawn line. "

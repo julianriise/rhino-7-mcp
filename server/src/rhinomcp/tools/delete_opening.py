@@ -25,7 +25,8 @@ def delete_opening(
 
     Returns:
     Dictionary with deleted_marker_id, host_id, message, ok.
-    message is the status line, such as "Removed 2 windows."
+    message is the status line. A marked opening is named, such as
+    "Removed Door D02." With no mark it stays "Removed 2 windows."
     """
     try:
         rhino = get_rhino_connection()

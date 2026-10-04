@@ -11,11 +11,11 @@ namespace RhinoMCPPlugin.Forsk
     /// One line per change, from structured data: done, failed or skipped, the
     /// object in bold, then what happened ("✓ D02 moved 400 mm along w01"). The
     /// object is the first Forsk id the tool's message names (w01, D02, V03,
-    /// rd-01), else the step's label from ForskText. No RhinoCommon.
+    /// W01, rd-01), else the step's label from ForskText. No RhinoCommon.
     /// </summary>
     public sealed class ForskReceipt
     {
-        static readonly Regex ForskId = new Regex(@"\b(w\d{2,}|[DV]\d{2,}|rd-\d{2,})\b", RegexOptions.CultureInvariant);
+        static readonly Regex ForskId = new Regex(@"\b(w\d{2,}|[DVW]\d{2,}|rd-\d{2,})\b", RegexOptions.CultureInvariant);
 
         /// <summary>Every Forsk id a text names, once each, in the order it names them.</summary>
         public static IEnumerable<string> IdsIn(string text)

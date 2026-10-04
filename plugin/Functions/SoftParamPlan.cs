@@ -315,6 +315,71 @@ public static class SoftParamPlan
         return line + ".";
     }
 
+    /// <summary>One deleted opening: its kind and its schedule mark, when it has one.</summary>
+    public readonly struct RemovedName
+    {
+        public readonly string Kind;
+        public readonly string Mark;
+
+        public RemovedName(string kind, string mark)
+        {
+            Kind = kind ?? "";
+            Mark = mark ?? "";
+        }
+    }
+
+    /// <summary>
+    /// "Removed Door D02." when every opening has a schedule mark (D02, V01, W01).
+    /// Otherwise the count line. A marker name (door-02) or a Rhino id is not a mark.
+    /// </summary>
+    public static string RemovalLine(IList<RemovedName> removed, int walls)
+    {
+        var windows = 0;
+        var doors = 0;
+        var labels = new List<string>();
+        var named = removed != null && removed.Count > 0;
+        if (removed != null)
+        {
+            foreach (var item in removed)
+            {
+                var window = string.Equals(item.Kind, "window", StringComparison.OrdinalIgnoreCase);
+                if (window) windows++;
+                else if (item.Kind.Length > 0) doors++;
+                else named = false;
+                var mark = ScheduleMark(item.Mark);
+                if (mark.Length == 0) named = false;
+                else labels.Add((window ? "Window" : "Door") + " " + mark);
+            }
+        }
+        if (!named || labels.Count != removed.Count)
+            return RemovalLine(windows, doors, walls);
+        return "Removed " + JoinAnd(labels) + ".";
+    }
+
+    /// <summary>D02, V01, W01. Anything else, including a GUID, is empty.</summary>
+    static string ScheduleMark(string mark)
+    {
+        var text = (mark ?? "").Trim();
+        if (text.Length < 3 || text.Length > 6) return "";
+        var head = text[0];
+        if (head != 'D' && head != 'V' && head != 'W') return "";
+        for (var i = 1; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c < '0' || c > '9') return "";
+        }
+        return text;
+    }
+
+    static string JoinAnd(List<string> labels)
+    {
+        if (labels.Count <= 1) return labels.Count == 0 ? "" : labels[0];
+        var text = labels[0];
+        for (var i = 1; i < labels.Count - 1; i++)
+            text += ", " + labels[i];
+        return text + " and " + labels[labels.Count - 1];
+    }
+
     /// <summary>
     /// A cut is real when the boolean returned pieces and the volume fell,
     /// or the volume held and the cutter still meets the solid. A heavier

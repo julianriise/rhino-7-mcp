@@ -33,6 +33,8 @@ public partial class RhinoMCPFunctions
         public double Head;
         public double Width;
         public BoundingBox MarkerBbox;
+        /// <summary>forsk:mark (D02, V01, W01). Empty before Print.</summary>
+        public string Mark;
     }
 
     private sealed class OpeningSpec
@@ -794,7 +796,8 @@ public partial class RhinoMCPFunctions
             Sill = sill,
             Head = head,
             Width = width,
-            MarkerBbox = bbox
+            MarkerBbox = bbox,
+            Mark = obj.Attributes.GetUserString(Schedules.MarkKey) ?? ""
         };
     }
 
@@ -1717,9 +1720,12 @@ public partial class RhinoMCPFunctions
         HashSet<Guid> before,
         double tol)
     {
-        var windows = removals.Count(r => r.Record.Kind == OpeningKind.Window);
-        var doors = removals.Count - windows;
         var walls = removals.Select(r => r.HostId).Distinct().Count();
+        var names = new List<SoftParamPlan.RemovedName>();
+        foreach (var item in removals)
+            names.Add(new SoftParamPlan.RemovedName(
+                item.Record.Kind == OpeningKind.Window ? "window" : "door",
+                item.Record.Mark));
 
         var hostIds = new HashSet<Guid>();
         var deleted = new JArray();
@@ -1786,7 +1792,7 @@ public partial class RhinoMCPFunctions
             ["markers"] = markers,
             ["plate_count"] = CountStrayObjects(doc, before, hostIds),
             ["ok"] = true,
-            ["message"] = SoftParamPlan.RemovalLine(windows, doors, walls)
+            ["message"] = SoftParamPlan.RemovalLine(names, walls)
         };
     }
 
