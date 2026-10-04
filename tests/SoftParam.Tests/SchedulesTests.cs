@@ -376,6 +376,17 @@ public class SchedulesTests
     }
 
     [Fact]
+    public void DrawingList_GivesADetailSheet_ItsOwnScale()
+    {
+        var table = Schedules.DrawingList(new[]
+        {
+            new Schedules.Drawing { Number = "A-20-001", Title = "Ground floor plan", Scale = 100 },
+            new Schedules.Drawing { Number = "A-50-001", Title = Details.SheetTitle(20), Scale = 20 }
+        });
+        Assert.Equal(new[] { "A-50-001", "Details 1:20", "1:20" }, table.Rows[1]);
+    }
+
+    [Fact]
     public void FrontSheet_FlowsOntoOneA3Page_ForTheOffice()
     {
         var sheets = new List<Schedules.Drawing> { new Schedules.Drawing { Number = "A-00-001", Title = "Drawing list and areas" } };

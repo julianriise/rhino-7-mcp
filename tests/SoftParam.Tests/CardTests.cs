@@ -179,6 +179,22 @@ public class CardTests
     }
 
     [Fact]
+    public void ChooseSheets_ListsTheDetailSheets_BetweenTheSectionsAndTheLists()
+    {
+        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d =>
+        {
+            d.SectionLetters = new List<string> { "A" };
+            d.DetailSheets = new List<string> { "detail_20_2", "detail_20_1" };
+        }));
+        var card = ForskCards.For("print.pages", facts)!;
+        var keys = card.Fields!.Select(f => f.Key).ToList();
+        Assert.Equal(new[] { "section_a", "detail_20_1", "detail_20_2", "schedules" }, keys.Skip(keys.IndexOf("section_a")).Take(4));
+        Assert.Equal("A-50-001 Details 1:20", card.Fields!.Single(f => f.Key == "detail_20_1").Label);
+        Assert.Equal("A-50-002 Details 1:20", card.Fields!.Single(f => f.Key == "detail_20_2").Label);
+        Assert.Equal("1", card.Fields!.Single(f => f.Key == "detail_20_2").Value);
+    }
+
+    [Fact]
     public void ChooseSheets_WithNoScaleKnown_SaysItFits()
     {
         var card = ForskCards.For("print.pages", Docs.Facts("house"))!;

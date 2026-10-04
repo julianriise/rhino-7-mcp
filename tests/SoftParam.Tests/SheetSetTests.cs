@@ -43,6 +43,28 @@ public class SheetSetTests
     }
 
     [Fact]
+    public void DetailSheets_FollowTheSections_BeforeTheLists_NumberedA50()
+    {
+        var facts = Garage("A");
+        facts.DetailSheets = new List<string> { "detail_25_1", "detail_20_2", "detail_20_1" };
+        var set = SheetSet.Infer(facts);
+        Assert.Equal(new[] { "front", "plan", "north", "east", "south", "west", "section_a", "detail_20_1", "detail_20_2", "detail_25_1", "schedules", "takeoff" },
+            Ids(set));
+        Assert.Equal(new[] { "A-50-001", "A-50-002", "A-50-003" },
+            set.Where(s => s.Id.StartsWith("detail_")).Select(s => SheetSet.Number(s.Id, 0, 0, facts.DetailSheets)));
+        Assert.All(set.Where(s => s.Id.StartsWith("detail_")), s => Assert.True(s.On));
+        Assert.Equal("Details 1:20", SheetSet.Title("detail_20_2", 0));
+        Assert.False(SheetSet.IsListSheet("detail_20_1"));
+
+        // A detail sheet switched off stays off; a new one comes in on, before the lists.
+        var stored = set.Select(s => new SheetSet.Sheet(s.Id, s.Id != "detail_20_2" && s.On)).Where(s => s.Id != "detail_25_1").ToList();
+        var merged = SheetSet.Merge(set, stored);
+        Assert.False(merged.Single(s => s.Id == "detail_20_2").On);
+        Assert.True(merged.Single(s => s.Id == "detail_25_1").On);
+        Assert.Equal(Ids(set), Ids(merged));
+    }
+
+    [Fact]
     public void NoWalls_NoSet_AndNoLists_NoListsSheet()
     {
         Assert.Empty(SheetSet.Infer(new SheetSet.SetFacts { Walls = false, Lists = new List<string> { "door" } }));

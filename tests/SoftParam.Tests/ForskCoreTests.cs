@@ -142,6 +142,11 @@ public class ForskCoreTests
             ForskReceipt.PrintLine(7, 200, "/Users/jr/Desktop/Holmen.pdf", null, " Section A–A at 1:500 to fit.", " · Blank preview: page 3"));
         // One list sheet has no scale.
         Assert.Equal("✓ Printed 1 sheet on A3 · Holmen.pdf", ForskReceipt.PrintLine(1, 0, "/Users/jr/Desktop/Holmen.pdf", null, null, ""));
+        // Detail sheets name their scales after the set's; a detail that dropped says so.
+        Assert.Equal("✓ Printed 10 sheets at 1:100 on A3, details at 1:20 · Garage.pdf",
+            ForskReceipt.PrintLine(10, 100, "/x/Garage.pdf", null, null, "", new[] { 20 }, 0));
+        Assert.Equal("✓ Printed 9 sheets at 1:100 on A3, details at 1:20 and 1:25 · Garage.pdf · 1 detail dropped: its wall or opening is gone.",
+            ForskReceipt.PrintLine(9, 100, "/x/Garage.pdf", null, null, "", new[] { 20, 25 }, 1));
 
         var receipt = ForskReceipt.FromLine("✓ Printed 7 sheets at 1:200 on A3 · Holmen.pdf");
         Assert.True(receipt.Ok);

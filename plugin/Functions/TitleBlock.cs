@@ -137,12 +137,13 @@ public static class TitleBlock
 
     /// <summary>
     /// The scale bar is on every drawing sheet whose detail locked its scale:
-    /// the plan, the facades and the sections. The lists have no scale.
+    /// the plan, the facades, the sections and the detail sheets. The lists have no scale.
     /// </summary>
     public static bool ScaleBar(string sheetId, int pageScale)
     {
         var id = (sheetId ?? "").Trim().ToLowerInvariant();
-        var drawing = id == SheetSet.PlanId || SheetSet.Facades.Contains(id) || Sections.TryLetter(id, out _);
+        var drawing = id == SheetSet.PlanId || SheetSet.Facades.Contains(id) || Sections.TryLetter(id, out _)
+            || Details.TrySheetId(id, out _, out _);
         return drawing && pageScale > 0;
     }
 

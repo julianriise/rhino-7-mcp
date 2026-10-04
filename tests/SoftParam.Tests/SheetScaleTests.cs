@@ -157,4 +157,26 @@ public class SheetScaleTests
         Assert.Equal(" Ground floor plan at 1:200 and Section A–A at 1:500 to fit.",
             SheetScale.Clause(new[] { "Ground floor plan", "Section A–A" }, new[] { 200, 500 }));
     }
+
+    [Fact]
+    public void TheSetScale_IgnoresTheDetailSheets()
+    {
+        // The pack sets the detail sheets aside before it builds the spans Pick reads.
+        var source = File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPack.cs"));
+        var aside = source.IndexOf("detailViews.Add(viewName);\n                continue;", StringComparison.Ordinal);
+        var spans = source.IndexOf("sheets.Add(sheet);", StringComparison.Ordinal);
+        var pick = source.IndexOf("SheetScale.Pick(sheets.Select(PackSpan).ToList()", StringComparison.Ordinal);
+        Assert.True(aside > 0 && aside < spans && spans < pick, "a detail sheet is set aside before it becomes a span");
+        Assert.Contains("if (Details.TrySheetId(viewName, out _, out _))", source);
+    }
+
+    static string FunctionsDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", "Functions");
+            if (Directory.Exists(path)) return path;
+        }
+        throw new DirectoryNotFoundException("plugin/Functions above " + AppContext.BaseDirectory);
+    }
 }

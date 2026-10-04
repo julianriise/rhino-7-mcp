@@ -232,6 +232,11 @@ public partial class RhinoMCPFunctions
         }
 
         RestorePrintColors(doc);
+        if (doc.Strings.GetValue(Details.Section, Details.RetiredEntry) != null)
+        {
+            doc.Strings.Delete(Details.Section, Details.RetiredEntry);
+            RhinoApp.WriteLine("Forsk: removed " + Details.Section + "/" + Details.RetiredEntry + ".");
+        }
         _drawIncludeExisting = includeExisting;
         // A whole Print writes the set: pages of sheets switched off go.
         if (replace && offViews.Count > 0)
@@ -402,6 +407,8 @@ public partial class RhinoMCPFunctions
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 pageRecord["section_markers"] = new JArray(drawn.Dims.SectionMarkers ?? new List<string>());
                 pageRecord["section_markers_blocked"] = new JArray(drawn.Dims.SectionMarkersBlocked ?? new List<string>());
+                pageRecord["callouts"] = new JArray(drawn.Dims.Callouts ?? new List<string>());
+                pageRecord["callouts_blocked"] = new JArray(drawn.Dims.CalloutsBlocked ?? new List<string>());
                 if (!string.IsNullOrEmpty(drawn.RoomText))
                     pageRecord["room_tag_text"] = drawn.RoomText;
                 _lastPlanStats = new PlanStats
@@ -451,6 +458,8 @@ public partial class RhinoMCPFunctions
             pages.Add(pageRecord);
         }
         var sheetCount = sheets.Count;
+        DetailSheetPlan(doc, out var detailsDropped);
+        var detailScales = new SortedSet<int>();
         foreach (var detailView in detailViews)
         {
             if (replace)
@@ -459,6 +468,7 @@ public partial class RhinoMCPFunctions
             if (detailPage == null) continue;
             pages.Add(detailPage);
             sheetCount++;
+            if (Details.TrySheetId(detailView, out var detailScale, out _)) detailScales.Add(detailScale);
         }
         var scheduleNote = "";
         if (withSchedules)
@@ -508,6 +518,8 @@ public partial class RhinoMCPFunctions
             ["drawings"] = sheets.Count,
             ["bumped"] = bumpNote.Trim(),
             ["scale"] = reported,
+            ["detail_scales"] = new JArray(detailScales),
+            ["details_dropped"] = detailsDropped,
             ["asked"] = asked.HasValue,
             // "on A3 at 1:N." then the drawing notes: smoke_compare reads "at 1:N. Greyscale drawing: plan".
             ["message"] = SheetCountText(sheetCount) + " on A3 at 1:" + reported.ToString(CultureInfo.InvariantCulture) + "."
@@ -1595,6 +1607,7 @@ public partial class RhinoMCPFunctions
         if (doors) facts.Lists.Add("door");
         if (windows) facts.Lists.Add("window");
         if (PlanRooms(doc).Any(r => r.Tagged)) facts.Lists.Add("room");
+        if (facts.Walls) facts.DetailSheets = DetailSheetIds(doc);
         return facts;
     }
 

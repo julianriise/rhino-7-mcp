@@ -88,6 +88,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Details;
         /// <summary>Each stored detail's name by id ("North wall", "Door D01"), read from the model. One whose element is gone has none.</summary>
         public Dictionary<string, string> DetailNames = new Dictionary<string, string>();
+        /// <summary>The detail sheets the details pack onto (detail_20_1, …), read from the model.</summary>
+        public List<string> DetailSheets = new List<string>();
     }
 
     /// <summary>The classifier's answer. One pure read of the rows; no RhinoCommon.</summary>
@@ -142,6 +144,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The details, as stored, and their names by id.</summary>
         public List<global::RhinoMCPPlugin.Functions.Details.Record> Details = new List<global::RhinoMCPPlugin.Functions.Details.Record>();
         public Dictionary<string, string> DetailNames = new Dictionary<string, string>();
+        public List<string> DetailSheets = new List<string>();
         /// <summary>The things picked, one row each (ForskPick.Things). The pick line reads them.</summary>
         public List<ChipRow> Selected = new List<ChipRow>();
         /// <summary>door or window when every picked opening is that kind, else null.</summary>
@@ -243,6 +246,7 @@ namespace RhinoMCPPlugin.Forsk
                 && input.StoredFingerprint != SheetFingerprint.Of(rows, input.Details);
             facts.Details = global::RhinoMCPPlugin.Functions.Details.Read(input.Details);
             facts.DetailNames = new Dictionary<string, string>(input.DetailNames ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+            facts.DetailSheets = new List<string>(input.DetailSheets ?? new List<string>());
             ReadSelection(rows, facts);
             facts.SelectionKey = string.Join(",", rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
             facts.ModelKey = ModelKey(rows);

@@ -343,7 +343,8 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Walls = f?.HasWalls == true,
                 Sections = new List<string>(f?.SectionLetters ?? new List<string>()),
-                Lists = ListKinds(f)
+                Lists = ListKinds(f),
+                DetailSheets = new List<string>(f?.DetailSheets ?? new List<string>())
             };
             return SheetSet.Merge(SheetSet.Infer(facts), SheetSet.Read(f?.PrintPages));
         }
@@ -361,7 +362,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A sheet as the cards name it: A-40-001 North elevation.</summary>
         static string SheetLine(string id, FileFacts f)
         {
-            return SheetSet.Number(id, 0) + " " + SheetSet.Title(id, 0, ListKinds(f));
+            return SheetSet.Number(id, 0, 0, f?.DetailSheets) + " " + SheetSet.Title(id, 0, ListKinds(f));
         }
 
         public static CardSpec Rooms(FileFacts f)

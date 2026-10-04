@@ -41,11 +41,12 @@ public partial class RhinoMCPFunctions
                 StoreAskedScale(doc, scale.ToObject<int>());
         }
         var sheets = new JArray();
+        var ids = set.Select(s => s.Id).ToList();
         foreach (var sheet in set)
             sheets.Add(new JObject
             {
                 ["id"] = sheet.Id,
-                ["number"] = SheetSet.Number(sheet.Id, level),
+                ["number"] = SheetSet.Number(sheet.Id, level, 0, ids),
                 ["title"] = SheetSet.Title(sheet.Id, level),
                 ["on"] = sheet.On
             });

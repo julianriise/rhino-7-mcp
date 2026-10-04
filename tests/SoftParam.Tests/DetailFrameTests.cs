@@ -98,17 +98,6 @@ public class DetailFrameTests
     }
 
     [Fact]
-    public void TheDoorsPlan_InARow_StandsOnTheTitleBand()
-    {
-        var facts = DetailFixtures.Facts(DetailFixtures.Garage(), opening: "o-door");
-        var placed = Details.Row(Details.Drawings(facts), 20);
-        Assert.Equal(new[] { 1, 2, 3 }, placed.Select(p => p.Number));
-        // Boxes of 135, 135 and 80 mm: each drawing at 1:20 plus its band either side.
-        Assert.Equal(new[] { 15.0, 150.0, 285.0 }, placed.Select(p => p.X));
-        Assert.All(placed, p => Assert.Equal(Details.TitleBandMm + Details.BandMm, p.Y, 6));
-    }
-
-    [Fact]
     public void Frame_IsNullForAViewTheDetailHasNot()
     {
         var facts = DetailFixtures.Facts(DetailFixtures.Garage(), wall: "w01");

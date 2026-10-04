@@ -126,11 +126,25 @@ public class TitleBlockTests
     [InlineData("west", false, true)]
     [InlineData("section_a", false, true)]
     [InlineData("schedules", false, false)]
+    [InlineData("detail_20_1", false, true)]
     public void TheScaleBar_IsOnEveryDrawingSheet_TheNorthArrowOnThePlan(string sheet, bool north, bool bar)
     {
         Assert.Equal(north, TitleBlock.NorthArrow(sheet));
-        // Facades and sections lock their scale, so they get the bar; the lists have no scale.
+        // Facades, sections and detail sheets lock their scale, so they get the bar; the lists have no scale.
         Assert.Equal(bar, TitleBlock.ScaleBar(sheet, 100));
         Assert.False(TitleBlock.ScaleBar(sheet, 0));
+    }
+
+    [Fact]
+    public void ADetailSheet_ShowsItsOwnScale_AndItsNumber()
+    {
+        var fields = Office();
+        fields.Drawing = SheetSet.Title("detail_20_1", 0);
+        fields.Number = SheetSet.Number("detail_20_1", 0, 0, new[] { "detail_20_1" });
+        fields.Scale = "1:20";
+        var cells = TitleBlock.Cells(fields);
+        Assert.Equal("Details 1:20", cells.Single(c => c.Key == "drawing").Value);
+        Assert.Equal("A-50-001", cells.Single(c => c.Key == "number").Value);
+        Assert.Equal("1:20", cells.Single(c => c.Key == "scale").Value);
     }
 }

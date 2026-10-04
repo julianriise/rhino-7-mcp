@@ -1278,7 +1278,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
             var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
             var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
-            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank);
+            var detailScales = (packed?["detail_scales"] as JArray)?.Select(s => s.Value<int>()).ToList();
+            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank,
+                detailScales, packed?["details_dropped"]?.Value<int>() ?? 0);
         }
 
         /// <summary>

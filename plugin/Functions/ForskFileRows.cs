@@ -128,6 +128,7 @@ public partial class RhinoMCPFunctions
         input.StoredFingerprint = doc.Strings.GetValue(LayoutMetaSection, SheetFingerprintKey);
         input.Details = doc.Strings.GetValue(Details.Section, Details.Entry);
         input.DetailNames = DetailNames(doc, Details.Read(input.Details));
+        input.DetailSheets = DetailSheetIds(doc);
         input.Layouts = MatchingForskPages(doc, null).Count;
         foreach (var def in ReadSectionDefs(doc))
             if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);

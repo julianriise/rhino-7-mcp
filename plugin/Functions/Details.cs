@@ -21,6 +21,8 @@ public static class Details
 {
     public const string Section = "forsk";
     public const string Entry = "details";
+    /// <summary>The removed Add dimensions' chains. A file that still has them loses them at its next Print.</summary>
+    public const string RetiredEntry = "user_dims";
     public const string NeedsPick = "Pick walls, doors or windows, then Add detail.";
 
     public const string Plan = "plan";
@@ -503,22 +505,6 @@ public static class Details
         public int Number;
         public double X;
         public double Y;
-    }
-
-    /// <summary>
-    /// Drawings in one plain row, left to right, each inside its band, the
-    /// row standing on the title band. The detail sheet packer replaces this.
-    /// </summary>
-    public static List<Placed> Row(IEnumerable<Drawing> drawings, int scale)
-    {
-        var placed = new List<Placed>();
-        var x = 0.0;
-        foreach (var drawing in drawings ?? Enumerable.Empty<Drawing>())
-        {
-            placed.Add(new Placed { Drawing = drawing, Number = placed.Count + 1, X = x + BandMm, Y = TitleBandMm + BandMm });
-            x += drawing.Width / scale + 2 * BandMm;
-        }
-        return placed;
     }
 
     /// <summary>

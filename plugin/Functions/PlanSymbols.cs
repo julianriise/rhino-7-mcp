@@ -61,6 +61,9 @@ public partial class RhinoMCPFunctions
         // marker found no spot clear of everything (drawn at its first spot).
         public List<string> SectionMarkers;
         public List<string> SectionMarkersBlocked;
+        // The details whose callout is on the plan, and those with no clear spot (not drawn).
+        public List<string> Callouts;
+        public List<string> CalloutsBlocked;
         public string Note;
         public string RoomText;
     }
@@ -99,7 +102,9 @@ public partial class RhinoMCPFunctions
             RoomsOverflowing = new List<string>(),
             MarksOnTags = new List<string>(),
             SectionMarkers = new List<string>(),
-            SectionMarkersBlocked = new List<string>()
+            SectionMarkersBlocked = new List<string>(),
+            Callouts = new List<string>(),
+            CalloutsBlocked = new List<string>()
         };
         if (doc == null || layer == null || scale < 1) return false;
         var pattern = SolidPatternIndex(doc);
@@ -166,6 +171,8 @@ public partial class RhinoMCPFunctions
         added += BakeDimensions(doc, layer, scale, worldToHld, delta, pending, rooms, poche, pattern, tol,
             ref box, ref index, ref count, ref stats);
         added += BakeSectionMarkers(doc, layer, scale, worldToHld, delta, pattern, tol,
+            ref box, ref index, ref count, ref stats);
+        added += BakeDetailCallouts(doc, layer, scale, worldToHld, delta, poche, pattern, tol,
             ref box, ref index, ref count, ref stats);
 
         foreach (var rect in openings)
@@ -1088,7 +1095,7 @@ public partial class RhinoMCPFunctions
     /// <summary>The filled dot a leader starts from.</summary>
     private static int AddLeaderDot(
         RhinoDoc doc, Layer layer, Point3d at, int scale, int pattern, double tol, IDictionary<string, string> stamps,
-        ref BoundingBox box, ref int index, ref int count)
+        ref BoundingBox box, ref int index, ref int count, string role = "room_leader")
     {
         Hatch[] hatches;
         using (var circle = new ArcCurve(new Circle(at, LeaderDotMm * scale / 2.0)))
@@ -1101,7 +1108,7 @@ public partial class RhinoMCPFunctions
         foreach (var hatch in hatches)
         {
             if (hatch == null) continue;
-            var attr = DrawAttr(layer, FormatStableId("d", index), "room_leader", "dot", null);
+            var attr = DrawAttr(layer, FormatStableId("d", index), role, "dot", null);
             foreach (var pair in stamps)
                 attr.SetUserString(pair.Key, pair.Value);
             Guid id;

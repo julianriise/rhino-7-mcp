@@ -20,12 +20,16 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
-    /// <summary>The drawings on detail sheet n at 1:scale, placed, and how many details dropped.</summary>
-    private static List<Details.Placed> DetailSheetDrawings(RhinoDoc doc, int scale, int n, out int dropped)
+    /// <summary>
+    /// The detail sheets as DetailSheet.Plan packs them from the stored
+    /// records and the model as it is now, and how many details dropped.
+    /// The one source for the set, the pages card, the sheets and the callouts.
+    /// </summary>
+    private static List<DetailSheet.Sheet> DetailSheetPlan(RhinoDoc doc, out int dropped)
     {
         dropped = 0;
-        var records = Details.Read(doc.Strings.GetValue(Details.Section, Details.Entry));
-        if (records.Count == 0) return new List<Details.Placed>();
+        var records = Details.Read(doc?.Strings.GetValue(Details.Section, Details.Entry));
+        if (records.Count == 0) return new List<DetailSheet.Sheet>();
         var model = ReadIfcModel(doc);
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         var facts = new List<Details.Facts>();
@@ -35,15 +39,10 @@ public partial class RhinoMCPFunctions
             if (one == null) dropped++;
             else facts.Add(one);
         }
-        var names = Details.Names(facts);
-        var drawings = new List<Details.Drawing>();
-        for (var i = 0; i < facts.Count; i++)
-        {
-            var own = Details.Drawings(facts[i], names[i]);
-            if (own.Count > 0 && Details.ScaleOf(own) == scale) drawings.AddRange(own);
-        }
-        return n == 1 ? Details.Row(drawings, scale) : new List<Details.Placed>();
+        return DetailSheet.Plan(DetailSheet.Items(facts));
     }
+
+    private static List<string> DetailSheetIds(RhinoDoc doc) => DetailSheetPlan(doc, out _).Select(s => s.Id).ToList();
 
     private GreyscaleDrawing BakeDetailSheet(RhinoDoc doc, int scale, int n, bool includeExisting)
     {
@@ -51,7 +50,8 @@ public partial class RhinoMCPFunctions
         var result = new GreyscaleDrawing { View = view, Layer = "", Box = BoundingBox.Empty, Details = new JArray() };
         var baseProfile = ReadPrintProfile(doc);
         PrintProfiles.Active = PrintProfiles.AtScale(baseProfile, scale);
-        var placed = DetailSheetDrawings(doc, scale, n, out result.DetailsDropped);
+        var plan = DetailSheetPlan(doc, out result.DetailsDropped);
+        var placed = plan.FirstOrDefault(sh => sh.Id == view)?.Drawings ?? new List<Details.Placed>();
         if (placed.Count == 0)
         {
             result.Error = "No details at 1:" + scale.ToString(CultureInfo.InvariantCulture) + ".";
@@ -89,6 +89,16 @@ public partial class RhinoMCPFunctions
                 notes.Add(d.Title + " skipped");
                 RhinoApp.WriteLine("Forsk detail skipped: " + d.Title + ": " + ex.Message);
             }
+            try
+            {
+                BakeDetailTitle(doc, layer, view, item, origin, scale, pattern, tol, ref box, ref index, ref count);
+                BakeDetailMarks(doc, layer, view, item, shift, plan, scale, pattern, tol, ref box, ref index, ref count);
+            }
+            catch (Exception ex)
+            {
+                notes.Add(d.Title + " title skipped");
+                RhinoApp.WriteLine("Forsk detail title skipped: " + d.Title + ": " + ex.Message);
+            }
             result.Details.Add(new JObject
             {
                 ["number"] = item.Number,
@@ -107,6 +117,155 @@ public partial class RhinoMCPFunctions
         result.SymbolNote = notes.Count == 0 ? null : string.Join("; ", notes);
         if (count == 0) result.Error = "No visible curves for " + view + ".";
         return result;
+    }
+
+    /// <summary>The pen of a view title's rule.</summary>
+    private static PrintPen DetailRulePen => new PrintPen(DetailSheet.TitleRuleMm, PrintProfiles.Active.Text);
+
+    /// <summary>A drawing's view title in its title band: number in a circle, title, scale, the rule.</summary>
+    private void BakeDetailTitle(RhinoDoc doc, Layer layer, string view, Details.Placed item, Pt origin, int scale,
+        int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
+    {
+        var title = DetailSheet.TitleOf(item, scale);
+        Point3d At(Pt p) => new Point3d(origin.X + p.X * scale, origin.Y + p.Y * scale, 0);
+        var stamp = DetailStamp(view, item.Drawing);
+        using (var circle = new ArcCurve(new Circle(At(title.Circle), title.Radius * scale)))
+            AddStroke(doc, layer, circle, PenThin, scale, false, pattern, tol, "detail_title", "circle", null, null,
+                ref box, ref index, ref count, stamp);
+        using (var rule = new LineCurve(At(title.RuleFrom), At(title.RuleTo)))
+            AddStroke(doc, layer, rule, DetailRulePen, scale, false, pattern, tol, "detail_title", "rule", null, null,
+                ref box, ref index, ref count, stamp);
+        AddDetailText(doc, layer, item.Number.ToString(CultureInfo.InvariantCulture), At(title.Circle), DetailSheet.TitleTextMm, scale,
+            false, "detail_title", stamp, ref box, ref index, ref count);
+        AddDetailText(doc, layer, item.Drawing.Title, At(title.Name), DetailSheet.TitleTextMm, scale, true, "detail_title", stamp,
+            ref box, ref index, ref count);
+        AddDetailText(doc, layer, "1:" + scale.ToString(CultureInfo.InvariantCulture), At(title.Scale), DetailSheet.TitleScaleMm, scale,
+            true, "detail_title", stamp, ref box, ref index, ref count);
+    }
+
+    /// <summary>A plan detail's marks for its companion drawings: a 9 mm bubble, number over sheet number, and an arrow its way.</summary>
+    private void BakeDetailMarks(RhinoDoc doc, Layer layer, string view, Details.Placed item, Pt shift, List<DetailSheet.Sheet> plan,
+        int scale, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
+    {
+        var d = item.Drawing;
+        var ids = plan.Select(sh => sh.Id).ToList();
+        foreach (var mark in d.Marks)
+        {
+            if (!DetailSheet.Find(plan, d.Facts.Record.Id, mark.View, out var sheet, out var target)) continue;
+            var centre = new Point3d(d.Map(mark.At.X) + shift.X, mark.At.Y + shift.Y, 0);
+            var look = new Vector3d(mark.Look.X, mark.Look.Y, 0);
+            var stamp = DetailStamp(view, d);
+            stamp.Extra["forsk:detail_target"] = mark.View;
+            BakeBubble(doc, layer, centre, DetailCallout.MarkMm, target.Number, DetailSheet.Number(sheet.Id, ids), scale, "detail_marker",
+                stamp, pattern, tol, ref box, ref index, ref count);
+            if (!look.Unitize()) continue;
+            var r = DetailCallout.MarkMm / 2.0 * scale;
+            var tip = centre + look * (r + 2.0 * scale);
+            var side = new Vector3d(-look.Y, look.X, 0) * (1.2 * scale);
+            using (var arrow = new PolylineCurve(new[] { centre + look * r + side, tip, centre + look * r - side }))
+                AddStroke(doc, layer, arrow, PenThin, scale, false, pattern, tol, "detail_marker", "arrow", null, null,
+                    ref box, ref index, ref count, stamp);
+        }
+    }
+
+    /// <summary>A numbered bubble: circle, divider, number above, sheet number below.</summary>
+    private int BakeBubble(RhinoDoc doc, Layer layer, Point3d centre, double diameter, int number, string sheetNo, int scale,
+        string role, SymbolStamp stamp, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
+    {
+        var bubble = DetailCallout.Of(sheetNo, diameter, text => ModelTextWidth(doc, text, scale) / scale);
+        Point3d At(Pt p) => new Point3d(centre.X + p.X * scale, centre.Y + p.Y * scale, 0);
+        var added = 0;
+        using (var circle = new ArcCurve(new Circle(centre, bubble.Radius * scale)))
+            added += AddStroke(doc, layer, circle, PenThin, scale, false, pattern, tol, role, "circle", null, null,
+                ref box, ref index, ref count, stamp);
+        using (var divider = new LineCurve(At(bubble.DividerFrom), At(bubble.DividerTo)))
+            added += AddStroke(doc, layer, divider, PenThin, scale, false, pattern, tol, role, "divider", null, null,
+                ref box, ref index, ref count, stamp);
+        if (AddDetailText(doc, layer, number.ToString(CultureInfo.InvariantCulture), At(bubble.Number), DetailCallout.NumberMm, scale,
+                false, role, stamp, ref box, ref index, ref count)) added++;
+        if (AddDetailText(doc, layer, sheetNo, At(bubble.Sheet), DetailCallout.SheetMm, scale, false, role, stamp,
+                ref box, ref index, ref count)) added++;
+        return added;
+    }
+
+    /// <summary>
+    /// Each detail's callout on the main plan: last, after the section
+    /// markers, a 12 mm bubble at the nearest spot PlanDims.PlaceLeader finds
+    /// clear of the poché and of what is drawn, with a leader to the element
+    /// ending in a dot. One with no clear spot is not drawn and is named.
+    /// </summary>
+    private int BakeDetailCallouts(
+        RhinoDoc doc, Layer layer, int scale, Transform worldToHld, Vector3d delta, List<List<List<Pt>>> poche, int pattern, double tol,
+        ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
+    {
+        var callouts = DetailCallout.Callouts(DetailSheetPlan(doc, out _));
+        var r = DetailCallout.CalloutMm / 2.0 * scale;
+        var near = LeaderDotMm * scale;
+        var added = 0;
+        foreach (var callout in callouts)
+        {
+            var target = ToDrawing(new Point3d(callout.Target.X, callout.Target.Y, 0), worldToHld, delta);
+            var at = new Pt(target.X, target.Y);
+            var ring = new List<Pt>
+            {
+                new Pt(at.X - near, at.Y - near), new Pt(at.X + near, at.Y - near),
+                new Pt(at.X + near, at.Y + near), new Pt(at.X - near, at.Y + near)
+            };
+            if (!PlanDims.PlaceLeader(at, ring, r, r, scale, PlanObstacles(doc, layer), poche, out var centre, out _))
+            {
+                stats.CalloutsBlocked.Add(callout.Name);
+                continue;
+            }
+            var stamps = new Dictionary<string, string> { ["forsk:detail"] = callout.Detail };
+            var stamp = new SymbolStamp { Extra = stamps };
+            var start = DetailCallout.LeaderStart(centre, at, DetailCallout.CalloutMm / 2.0, scale);
+            added += BakeBubble(doc, layer, new Point3d(centre.X, centre.Y, 0), DetailCallout.CalloutMm, callout.Number, callout.Sheet, scale,
+                "callout", stamp, pattern, tol, ref box, ref index, ref count);
+            using (var leader = new LineCurve(new Point3d(start.X, start.Y, 0), new Point3d(at.X, at.Y, 0)))
+                added += AddStroke(doc, layer, leader, PenThin, scale, false, pattern, tol, "callout", "leader", null, null,
+                    ref box, ref index, ref count, stamp);
+            added += AddLeaderDot(doc, layer, new Point3d(at.X, at.Y, 0), scale, pattern, tol, stamps, ref box, ref index, ref count, "callout");
+            stats.Callouts.Add(callout.Name);
+        }
+        return added;
+    }
+
+    private static SymbolStamp DetailStamp(string view, Details.Drawing d) => new SymbolStamp
+    {
+        Extra = new Dictionary<string, string>
+        {
+            ["forsk:view"] = view,
+            ["forsk:detail"] = d?.Facts?.Record?.Id ?? "",
+            ["forsk:detail_view"] = d?.View ?? ""
+        }
+    };
+
+    /// <summary>Text at a paper height, centred or from its left baseline, stamped with its role.</summary>
+    private static bool AddDetailText(RhinoDoc doc, Layer layer, string text, Point3d at, double paperMm, int scale, bool left,
+        string role, SymbolStamp stamp, ref BoundingBox box, ref int index, ref int count)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        var entity = PlanAnnotation(doc, text, new Plane(at, Vector3d.XAxis, Vector3d.YAxis), paperMm * scale);
+        if (entity == null) return false;
+        if (left)
+        {
+            entity.TextHorizontalAlignment = TextHorizontalAlignment.Left;
+            entity.TextVerticalAlignment = TextVerticalAlignment.Bottom;
+        }
+        var attr = DrawAttr(layer, FormatStableId("d", index), role, "text", null);
+        foreach (var pair in stamp?.Extra ?? new Dictionary<string, string>())
+            attr.SetUserString(pair.Key, pair.Value);
+        attr.SetUserString("forsk:paper_height", paperMm.ToString("0.###", CultureInfo.InvariantCulture));
+        Guid id;
+        try { id = doc.Objects.AddText(entity, attr); }
+        catch (Exception) { id = Guid.Empty; }
+        finally { entity.Dispose(); }
+        if (id == Guid.Empty) return false;
+        var written = doc.Objects.FindId(id)?.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+        if (written.IsValid) box.Union(written);
+        index++;
+        count++;
+        return true;
     }
 
     /// <summary>
@@ -147,7 +306,7 @@ public partial class RhinoMCPFunctions
         }
         var stableId = FormatStableId("l", number);
         var title = Details.SheetTitle(scale);
-        var sheetNo = SheetSet.Number(spec.View, wallLevel);
+        var sheetNo = SheetSet.Number(spec.View, wallLevel, 0, DetailSheetIds(doc));
         var pageScale = scaleLocked ? DetailModelScale(page) : 0;
         var footer = new JObject();
         var ids = AddSheetFooter(doc, page, spec, stableId, sheetNo, pageScale, title, footer);

@@ -56,11 +56,14 @@ public static class SheetSet
         public List<string> Sections = new List<string>();
         /// <summary>The lists that have rows: door, window, room.</summary>
         public List<string> Lists = new List<string>();
+        /// <summary>The detail sheets DetailSheet.Plan packs: detail_20_1, …</summary>
+        public List<string> DetailSheets = new List<string>();
     }
 
     /// <summary>
     /// The default set: the front sheet, the plan and the four facades when
-    /// walls exist, each stored section by letter, the lists when one has
+    /// walls exist, each stored section by letter, the detail sheets (scale
+    /// ascending, then n), the lists when one has
     /// rows, then the Mengdeliste. Every sheet on but the Mengdeliste. No
     /// walls, no set.
     /// </summary>
@@ -79,6 +82,8 @@ public static class SheetSet
             .OrderBy(l => l, StringComparer.Ordinal);
         foreach (var letter in letters)
             set.Add(new Sheet(Sections.View(letter), true));
+        foreach (var detail in DetailSheet.Order(facts.DetailSheets))
+            set.Add(new Sheet(detail, true));
         if ((facts.Lists ?? new List<string>()).Any(k => ListKinds.Contains(k)))
             set.Add(new Sheet(SchedulesId, true));
         set.Add(new Sheet(TakeoffId, false));
@@ -124,12 +129,14 @@ public static class SheetSet
     /// The sheet number: the front sheet A-00-001, plan A-20-00n (n the
     /// storey), facades A-40-001 to 004, section A A-40-101 and on by letter,
     /// the lists A-00-002 and one more per page they flow onto (page is
-    /// 0-based). A-10-001 is kept for the site plan. Empty for an id that is
+    /// 0-based), the detail sheets A-50-001 and on in the order of
+    /// detailSheets. A-10-001 is kept for the site plan. Empty for an id that is
     /// no sheet.
     /// </summary>
-    public static string Number(string id, int level, int page = 0)
+    public static string Number(string id, int level, int page = 0, IEnumerable<string> detailSheets = null)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
+        if (Details.TrySheetId(key, out _, out _)) return DetailSheet.Number(key, detailSheets);
         if (key == FrontId) return Format(0, 1);
         // Clear of the lists' pages, so it keeps its number however many they take.
         if (key == TakeoffId) return Format(0, 50);
@@ -157,6 +164,7 @@ public static class SheetSet
         if (key == TakeoffId) return SheetLang.Pick(norwegian, "Quantities", "Mengdeliste");
         if (key == SchedulesId)
             return Schedules.SheetTitle(listKinds ?? ListKinds.ToList(), norwegian);
+        if (Details.TrySheetId(key, out var scale, out _)) return Details.SheetTitle(scale, norwegian);
         return OpeningTypes.ViewTitle(key, level, norwegian);
     }
 

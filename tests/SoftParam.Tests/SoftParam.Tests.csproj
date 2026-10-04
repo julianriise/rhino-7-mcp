@@ -38,6 +38,8 @@
     <Compile Include="..\..\plugin\Functions\DetailDims.cs" Link="DetailDims.cs" />
     <Compile Include="..\..\plugin\Functions\DetailClip.cs" Link="DetailClip.cs" />
     <Compile Include="..\..\plugin\Functions\DetailBreaks.cs" Link="DetailBreaks.cs" />
+    <Compile Include="..\..\plugin\Functions\DetailSheet.cs" Link="DetailSheet.cs" />
+    <Compile Include="..\..\plugin\Functions\DetailCallout.cs" Link="DetailCallout.cs" />
     <Compile Include="..\..\plugin\Functions\IfcExport.cs" Link="IfcExport.cs" />
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\SheetSet.cs" Link="SheetSet.cs" />

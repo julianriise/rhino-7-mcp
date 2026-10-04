@@ -7,18 +7,20 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 | D1 Add detail replaces Add dimensions | `679a547` | done headless |
 | D2 plan detail | `0e35401` | done headless; bake unverified |
 | D2b break lines for long walls | `f58fa08` | done headless; bake unverified |
-| D3 wall section, opening elevation and section | see `git log` (`feat(print): D3 …`) | done headless; bake unverified |
+| D3 wall section, opening elevation and section | `4740c2e` | done headless; bake unverified |
+| D4 detail sheets and callouts | see `git log` (`feat(print): D4 …`) | done headless; bake unverified |
 
 ## Gates (last run, Linux container)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
-- `dotnet test tests/SoftParam.Tests`: exit 0, 1986 passed, 1 skipped (D2b 1974, D2 1967, D1 1946; base 1926 passed).
+- `dotnet test tests/SoftParam.Tests`: exit 0, 2001 passed, 1 skipped (D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed).
 - `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 499 passed, 2 skipped (D2 499, D1 498; base 500: the two `check_user_dims` tests went).
 - `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
 - Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
 
 ## Unverified (needs Rhino)
 
+- D4: the plan callouts (12 mm bubble, divider, number over `A-50-00n`, leader and 0.8 dot) placed by `PlanDims.PlaceLeader` clear of the poché and what is on the plan layer, and `callouts`/`callouts_blocked` in the plan page record; the view titles (circle, title, 1:20, the 0.35 rule) and the companion marks inside each plan detail; the packed positions on `S-DRAW::Details 20-1`; the footer's Scale cell and scale bar at 1:20; the sheet order in the PDF and the Drawing list rows; the `forsk/user_dims` delete; the receipt's ", details at 1:20".
 - D1: `details add` from a live selection (walls by `forsk:id`, markers by `forsk:id`), and the card names, which come from `ReadIfcModel` on the live document at every window refresh.
 - D3: the vertical bakes: the section cut and fills on the wall cluster and the slab (and roof), the frame cut outlined only (`IsSkippedFillKind` skips `opening`), the elevation's depth band keeping only the host wall's band, the HLD map with up = Z, and the level marks (a 10 mm thin line out of the crop, a small triangle, the text). The level text goes through `AddDimensionText`, so it carries role `dimension` plus `forsk:level`.
 - D2b: that the 2D pass clips the HLD lines and the poché to each kept stretch and shifts them by `Map` with no slivers, the two zigzags 10 paper mm apart at each break, and the underline under 5550, 8000, 5350 and 7600.
@@ -42,10 +44,16 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 - D3 opening section, horizontally: frame stops come in only when `OpeningElement.FrameInsetMm` (1 mm today) reaches `MergeMm` 5, so the chain is outer face → inner face, as the brief expects. Vertical chains merge stops closer than 5 mm (a door's sill at the floor).
 - D3 vertical dimensions run up the outer face (pointing out); the level marks stand at the opposite crop edge.
 - `layout_pack` accepts `detail_<5|10|20|25|50>_<n>` (contract pattern, server wrapper).
+- D4 `DetailSheet.Plan(items)` takes the details with their drawings (`DetailSheet.Items(facts)`) rather than `(details, sizes)`; one `DetailSheetPlan(doc)` is the source for the set, the pages card, the file facts, each sheet and the callouts. `Details.Row` (D2's plain row) is gone.
+- D4 shelves stack from the area's top; a detail's drawings start a new shelf when the whole row does not fit beside the last one. Sheet counts on the garage: the broken south wall plus the door give 2 sheets; door plus window 2; both end walls plus both openings 4 (one A3 per detail, as the brief expects).
+- D4 callouts: `DetailCallout.Callouts(sheets)` gives target, number and sheet number; placement is `PlanDims.PlaceLeader` with a 0.8 mm square round the target as its "room", so the bubble keeps off it, the poché and what is drawn. The leader is redrawn from the bubble's edge to the target. A blocked callout is not drawn and is named in `callouts_blocked`.
+- D4 the pack result gains `detail_scales` and `details_dropped`; the page record of the plan gains `callouts` next to `callouts_blocked`.
+- D4 `TitleBlock.ScaleBar` is true on detail sheets too (their detail is locked at the sheet scale).
+- D4 the receipt puts ", details at 1:20" (", details at 1:20 and 1:25" for two scales) right after "on A3", before the revision; `Details.DroppedLine` ends the line after " · ".
 
 ## Left
 
-- D4, D5.
+- D5.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 

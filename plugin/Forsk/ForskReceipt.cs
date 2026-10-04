@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Functions;
 
 namespace RhinoMCPPlugin.Forsk
 {
@@ -76,17 +79,24 @@ namespace RhinoMCPPlugin.Forsk
         /// Print's one line: "✓ Printed 7 sheets at 1:200 on A3 · Holmen.pdf".
         /// The file name only, no folder. A set revision is named, a sheet
         /// bumped up the ladder is one clause, and a blank page keeps its clause.
-        /// scale 0: the sheets have none (a list alone).
+        /// scale 0: the sheets have none (a list alone). Detail sheets name
+        /// their own scales after the set's, and details that dropped end it.
         /// </summary>
-        public static string PrintLine(int sheets, int scale, string written, string revision, string bumped, string blank)
+        public static string PrintLine(int sheets, int scale, string written, string revision, string bumped, string blank,
+            IEnumerable<int> detailScales = null, int detailsDropped = 0)
         {
             var text = "Printed " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture) + (sheets == 1 ? " sheet" : " sheets");
             if (scale > 0) text += " at 1:" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
             text += " on A3";
+            var details = (detailScales ?? Enumerable.Empty<int>())
+                .Select(s => "1:" + s.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToList();
+            if (details.Count > 0) text += ", details at " + string.Join(" and ", details);
             if (!string.IsNullOrWhiteSpace(revision)) text += ", rev. " + revision.Trim();
             var bump = (bumped ?? "").Trim().TrimEnd('.');
             if (bump.Length > 0) text += " (" + bump + ")";
-            return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + (blank ?? "");
+            var dropped = Details.DroppedLine(detailsDropped);
+            return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + (blank ?? "")
+                + (dropped.Length > 0 ? " · " + dropped : "");
         }
 
         /// <summary>"✓ Exported 7 sheets as DWG · Holmen DWG/": the folder's name, never its path.</summary>
