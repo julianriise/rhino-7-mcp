@@ -76,6 +76,20 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>Draw a straight stair in Top: the foot, then where it ends. One add_stair, one undo record.</summary>
+    public class ForskDrawStairCommand : Command
+    {
+        public override string EnglishName => ForskStair.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            var envelope = ForskStair.RunOnUi(true);
+            var ok = string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
+            RhinoApp.WriteLine(ok ? envelope["result"]?["message"]?.ToString() : envelope?["message"]?.ToString());
+            return ok ? Result.Success : Result.Cancel;
+        }
+    }
+
     /// <summary>Drag a cross-section line in Top, name it, store it with section_add.</summary>
     public class ForskSectionCommand : Command
     {

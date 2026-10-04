@@ -375,6 +375,7 @@ def test_new_commands():
         ("commands/export_ifc.json", {"path": "/tmp/forsk-ifc-garage.ifc"}),
         ("commands/add_stair.json", {}),
         ("commands/add_stair.json", {"from": [1000, 650], "to": [5000, 650], "width": 1000, "riser_max": 170, "going": 280}),
+        ("commands/add_stair.json", {"from": [1500, 550], "to": [6180, 550], "width": 900, "going": 260, "against": "right"}),
         ("commands/add_stair.json", {"along_wall": True, "at": [7000, 300], "rise": "auto"}),
         ("commands/add_stair.json", {"wall_id": GUID, "side": "north", "rise": 2750}),
         ("commands/edit_stair.json", {"width": 1000}),

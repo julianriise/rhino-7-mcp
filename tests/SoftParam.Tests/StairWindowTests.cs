@@ -34,10 +34,10 @@ public class StairWindowTests
     }
 
     [Fact]
-    public void AddStair_IsOnTheCard_WithNothingOrOneWallPicked()
+    public void AddStair_IsOnTheCard_WithOneWallPicked_AndDrawStairTakesTheRest()
     {
-        Assert.Contains(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "stair.add");
         Assert.Contains(ForskRegistry.Card(Docs.Facts("house, wall selected")).Actions, a => a.Id == "stair.add");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "stair.add");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, door selected")).Actions, a => a.Id == "stair.add");
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("plan curves")).Actions, a => a.Id == "stair.add");
         // Not a bar suggestion: the bar keeps what it had.

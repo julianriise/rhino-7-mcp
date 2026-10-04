@@ -4484,7 +4484,20 @@ class TestStairTools:
         assert add_stair(ctx=None, rise="high")["success"] is False
         assert add_stair(ctx=None, width=-5)["success"] is False
         assert add_stair(ctx=None, side="up")["success"] is False
+        assert add_stair(ctx=None, against="right")["success"] is False
+        assert add_stair(ctx=None, from_point=[0, 0], to_point=[1, 0], against="up")["success"] is False
         mock_get_conn.assert_not_called()
+
+    @patch("rhinomcp.tools.add_stair.get_rhino_connection")
+    def test_add_sends_the_wall_side(self, mock_get_conn):
+        from rhinomcp.tools.add_stair import add_stair
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"message": "ok"}
+        mock_get_conn.return_value = mock_conn
+        add_stair(ctx=None, from_point=[1500, 550], to_point=[6180, 550], against="right")
+        mock_conn.send_command.assert_called_once_with(
+            "add_stair", {"from": [1500, 550], "to": [6180, 550], "against": "right"})
 
     @patch("rhinomcp.tools.edit_stair.get_rhino_connection")
     def test_edit_sends_only_what_changes(self, mock_get_conn):

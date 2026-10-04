@@ -195,6 +195,12 @@ public partial class RhinoMCPFunctions
             spec.Y = from.Y;
             spec.Dx = dx / length;
             spec.Dy = dy / length;
+            var side = parameters["against"]?.ToString()?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(side))
+            {
+                if (side != "left" && side != "right") throw new ArgumentException("against is left or right.");
+                spec.Against = side;
+            }
             return null;
         }
 

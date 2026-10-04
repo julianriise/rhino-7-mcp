@@ -241,11 +241,10 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;
                 case "stair.add":
-                    // One wall picked: along its room side. Else the foot and the way up in the view.
-                    if (facts.Picked == Picked.Wall)
-                        Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
-                    else
-                        StairPick(thread, label);
+                    Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
+                    return;
+                case "stair.draw":
+                    DrawPick(thread, label, "stair.draw", "prompt.stair", "add_stair", ForskStair.RunOnUi);
                     return;
                 case "stair.delete":
                     Job(thread, action.Id, label, sink => sink.Tool("delete_stair", new JObject()));
@@ -1102,12 +1101,6 @@ namespace RhinoMCPPlugin.Forsk
             // ForskSection kept its own single record.
             Finish(thread, "section.add", null, doc?.RuntimeSerialNumber ?? 0, null, userText);
             TakeKeyboard();
-        }
-
-        /// <summary>R5: the foot of the stair, then the way up, in the view; add_stair in one record. Esc adds nothing.</summary>
-        void StairPick(DocThread thread, string userText)
-        {
-            DrawPick(thread, userText, "stair.add", "prompt.stair", "add_stair", ForskStair.RunOnUi);
         }
 
         /// <summary>A draw tool: its prompt, the points in the view, then the tool calls in one undo record. Esc adds nothing.</summary>

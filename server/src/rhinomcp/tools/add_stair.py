@@ -40,6 +40,7 @@ def add_stair(
     riser_max: Optional[float] = None,
     going: Optional[float] = None,
     rise: Optional[Union[float, str]] = None,
+    against: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Add a straight stair ("add a straight stair", "legg til en trapp", "add
@@ -62,6 +63,8 @@ def add_stair(
     - going: tread depth, mm, default 260.
     - rise: total rise in mm, or "auto" (default): the walls' height plus the
       floor slab, and it follows the walls when they are baked again.
+    - against: "left" or "right", the side of the stair that stands against a
+      wall, looking up it. Only with from_point and to_point.
 
     A size outside the comfort rule (2R+G 600-640, riser 180 or less) still
     builds and the message says so. Returns id, forsk_id, risers, riser,
@@ -78,6 +81,8 @@ def add_stair(
         for name, value in (("width", width), ("riser_max", riser_max), ("going", going)):
             if value is not None and not _is_mm(value):
                 return {"success": False, "message": f"{name} must be a positive number in mm."}
+        if against is not None and (against not in ("left", "right") or from_point is None):
+            return {"success": False, "message": "against is left or right, with from_point and to_point."}
         why = stair_rise(rise)
         if why:
             return {"success": False, "message": why}
@@ -91,7 +96,7 @@ def add_stair(
         if wall_id:
             params["wall_id"] = wall_id
         for key, value in (("side", side), ("at", at), ("width", width), ("riser_max", riser_max),
-                           ("going", going), ("rise", rise)):
+                           ("going", going), ("rise", rise), ("against", against)):
             if value is not None:
                 params[key] = value
         result = get_rhino_connection().send_command("add_stair", params)

@@ -535,6 +535,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["along_wall"] = Bool("Run along the one picked wall's room side."),
                         ["at"] = Pair("The stair starts at the wall end nearer this point [x, y]."),
                         ["width"] = Num("mm, default 900."),
+                        ["against"] = Str("left or right: the side of the stair that stands against a wall, looking up it. With from and to."),
                         ["riser_max"] = Num("Highest step in mm, default 180. Steps 170 high is 170."),
                         ["going"] = Num("Tread depth in mm, default 260."),
                         ["rise"] = Num("Total rise in mm. Omit for auto.")

@@ -164,11 +164,11 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             // Draw tools: click the walls or the stair in the Top view.
             new ForskAction("wall.draw", Runs.Run, "group.model", f => true),
+            new ForskAction("stair.draw", Runs.Run, "group.model", f => f.HasWalls),
             new ForskAction("exist.mark", Runs.Run, "group.model", f => f.Picked == Picked.Loose),
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),
-            // R5: a stair. Nothing picked: two points in the view. One wall picked: along it.
-            new ForskAction("stair.add", Runs.Run, "group.model", f => f.HasWalls
-                && (f.Picked == Picked.None || f.Picked == Picked.Wall && f.PickedCount == 1)),
+            // R5: a stair along the one wall picked. With nothing picked, Draw stair is the way.
+            new ForskAction("stair.add", Runs.Run, "group.model", f => f.HasWalls && f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("stair.edit", Runs.Card, "group.model", f => f.Picked == Picked.Stair && f.PickedCount == 1),
             new ForskAction("stair.delete", Runs.Run, "group.model", f => f.Picked == Picked.Stair),
             new ForskAction("opening.move", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
@@ -291,7 +291,7 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Loose) yield return Find("exist.mark");
         }
 
-        /// <summary>"draw a wall", "draw walls": the draw tools by name, wherever they sit on the bar.</summary>
+        /// <summary>"draw a wall", "draw stairs": the draw tools by name, wherever they sit on the bar.</summary>
         public static ForskAction ByDrawPhrase(string text)
         {
             var typed = string.Join(" ", (text ?? "").Trim().TrimEnd('.', '!').ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
@@ -301,6 +301,10 @@ namespace RhinoMCPPlugin.Forsk
                 case "draw walls":
                 case "draw a wall":
                     return Find("wall.draw");
+                case "draw stair":
+                case "draw stairs":
+                case "draw a stair":
+                    return Find("stair.draw");
                 default:
                     return null;
             }

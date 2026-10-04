@@ -68,6 +68,14 @@
       "maximum": 600,
       "description": "Tread depth, mm, default 260."
     },
+    "against": {
+      "type": "string",
+      "enum": [
+        "left",
+        "right"
+      ],
+      "description": "With from and to: the side of the stair that stands against a wall, looking up it."
+    },
     "rise": {
       "oneOf": [
         {
