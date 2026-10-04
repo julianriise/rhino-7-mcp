@@ -11,7 +11,24 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 | D4 detail sheets and callouts | `0a16918` | done headless; bake unverified |
 | D5 detail sheets in DWG | `bea17e8` | done headless; export unverified |
 
-## Gates (last run, Linux container, after the rebase)
+## Fixes after Julian's garage smoke on `ece9153`
+
+Office smoke passed; the garage export step failed. Root causes and fixes:
+
+| Fix | Commit | Root cause |
+|---|---|---|
+| Wall plan breaks again at 1:20 | `71f4d58` | The high window (sill 1300, above the 1200 cut) kept jamb zones at 4200/5400, so no gap ≥ 1000 was left: no break, 1:25. The plan now keeps zones and dimension stops only for openings its cut passes through (`Details.PlanOpenings`); the section cut moves to the break's `u1` when `u0` is inside an opening. |
+| Cut lines on `A-WALL-CUT` at 0.70 | `afd1e74` | The bake trims the solids itself, so HLD never marks a section cut; every line went out as beyond/silhouette (`A-ELEV`, ≤ 0.50) and the poché was hatched, not outlined. The clipped poché's edges off the crop are now stroked with `PenCut`, role `cut` (`DetailClip.CutRuns`); seen lines on them are dropped. |
+| Marks clear of the values | `0be150c` | The marks sat at the opening's or the cut's u, where the centred values go, and were baked without the laid-out dims. `DetailCallout.PlaceMarks` takes `LayoutFixed`'s obstacles and the poché, keeps a clear mark on its point, else `PlanDims.PlaceLeader` moves it inside the drawing's band, with a leader and dot. |
+| Export step finds D01 | `6429202` | Garage door markers carry no `forsk:id`. The step now uses `forsk:id`, else the marker's object id (as the plugin does), and takes D01, else the lowest mark. |
+
+Tests on the smoke garage's real south wall (`DetailFixtures.SmokeGarage`: D01, flip, sliding, the high window, pocket, roof): one break 4450…6230, drawn 7020, 1:20, values 750 · 900 · 200 · 900 · 200 · 900 · 2980 (underlined) · 900 · 270, the section cut at 6230. The bake reads the same `Details.Resolve` / `DetailSheet.Plan` data as these tests; the old tests used only the brief's one-door wall.
+
+**Not as expected: three 1:20 sheets, not two.** On this garage the broken wall plan is 7020 / 20 + 30 = 381 mm wide. Its 80 mm section fits neither beside it (471 > 400) nor under it (82 + 10 + 242 > 254). So wall plus D01 give `A-50-001` (wall plan), `A-50-002` (wall section) and `A-50-003` (door), all at 1:20. This is pinned in `TheSmokeGarage_WallAndDoor_TakeThreeSheetsAt1To20`. Two sheets would need a rule change (Julian's call): a smaller `KeepMm`, so more of the wall can break out, or a wall section placed on the door's sheet.
+
+Gates after the fixes (main still `0f51473`, no rebase): build 0 warnings; `SoftParam.Tests` 2104 passed, 1 skipped (nb-NO); pytest 515 passed, 2 skipped; contracts exit 0.
+
+## Gates (D1–D5, Linux container, after the rebase)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
 - `dotnet test tests/SoftParam.Tests`: exit 0, 2092 passed, 1 skipped, under `CommaCulture` (nb-NO). Before the rebase: D5 2004, D4 2001, D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed.
@@ -48,7 +65,7 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 - D3 vertical dimensions run up the outer face (pointing out); the level marks stand at the opposite crop edge.
 - `layout_pack` accepts `detail_<5|10|20|25|50>_<n>` (contract pattern, server wrapper).
 - D4 `DetailSheet.Plan(items)` takes the details with their drawings (`DetailSheet.Items(facts)`) rather than `(details, sizes)`; one `DetailSheetPlan(doc)` is the source for the set, the pages card, the file facts, each sheet and the callouts. `Details.Row` (D2's plain row) is gone.
-- D4 shelves stack from the area's top; a detail's drawings start a new shelf when the whole row does not fit beside the last one. Sheet counts on the garage: the broken south wall plus the door give 2 sheets; door plus window 2; both end walls plus both openings 4 (one A3 per detail, as the brief expects).
+- D4 shelves stack from the area's top; a detail's drawings start a new shelf when the whole row does not fit beside the last one. Sheet counts on the brief's one-door garage: the broken south wall plus the door give 2 sheets (the smoke garage's busier wall gives 3, see above); door plus window 2; both end walls plus both openings 4 (one A3 per detail, as the brief expects).
 - D4 callouts: `DetailCallout.Callouts(sheets)` gives target, number and sheet number; placement is `PlanDims.PlaceLeader` with a 0.8 mm square round the target as its "room", so the bubble keeps off it, the poché and what is drawn. The leader is redrawn from the bubble's edge to the target. A blocked callout is not drawn and is named in `callouts_blocked`.
 - D4 the pack result gains `detail_scales` and `details_dropped`; the page record of the plan gains `callouts` next to `callouts_blocked`.
 - D4 `TitleBlock.ScaleBar` is true on detail sheets too (their detail is locked at the sheet scale).
@@ -61,6 +78,7 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 
 - Nothing of D1–D5 is left headless. All bakes and exports wait for the live checklist.
 - Not built: a denser packer (one A3 per detailed element), swing arcs in the plan detail, a log line for `DetailBreaks.Plan.TooLong`.
+- An opening detail of a window above the plan cut (a high window): its plan is cut at 1200 like the rest, so it shows no window; not handled.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 
@@ -73,8 +91,8 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 Garage from `smoke_garage`, plugin built from `cursor/add-detail-2118`.
 
 1. Click the south wall, Shift+click door D01 in it: "1 wall, 1 door", first pill **Add detail**. Click it: "✓ 2 details added · they print on a detail sheet." **?** → **Your details**: South wall · plan, section; Door D01 · plan, elevation, section.
-2. **⋯** → **Choose sheets**: `A-50-001 Details 1:20` and `A-50-002 Details 1:20` between the sections and the lists. Close, press **Print** once. The receipt reads "… on A3, details at 1:20 · Garage.pdf".
-3. In the PDF: the plan has two callouts (1 over `A-50-001`, 1 over `A-50-002`) with leaders and dots, no new chain; the Drawing list has both A-50 rows at 1:20; `A-50-001` holds the wall plan with one zigzag break (values across it underlined) and the wall section; `A-50-002` holds the door plan, elevation and section in one row; titles like "1 Door D01 — Plan 1:20"; title block `A-50-00n`, Scale `1:20`, a scale bar; cut lines heavier than on the plan.
+2. **⋯** → **Choose sheets**: `A-50-001`, `A-50-002` and `A-50-003 Details 1:20` between the sections and the lists. Close, press **Print** once. The receipt reads "… on A3, details at 1:20 · Garage.pdf".
+3. In the PDF: the plan has two callouts (1 over `A-50-001`, 1 over `A-50-003`) with leaders and dots, no new chain; the Drawing list has the three A-50 rows at 1:20; `A-50-001` holds the wall plan with one zigzag break between the sliding and pocket doors (2980 and the overalls underlined, no 1430); `A-50-002` the wall section; `A-50-003` the door plan, elevation and section in one row; no mark bubble on a value (a moved one has a leader and dot); titles like "1 Door D01 — Plan 1:20"; title block `A-50-00n`, Scale `1:20`, a scale bar; cut lines heavier than on the plan.
 4. **Export DWG** once. Open `Garage A-50-001 Details 1-20.dwg`: cut on `A-WALL-CUT` at 0.70, values on `A-ANNO-DIMS`, bubbles on `A-SYMB`.
 5. Type "remove the details": one line back; **Choose sheets** no longer lists the A-50 sheets. Do not print again.
 
