@@ -354,8 +354,10 @@ public static class WallEdit
     /// it. The wall joins the one record it touches. One that touches none,
     /// or two or more, stands as a record of its own; with two or more it
     /// shares its ends with them, and the join graph reads them together.
+    /// own: the wall is a record of its own even where it touches exactly one
+    /// (Draw wall: one run, one wall, one id).
     /// </summary>
-    public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why)
+    public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why, bool own = false)
     {
         added = null;
         why = null;
@@ -378,7 +380,7 @@ public static class WallEdit
             if (Group(RoomDetect.Union(new[] { records[i], new List<List<Pt>> { band } }, tol)).Count == 1)
                 joined.Add(i);
         added = new Added { Band = band, From = from, To = to, Touches = joined };
-        if (joined.Count != 1)
+        if (joined.Count != 1 || own)
         {
             added.Rings = new List<List<Pt>> { band };
             return true;

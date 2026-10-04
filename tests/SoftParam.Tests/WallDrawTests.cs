@@ -426,7 +426,7 @@ public class WallDrawTests
     }
 
     [Fact]
-    public void Receipt_HasNoIds_AndSaysClosedOnlyWhenAllWereDrawn()
+    public void Receipt_WithNoIdsKnown_NamesNone_AndSaysClosedOnlyWhenAllWereDrawn()
     {
         Assert.Equal("Drew a 200 mm wall, 3.5 m long.", WallDraw.Receipt(1, 1, 200, 3500, false));
         Assert.Equal("Drew 4 walls, 150 mm thick, 14.0 m in all, closed.", WallDraw.Receipt(4, 4, 150, 14000, true));
