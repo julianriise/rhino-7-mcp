@@ -15,6 +15,14 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 
 Root cause: `DetailCallout.Of` worked out whether the sheet number fitted (`Fits`), but nothing acted on it. A 9 mm mark has about 6.1 mm of room on the sheet number's line, and "A-50-002" in Arial at 1.8 mm is about 7.4 mm wide. Now `Of` grows the radius until the number and the sheet number each clear the circle by 0.8 mm. The 9 and 12 mm sizes are minimums. The text stays 1.8 / 2.5 mm. Mark placement (`PlaceMarks`, which now also reads each mark's number and sheet), the plan callouts' `PlaceLeader`, the leaders and the arrows all use that one radius. The DWG flattens the same circle and writes the texts at their paper height, so it matches the PDF. Unverified: the live widths come from Rhino's text measure.
 
+**Regression on A-50-001 after `e3f2642`.** The grown "1 / A-50-002" bubble ran up into the wall plan and sat on D04. Root cause, in three parts. The grown square (about 7 mm half) no longer fit between the outer dims and the mark, and `PlaceLeader` takes the nearest clear spot in any direction. Only the poché blocked a spot, and the pocket slot and the cut openings are gaps in the poché. And the bake's strokes (seen lines, cut runs, break lines) were not obstacles at all. Fix in `PlaceMarks`:
+
+- The box it keeps clear is the bubble plus the arrow along its look only (`HalfX`, `HalfY`).
+- The bake passes every stroke as segment boxes (`stroked`), and the openings the cut passes through block across the wall.
+- Spots are tried in this order: beyond the mark on its own side of the wall (below the overall line on the garage), at either end of the run, on the other side, then anywhere.
+
+Tests: `NoBubbleOnAnyA50Sheet_TouchesLinesValuesOrAnotherBubble_ForTheWallAndD01` and `TheWallPlansSectionMark_HangsBelowItsOverallLine_OnAShortLeader` (16 mm or less) failed before ("crosses a line" at D04) and pass after. Unverified: the live HLD lines of the doors and the pocket, which the test models as the opening and leaf boxes.
+
 ## Fixes after Julian's garage smoke on `ece9153`
 
 Office smoke passed; the garage export step failed. Root causes and fixes:

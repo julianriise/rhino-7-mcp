@@ -138,20 +138,25 @@ public static class DetailCallout
         public Pt At;
         public Pt Centre;
         public bool Moved;
-        /// <summary>Half the square it keeps clear, paper mm: its bubble and the arrow past it.</summary>
-        public double HalfMm => Bubble.Radius + MarkArrowMm;
+        /// <summary>Half the box it keeps clear, paper mm: its bubble, and the arrow past it along its look.</summary>
+        public double HalfX => Bubble.Radius + MarkArrowMm * Math.Abs(Mark.Look.X);
+        public double HalfY => Bubble.Radius + MarkArrowMm * Math.Abs(Mark.Look.Y);
     }
 
     /// <summary>
     /// A plan detail's marks whose drawing is on a sheet, in drawing mm
     /// (frame u through Map, then shifted), each in a bubble sized to its
-    /// texts: on its point when it clears what is drawn (taken: the
-    /// dimensions as LayoutFixed laid them) and the poché, else at the
+    /// texts. On its point when it clears what is drawn: taken (the
+    /// dimensions as LayoutFixed laid them), lines (the drawing's strokes),
+    /// the openings its cut passes through and the poché. Else at the
     /// nearest clear spot inside the drawing's band that PlanDims.PlaceLeader
-    /// finds, else on its point. Each joins taken.
+    /// finds, tried in turn beyond its point on its own side of the wall
+    /// (past the outermost dimension there), at either end of the run, on
+    /// the other side, then anywhere; else on its point. Each joins taken.
     /// </summary>
     public static List<PlacedMark> PlaceMarks(Details.Drawing d, IList<DetailSheet.Sheet> plan, Pt shift, int scale,
-        List<PlanDims.Obstacle> taken, List<List<List<Pt>>> walls, Func<string, double> measure = null)
+        List<PlanDims.Obstacle> taken, List<List<List<Pt>>> walls, Func<string, double> measure = null,
+        IList<PlanDims.Obstacle> lines = null)
     {
         var placed = new List<PlacedMark>();
         if (d == null || scale < 1) return placed;
@@ -172,30 +177,60 @@ public static class DetailCallout
             new RoomDetect.Box(x1, y0 - far, x1 + far, y1 + far),
             new RoomDetect.Box(x0 - far, y0 - far, x1 + far, y0),
             new RoomDetect.Box(x0 - far, y1, x1 + far, y1 + far)
-        }.Select(b => new PlanDims.Obstacle(b, PlanDims.Kind.Line));
-        RoomDetect.Box Square(Pt c, double half) => new RoomDetect.Box(c.X - half, c.Y - half, c.X + half, c.Y + half);
+        }.Select(b => new PlanDims.Obstacle(b, PlanDims.Kind.Line)).ToList();
+        var run = d.Facts?.Run;
+        double lo = run == null ? d.V0 : Math.Min(run.Near, run.Far), hi = run == null ? d.V1 : Math.Max(run.Near, run.Far);
+        var openings = (run == null ? new List<Details.Hosted>() : Details.PlanOpenings(d.Facts)).Select(o =>
+        {
+            var a = d.Map(Details.U(d.Facts, o.U - o.Opening.Width / 2.0)) + shift.X;
+            var b = d.Map(Details.U(d.Facts, o.U + o.Opening.Width / 2.0)) + shift.X;
+            return new PlanDims.Obstacle(new RoomDetect.Box(Math.Min(a, b), lo + shift.Y, Math.Max(a, b), hi + shift.Y), PlanDims.Kind.Line);
+        });
+        var fixedLines = outside.Concat(openings).Concat(lines ?? new List<PlanDims.Obstacle>()).ToList();
+        var left = d.Map(d.U0) + shift.X;
+        var right = left + d.Width;
+        RoomDetect.Box Square(Pt c, double hx, double hy) => new RoomDetect.Box(c.X - hx, c.Y - hy, c.X + hx, c.Y + hy);
+        PlanDims.Obstacle Block(double minX, double minY, double maxX, double maxY) =>
+            new PlanDims.Obstacle(new RoomDetect.Box(minX, minY, maxX, maxY), PlanDims.Kind.Line);
         foreach (var mark in d.Marks)
         {
             if (!DetailSheet.Find(plan, d.Facts.Record.Id, mark.View, out var sheet, out var target)) continue;
             var sheetNo = DetailSheet.Number(sheet.Id, ids);
             var number = target.Number.ToString(CultureInfo.InvariantCulture);
             var one = new PlacedMark { Mark = mark, Number = target.Number, Sheet = sheetNo, Bubble = Of(sheetNo, MarkMm, measure, number) };
-            var h = one.HalfMm * s;
+            var hx = one.HalfX * s;
+            var hy = one.HalfY * s;
             var at = new Pt(d.Map(mark.At.X) + shift.X, mark.At.Y + shift.Y);
-            var drawn = outside.Concat(taken).ToList();
+            var drawn = fixedLines.Concat(taken).ToList();
             var centre = at;
             var moved = false;
-            if (drawn.Any(o => Schedules.Overlaps(Square(at, h), o.Box, clear)) || Schedules.OnWalls(Square(at, h + clear), walls))
+            if (drawn.Any(o => Schedules.Overlaps(Square(at, hx, hy), o.Box, clear)) || Schedules.OnWalls(Square(at, hx + clear, hy + clear), walls))
             {
                 var dot = new List<Pt>
                 {
                     new Pt(at.X - clear, at.Y - clear), new Pt(at.X + clear, at.Y - clear),
                     new Pt(at.X + clear, at.Y + clear), new Pt(at.X - clear, at.Y + clear)
                 };
-                moved = PlanDims.PlaceLeader(at, dot, h, h, scale, drawn, walls, out var spot, out _);
-                if (moved) centre = spot;
+                // Its own side of the wall: below it when the mark is below the wall's middle.
+                var below = at.Y < (lo + hi) / 2.0 + shift.Y;
+                double xa = x0 - far, xb = x1 + far, ya = y0 - far, yb = y1 + far;
+                var tries = new[]
+                {
+                    below ? Block(xa, at.Y, xb, yb) : Block(xa, ya, xb, at.Y),
+                    Block(left, ya, right, yb),
+                    below ? Block(xa, ya, xb, hi + shift.Y) : Block(xa, lo + shift.Y, xb, yb),
+                    (PlanDims.Obstacle?)null
+                };
+                foreach (var keepOut in tries)
+                {
+                    var those = keepOut == null ? drawn : new[] { keepOut.Value }.Concat(drawn).ToList();
+                    moved = PlanDims.PlaceLeader(at, dot, hx, hy, scale, those, walls, out var spot, out _);
+                    if (!moved) continue;
+                    centre = spot;
+                    break;
+                }
             }
-            taken.Add(new PlanDims.Obstacle(Square(centre, h), PlanDims.Kind.Text));
+            taken.Add(new PlanDims.Obstacle(Square(centre, hx, hy), PlanDims.Kind.Text));
             if (moved)
                 taken.Add(new PlanDims.Obstacle(PlanDims.SegBox(new PlanDims.Seg(at, LeaderStart(centre, at, one.Bubble.Radius, scale))), PlanDims.Kind.Line));
             one.At = at;

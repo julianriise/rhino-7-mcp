@@ -507,17 +507,27 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        // Every stroke, segment by segment where it is on the sheet: no bubble may sit on one.
+        var stroked = new List<PlanDims.Obstacle>();
+        void Stroked(IList<Pt> run)
+        {
+            for (var i = 1; i < run.Count; i++)
+                stroked.Add(new PlanDims.Obstacle(PlanDims.SegBox(new PlanDims.Seg(
+                    new Pt(run[i - 1].X + shift.X, run[i - 1].Y + shift.Y), new Pt(run[i].X + shift.X, run[i].Y + shift.Y))), PlanDims.Kind.Line));
+        }
         // The poché's outline is the cut line; a line seen on it would double it thinner.
         foreach (var line in seen)
         {
             var samples = line.Key.Concat(line.Key.Zip(line.Key.Skip(1), (a, b) => new Pt((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0))).ToList();
             if (Sections.IsCut(samples, rings, DetailCutOnMm)) continue;
+            Stroked(line.Key);
             using (var curve = new PolylineCurve(line.Key.Select(Sheet)))
                 added += AddStroke(doc, layer, curve, line.Value, scale, false, pattern, tol,
                     "beyond", null, null, null, ref box, ref index, ref count, stamp);
         }
         foreach (var run in cutRuns)
         {
+            Stroked(run);
             using (var curve = new PolylineCurve(run.Select(Sheet)))
                 added += AddStroke(doc, layer, curve, PenCut, scale, false, pattern, tol,
                     "cut", null, null, null, ref box, ref index, ref count, stamp);
@@ -526,6 +536,7 @@ public partial class RhinoMCPFunctions
         foreach (var edge in breakEdges)
         {
             var line = DetailClip.BreakLine(edge.Key, edge.Value, scale);
+            Stroked(line);
             using (var curve = new PolylineCurve(line.Select(Sheet)))
                 added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
                     "break_line", null, null, null, ref box, ref index, ref count, stamp);
@@ -588,7 +599,7 @@ public partial class RhinoMCPFunctions
         }
         foreach (var level in DetailDims.Levels(d.Facts, d))
             added += BakeDetailLevel(doc, layer, level, shift, scale, pattern, tol, ref box, ref index, ref count, stamp);
-        BakeDetailMarks(doc, layer, view, d, DetailCallout.PlaceMarks(d, plan, shift, scale, taken, walls, PaperTextWidth(doc, scale)),
+        BakeDetailMarks(doc, layer, view, d, DetailCallout.PlaceMarks(d, plan, shift, scale, taken, walls, PaperTextWidth(doc, scale), stroked),
             scale, pattern, tol, ref box, ref index, ref count);
         return fills;
     }

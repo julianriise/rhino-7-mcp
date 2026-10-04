@@ -61,6 +61,13 @@ static class DetailFixtures
     };
 
     /// <summary>
+    /// Where the smoke garage's pocket door parks, along the south wall: a
+    /// slot in the wall with the leaf in it, which leaves the plan's poché
+    /// open over it, with only the faces and the leaf drawn.
+    /// </summary>
+    public const double PocketLo = 5400, PocketHi = 6830;
+
+    /// <summary>
     /// The garage smoke's model at Print (scripts/garage_opening_smoke.py):
     /// the south wall holds D01 750..1650, a flipped door 1850..2750, a
     /// sliding one 2950..3850, the high window 4200..5400 (sill 1300, above
