@@ -76,7 +76,7 @@ namespace RhinoMCPPlugin.Forsk
             "layout_pack",
             "export_pdf",
             "export_sheets",
-            "plan_dims",
+            "details",
             "export_ifc",
             "clear_layouts",
             "section_add",
@@ -632,12 +632,12 @@ namespace RhinoMCPPlugin.Forsk
                         ["path"] = Str("Omit in the panel. The save dialog sets an absolute .pdf path."),
                         ["layout"] = Str("Optional page name or view: plan, north, east, south, west. Omit for every Forsk page, in set order.")
                     }),
-                Fn("plan_dims",
-                    "The user's own plan dimensions, drawn at the next Print. add: across two or more parallel walls, with a stop at both faces of each wall and at each picked door or window in a wall along it; omit refs to use what is picked. remove: ids such as U02, or omit ids for all (remove the dimensions, fjern målene). list: what is stored.",
+                Fn("details",
+                    "Detail drawings of picked walls, doors and windows, drawn on detail sheets at the next Print. add: omit refs to use what is picked (add detail, legg til detalj). remove: ids such as DET02, or omit ids for all (remove the details, fjern detaljene). list: what is stored.",
                     new JObject
                     {
                         ["action"] = new JObject { ["type"] = "string", ["enum"] = new JArray("add", "remove", "list") },
-                        ["ids"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "remove: U01, U02. Omit for all." },
+                        ["ids"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "remove: DET01, DET02. Omit for all." },
                         ["refs"] = new JObject
                         {
                             ["type"] = "array",

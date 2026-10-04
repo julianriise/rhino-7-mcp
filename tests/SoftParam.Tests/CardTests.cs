@@ -416,18 +416,19 @@ public class CardTests
         Assert.Equal("Moved the north wall of w01 500 mm north; the east and west walls followed. Floor, roof and 1 room updated.", receipt.Text);
     }
 
-    /// <summary>R2: one tick per stored dimension; Save keeps the ticked ones, Remove all drops them all.</summary>
+    /// <summary>One tick per detail, named as the model names its element; Save removes the unticked ones.</summary>
     [Fact]
-    public void TheDimensionsList_HasARowPerDimension()
+    public void TheDetailList_HasARowPerDetail()
     {
-        var card = ForskCards.For("dims.list", Docs.Facts("house, two user dimensions"));
-        Assert.Equal("dims.list", card.Kind);
-        Assert.Equal(new[] { "U01", "U02" }, card.Fields.Select(f => f.Key));
-        Assert.Equal(new[] { "U01 · 2 walls, 1 opening", "U02 · 2 walls" }, card.Fields.Select(f => f.Label));
+        var card = ForskCards.For("detail.list", Docs.Facts("house, two details"));
+        Assert.Equal("detail.list", card.Kind);
+        Assert.Equal("model", card.Depends);
+        Assert.Equal(new[] { "DET01", "DET02" }, card.Fields.Select(f => f.Key));
+        Assert.Equal(new[] { "North wall · plan, section", "Door D01 · plan, elevation, section" }, card.Fields.Select(f => f.Label));
         Assert.All(card.Fields, f => Assert.True(f.Check && f.Value == "1"));
         Assert.Equal(new[] { "save", "remove_all", "cancel" }, card.Pills.Select(p => p.Id));
         Assert.Equal(new[] { "Save", "Remove all", "Cancel" }, card.Pills.Select(p => p.Label));
-        Assert.Null(ForskCards.For("dims.list", Docs.Facts("house")));
-        Assert.Equal(new JArray("U02"), ForskCards.DimsRemoved(new JObject { ["U01"] = "1", ["U02"] = "0" }));
+        Assert.Null(ForskCards.For("detail.list", Docs.Facts("house")));
+        Assert.Equal(new JArray("DET02"), ForskCards.Unticked(new JObject { ["DET01"] = "1", ["DET02"] = "0" }));
     }
 }

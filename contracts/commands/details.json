@@ -1,19 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "plan_dims.json",
-  "title": "PlanDims Command",
-  "description": "The user's own plan dimensions, stored by Forsk ids and drawn at the next Print. add: across two or more parallel walls (refs, or the picked walls and their doors and windows). remove: the ids given, or all. list: what is stored.",
+  "$id": "details.json",
+  "title": "Details Command",
+  "description": "Detail drawings of picked walls, doors and windows, stored by Forsk ids and drawn at every Print on detail sheets (A-50-001…). add: one detail per element (refs, or the picked walls and openings); one that has a detail already is not added again. remove: the ids given, or all. list: what is stored.",
   "type": "object",
   "properties": {
     "action": { "type": "string", "enum": ["add", "remove", "list"] },
     "ids": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^U[0-9]+$" },
-      "description": "remove only: which dimensions (U01, U02). Omit to remove every one."
+      "items": { "type": "string", "pattern": "^DET[0-9]+$" },
+      "description": "remove only: which details (DET01, DET02). Omit to remove every one."
     },
     "refs": {
       "type": "array",
-      "minItems": 2,
+      "minItems": 1,
       "items": {
         "type": "object",
         "properties": {

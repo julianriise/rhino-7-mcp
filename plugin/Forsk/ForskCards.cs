@@ -62,7 +62,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
                 case "section.remove": return RemoveSection(f);
-                case "dims.list": return DimsList(f);
+                case "detail.list": return DetailList(f);
                 case "stair.edit": return EditStair(f);
                 default: return null;
             }
@@ -162,16 +162,16 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// R2: one tick per user dimension ("U01 · 2 walls, 1 window"). Save
-        /// removes the unticked ones, Remove all removes every one. Null when there are none.
+        /// One tick per detail ("North wall · plan, section"). Save removes the
+        /// unticked ones, Remove all removes every one. Null when there are none.
         /// </summary>
-        public static CardSpec DimsList(FileFacts f)
+        public static CardSpec DetailList(FileFacts f)
         {
-            if (f?.Dims == null || f.Dims.Count == 0) return null;
+            if (f?.Details == null || f.Details.Count == 0) return null;
             var card = new CardSpec
             {
-                Kind = "dims.list",
-                Question = ForskText.Get("dims.list.ask"),
+                Kind = "detail.list",
+                Question = ForskText.Get("detail.list.ask"),
                 Fields = new List<CardField>(),
                 Depends = "model",
                 Pills =
@@ -181,19 +181,23 @@ namespace RhinoMCPPlugin.Forsk
                     new CardPill("cancel", ForskText.Get("word.cancel"))
                 }
             };
-            foreach (var dim in f.Dims)
+            foreach (var record in f.Details)
             {
-                var walls = dim.Refs.Count(r => r.Wall != null);
-                var openings = dim.Refs.Count(r => r.Opening != null);
-                var what = walls + (walls == 1 ? " wall" : " walls")
-                    + (openings == 0 ? "" : ", " + openings + (openings == 1 ? " opening" : " openings"));
-                card.Fields.Add(new CardField { Key = dim.Id, Label = dim.Id + " · " + what, Check = true, Value = "1" });
+                var views = string.Join(", ", Details.Views(record).Select(v => ForskText.Get("detail." + v)));
+                card.Fields.Add(new CardField { Key = record.Id, Label = DetailName(f, record) + " · " + views, Check = true, Value = "1" });
             }
             return card;
         }
 
-        /// <summary>The dimensions a Save on the list removes: the unticked rows.</summary>
-        public static JArray DimsRemoved(JObject values)
+        /// <summary>The detail's element as the model names it, else its stored id ("Wall W03").</summary>
+        static string DetailName(FileFacts f, Details.Record record)
+        {
+            if (f.DetailNames != null && f.DetailNames.TryGetValue(record.Id, out var name) && !string.IsNullOrWhiteSpace(name)) return name;
+            return record.Wall != null ? "Wall " + record.Wall.ToUpperInvariant() : ForskText.Get("pick.opening");
+        }
+
+        /// <summary>The rows a Save on a tick list removes: the unticked ones.</summary>
+        public static JArray Unticked(JObject values)
         {
             var ids = new JArray();
             foreach (var pair in values ?? new JObject())

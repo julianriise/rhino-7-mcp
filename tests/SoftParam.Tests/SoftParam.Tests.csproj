@@ -34,7 +34,7 @@
     <Compile Include="..\..\plugin\Functions\Schedules.cs" Link="Schedules.cs" />
     <Compile Include="..\..\plugin\Functions\AreaStats.cs" Link="AreaStats.cs" />
     <Compile Include="..\..\plugin\Functions\PlanDims.cs" Link="PlanDims.cs" />
-    <Compile Include="..\..\plugin\Functions\UserDims.cs" Link="UserDims.cs" />
+    <Compile Include="..\..\plugin\Functions\Details.cs" Link="Details.cs" />
     <Compile Include="..\..\plugin\Functions\IfcExport.cs" Link="IfcExport.cs" />
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\SheetSet.cs" Link="SheetSet.cs" />

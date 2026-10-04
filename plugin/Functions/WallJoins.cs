@@ -404,6 +404,19 @@ public static class WallJoins
         return runs;
     }
 
+    /// <summary>A record's longest straight run, or null when its path gives none.</summary>
+    public static WallEdit.Run MainRun(List<List<Pt>> rings, double tol)
+    {
+        if (rings == null || rings.Count == 0) return null;
+        List<WallEdit.Run> runs;
+        try { runs = Runs(rings, tol); }
+        catch (Exception) { return null; }
+        WallEdit.Run best = null;
+        foreach (var run in runs ?? new List<WallEdit.Run>())
+            if (best == null || run.Length > best.Length) best = run;
+        return best;
+    }
+
     /// <summary>
     /// Two runs join when their centrelines meet within each one's length,
     /// give or take the other's half thickness (more at a slant). The meeting

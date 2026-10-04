@@ -367,11 +367,12 @@ def test_new_commands():
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "layout": "plan"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DWG"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DXF", "format": "dxf"}),
-        ("commands/plan_dims.json", {"action": "add"}),
-        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}, {"wall": "w02"}, {"opening": "o-1"}]}),
-        ("commands/plan_dims.json", {"action": "remove", "ids": ["U02"]}),
-        ("commands/plan_dims.json", {"action": "remove"}),
-        ("commands/plan_dims.json", {"action": "list"}),
+        ("commands/details.json", {"action": "add"}),
+        ("commands/details.json", {"action": "add", "refs": [{"wall": "w03"}]}),
+        ("commands/details.json", {"action": "add", "refs": [{"wall": "w01"}, {"opening": "o-1"}]}),
+        ("commands/details.json", {"action": "remove", "ids": ["DET02"]}),
+        ("commands/details.json", {"action": "remove"}),
+        ("commands/details.json", {"action": "list"}),
         ("commands/export_ifc.json", {"path": "/tmp/forsk-ifc-garage.ifc"}),
         ("commands/add_stair.json", {}),
         ("commands/add_stair.json", {"from": [1000, 650], "to": [5000, 650], "width": 1000, "riser_max": 170, "going": 280}),
@@ -968,15 +969,18 @@ def test_responses():
     if not validate("responses/export_ifc_result.json", ifc_written):
         all_passed = False
 
-    print("  plan_dims_result:")
-    dims_added = {
-        "dims": [{"id": "U01", "walls": 2, "openings": 0}], "count": 1, "id": "U01",
-        "total": 4000, "values": [200, 3600, 200], "skipped": 0,
-        "message": "✓ Dimension across 2 walls added · it prints on the plan.",
+    print("  details_result:")
+    details_added = {
+        "details": [
+            {"id": "DET01", "wall": "w01", "name": "South wall", "views": ["plan", "section"]},
+            {"id": "DET02", "opening": "o-1", "name": "Door D01", "views": ["plan", "elevation", "section"]},
+        ],
+        "count": 2, "added": 2, "already": 0,
+        "message": "✓ 2 details added · they print on a detail sheet.",
     }
-    if not validate("responses/plan_dims_result.json", dims_added):
+    if not validate("responses/details_result.json", details_added):
         all_passed = False
-    if not validate("responses/plan_dims_result.json", {"dims": [], "count": 0, "message": "No dimensions of your own yet."}):
+    if not validate("responses/details_result.json", {"details": [], "count": 0, "message": "No details yet."}):
         all_passed = False
 
     print("  export_sheets_result:")
@@ -1444,7 +1448,7 @@ def test_invalid_examples():
         ("commands/export_pdf.json", {"path": ""}, "export_pdf empty path"),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "bogus": 1}, "export_pdf unknown field"),
         ("commands/export_sheets.json", {}, "export_sheets missing folder"),
-        ("commands/plan_dims.json", {}, "plan_dims missing action"),
+        ("commands/details.json", {}, "details missing action"),
         ("commands/export_ifc.json", {}, "export_ifc missing path"),
         ("commands/add_stair.json", {"from": [0, 0]}, "add_stair from only one point"),
         ("commands/add_stair.json", {"riser_max": 50}, "add_stair riser too low"),
@@ -1455,10 +1459,10 @@ def test_invalid_examples():
         ("commands/edit_stair.json", {"going": 80}, "edit_stair going too short"),
         ("commands/delete_stair.json", {"all": True}, "delete_stair unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),
-        ("commands/plan_dims.json", {"action": "move"}, "plan_dims unknown action"),
-        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01"}]}, "plan_dims one ref"),
-        ("commands/plan_dims.json", {"action": "add", "refs": [{"wall": "w01", "opening": "o"}, {"wall": "w02"}]}, "plan_dims ref with two keys"),
-        ("commands/plan_dims.json", {"action": "remove", "ids": ["w01"]}, "plan_dims id not U.."),
+        ("commands/details.json", {"action": "move"}, "details unknown action"),
+        ("commands/details.json", {"action": "add", "refs": []}, "details no refs"),
+        ("commands/details.json", {"action": "add", "refs": [{"wall": "w01", "opening": "o"}]}, "details ref with two keys"),
+        ("commands/details.json", {"action": "remove", "ids": ["U01"]}, "details id not DET.."),
         ("commands/export_sheets.json", {"folder": "/tmp/x", "format": "pdf"}, "export_sheets format not dwg or dxf"),
         ("commands/export_sheets.json", {"folder": "/tmp/x", "path": "/tmp/x.dwg"}, "export_sheets unknown field"),
         ("commands/clear_layouts.json", {"views": ["section"]}, "clear_layouts unknown view"),
@@ -1575,8 +1579,8 @@ KEEPS_VIEW = {
     "section_clear", "select_objects", "modify_object", "modify_objects",
     "update_object_attributes", "mark_as_existing", "create_layer", "get_or_set_current_layer",
     "set_layer_material", "set_project_meta", "section_add", "print_profile",
-    # Writes the forsk/user_dims document string only.
-    "plan_dims",
+    # Writes the forsk/details document string only.
+    "details",
 }
 
 

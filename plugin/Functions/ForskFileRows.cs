@@ -126,7 +126,8 @@ public partial class RhinoMCPFunctions
         var input = new DocInput { Rows = ChipRows(doc) };
         if (doc == null) return input;
         input.StoredFingerprint = doc.Strings.GetValue(LayoutMetaSection, SheetFingerprintKey);
-        input.UserDims = doc.Strings.GetValue(UserDims.Section, UserDims.Entry);
+        input.Details = doc.Strings.GetValue(Details.Section, Details.Entry);
+        input.DetailNames = DetailNames(doc, Details.Read(input.Details));
         input.Layouts = MatchingForskPages(doc, null).Count;
         foreach (var def in ReadSectionDefs(doc))
             if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);
@@ -196,6 +197,6 @@ public partial class RhinoMCPFunctions
     private static void StampSheetFingerprint(RhinoDoc doc)
     {
         doc.Strings.SetString(LayoutMetaSection, SheetFingerprintKey,
-            SheetFingerprint.Of(ChipRows(doc), doc.Strings.GetValue(UserDims.Section, UserDims.Entry)));
+            SheetFingerprint.Of(ChipRows(doc), doc.Strings.GetValue(Details.Section, Details.Entry)));
     }
 }

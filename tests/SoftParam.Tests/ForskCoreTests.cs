@@ -24,19 +24,19 @@ public class ForskCoreTests
         Assert.Equal(printed, SheetFingerprint.Of(model.Append(Row.PlanCurve("wall"))));
     }
 
-    /// <summary>R2: a user dimension added or removed makes the sheets stale.</summary>
+    /// <summary>A detail added or removed makes the sheets stale.</summary>
     [Fact]
-    public void TheFingerprint_ChangesWithTheUserDimensions()
+    public void TheFingerprint_ChangesWithTheDetails()
     {
         var model = new[] { Row.Wall(), Row.Floor() };
         Assert.Equal(SheetFingerprint.Of(model), SheetFingerprint.Of(model, null));
         Assert.Equal(SheetFingerprint.Of(model), SheetFingerprint.Of(model, ""));
-        var one = SheetFingerprint.Of(model, "[{\"id\":\"U01\",\"refs\":[{\"wall\":\"w01\"},{\"wall\":\"w02\"}]}]");
+        var one = SheetFingerprint.Of(model, "[{\"id\":\"DET01\",\"wall\":\"w01\"}]");
         Assert.NotEqual(SheetFingerprint.Of(model), one);
 
         var printed = new DocInput { Rows = model.ToList(), Layouts = 3, StoredFingerprint = SheetFingerprint.Of(model) };
         Assert.False(FileClassifier.Read(printed).SheetsStale);
-        printed.UserDims = "[{\"id\":\"U01\",\"refs\":[{\"wall\":\"w01\"},{\"wall\":\"w02\"}]}]";
+        printed.Details = "[{\"id\":\"DET01\",\"wall\":\"w01\"}]";
         Assert.True(FileClassifier.Read(printed).SheetsStale);
     }
 

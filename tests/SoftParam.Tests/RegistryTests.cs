@@ -290,27 +290,40 @@ public class RegistryTests
         Assert.DoesNotContain(ForskRegistry.Bar(picked).Context, a => a.Id == "export.dwg");
     }
 
-    /// <summary>R2: Add dimensions for two or more walls, with or without doors and windows; first for a mixed pick.</summary>
+    /// <summary>
+    /// Add detail for any pick of walls, doors and windows. It is the bar's
+    /// first pill for walls with openings and the second for two or more walls;
+    /// one wall or one opening keeps its bar, and Add detail is on the card.
+    /// </summary>
     [Fact]
-    public void AddDimensions_IsTheBarsNextStep_ForWallsPickedTogether()
+    public void AddDetail_IsOnTheBar_ForWallsPickedTogether_AndOnTheCardForOne()
     {
         var walls = Docs.Facts("house, two walls selected");
-        Assert.Equal(new[] { "file.print", "wall.move", "dims.add" }, ForskRegistry.Bar(walls).Slots.Select(a => a.Id));
-        var mixed = Docs.Facts("house, two walls and a window selected");
+        Assert.Equal(new[] { "file.print", "wall.move", "detail.add" }, ForskRegistry.Bar(walls).Slots.Select(a => a.Id));
+        var mixed = Docs.Facts("house, a wall and a door selected");
         Assert.Equal(Picked.Other, mixed.Picked);
-        Assert.Equal("dims.add", ForskRegistry.Bar(mixed).Context[0].Id);
-        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("dims.add"));
-        // One wall is a thickness, not a dimension across walls; a door alone has no wall.
-        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, wall selected")).Actions, a => a.Id == "dims.add");
-        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, door selected")).Actions, a => a.Id == "dims.add");
-        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "dims.add");
+        Assert.Equal("detail.add", ForskRegistry.Bar(mixed).Context[0].Id);
+        Assert.Equal("detail.add", ForskRegistry.Bar(Docs.Facts("house, two walls and a window selected")).Context[0].Id);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("detail.add"));
+
+        var wall = Docs.Facts("house, wall selected");
+        Assert.Equal(new[] { "file.print", "wall.move", "wall.drag" }, ForskRegistry.Bar(wall).Slots.Select(a => a.Id));
+        Assert.Contains(ForskRegistry.Card(wall).Actions, a => a.Id == "detail.add");
+        var door = Docs.Facts("house, door selected");
+        Assert.Equal(new[] { "file.print", "opening.move", "opening.type" }, ForskRegistry.Bar(door).Slots.Select(a => a.Id));
+        Assert.Contains(ForskRegistry.Card(door).Actions, a => a.Id == "detail.add");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "detail.add");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house, room selected")).Actions, a => a.Id == "detail.add");
+        Assert.DoesNotContain(ForskRegistry.All, a => a.Id.StartsWith("dims.", StringComparison.Ordinal));
+        Assert.Equal("Add detail", ForskText.Label("detail.add"));
+        Assert.Equal("Legg til detalj", ForskText.Get("detail.add.nb"));
     }
 
     [Fact]
-    public void TheDimensionsList_IsOnTheCard_OnlyWhenThereAreSome()
+    public void TheDetailList_IsOnTheCard_OnlyWhenThereAreSome()
     {
-        Assert.Contains(ForskRegistry.Card(Docs.Facts("house, two user dimensions")).Actions, a => a.Id == "dims.list");
-        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "dims.list");
+        Assert.Contains(ForskRegistry.Card(Docs.Facts("house, two details")).Actions, a => a.Id == "detail.list");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "detail.list");
     }
 
     /// <summary>R4: Export IFC sits next to Export DWG on the card, for a file with walls.</summary>

@@ -178,8 +178,8 @@ namespace RhinoMCPPlugin.Forsk
                 case "export.ifc":
                     Export(thread, null, "ifc");
                     return;
-                case "dims.add":
-                    Job(thread, action.Id, label, sink => sink.Tool("plan_dims", new JObject { ["action"] = "add" }));
+                case "detail.add":
+                    Job(thread, action.Id, label, sink => sink.Tool("details", new JObject { ["action"] = "add" }));
                     return;
                 case "file.draw":
                     Draw(thread, action, doc);
@@ -397,15 +397,15 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
                     break;
-                case "dims.list":
-                    var unticked = ForskCards.DimsRemoved(values);
+                case "detail.list":
+                    var unticked = ForskCards.Unticked(values);
                     if (pill.Id == "save" && unticked.Count == 0)
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line("Kept every dimension."), userText: pill.Label);
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line("Kept every detail."), userText: pill.Label);
                     else
                     {
-                        var dimsArgs = new JObject { ["action"] = "remove" };
-                        if (pill.Id == "save") dimsArgs["ids"] = unticked;
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("plan_dims", dimsArgs), userText: pill.Label);
+                        var detailArgs = new JObject { ["action"] = "remove" };
+                        if (pill.Id == "save") detailArgs["ids"] = unticked;
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("details", detailArgs), userText: pill.Label);
                     }
                     break;
                 case "sheets.clear":

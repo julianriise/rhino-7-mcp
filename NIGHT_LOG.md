@@ -1,3 +1,44 @@
+# Night log: v4 detail slices on `cursor/add-detail-2118`
+
+Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run works on its own cloud branch, and main has two commits more (chat hover focus `8c2fac6`, DWG sheet text at printed size `b82f07b`).
+
+| Slice | Commit | State |
+|---|---|---|
+| D1 Add detail replaces Add dimensions | see `git log` (`feat(print): D1 …`) | done headless |
+
+## Gates (last run, Linux container)
+
+- `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
+- `dotnet test tests/SoftParam.Tests`: exit 0, 1946 passed, 1 skipped (base 1926 passed).
+- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 498 passed, 2 skipped (base 500: the two `check_user_dims` tests went).
+- `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
+- Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
+
+## Unverified (needs Rhino)
+
+- D1: `details add` from a live selection (walls by `forsk:id`, markers by `forsk:id`), and the card names, which come from `ReadIfcModel` on the live document at every window refresh.
+
+## Changes from the brief
+
+- `PlanDims.FixedChain` has `Row` (an int, 1 nearest the reference) where the brief lists `Rows`.
+- The card names come in through `DocInput.DetailNames` (resolved Rhino-side), so the classifier and the card stay pure.
+- An opening's host run is the run of its cluster whose band holds the opening's centre as `ReadIfcModel` gives it (projected on the host record's longest run). An opening on the short leg of an L-shaped record may miss; it then drops like a gone one.
+- Single wall or single opening: Add detail is on the "?" card only. Two or more walls: slot 2. Walls with openings: slot 1.
+
+## Left
+
+- D2, D2b, D3, D4, D5.
+
+## Forsk-side follow-ups (forsk repo not reachable)
+
+- `scripts/smoke_garage.sh`: nothing called `check_user_dims` from forsk directly, but its `garage_opening_smoke.py` step no longer checks user dims.
+- `docs/SMOKE.md`: replace the R2 "Add dimensions" line with the Add detail line.
+- ROADMAP: R2 "Add dimensions" is replaced by "Add detail" (v4 Detail drawings, step 1).
+
+## Live checklist
+
+Filled in at the last slice.
+
 # Night log: v3 release slices on `night-v3`
 
 Base: main `d17499b`, then R1 `7f2fd0b` and the R3 WIP `a04ce5d`.

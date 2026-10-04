@@ -237,7 +237,6 @@ public partial class RhinoMCPFunctions
         var pages = new JArray();
         var drawingNotes = new List<string>();
         string cutNote = null;
-        var userDropped = 0;
         var planCutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
         var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
         var detailSpan = new SheetScale.Span(detailW, detailH);
@@ -384,12 +383,8 @@ public partial class RhinoMCPFunctions
                     ["skipped"] = drawn.Dims.DimsSkipped,
                     ["collisions"] = drawn.Dims.DimsCollisions,
                     ["openings"] = drawn.Dims.DimOpenings,
-                    ["openings_shown"] = drawn.Dims.DimOpeningsShown,
-                    ["user"] = drawn.Dims.DimsUser,
-                    ["user_dropped"] = drawn.Dims.DimsUserDropped,
-                    ["user_openings_skipped"] = drawn.Dims.DimsUserSkipped
+                    ["openings_shown"] = drawn.Dims.DimOpeningsShown
                 };
-                userDropped = drawn.Dims.DimsUserDropped;
                 pageRecord["view_title"] = viewTitle;
                 pageRecord["north_arrow"] = footer["north_arrow"] != null;
                 pageRecord["section_markers"] = new JArray(drawn.Dims.SectionMarkers ?? new List<string>());
@@ -492,8 +487,6 @@ public partial class RhinoMCPFunctions
             ["bumped"] = bumpNote.Trim(),
             ["scale"] = reported,
             ["asked"] = asked.HasValue,
-            // R2: user dimensions that dropped at this Print; the receipt says so.
-            ["user_dims_dropped"] = userDropped,
             // "on A3 at 1:N." then the drawing notes: smoke_compare reads "at 1:N. Greyscale drawing: plan".
             ["message"] = SheetCountText(sheetCount) + " on A3 at 1:" + reported.ToString(CultureInfo.InvariantCulture) + "."
                 + curveNote + cutNote + bumpNote + scheduleNote

@@ -1278,10 +1278,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var blank = blankAt >= 0 ? " · " + ForskTools.Clip(message.Substring(blankAt)) : "";
             var sheets = packed?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
             var scale = (packed?["drawings"]?.Value<int>() ?? 0) > 0 ? packed["scale"]?.Value<int>() ?? 0 : 0;
-            // R2: a user dimension whose wall is gone drops, and the receipt says so.
-            var dropped = UserDims.DroppedLine(packed?["user_dims_dropped"]?.Value<int>() ?? 0);
-            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank)
-                + (dropped.Length > 0 ? " · " + dropped : "");
+            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank);
         }
 
         /// <summary>

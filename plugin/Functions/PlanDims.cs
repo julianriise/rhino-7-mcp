@@ -100,12 +100,15 @@ public static class PlanDims
     }
 
     /// <summary>
-    /// R2: a dimension the user asked for (UserDims), resolved: stops along
-    /// Dir from Origin, across the walls; Origin sits at the middle of the
-    /// walls' shared span, and the line may move Reach either way along Out.
+    /// A chain whose stops are fixed by the model rather than found on the
+    /// plan, as a detail drawing's dimensions are: stops along Dir from
+    /// Origin, drawn out along Out on row Row (1 nearest its reference), and
+    /// free to slide Reach either way along Out. Kind names what it measures
+    /// (face, overall, thickness, height).
     /// </summary>
-    public sealed class UserChain
+    public sealed class FixedChain
     {
+        public string Kind;
         public string Id;
         public Pt Origin;
         public Pt Dir;
@@ -113,13 +116,12 @@ public static class PlanDims
         public List<double> Stops = new List<double>();
         public List<string> StopIds = new List<string>();
         public double Reach;
-        public int Walls;
+        public int Row = 1;
     }
 
     /// <summary>
     /// The plan in drawing mm: the outer wall faces of the building, the
-    /// openings, the tagged rooms, what is already drawn, the poché, and the
-    /// user's own dimensions.
+    /// openings, the tagged rooms, what is already drawn and the poché.
     /// </summary>
     public sealed class Scene
     {
@@ -127,7 +129,6 @@ public static class PlanDims
         public List<List<Pt>> Outlines = new List<List<Pt>>();
         public List<Opening> Openings = new List<Opening>();
         public List<Room> Rooms = new List<Room>();
-        public List<UserChain> User = new List<UserChain>();
         public List<Obstacle> Taken = new List<Obstacle>();
         public List<List<List<Pt>>> Walls = new List<List<List<Pt>>>();
         /// <summary>Paper width in mm of a value printed TextMm tall; 0 falls back to an estimate.</summary>
@@ -192,7 +193,7 @@ public static class PlanDims
         public List<Label> Texts = new List<Label>();
         public bool Placed;
         public int Collisions;
-        /// <summary>A user chain runs across walls: its line may cross the poché.</summary>
+        /// <summary>A chain across walls (a thickness): its line may cross the poché.</summary>
         public bool CrossesWalls;
     }
 
@@ -348,22 +349,6 @@ public static class PlanDims
                 Place(overall, outward, taken, walls, s, scene.Measure, false);
                 result.Chains.Add(overall);
             }
-        }
-
-        // R2: the user's own chains, across their walls, at the middle of the
-        // walls' shared span first, then a step at a time either way along them.
-        foreach (var user in scene.User ?? new List<UserChain>())
-        {
-            if (user == null || user.Stops.Count < 2) continue;
-            var chain = NewChain("user", user.Id, user.Origin, user.Dir, user.Out, result.Chains.Count);
-            chain.Id = user.Id;
-            chain.CrossesWalls = true;
-            // Its stops are wall faces the plan already draws: ticks mark them, a witness would lie on the face line.
-            chain.Witness = false;
-            for (var i = 0; i < user.Stops.Count; i++)
-                AddStop(chain, user.Stops[i], i < user.StopIds.Count ? user.StopIds[i] : null);
-            Place(chain, BothWays(user.Reach, StepMm * s), taken, walls, s, scene.Measure, false);
-            result.Chains.Add(chain);
         }
 
         // Rooms: a width and a depth in each rectangle, near a wall, clear of

@@ -115,7 +115,12 @@ static class Docs
         ("house, box selected", () => Of(House().Append(Row.Box(selected: true)).ToArray())),
         ("house, two walls selected", () => Of(House().Append(Row.Wall(selected: true, stamp: "w02")).Append(Row.Wall(selected: true, stamp: "w03")).ToArray())),
         ("house, two walls and a window selected", () => Of(House().Append(Row.Wall(selected: true, stamp: "w02")).Append(Row.Wall(selected: true, stamp: "w03")).Append(Row.Window(selected: true)).ToArray())),
-        ("house, two user dimensions", () => Of(House()).With(d => d.UserDims = "[{\"id\":\"U01\",\"refs\":[{\"wall\":\"w01\"},{\"wall\":\"w02\"},{\"opening\":\"o-1\"}]},{\"id\":\"U02\",\"refs\":[{\"wall\":\"w03\"},{\"wall\":\"w04\"}]}]")),
+        ("house, a wall and a door selected", () => Of(House(doorSelected: true).Append(Row.Wall(selected: true, stamp: "w02")).ToArray())),
+        ("house, two details", () => Of(House()).With(d =>
+        {
+            d.Details = "[{\"id\":\"DET01\",\"wall\":\"w01\"},{\"id\":\"DET02\",\"opening\":\"o-door\"}]";
+            d.DetailNames = new Dictionary<string, string> { ["DET01"] = "North wall", ["DET02"] = "Door D01" };
+        })),
         ("walls only", () => Of(Row.Wall(), Row.Floor())),
         ("one whole wall record", () => Of(Row.Wall(runs: 7), Row.Floor(), Row.Room(), Row.Window())),
         ("one whole wall record selected", () => Of(Row.Wall(runs: 7, selected: true), Row.Floor(), Row.Room(), Row.Window())),

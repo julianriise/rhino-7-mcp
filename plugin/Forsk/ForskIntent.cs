@@ -256,6 +256,7 @@ namespace RhinoMCPPlugin.Forsk
             if (HasWord(t, "drawings") || HasWord(t, "tegning") || HasWord(t, "tegninger")) return true;
             if (HasWord(t, "schedule") || HasWord(t, "schedules")) return true;
             if (HasWord(t, "dørliste") || HasWord(t, "vindusliste") || HasWord(t, "romliste")) return true;
+            if (IsDetail(t)) return true;
             if (IsDimensions(t)) return true;
             if (IsSection(t)) return true;
             if (IsProfile(t)) return true;
@@ -340,6 +341,21 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "hatched") || HasWord(t, "skravert") || HasWord(t, "skravur") || HasWord(t, "black") || HasWord(t, "svart"));
         }
 
+        /// <summary>
+        /// Detail drawings added or removed: add detail, detail this wall, remove
+        /// the details, legg til detalj, fjern detaljene. The word alone ("explain
+        /// in detail") is not one.
+        /// </summary>
+        static bool IsDetail(string t)
+        {
+            var noun = HasWord(t, "detail") || HasWord(t, "details") || HasWord(t, "detalj") || HasWord(t, "detaljen")
+                || HasWord(t, "detaljer") || HasWord(t, "detaljene");
+            if (!noun) return false;
+            if (t.StartsWith("detail ", StringComparison.Ordinal)) return true;
+            return HasWord(t, "add") || HasWord(t, "remove") || HasWord(t, "delete") || HasWord(t, "legg")
+                || HasWord(t, "fjern") || HasWord(t, "slett");
+        }
+
         /// <summary>The plan's dimensions, unless a door or window is named: its size is an edit.</summary>
         static bool IsDimensions(string t)
         {
@@ -347,9 +363,6 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "målsett") || HasWord(t, "målsetting") || HasWord(t, "målkjede") || HasWord(t, "målkjeder")
                 || HasWord(t, "målene") || HasWord(t, "målet");
             if (!words) return false;
-            // R2: adding or removing a dimension is the plan's, even at a door or a window.
-            if (HasWord(t, "add") || HasWord(t, "remove") || HasWord(t, "delete") || HasWord(t, "fjern")
-                || HasWord(t, "legg") || HasWord(t, "slett")) return true;
             foreach (var opening in new[] { "window", "windows", "door", "doors", "opening", "vindu", "vinduet", "dør", "døra", "døren", "åpning" })
                 if (HasWord(t, opening)) return false;
             return true;

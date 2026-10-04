@@ -84,8 +84,10 @@ namespace RhinoMCPPlugin.Forsk
         public bool UndoNewest;
         /// <summary>The last action was a whole-set Print, on this document, and nothing changed since.</summary>
         public bool JustPrinted;
-        /// <summary>R2: the stored user dimensions (forsk/user_dims JSON), or null.</summary>
-        public string UserDims;
+        /// <summary>The stored details (forsk/details JSON), or null.</summary>
+        public string Details;
+        /// <summary>Each stored detail's name by id ("North wall", "Door D01"), read from the model. One whose element is gone has none.</summary>
+        public Dictionary<string, string> DetailNames = new Dictionary<string, string>();
     }
 
     /// <summary>The classifier's answer. One pure read of the rows; no RhinoCommon.</summary>
@@ -134,11 +136,12 @@ namespace RhinoMCPPlugin.Forsk
         public string Ink = "default";
         public Picked Picked;
         public int PickedCount;
-        /// <summary>R2: of the things picked, the Forsk walls and the doors and windows.</summary>
+        /// <summary>Of the things picked, the Forsk walls and the doors and windows.</summary>
         public int PickedWalls;
         public int PickedOpenings;
-        /// <summary>R2: the user's own dimensions, as stored.</summary>
-        public List<global::RhinoMCPPlugin.Functions.UserDims.Dim> Dims = new List<global::RhinoMCPPlugin.Functions.UserDims.Dim>();
+        /// <summary>The details, as stored, and their names by id.</summary>
+        public List<global::RhinoMCPPlugin.Functions.Details.Record> Details = new List<global::RhinoMCPPlugin.Functions.Details.Record>();
+        public Dictionary<string, string> DetailNames = new Dictionary<string, string>();
         /// <summary>The things picked, one row each (ForskPick.Things). The pick line reads them.</summary>
         public List<ChipRow> Selected = new List<ChipRow>();
         /// <summary>door or window when every picked opening is that kind, else null.</summary>
@@ -237,8 +240,9 @@ namespace RhinoMCPPlugin.Forsk
             facts.Kind = Kind(facts, rows.Count);
             facts.SheetsStale = facts.Layouts > 0
                 && !string.IsNullOrEmpty(input.StoredFingerprint)
-                && input.StoredFingerprint != SheetFingerprint.Of(rows, input.UserDims);
-            facts.Dims = global::RhinoMCPPlugin.Functions.UserDims.Read(input.UserDims);
+                && input.StoredFingerprint != SheetFingerprint.Of(rows, input.Details);
+            facts.Details = global::RhinoMCPPlugin.Functions.Details.Read(input.Details);
+            facts.DetailNames = new Dictionary<string, string>(input.DetailNames ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
             ReadSelection(rows, facts);
             facts.SelectionKey = string.Join(",", rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
             facts.ModelKey = ModelKey(rows);
@@ -379,8 +383,8 @@ namespace RhinoMCPPlugin.Forsk
             return Of(rows, null);
         }
 
-        /// <summary>R2: the user's dimensions are part of what a sheet was drawn from.</summary>
-        public static string Of(IEnumerable<ChipRow> rows, string userDims)
+        /// <summary>The stored details are part of what the sheets were drawn from.</summary>
+        public static string Of(IEnumerable<ChipRow> rows, string details)
         {
             var parts = new List<string>();
             foreach (var row in rows ?? Enumerable.Empty<ChipRow>())
@@ -391,7 +395,7 @@ namespace RhinoMCPPlugin.Forsk
                 parts.Add((row.Id ?? "") + ":" + (row.Stamp ?? ""));
             }
             parts.Sort(StringComparer.Ordinal);
-            if (!string.IsNullOrWhiteSpace(userDims)) parts.Add("user_dims:" + userDims.Trim());
+            if (!string.IsNullOrWhiteSpace(details)) parts.Add("details:" + details.Trim());
             using (var sha = SHA1.Create())
             {
                 var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", parts)));

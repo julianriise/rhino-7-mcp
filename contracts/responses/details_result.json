@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "details_result.json",
+  "title": "DetailsResult",
+  "description": "The stored details after the call, and one line. add also says how many were added and how many were already there.",
+  "type": "object",
+  "properties": {
+    "details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^DET[0-9]+$" },
+          "wall": { "type": "string" },
+          "opening": { "type": "string" },
+          "name": { "type": "string" },
+          "views": { "type": "array", "items": { "type": "string", "enum": ["plan", "elevation", "section"] } }
+        },
+        "required": ["id", "views"]
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "added": { "type": "integer", "minimum": 0 },
+    "already": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["details", "count", "message"]
+}

@@ -165,7 +165,7 @@ public partial class RhinoMCPFunctions
         if (!Guid.TryParse(attr.GetUserString("forsk:host"), out var hostId) || !walls.TryGetValue(hostId, out var host)) return null;
         var kind = (attr.GetUserString("forsk:opening_kind") ?? "").Trim().ToLowerInvariant();
         if (kind != "door" && kind != "window") return null;
-        var run = UserDims.MainRun(host.Rings, 1.0);
+        var run = WallJoins.MainRun(host.Rings, 1.0);
         var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
         if (run == null || !box.IsValid) return null;
         var centre = (run.Near + run.Far) / 2.0;
