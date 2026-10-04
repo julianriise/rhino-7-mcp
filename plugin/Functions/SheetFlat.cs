@@ -148,6 +148,21 @@ public static class SheetFlat
         return height > 0 ? height * map.Scale : 0;
     }
 
+    /// <summary>
+    /// The height or width stored in the sheet file. <paramref name="documentDimensionScale"/>
+    /// is the active style's scale (x100 in the mm templates). Export text is
+    /// one-to-one, so that scale is not applied: a 2.5 mm room tag stays 2.5,
+    /// a door mark 1.25, a dimension value 1.8, a title 3.5, and the box
+    /// around the word stays its printed width.
+    /// </summary>
+    public static double WrittenMm(double paperMm, double documentDimensionScale)
+    {
+        // documentDimensionScale is the template x100. The export style is
+        // one-to-one, so the stored size is the paper size at every scale.
+        _ = documentDimensionScale;
+        return paperMm > 0 ? paperMm : 0;
+    }
+
     /// <summary>A straight piece (x0 y0 x1 y1) or a three-point arc (start, a point on it, end).</summary>
     public sealed class Seg
     {

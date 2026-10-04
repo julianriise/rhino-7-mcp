@@ -4,9 +4,11 @@ model as IFC, then check them.
 
 Run after the garage smoke has built the garage (forsk scripts/smoke_garage.sh
 calls it). Writes /tmp/forsk-export-garage/Garage DXF/, .../Garage DWG/ and
-.../Garage.ifc; checks the plan DXF with dxf_check.py (ezdxf), every DWG's
-header, and the IFC with ifc_check.py (ifcopenshell), which also proves the
-IFC library loads in Rhino. Stdout at most 25 lines; exit 0 when all pass.
+.../Garage.ifc; checks every DXF for paper-size text and the A3 sheet
+(dxf_check.py), the plan for its layers, every elevation for facade lines,
+every DWG's header, and the IFC with ifc_check.py (ifcopenshell), which also
+proves the IFC library loads in Rhino. Stdout at most 25 lines; exit 0 when
+all pass.
 
 Usage:
   RHINO_MCP_TIMEOUT=300 python3 scripts/export_smoke.py
@@ -77,6 +79,14 @@ def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bo
             for name in elevations:
                 doc, why = dxf_check.read_dxf(folder / name)
                 problems = [why] if why else dxf_check.check_elevation(doc)
+                if problems:
+                    ok = False
+                    lines.append(f"FAIL {name}: " + "; ".join(problems))
+            # Front sheet and schedule are neither the plan nor A-40. Same text scale.
+            rest = [name for name in files if name != plan and name not in elevations]
+            for name in rest:
+                doc, why = dxf_check.read_dxf(folder / name)
+                problems = [why] if why else dxf_check.check_fit(doc)
                 if problems:
                     ok = False
                     lines.append(f"FAIL {name}: " + "; ".join(problems))

@@ -158,6 +158,27 @@ public class SheetFlatPieceTests
         Assert.Equal(3.5, SheetFlat.TextMm(3.5, SheetFlat.Affine.Identity), 9);
         Assert.Equal(0, SheetFlat.TextMm(-1, plan), 9);
     }
+
+    /// <summary>
+    /// What the file stores, in sheet mm. The mm template's dimension scale is
+    /// 100; a room tag stays 2.5, a door mark 1.25, a dimension value 1.8, a
+    /// schedule cell 2, a title 3.5, and the box around "Room" stays about 22.6.
+    /// </summary>
+    [Fact]
+    public void ExportText_IsWrittenAtPaperMillimetres()
+    {
+        const double templateScale = 100;
+        Assert.Equal(2.5, SheetFlat.WrittenMm(2.5, templateScale), 9);
+        Assert.Equal(1.25, SheetFlat.WrittenMm(1.25, templateScale), 9);
+        Assert.Equal(1.8, SheetFlat.WrittenMm(1.8, templateScale), 9);
+        Assert.Equal(2, SheetFlat.WrittenMm(2, templateScale), 9);
+        Assert.Equal(3.5, SheetFlat.WrittenMm(3.5, templateScale), 9);
+        Assert.Equal(22.55, SheetFlat.WrittenMm(22.55, templateScale), 9);
+        Assert.Equal(2.5, SheetFlat.WrittenMm(2.5, 1), 9);
+        Assert.Equal(3.5, SheetFlat.WrittenMm(3.5, 0), 9);
+        Assert.Equal(0, SheetFlat.WrittenMm(0, templateScale), 9);
+        Assert.Equal(0, SheetFlat.WrittenMm(-1, templateScale), 9);
+    }
 }
 
 /// <summary>R3: the chat words for an export, the receipt, and the Choose sheets pill.</summary>

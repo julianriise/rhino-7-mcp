@@ -4,7 +4,8 @@
 A plan DXF must have the plan export layers (not A-GRND: a plan has no
 ground line), at least 4 entities on A-WALL-CUT, a HATCH on A-WALL-PATT, a
 0.50 mm lineweight on an entity or a layer, the sheet number A-20-001 on
-A-ANNO-TTLB, and extents inside the A3 sheet (420 x 297 mm). A DWG must
+A-ANNO-TTLB, extents inside the A3 sheet (420 x 297 mm), and text at its
+printed size (a room tag about 2.5 mm, not the template's x100). A DWG must
 exist, not be empty, and start with AC10. Either must be AutoCAD 2004
 (AC1018) or later. Hatches and lineweights exist from AutoCAD 2000; only
 R12 (AC1009) drops them.
@@ -29,6 +30,9 @@ LAYERS = (
 SHEET_W, SHEET_H = 420.0, 297.0
 # A text box is measured from its font; allow a little past the paper edge.
 SLACK_MM = 1.0
+# Printed sheet text is a few millimetres (room tag 2.5, title 3.5). The mm
+# template's dimension scale leaves the same text at 125 mm and up.
+PAPER_TEXT_MM = 12.0
 HEAVY = 50  # 0.50 mm in DXF hundredths
 MODERN = "AC1018"  # AutoCAD 2004
 MODERN_NAME = "AutoCAD 2004"
@@ -36,8 +40,6 @@ MODERN_NAME = "AutoCAD 2004"
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
     """What is wrong with a plan sheet DXF. Empty when it passes."""
-    from ezdxf import bbox
-
     problems = []
     if doc.dxfversion < MODERN:
         problems.append(f"version {doc.dxfversion}, want {MODERN} ({MODERN_NAME}) or later")
@@ -64,7 +66,49 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
     if not any(number in t for t in texts):
         problems.append(f"A-ANNO-TTLB has no text {number}")
 
-    box = bbox.extents(msp, fast=True)
+    problems.extend(check_fit(doc))
+    return problems
+
+
+def check_text(doc) -> list[str]:
+    """Text height and width in paper mm. Empty when every text is printed size.
+
+    Dimension values are MTEXT. A DIMENSION's text and arrow, when one is
+    present, use the same paper cap.
+    """
+    problems = []
+    height_noted = False
+    width_noted = False
+    arrow_noted = False
+    for entity in doc.modelspace():
+        kind = entity.dxftype()
+        height, width, arrow = _text_size(entity)
+        if kind not in ("TEXT", "MTEXT", "DIMENSION"):
+            continue
+        if not height_noted and height > PAPER_TEXT_MM:
+            problems.append(
+                f"text height {height:.0f} mm is model size, want paper mm (<= {PAPER_TEXT_MM:.0f})"
+            )
+            height_noted = True
+        if not width_noted and width > SHEET_W + SLACK_MM:
+            problems.append(f"text width {width:.0f} mm is wider than the 420 mm sheet")
+            width_noted = True
+        if not arrow_noted and arrow > PAPER_TEXT_MM:
+            problems.append(
+                f"dimension arrow {arrow:.0f} mm is model size, want paper mm (<= {PAPER_TEXT_MM:.0f})"
+            )
+            arrow_noted = True
+        if height_noted and width_noted and arrow_noted:
+            break
+    return problems
+
+
+def check_fit(doc) -> list[str]:
+    """Paper-size text, and the drawing inside the A3 sheet. Empty when it fits."""
+    from ezdxf import bbox
+
+    problems = check_text(doc)
+    box = bbox.extents(doc.modelspace(), fast=True)
     if box.has_data:
         lo, hi = box.extmin, box.extmax
         if lo.x < -SLACK_MM or lo.y < -SLACK_MM or hi.x > SHEET_W + SLACK_MM or hi.y > SHEET_H + SLACK_MM:
@@ -76,11 +120,29 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
     return problems
 
 
+def _text_size(entity) -> tuple[float, float, float]:
+    """Height, width and arrow length in mm. Width and arrow are 0 when absent."""
+    kind = entity.dxftype()
+    if kind == "MTEXT":
+        return float(entity.dxf.get("char_height", 0) or 0), float(entity.dxf.get("width", 0) or 0), 0.0
+    if kind == "TEXT":
+        return float(entity.dxf.get("height", 0) or 0), 0.0, 0.0
+    if kind != "DIMENSION":
+        return 0.0, 0.0, 0.0
+    style_name = entity.dxf.get("dimstyle", "")
+    style = entity.doc.dimstyles.get(style_name) if style_name else None
+    if style is None:
+        return 0.0, 0.0, 0.0
+    return float(style.dxf.get("dimtxt", 0) or 0), 0.0, float(style.dxf.get("dimasz", 0) or 0)
+
+
 def check_elevation(doc) -> list[str]:
-    """An elevation sheet DXF (A-40-…) has its facade: lines on A-ELEV."""
+    """An elevation or section (A-40-…) has facade lines, paper-size text and the A3 sheet."""
+    problems = []
     if not any(e.dxf.get("layer", "0").upper() == "A-ELEV" for e in doc.modelspace()):
-        return ["no facade lines on A-ELEV"]
-    return []
+        problems.append("no facade lines on A-ELEV")
+    problems.extend(check_fit(doc))
+    return problems
 
 
 def read_dxf(path):

@@ -289,7 +289,7 @@ public partial class RhinoMCPFunctions
                 var layers = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var def in SheetFlat.Layers)
                     layers[def.Name] = target.Layers.Add(ExportLayer(def));
-                AddPieces(source, target, pieces, layers, null);
+                AddPieces(source, target, pieces, layers, null, null);
                 return WriteAndCheck(target, path);
             }
         }
@@ -308,6 +308,7 @@ public partial class RhinoMCPFunctions
     {
         var picked = doc.Objects.GetSelectedObjects(false, false)?.Select(o => o.Id).ToList() ?? new List<Guid>();
         var made = new List<int>();
+        var madeStyles = new List<int>();
         var added = new List<Guid>();
         try
         {
@@ -323,7 +324,7 @@ public partial class RhinoMCPFunctions
                 layers[def.Name] = found;
             }
             doc.Objects.UnselectAll(true);
-            AddPieces(doc, doc, pieces, layers, added);
+            AddPieces(doc, doc, pieces, layers, added, madeStyles);
             doc.Objects.Select(added, true);
             if (File.Exists(path)) File.Delete(path);
             RhinoApp.RunScript(SheetFlat.ExportScript(path), false);
@@ -337,6 +338,12 @@ public partial class RhinoMCPFunctions
         {
             foreach (var id in added)
                 doc.Objects.Delete(id, true);
+            madeStyles.Sort();
+            for (var i = madeStyles.Count - 1; i >= 0; i--)
+            {
+                try { doc.DimStyles.Delete(madeStyles[i], true); }
+                catch (Exception) { }
+            }
             foreach (var index in made)
                 doc.Layers.Delete(index, true);
             doc.Objects.UnselectAll(true);
@@ -388,9 +395,10 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    private static void AddPieces(RhinoDoc source, RhinoDoc target, List<FlatPiece> pieces, Dictionary<string, int> layers, List<Guid> added)
+    private static void AddPieces(RhinoDoc source, RhinoDoc target, List<FlatPiece> pieces, Dictionary<string, int> layers, List<Guid> added, List<int> madeStyles)
     {
         var patterns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var scale = DocumentDimensionScale(target);
         foreach (var piece in pieces)
         {
             if (!layers.TryGetValue(piece.Layer, out var layer) || layer < 0) continue;
@@ -406,9 +414,23 @@ public partial class RhinoMCPFunctions
             if (piece.Text != null)
             {
                 if (piece.Text.Length == 0 || piece.TextMm <= 0) continue;
+                // Paper millimetres on a 1:1 style. The string AddText uses the
+                // document style, whose dimension scale is x100 in the mm
+                // templates, so a 2.5 mm tag was stored as 250 mm and its box
+                // (and a dimension value at 1.8 mm) left the sheet. Arrow ticks
+                // are curves already in paper mm; this style's own arrow length
+                // is the paper size once its scale is 1.
+                var height = Math.Round(SheetFlat.WrittenMm(piece.TextMm, scale), 3, MidpointRounding.AwayFromZero);
+                var style = ExportTextStyle(target, height, madeStyles);
+                if (style == null) continue;
                 var justify = (TextJustification)Enum.Parse(typeof(TextJustification), piece.Justify);
-                id = target.Objects.AddText(piece.Text, piece.TextPlane, piece.TextMm,
-                    string.IsNullOrEmpty(piece.Font) ? "Arial" : piece.Font, false, false, justify, attr);
+                using (var entity = TextEntity.Create(piece.Text, piece.TextPlane, style, false, 0, 0))
+                {
+                    if (entity == null) continue;
+                    entity.Justification = justify;
+                    entity.SetFacename(true, string.IsNullOrEmpty(piece.Font) ? "Arial" : piece.Font);
+                    id = target.Objects.AddText(entity, attr);
+                }
             }
             else if (piece.Geometry is Hatch hatch)
             {
@@ -423,6 +445,43 @@ public partial class RhinoMCPFunctions
                 id = target.Objects.AddCurve(curve, attr);
             if (id != Guid.Empty) added?.Add(id);
         }
+    }
+
+    /// <summary>The active dimension style's scale, or 1 when the document has none.</summary>
+    private static double DocumentDimensionScale(RhinoDoc doc)
+    {
+        var current = doc?.DimStyles?.Current;
+        return current == null || current.DimensionScale <= 0 ? 1 : current.DimensionScale;
+    }
+
+    /// <summary>
+    /// A text style of <paramref name="heightMm"/> with dimension scale 1.
+    /// One style per printed height. A style this call adds is recorded so the
+    /// active document can drop it again; a style already there is left in place.
+    /// The current style is never modified: a write regenerates every text on it.
+    /// </summary>
+    private static DimensionStyle ExportTextStyle(RhinoDoc doc, double heightMm, List<int> made)
+    {
+        var name = "Forsk sheet " + heightMm.ToString("0.###", CultureInfo.InvariantCulture);
+        var found = doc.DimStyles.FindName(name);
+        if (found != null)
+        {
+            if (Math.Abs(found.TextHeight - heightMm) > 1e-6 || Math.Abs(found.DimensionScale - 1.0) > 1e-9)
+            {
+                found.TextHeight = heightMm;
+                found.DimensionScaleValue = ScaleValue.OneToOne();
+                doc.DimStyles.Modify(found, found.Index, true);
+            }
+            return found;
+        }
+        var style = doc.DimStyles.Current != null ? doc.DimStyles.Current.Duplicate() : new DimensionStyle();
+        style.Name = name;
+        style.TextHeight = heightMm;
+        style.DimensionScaleValue = ScaleValue.OneToOne();
+        var index = doc.DimStyles.Add(style, false);
+        if (index < 0) return null;
+        made?.Add(index);
+        return doc.DimStyles.FindIndex(index);
     }
 
     /// <summary>The fill's pattern in the target document: there by name, or copied from the source.</summary>

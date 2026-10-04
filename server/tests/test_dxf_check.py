@@ -185,6 +185,89 @@ def test_the_export_step_fails_on_a_bad_ifc(tmp_path):
     assert "FAIL ifc: IfcWall 3, want 4 or more" in lines
 
 
+def test_model_size_text_fails_on_a_plan():
+    doc = plan_doc()
+    doc.modelspace().add_mtext(
+        "Room",
+        dxfattribs={"layer": "A-ANNO-TEXT", "char_height": 250, "width": 2255, "insert": (210, 171)},
+    )
+    problems = dxf_check.check_plan(doc)
+    assert any("text height" in p for p in problems), problems
+    assert any("text width" in p for p in problems), problems
+
+
+def test_paper_size_text_passes_on_a_plan():
+    doc = plan_doc()
+    doc.modelspace().add_mtext(
+        "Room",
+        dxfattribs={"layer": "A-ANNO-TEXT", "char_height": 2.5, "width": 22.6, "insert": (210, 171)},
+    )
+    assert dxf_check.check_plan(doc) == []
+
+
+def test_an_elevation_with_model_size_text_fails():
+    doc = elevation_doc()
+    doc.modelspace().add_mtext(
+        "North elevation",
+        dxfattribs={"char_height": 350, "width": 7175, "insert": (20, 20)},
+    )
+    problems = dxf_check.check_elevation(doc)
+    assert any("text height" in p for p in problems), problems
+
+
+def front_doc(*, text_height=3.5, text_width=40):
+    doc = ezdxf.new("R2018")
+    msp = doc.modelspace()
+    msp.add_line((10, 10), (400, 10))
+    msp.add_mtext(
+        "Drawing list",
+        dxfattribs={"char_height": text_height, "width": text_width, "insert": (20, 20)},
+    )
+    return doc
+
+
+def test_a_front_sheet_at_paper_size_passes(tmp_path):
+    def files(fmt):
+        if fmt == "dxf":
+            return [
+                ("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p)),
+                ("Garage A-40-001 North.dxf", lambda p: elevation_doc().saveas(p)),
+                ("Garage A-00-001 Drawing list.dxf", lambda p: front_doc().saveas(p)),
+            ]
+        return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1021" + b"\0" * 10))]
+
+    lines, ok = export_smoke.run(FakeRhino(files), tmp_path, check_ifc=lambda p: [])
+    assert ok, lines
+
+
+def test_a_front_sheet_at_model_size_fails(tmp_path):
+    def files(fmt):
+        if fmt == "dxf":
+            return [
+                ("Garage A-20-001 Plan.dxf", lambda p: plan_doc().saveas(p)),
+                ("Garage A-40-001 North.dxf", lambda p: elevation_doc().saveas(p)),
+                ("Garage A-00-001 Drawing list.dxf", lambda p: front_doc(text_height=350, text_width=10287).saveas(p)),
+            ]
+        return [("Garage A-20-001 Plan.dwg", lambda p: p.write_bytes(b"AC1021" + b"\0" * 10))]
+
+    lines, ok = export_smoke.run(FakeRhino(files), tmp_path, check_ifc=lambda p: [])
+    assert not ok
+    assert any("A-00-001" in line and "text height" in line for line in lines), lines
+
+
+def test_a_dimension_at_model_size_fails():
+    doc = plan_doc()
+    style = doc.dimstyles.new("ForskModel")
+    style.dxf.dimtxt = 180
+    style.dxf.dimasz = 100
+    doc.modelspace().add_linear_dim(
+        base=(100, 40), p1=(100, 50), p2=(200, 50), dimstyle="ForskModel",
+    ).render()
+    problems = dxf_check.check_plan(doc)
+    assert any("text height" in p and "180" in p for p in problems), problems
+    assert any("dimension arrow" in p and "100" in p for p in problems), problems
+
+
 def test_the_export_step_fails_on_a_dxf_without_poche(tmp_path):
     def files(fmt):
         if fmt == "dxf":
