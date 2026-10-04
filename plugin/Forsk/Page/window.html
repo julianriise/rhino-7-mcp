@@ -223,14 +223,15 @@ nav.bar { padding: 4px 16px 0; }
 .sheet .pills { margin: 0 0 2px; }
 .sheet .hint { color: var(--meta); font-size: 12px; margin: 8px 0 0; }
 .dock { position: relative; }
+.tools { display: flex; align-items: center; gap: 4px; min-height: 32px; }
 .add {
-  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--meta);
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--meta);
   font: 400 22px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
   /* The system "+" ink sits 2px below the em centre, so the control reads low. */
   transform: translateY(-2px);
 }
-.key-hint { flex: none; align-self: center; color: var(--meta); font-size: 12px; line-height: 1; padding: 0 2px 0 0; }
+.key-hint { flex: none; margin-left: auto; color: var(--meta); font-size: 12px; line-height: 1; padding: 0 2px 0 0; }
 .step::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
   background: linear-gradient(90deg, rgba(245,246,248,0) 0%, rgba(245,246,248,0.9) 50%, rgba(245,246,248,0) 100%);
@@ -240,21 +241,22 @@ nav.bar { padding: 4px 16px 0; }
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 form.composer { margin: 0; padding: 8px 16px 16px; }
 .field {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
   background: var(--card); border: 0; border-radius: 20px;
   box-shadow: var(--shadow);
-  padding: 6px 6px 6px 4px; min-height: 48px;
+  padding: 10px 8px 6px;
 }
 textarea {
   flex: 1; align-self: center; min-width: 0; border: 0; outline: none; resize: none; background: transparent;
   font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); caret-color: var(--ink);
-  /* One line is 1.4 at 14px. The field's padding and the 32px buttons stay; a wrapped line uses this height, not the row. */
   height: calc(14px * 1.4); padding: 0; margin: 0; max-height: calc(14px * 1.4 * 5); overflow-y: auto;
   -webkit-user-select: text; user-select: text;
 }
+/* The line is the full width of the card. The icons stay on the row under it, so a new line grows upward. */
+#q { width: 100%; flex: none; align-self: stretch; padding: 0 8px; }
 textarea::placeholder { color: var(--faint); }
 .send {
-  flex: none; align-self: center; width: 32px; height: 32px; border: 0; border-radius: 50%;
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%;
   background: var(--brand); color: #FFFFFF; font: 600 16px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
 }
@@ -317,10 +319,12 @@ textarea::placeholder { color: var(--faint); }
   <nav id="bar" class="bar" aria-label="Suggestions"></nav>
   <form id="composer" class="composer" autocomplete="off">
     <div class="field">
-      <button id="add" class="add" type="button" tabindex="0" aria-label="Import a plan" title="Import a plan">+</button>
       <textarea id="q" rows="1" placeholder="Ask Forsk…" spellcheck="true" aria-label="Ask Forsk"></textarea>
-      <span class="key-hint" aria-hidden="true" title="Return to send">&#x23CE;</span>
-      <button id="send" class="send" type="submit" tabindex="0" aria-label="Send" disabled>&#8593;</button>
+      <div class="tools">
+        <button id="add" class="add" type="button" tabindex="0" aria-label="Import a plan" title="Import a plan">+</button>
+        <span class="key-hint" aria-hidden="true" title="Return to send">&#x23CE;</span>
+        <button id="send" class="send" type="submit" tabindex="0" aria-label="Send" disabled>&#8593;</button>
+      </div>
     </div>
   </form>
 </div>

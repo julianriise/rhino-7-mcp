@@ -197,8 +197,8 @@ public class PageChromeTests
 
     /// <summary>
     /// A wrapped line was 32px, so the caret filled the row. The line is 1.4
-    /// at 14px. The field's padding stays, and the auto-grow uses that same
-    /// line height rather than the 32px row.
+    /// at 14px. The icons sit on their own row, and the auto-grow uses that
+    /// same line height rather than the 32px buttons.
     /// </summary>
     [Fact]
     public void TheComposer_LineHeight_IsTheFont_AndTheGrowUsesIt()
@@ -211,7 +211,6 @@ public class PageChromeTests
         var cardAt = html.IndexOf(".card textarea { height: auto", StringComparison.Ordinal);
         var cardRule = html.Substring(cardAt, html.IndexOf('}', cardAt) - cardAt);
         Assert.Contains("min-height: calc(15px * 1.4 * 4)", cardRule);
-        var field = html.Substring(fieldAt, html.IndexOf('}', fieldAt) - fieldAt);
 
         Assert.Contains("font-size: 14px", rule);
         Assert.Contains("line-height: 1.4", rule);
@@ -220,8 +219,6 @@ public class PageChromeTests
         Assert.Contains("padding: 0", rule);
         Assert.DoesNotContain("line-height: 32px", rule);
         Assert.DoesNotContain("32px * 5", rule);
-        Assert.Contains("padding: 6px 6px 6px 4px", field);
-        Assert.Contains("min-height: 48px", field);
 
         var engine = PageScript.Load();
         Assert.Equal("20", engine.Evaluate("String(Forsk.composerHeight(20, 20))").ToString());
@@ -410,5 +407,35 @@ public class PageChromeTests
         Assert.Contains("Forsk.visibleSlots(row.clientWidth, widths, helpW, gap)", script);
         Assert.Contains("fitSlots();", script);
         Assert.Contains("root.requestAnimationFrame(fitSlots)", script);
+    }
+
+    /// <summary>
+    /// The field is a column. The line uses the whole width and grows upward.
+    /// Import stays on the left of the row under it. Return and send stay on the right.
+    /// </summary>
+    [Fact]
+    public void TheComposer_PinsTheIconsUnderTheLine()
+    {
+        var html = Html();
+        var formAt = html.IndexOf("<form id=\"composer\"", StringComparison.Ordinal);
+        var composer = html.Substring(formAt, html.IndexOf("</form>", formAt, StringComparison.Ordinal) - formAt);
+        var textAt = composer.IndexOf("<textarea", StringComparison.Ordinal);
+        var toolsAt = composer.IndexOf("class=\"tools\"", StringComparison.Ordinal);
+        Assert.True(textAt >= 0 && toolsAt > textAt);
+        var tools = composer.Substring(toolsAt);
+        var addAt = tools.IndexOf("id=\"add\"", StringComparison.Ordinal);
+        var hintAt = tools.IndexOf("class=\"key-hint\"", StringComparison.Ordinal);
+        var sendAt = tools.IndexOf("id=\"send\"", StringComparison.Ordinal);
+        Assert.True(addAt >= 0 && hintAt > addAt && sendAt > hintAt);
+
+        var fieldAt = html.IndexOf(".field {", StringComparison.Ordinal);
+        var field = html.Substring(fieldAt, html.IndexOf('}', fieldAt) - fieldAt);
+        Assert.Contains("flex-direction: column", field);
+        var lineAt = html.IndexOf("#q {", StringComparison.Ordinal);
+        var line = html.Substring(lineAt, html.IndexOf('}', lineAt) - lineAt);
+        Assert.Contains("width: 100%", line);
+        Assert.Contains("flex: none", line);
+        var hint = html.Substring(html.IndexOf(".key-hint {", StringComparison.Ordinal), 80);
+        Assert.Contains("margin-left: auto", hint);
     }
 }
