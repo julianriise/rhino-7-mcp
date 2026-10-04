@@ -5,9 +5,9 @@ Every door and window fills an opening that voids its own host wall; each
 space has a Name, a LongName and Qto_SpaceBaseQuantities.NetFloorArea;
 every standard wall has a material layer set usage; ifcopenshell.validate
 finds no errors; ifcopenshell.geom makes a shape for every wall. With
---expect garage, the counts are at least the garage smoke's (4 walls, a
-floor slab and a roof slab, 1 space), exactly 1 roof and 1 storey, and at
-least one door or window. With --expect stair, the garage's counts plus
+--expect garage, the counts are at least the garage smoke's (4 walls, the
+roof's slab, 1 space; the smoke draws no floor slab), exactly 1 roof and 1
+storey, and at least one door or window. With --expect stair, the garage's counts plus
 exactly one IfcStair. Every IfcStair aggregates an IfcStairFlight with two
 risers or more, a riser height, a tread length, and a shape whose height
 is NumberOfRisers - 1 times the riser height (the top step is the floor).
@@ -26,8 +26,8 @@ import sys
 
 # At least this many; the storey and the roof exactly.
 EXPECT = {
-    "garage": {"IfcWall": 4, "IfcSlab": 2, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1},
-    "stair": {"IfcWall": 4, "IfcSlab": 2, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1, "IfcStair": 1},
+    "garage": {"IfcWall": 4, "IfcSlab": 1, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1},
+    "stair": {"IfcWall": 4, "IfcSlab": 1, "IfcRoof": 1, "IfcSpace": 1, "IfcBuildingStorey": 1, "IfcStair": 1},
 }
 EXACT = {"IfcRoof", "IfcBuildingStorey", "IfcStair"}
 

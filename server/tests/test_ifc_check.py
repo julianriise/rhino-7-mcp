@@ -43,6 +43,18 @@ def test_garage_counts_are_minimums_but_one_storey_and_one_roof():
     assert "IfcWall 3, want 4 or more" in ifc_check.check(three, expect, shapes=False)
 
 
+@pytest.mark.parametrize("kind", ["garage", "stair"])
+def test_the_smoke_garage_has_its_roof_slab_and_no_floor_slab(kind):
+    # The garage smoke draws walls and a roof, no floor: one IfcSlab, the roof's.
+    roof_only = model_with("IfcWall", "IfcWall", "IfcWall", "IfcWall", "IfcSlab", "IfcRoof",
+                           "IfcSpace", "IfcBuildingStorey", "IfcDoor", *(["IfcStair"] if kind == "stair" else []))
+    problems = ifc_check.check(roof_only, ifc_check.EXPECT[kind], shapes=False)
+    # The counts pass; a bare stair's own checks are another test's.
+    assert not [p for p in problems if p.startswith("Ifc") and ", want" in p], problems
+    no_slab = model_with("IfcWall", "IfcWall", "IfcWall", "IfcWall", "IfcRoof", "IfcSpace", "IfcBuildingStorey", "IfcDoor")
+    assert "IfcSlab 0, want 1 or more" in ifc_check.check(no_slab, ifc_check.EXPECT[kind], shapes=False)
+
+
 def test_a_stair_without_its_flight_fails():
     problems = ifc_check.stair_problems(model_with("IfcStair"), shapes=False)
     assert any("0 flights" in p for p in problems), problems
