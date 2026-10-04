@@ -11,10 +11,10 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// Keeps plans and elevations on Forsk Technical and draws what the mode
 /// cannot: the door and window symbols and the stair on a plan, the ground
-/// line on an elevation. The pieces are built once per object and rebuilt
-/// only when the document events say it changed (ForskTechnicalCache), on
-/// idle, never while drawing. Opening blocks and stairs are not drawn on a
-/// plan unless selected; their symbols stand in for them, as on the sheet.
+/// line on an elevation, and the wall cut. Those pieces are built once and
+/// rebuilt only when the document events say it changed, on idle, never
+/// while drawing. Opening blocks and stairs are hidden in a plan by their
+/// layer, so the draw does not visit every object. Their symbols stand in.
 /// </summary>
 internal static class ForskTechnicalHost
 {
@@ -29,7 +29,11 @@ internal static class ForskTechnicalHost
     static readonly EventHandler<RhinoDoc.UserStringChangedArgs> StringChanged = (_, __) => _profileDirty = true;
     static readonly EventHandler Idle = (_, __) => OnIdle();
 
+    static readonly HashSet<Guid> PlanHidden = new HashSet<Guid>();
+    static readonly ForskTechnicalLinework EmptyLines = new ForskTechnicalLinework(new ForskTechnical.Stroke[0]);
+
     static ForskTechnicalConduit _conduit;
+    static RhinoDoc _bound;
     static DisplayModeDescription _mode;
     static string _modeSignature;
     static uint _docSerial;
@@ -40,6 +44,9 @@ internal static class ForskTechnicalHost
     static double? _groundZ;
     static bool _working;
     static bool _reported;
+    static ForskTechnicalLinework[] _planDrawn = new ForskTechnicalLinework[0];
+    static int _planDrawnVersion = -1;
+    static ForskTechnicalLinework _cuts = EmptyLines;
 
     internal static void Start()
     {
@@ -66,7 +73,9 @@ internal static class ForskTechnicalHost
         RhinoDoc.ModifyObjectAttributes -= Modified;
         RhinoDoc.UserStringChanged -= StringChanged;
         RhinoApp.Idle -= Idle;
+        RestorePlanLayers(_bound);
         Cache.Reset();
+        ForgetDrawn();
     }
 
     internal static bool Enabled()
@@ -121,23 +130,32 @@ internal static class ForskTechnicalHost
         return _mode != null && id.HasValue && id.Value == _mode.Id;
     }
 
-    internal static bool Hides(RhinoObject obj)
-    {
-        return obj != null && Cache.IsHidden(obj.Id) && obj.IsSelected(false) <= 0;
-    }
-
     internal static bool Current(RhinoDoc doc)
     {
         return doc != null && doc.RuntimeSerialNumber == _docSerial;
     }
 
-    internal static IEnumerable<ForskTechnicalLinework> Plan => Cache.Values;
-
-    internal static ForskTechnical.Stroke Ground(RhinoViewport viewport)
+    internal static void DrawPlan(DisplayPipeline display)
     {
-        if (!_extent.IsValid || viewport == null) return null;
+        RememberPlan();
+        for (var i = 0; i < _planDrawn.Length; i++) _planDrawn[i].Draw(display);
+        _cuts.Draw(display);
+    }
+
+    internal static void DrawElevation(DisplayPipeline display, RhinoViewport viewport)
+    {
+        if (display == null || viewport == null || !_extent.IsValid || !_groundZ.HasValue) return;
         var right = viewport.CameraX;
-        return ForskTechnical.GroundLine(_extent.Min.X, _extent.Min.Y, _extent.Max.X, _extent.Max.Y, _groundZ, right.X, right.Y, _profile);
+        if (!ForskTechnical.GroundEnds(
+                _extent.Min.X, _extent.Min.Y, _extent.Max.X, _extent.Max.Y,
+                _groundZ, right.X, right.Y, out var x0, out var y0, out var x1, out var y1))
+            return;
+        var pen = ForskTechnical.PenFor("ground_line", null, _profile);
+        display.DrawLine(
+            new Point3d(x0, y0, _groundZ.Value),
+            new Point3d(x1, y1, _groundZ.Value),
+            pen.Color,
+            ForskTechnical.Px(pen.Mm));
     }
 
     static string StoredSignature()
@@ -176,8 +194,11 @@ internal static class ForskTechnicalHost
         if (doc == null) return;
         if (doc.RuntimeSerialNumber != _docSerial)
         {
+            RestorePlanLayers(_bound);
+            _bound = doc;
             _docSerial = doc.RuntimeSerialNumber;
             Cache.Reset();
+            ForgetDrawn();
             _profileDirty = true;
         }
         if (!_profileDirty) return;
@@ -197,6 +218,7 @@ internal static class ForskTechnicalHost
             Sync(doc);
             var redraw = Retune(doc);
             if (AnyTechnical(doc)) redraw |= Refresh(doc);
+            redraw |= SyncPlanLayers(doc);
             if (redraw) doc.Views.Redraw();
         }
         catch (Exception ex)
@@ -244,6 +266,7 @@ internal static class ForskTechnicalHost
     static bool Refresh(RhinoDoc doc)
     {
         var version = Cache.Version;
+        var cutsStale = Cache.AllDirty || Cache.GroundDirty;
         if (Cache.AllDirty)
         {
             Cache.BeginAll();
@@ -265,8 +288,169 @@ internal static class ForskTechnicalHost
             }
         }
         var changed = Cache.Version != version;
+        if (cutsStale) changed |= RebuildCuts(doc);
         if (Cache.GroundDirty) changed |= Ground(doc);
+        RememberPlan();
         return changed;
+    }
+
+    /// <summary>Wall sections at the plan cut, once. The display mode does not build these while panning.</summary>
+    static bool RebuildCuts(RhinoDoc doc)
+    {
+        var strokes = new List<ForskTechnical.Stroke>();
+        var plane = new Plane(new Point3d(0, 0, _cutZ), Vector3d.ZAxis);
+        var tol = doc.ModelAbsoluteTolerance;
+        if (tol < 1) tol = 1;
+        var z = _cutZ - ForskTechnical.BelowCutMm;
+        foreach (var obj in ForskPlanCutHost.Listed(doc))
+        {
+            if (!string.Equals(obj?.Attributes?.GetUserString("forsk:kind"), "wall", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var brep = AsBrep(obj.Geometry);
+            if (brep == null) continue;
+            Curve[] curves;
+            try { curves = Brep.CreateContourCurves(brep, plane); }
+            catch (Exception) { continue; }
+            if (curves == null) continue;
+            foreach (var curve in curves) AddCurve(strokes, curve, z, tol);
+        }
+        _cuts = new ForskTechnicalLinework(strokes);
+        return true;
+    }
+
+    static void AddCurve(List<ForskTechnical.Stroke> strokes, Curve curve, double z, double tol)
+    {
+        if (curve == null || !curve.IsValid) return;
+        Polyline poly;
+        double[] xy;
+        if (curve.TryGetPolyline(out poly) && poly.Count >= 2)
+        {
+            xy = new double[poly.Count * 2];
+            for (var i = 0; i < poly.Count; i++)
+            {
+                xy[i * 2] = poly[i].X;
+                xy[i * 2 + 1] = poly[i].Y;
+            }
+        }
+        else
+        {
+            double length;
+            try { length = curve.GetLength(); }
+            catch (Exception) { return; }
+            if (length < tol) return;
+            var n = (int)Math.Ceiling(length / 20.0);
+            if (n < 1) n = 1;
+            if (n > 64) n = 64;
+            var parameters = curve.DivideByCount(n, true);
+            if (parameters == null || parameters.Length < 2) return;
+            xy = new double[parameters.Length * 2];
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                var point = curve.PointAt(parameters[i]);
+                xy[i * 2] = point.X;
+                xy[i * 2 + 1] = point.Y;
+            }
+        }
+        ForskTechnical.AddContour(strokes, xy, z, _profile);
+    }
+
+    static Brep AsBrep(GeometryBase geometry)
+    {
+        var brep = geometry as Brep;
+        if (brep != null) return brep;
+        var extrusion = geometry as Extrusion;
+        return extrusion == null ? null : extrusion.ToBrep(false);
+    }
+
+    /// <summary>
+    /// A plan view hides A-OPEN and A-STAIR. The pipeline skips those objects.
+    /// Other views, and Technical off, put the layers back.
+    /// </summary>
+    static bool SyncPlanLayers(RhinoDoc doc)
+    {
+        var want = new HashSet<Guid>();
+        if (Enabled() && ForskWhiteHost.Enabled())
+        {
+            foreach (var view in doc.Views)
+            {
+                if (view == null || view is RhinoPageView) continue;
+                var viewport = view.MainViewport;
+                if (viewport == null || !IsTechnical(viewport)) continue;
+                if (LookOf(viewport) != ForskTechnical.Look.Plan) continue;
+                if (!ForskPlanCut.IsTopName(viewport.Name)) continue;
+                want.Add(viewport.Id);
+            }
+        }
+        if (want.SetEquals(PlanHidden)) return false;
+        var changed = false;
+        var layers = new List<Layer>(doc.Layers.Count);
+        foreach (var layer in doc.Layers) layers.Add(layer);
+        foreach (var layer in layers)
+        {
+            if (layer == null || !ForskTechnical.HidesInPlan(layer.FullPath)) continue;
+            var touched = false;
+            foreach (var id in want)
+            {
+                if (PlanHidden.Contains(id) || !layer.PerViewportIsVisible(id)) continue;
+                layer.SetPerViewportVisible(id, false);
+                touched = true;
+            }
+            foreach (var id in PlanHidden)
+            {
+                if (want.Contains(id)) continue;
+                layer.DeletePerViewportVisible(id);
+                touched = true;
+            }
+            if (!touched) continue;
+            doc.Layers.Modify(layer, layer.Index, true);
+            changed = true;
+        }
+        PlanHidden.Clear();
+        foreach (var id in want) PlanHidden.Add(id);
+        return changed;
+    }
+
+    static void RestorePlanLayers(RhinoDoc doc)
+    {
+        if (doc != null && PlanHidden.Count > 0)
+        {
+            var layers = new List<Layer>(doc.Layers.Count);
+            foreach (var layer in doc.Layers) layers.Add(layer);
+            foreach (var layer in layers)
+            {
+                if (layer == null || !ForskTechnical.HidesInPlan(layer.FullPath)) continue;
+                foreach (var id in PlanHidden) layer.DeletePerViewportVisible(id);
+                doc.Layers.Modify(layer, layer.Index, true);
+            }
+        }
+        PlanHidden.Clear();
+    }
+
+    static void RememberPlan()
+    {
+        if (_planDrawnVersion == Cache.Version) return;
+        var drawn = new ForskTechnicalLinework[Cache.Count];
+        var i = 0;
+        foreach (var item in Cache.Values)
+        {
+            if (i >= drawn.Length) break;
+            drawn[i++] = item;
+        }
+        if (i != drawn.Length)
+        {
+            var trimmed = new ForskTechnicalLinework[i];
+            Array.Copy(drawn, trimmed, i);
+            drawn = trimmed;
+        }
+        _planDrawn = drawn;
+        _planDrawnVersion = Cache.Version;
+    }
+
+    static void ForgetDrawn()
+    {
+        _cuts = EmptyLines;
+        _planDrawn = new ForskTechnicalLinework[0];
+        _planDrawnVersion = -1;
     }
 
     static void Build(RhinoDoc doc, RhinoObject obj)
@@ -383,31 +567,11 @@ internal sealed class ForskTechnicalLinework
 
 sealed class ForskTechnicalConduit : DisplayConduit
 {
-    bool _plan;
-
     public ForskTechnicalConduit()
     {
         SpaceFilter = ActiveSpace.ModelSpace;
-    }
-
-    protected override void PreDrawObjects(DrawEventArgs args)
-    {
-        try
-        {
-            _plan = ForskTechnicalHost.Current(args?.RhinoDoc)
-                && ForskTechnicalHost.IsTechnical(args.Viewport)
-                && ForskTechnicalHost.LookOf(args.Viewport) == ForskTechnical.Look.Plan;
-        }
-        catch (Exception ex)
-        {
-            _plan = false;
-            ForskTechnicalHost.Report(ex.Message);
-        }
-    }
-
-    protected override void PreDrawObject(DrawObjectEventArgs args)
-    {
-        if (_plan && ForskTechnicalHost.Hides(args?.RhinoObject)) args.DrawObject = false;
+        // No per-object callback. Symbols and the cached cut are drawn after the view.
+        GeometryFilter = ObjectType.None;
     }
 
     protected override void DrawForeground(DrawEventArgs args)
@@ -419,15 +583,9 @@ sealed class ForskTechnicalConduit : DisplayConduit
             if (display == null || !ForskTechnicalHost.Current(args.RhinoDoc) || !ForskTechnicalHost.IsTechnical(viewport)) return;
             var look = ForskTechnicalHost.LookOf(viewport);
             if (look == ForskTechnical.Look.Plan)
-            {
-                foreach (var linework in ForskTechnicalHost.Plan) linework.Draw(display);
-            }
+                ForskTechnicalHost.DrawPlan(display);
             else if (look == ForskTechnical.Look.Elevation)
-            {
-                var ground = ForskTechnicalHost.Ground(viewport);
-                if (ground != null)
-                    display.DrawLine(new Point3d(ground.X0, ground.Y0, ground.Z), new Point3d(ground.X1, ground.Y1, ground.Z), ground.Ink, ground.Px);
-            }
+                ForskTechnicalHost.DrawElevation(display, viewport);
         }
         catch (Exception ex)
         {

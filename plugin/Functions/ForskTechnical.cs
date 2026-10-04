@@ -12,7 +12,8 @@ namespace RhinoMCPPlugin.Functions;
 /// cap. The door and window symbols, the stair and the elevation ground line
 /// are drawn over it from the pieces the plan and facade sheets print
 /// (ForskTechnicalHost). Pens come from the document's print profile, so
-/// screen and paper agree.
+/// screen and paper agree. The heavy cut outline is cached curves, rebuilt
+/// when the document changes. The display mode does not section every frame.
 /// </summary>
 public static class ForskTechnical
 {
@@ -21,7 +22,8 @@ public static class ForskTechnical
     public const string SettingKey = "ForskTechnical";
     /// <summary>Plugin setting that holds <see cref="Signature"/> of the last import.</summary>
     public const string SignatureKey = "ForskTechnicalSignature";
-    public const int ModeRevision = 2;
+    /// <summary>3 turns live clipping-section curves off. 2 is the wireframe parent.</summary>
+    public const int ModeRevision = 3;
     /// <summary>The paper weight one screen pixel stands for: the default beyond pen.</summary>
     public const double MmPerPx = 0.18;
     public const int MaxPx = 6;
@@ -155,7 +157,7 @@ public static class ForskTechnical
             ForskWhite.Bool("View settings", "DrawZAxis", false),
             ForskWhite.Bool("View settings", "ShowClippingPlanes", false),
             ForskWhite.Bool("View settings", "ClippingShowXSurface", false),
-            ForskWhite.Bool("View settings", "ClippingShowXEdges", true),
+            ForskWhite.Bool("View settings", "ClippingShowXEdges", false),
             ForskWhite.Int("View settings", "ClippingSurfaceUsage", ForskWhite.ClipFillUsage),
             ForskWhite.Int("View settings", "ClippingEdgesUsage", ForskWhite.ClipEdgeUsage),
             ForskWhite.Rgb("View settings", "ClippingSurfaceColor", poche.R, poche.G, poche.B),
@@ -337,36 +339,102 @@ public static class ForskTechnical
     public static Stroke GroundLine(double minX, double minY, double maxX, double maxY, double? groundZ,
         double rightX, double rightY, PrintProfile profile)
     {
-        if (!groundZ.HasValue || maxX < minX || maxY < minY) return null;
-        var length = Math.Sqrt(rightX * rightX + rightY * rightY);
-        if (!(length > 1e-9)) return null;
-        var rx = rightX / length;
-        var ry = rightY / length;
-        var lo = double.PositiveInfinity;
-        var hi = double.NegativeInfinity;
-        foreach (var x in new[] { minX, maxX })
-        foreach (var y in new[] { minY, maxY })
-        {
-            var along = x * rx + y * ry;
-            lo = Math.Min(lo, along);
-            hi = Math.Max(hi, along);
-        }
-        var (from, to) = Sections.FacadeGround(lo, hi);
-        var cx = (minX + maxX) / 2.0;
-        var cy = (minY + maxY) / 2.0;
-        var mid = cx * rx + cy * ry;
+        if (!GroundEnds(minX, minY, maxX, maxY, groundZ, rightX, rightY, out var x0, out var y0, out var x1, out var y1))
+            return null;
         var pen = PenFor("ground_line", null, profile);
         return new Stroke
         {
             Shape = "line",
             Role = "ground_line",
-            X0 = cx + rx * (from - mid),
-            Y0 = cy + ry * (from - mid),
-            X1 = cx + rx * (to - mid),
-            Y1 = cy + ry * (to - mid),
+            X0 = x0,
+            Y0 = y0,
+            X1 = x1,
+            Y1 = y1,
             Z = groundZ.Value,
             Mm = pen.Mm,
             Ink = pen.Color
         };
+    }
+
+    /// <summary>The ground line's ends, with no allocation. False without a ground or a sideways view.</summary>
+    public static bool GroundEnds(double minX, double minY, double maxX, double maxY, double? groundZ,
+        double rightX, double rightY, out double x0, out double y0, out double x1, out double y1)
+    {
+        x0 = y0 = x1 = y1 = 0;
+        if (!groundZ.HasValue || maxX < minX || maxY < minY) return false;
+        var length = Math.Sqrt(rightX * rightX + rightY * rightY);
+        if (!(length > 1e-9)) return false;
+        var rx = rightX / length;
+        var ry = rightY / length;
+        var lo = double.PositiveInfinity;
+        var hi = double.NegativeInfinity;
+        Along(minX, minY);
+        Along(maxX, minY);
+        Along(minX, maxY);
+        Along(maxX, maxY);
+        var span = Sections.FacadeGround(lo, hi);
+        var cx = (minX + maxX) / 2.0;
+        var cy = (minY + maxY) / 2.0;
+        var mid = cx * rx + cy * ry;
+        x0 = cx + rx * (span.X0 - mid);
+        y0 = cy + ry * (span.X0 - mid);
+        x1 = cx + rx * (span.X1 - mid);
+        y1 = cy + ry * (span.X1 - mid);
+        return true;
+
+        void Along(double x, double y)
+        {
+            var along = x * rx + y * ry;
+            if (along < lo) lo = along;
+            if (along > hi) hi = along;
+        }
+    }
+
+    /// <summary>
+    /// One cached cut outline, from a polyline stored as x, y, x, y.
+    /// A segment shorter than half a millimetre is dropped. The pen is the cut pen.
+    /// </summary>
+    public static void AddContour(List<Stroke> into, IReadOnlyList<double> xy, double z, PrintProfile profile)
+    {
+        if (into == null || xy == null || xy.Count < 4) return;
+        var pen = PenFor("cut", null, profile);
+        for (var i = 0; i + 3 < xy.Count; i += 2)
+        {
+            var x0 = xy[i];
+            var y0 = xy[i + 1];
+            var x1 = xy[i + 2];
+            var y1 = xy[i + 3];
+            var dx = x1 - x0;
+            var dy = y1 - y0;
+            if (dx * dx + dy * dy < 0.25) continue;
+            into.Add(new Stroke
+            {
+                Shape = "line",
+                Role = "cut",
+                X0 = x0,
+                Y0 = y0,
+                X1 = x1,
+                Y1 = y1,
+                Z = z,
+                Mm = pen.Mm,
+                Ink = pen.Color
+            });
+        }
+    }
+
+    /// <summary>
+    /// Opening blocks and stairs stay off a plan: their symbols stand in.
+    /// <paramref name="fullPath"/> is the layer's full path. A-WALL is not included.
+    /// </summary>
+    public static bool HidesInPlan(string fullPath)
+    {
+        if (string.IsNullOrEmpty(fullPath)) return false;
+        return IsPlanLayer(fullPath, "A-OPEN") || IsPlanLayer(fullPath, "A-STAIR");
+    }
+
+    static bool IsPlanLayer(string path, string name)
+    {
+        return path.Equals(name, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(name + "::", StringComparison.OrdinalIgnoreCase);
     }
 }

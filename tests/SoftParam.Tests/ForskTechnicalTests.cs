@@ -94,7 +94,7 @@ public class ForskTechnicalTests
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "DrawGrid"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ShowClippingPlanes"));
         Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ClippingShowXSurface"));
-        Assert.Equal("y", ForskWhite.Read(ini, "View settings", "ClippingShowXEdges"));
+        Assert.Equal("n", ForskWhite.Read(ini, "View settings", "ClippingShowXEdges"));
         Assert.Equal("1", ForskWhite.Read(ini, "View settings", "ClippingEdgesUsage"));
         Assert.Equal("0,0,0", ForskWhite.Read(ini, "View settings", "ClippingEdgeColor"));
         Assert.Equal("3", ForskWhite.Read(ini, "View settings", "ClippingEdgeThickness"));
@@ -125,10 +125,11 @@ public class ForskTechnicalTests
         Assert.Equal("n", ForskWhite.Read(hatch, "View settings", "ClippingShowXSurface"));
         Assert.Equal("2", ForskWhite.Read(hatch, "View settings", "ClippingEdgeThickness"));
 
-        Assert.Equal("2:default", ForskTechnical.Signature(PrintProfiles.Default));
-        Assert.False(ForskTechnical.NeedsReimport("2:default", PrintProfiles.Default));
+        Assert.Equal("3:default", ForskTechnical.Signature(PrintProfiles.Default));
+        Assert.False(ForskTechnical.NeedsReimport("3:default", PrintProfiles.Default));
+        Assert.True(ForskTechnical.NeedsReimport("2:default", PrintProfiles.Default));
         Assert.True(ForskTechnical.NeedsReimport("1:default", PrintProfiles.Default));
-        Assert.True(ForskTechnical.NeedsReimport("2:default", PrintProfiles.Grey));
+        Assert.True(ForskTechnical.NeedsReimport("3:default", PrintProfiles.Grey));
         Assert.True(ForskTechnical.NeedsReimport(null, PrintProfiles.Default));
     }
 
@@ -286,6 +287,48 @@ public class ForskTechnicalTests
     }
 
     [Fact]
+    public void A_wall_contour_is_cached_cut_lines_and_a_speck_is_dropped()
+    {
+        var strokes = new List<ForskTechnical.Stroke>();
+        ForskTechnical.AddContour(strokes, new double[] { 0, 0, 1000, 0, 1000, 200, 0, 200, 0, 0, 0.1, 0 }, 1190, PrintProfiles.Default);
+        Assert.Equal(4, strokes.Count);
+        Assert.Equal(1000, strokes[0].X1, 6);
+        Assert.Equal(0, strokes[0].Y1, 6);
+        Assert.Equal(200, strokes[1].Y1, 6);
+        foreach (var stroke in strokes)
+        {
+            Assert.Equal("line", stroke.Shape);
+            Assert.Equal("cut", stroke.Role);
+            Assert.Equal(PrintProfiles.Default.Cut.Mm, stroke.Mm);
+            Assert.Equal(1190, stroke.Z);
+        }
+
+        Assert.True(ForskTechnical.HidesInPlan("A-OPEN"));
+        Assert.True(ForskTechnical.HidesInPlan("a-open::Block"));
+        Assert.True(ForskTechnical.HidesInPlan("A-STAIR"));
+        Assert.True(ForskTechnical.HidesInPlan("A-STAIR::Flight"));
+        Assert.False(ForskTechnical.HidesInPlan("A-WALL"));
+        Assert.False(ForskTechnical.HidesInPlan("A-OPENING"));
+        Assert.False(ForskTechnical.HidesInPlan(null));
+    }
+
+    [Fact]
+    public void The_plan_draw_does_not_visit_every_object_or_section_every_frame()
+    {
+        var host = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "ForskTechnicalHost.cs"));
+        Assert.DoesNotContain("PreDrawObject", host, StringComparison.Ordinal);
+        Assert.Contains("GeometryFilter = ObjectType.None", host, StringComparison.Ordinal);
+        Assert.Contains("Brep.CreateContourCurves", host, StringComparison.Ordinal);
+        Assert.Contains("ForskTechnical.AddContour", host, StringComparison.Ordinal);
+        Assert.Contains("ForskTechnical.GroundEnds", host, StringComparison.Ordinal);
+        var start = host.IndexOf("internal static void DrawPlan", StringComparison.Ordinal);
+        var end = host.IndexOf("static string StoredSignature", StringComparison.Ordinal);
+        var draw = host.Substring(start, end - start);
+        Assert.DoesNotContain("CreateContourCurves", draw, StringComparison.Ordinal);
+        Assert.DoesNotContain("new List", draw, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_print_bake_and_the_screen_share_one_pen_rule()
     {
         Assert.Equal(PrintProfiles.Default.Cut.Mm, ForskTechnical.PenFor("cut", null, PrintProfiles.Default).Mm);
@@ -307,7 +350,7 @@ public class ForskTechnicalTests
         Assert.Equal(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
         var ini = Patched(PrintProfiles.Hatched);
         Assert.Equal("2", ForskWhite.Read(ini, "View settings", "ClippingEdgeThickness"));
-        Assert.Equal("2:hatch", ForskTechnical.Signature(PrintProfiles.Hatched));
+        Assert.Equal("3:hatch", ForskTechnical.Signature(PrintProfiles.Hatched));
         Assert.Equal(2, ForskTechnical.Px(0.35));
     }
 
