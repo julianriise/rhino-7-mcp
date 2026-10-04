@@ -371,6 +371,7 @@
 
   function receipt(item) {
     var row = el('div', 'receipt');
+    if (item.id) row.setAttribute('data-item', item.id);
     var mark = item.ok === false ? ['cross', '✗'] : item.ok === true ? ['tick', '✓'] : ['tick', '–'];
     row.appendChild(el('span', mark[0], mark[1]));
     var parts = Forsk.splitSubject(item.text, item.subject);
@@ -815,6 +816,36 @@
     renderSettings(model);
     renderSheet(model.help);
     applyPrefill(model.prefill);
+    showHover();
+  };
+
+  /*
+   * The viewport's hover, answered here: C# sends the thread items that name
+   * the element under the pointer (ids, empty to clear). The ids stay, so a
+   * render that redraws the thread lights the same rows again.
+   */
+  Forsk.hoverStyle = 'hl';
+
+  var hovered = [];
+
+  function showHover(reveal) {
+    var thread = document.getElementById('thread');
+    if (!thread) return;
+    var lit = thread.querySelectorAll('.' + Forsk.hoverStyle);
+    for (var i = 0; i < lit.length; i++) lit[i].classList.remove(Forsk.hoverStyle);
+    var first = null;
+    for (var j = 0; j < hovered.length; j++) {
+      var row = thread.querySelector('[data-item="' + String(hovered[j]).replace(/[^A-Za-z0-9_-]/g, '') + '"]');
+      if (!row) continue;
+      row.classList.add(Forsk.hoverStyle);
+      if (!first) first = row;
+    }
+    if (reveal && first && first.scrollIntoView) first.scrollIntoView({ block: 'nearest' });
+  }
+
+  Forsk.hover = function (ids) {
+    hovered = ids || [];
+    showHover(true);
   };
 
   Forsk.focus = function () {
