@@ -17,6 +17,15 @@ namespace RhinoMCPPlugin.Forsk
     {
         static readonly Regex ForskId = new Regex(@"\b(w\d{2,}|[DV]\d{2,}|rd-\d{2,})\b", RegexOptions.CultureInvariant);
 
+        /// <summary>Every Forsk id a text names, once each, in the order it names them.</summary>
+        public static IEnumerable<string> IdsIn(string text)
+        {
+            if (string.IsNullOrEmpty(text)) yield break;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Match match in ForskId.Matches(text))
+                if (seen.Add(match.Value)) yield return match.Value;
+        }
+
         /// <summary>True done, false failed, null skipped or cancelled.</summary>
         public bool? Ok;
         public string Subject;

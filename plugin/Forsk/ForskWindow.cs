@@ -45,6 +45,8 @@ namespace RhinoMCPPlugin.Forsk
         readonly WebView _web;
         readonly PageChannel _channel;
         readonly UITimer _boundsTimer;
+        readonly ForskHoverLink _link = new ForskHoverLink();
+        readonly ForskViewHover _viewHover;
         bool _ready;
         /// <summary>A leave arrived with the button down. Idle hands focus back once the drag ends outside.</summary>
         bool _hoverLeave;
@@ -81,6 +83,7 @@ namespace RhinoMCPPlugin.Forsk
             _channel = new PageChannel(message => Application.Instance.AsyncInvoke(() => OnAction(message)));
             _channel.Note = Log;
             _channel.Start();
+            _viewHover = new ForskViewHover(HoverOn, ViewHovered) { Enabled = true };
             _web.DocumentLoaded += (s, e) => Log("page document loaded · " + (_web.Url == null ? "no url" : _web.Url.ToString()));
             _boundsTimer = new UITimer { Interval = 0.5 };
             _boundsTimer.Elapsed += (s, e) =>
@@ -94,6 +97,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 _boundsTimer.Stop();
                 SaveBounds();
+                _viewHover.Stop();
                 _channel.Dispose();
                 Log("closed");
             };
@@ -223,6 +227,7 @@ namespace RhinoMCPPlugin.Forsk
             var count = model["thread"] is JArray items ? items.Count : 0;
             Log("render · " + count + " items");
             Script("Forsk.render", model);
+            ShowHover(_link.Rebuild(thread?.Items));
             if (thread != null) thread.Prefill = null;
         }
 
@@ -394,6 +399,7 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         void OnHover(string edge, bool typing, bool dragging)
         {
+            if (edge == "enter") ClearViewHover();
             if (Mouse.Buttons != MouseButtons.None) dragging = true;
             var decision = ForskHover.Decide(HoverOn(), edge, typing, dragging);
             if (decision == ForskHover.None)
