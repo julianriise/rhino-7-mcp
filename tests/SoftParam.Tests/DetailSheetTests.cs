@@ -41,9 +41,16 @@ public class DetailSheetTests
         Assert.Equal(new[] { 15.0, 160.0, 305.0 }, door.Select(p => p.X));
         Assert.Equal(370, Right(door[2], 20), 6);
         Assert.Equal(232, door.Max(p => DetailSheet.BoxHeight(p.Drawing, 20)), 6);
-        // One row, its boxes' tops on the area's top.
-        Assert.All(door, p => Assert.Equal(Details.AreaHeightMm,
-            p.Y - Details.TitleBandMm - Details.BandMm + DetailSheet.BoxHeight(p.Drawing, 20), 6));
+        // One row at 1:20. Each view, the plan included, is centred on the tallest.
+        Assert.Equal(20, sheets[1].Scale);
+        Assert.Equal(Details.Plan, door[0].Drawing.View);
+        double Mid(Details.Placed p)
+        {
+            var h = DetailSheet.BoxHeight(p.Drawing, 20);
+            return p.Y - Details.TitleBandMm - Details.BandMm + h / 2.0;
+        }
+        var mid = Mid(door.OrderByDescending(p => DetailSheet.BoxHeight(p.Drawing, 20)).First());
+        Assert.All(door, p => Assert.Equal(mid, Mid(p), 6));
     }
 
     [Fact]

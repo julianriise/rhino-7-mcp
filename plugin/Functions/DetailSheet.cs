@@ -11,8 +11,10 @@ namespace RhinoMCPPlugin.Functions;
 /// and shelf-packed into the 400 × 254 detail area, a detail's drawings
 /// together in one row (plan, elevation, section), the next sheet of that
 /// scale when one is full. Each box is the drawing, its 15 mm band on every
-/// side and its 12 mm title band below. Deterministic from the record order.
-/// Once a sheet is drawn, what it drew is centred in the area (Centre).
+/// side and its 12 mm title band below. A row's boxes share a vertical
+/// centre, so a short plan sits with the tallest view. Deterministic from
+/// the record order. Once a sheet is drawn, what it drew is centred in the
+/// area (Centre), one move, so the export's lines move with it.
 /// Pure, no RhinoCommon.
 /// </summary>
 public static class DetailSheet
@@ -62,17 +64,34 @@ public static class DetailSheet
         {
             Sheet sheet = null;
             double used = 0, x = 0, shelf = 0;
+            var shelfFrom = 0;
+            // A shelf is top-aligned as it fills. When it closes, each box drops
+            // so its middle matches the tallest. The group centre later moves
+            // the whole sheet by one dx,dy, which the DWG reads back.
+            void CentreShelf()
+            {
+                if (sheet == null || shelf <= 0) return;
+                for (var i = shelfFrom; i < sheet.Drawings.Count; i++)
+                {
+                    var placed = sheet.Drawings[i];
+                    placed.Y += (BoxHeight(placed.Drawing, sheet.Scale) - shelf) / 2.0;
+                }
+            }
             void NewSheet()
             {
+                CentreShelf();
                 sheet = new Sheet { Scale = scale, N = sheets.Count(s => s.Scale == scale) + 1 };
                 sheet.Id = Details.SheetId(scale, sheet.N);
                 sheets.Add(sheet);
                 used = x = shelf = 0;
+                shelfFrom = 0;
             }
             void NewShelf()
             {
+                CentreShelf();
                 used += shelf + GapMm;
                 x = shelf = 0;
+                shelfFrom = sheet.Drawings.Count;
             }
             foreach (var item in list.Where(i => i.Scale == scale))
             {
@@ -97,6 +116,7 @@ public static class DetailSheet
                     x += w + GapMm;
                 }
             }
+            CentreShelf();
         }
         return sheets;
     }
