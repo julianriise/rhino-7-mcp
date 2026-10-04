@@ -162,6 +162,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.move", Runs.Prefill, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
+            // Draw tools: click the walls or the stair in the Top view.
+            new ForskAction("wall.draw", Runs.Run, "group.model", f => true),
             new ForskAction("exist.mark", Runs.Run, "group.model", f => f.Picked == Picked.Loose),
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),
             // R5: a stair. Nothing picked: two points in the view. One wall picked: along it.
@@ -287,6 +289,21 @@ namespace RhinoMCPPlugin.Forsk
             if (f.ReviewStored && !f.HasWalls) yield return Find("file.check");
             if (!f.HasWalls) yield return Find("file.draw");
             if (f.Picked == Picked.Loose) yield return Find("exist.mark");
+        }
+
+        /// <summary>"draw a wall", "draw walls": the draw tools by name, wherever they sit on the bar.</summary>
+        public static ForskAction ByDrawPhrase(string text)
+        {
+            var typed = string.Join(" ", (text ?? "").Trim().TrimEnd('.', '!').ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+            switch (typed)
+            {
+                case "draw wall":
+                case "draw walls":
+                case "draw a wall":
+                    return Find("wall.draw");
+                default:
+                    return null;
+            }
         }
 
         /// <summary>

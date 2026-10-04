@@ -234,6 +234,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.drag":
                     DragWall(thread);
                     return;
+                case "wall.draw":
+                    DrawPick(thread, label, "wall.draw", "prompt.wall", "add_wall", ForskDrawWall.RunOnUi);
+                    return;
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;
@@ -445,8 +448,8 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             if (thread == null || doc == null || string.IsNullOrWhiteSpace(text)) return;
             text = text.Trim();
-            // A slot's exact English label fires that slot.
-            var hit = ForskRegistry.ByLabel(Drawn(doc), text);
+            // A slot's exact English label fires that slot; so does "draw a wall".
+            var hit = ForskRegistry.ByLabel(Drawn(doc), text) ?? ForskRegistry.ByDrawPhrase(text);
             if (hit != null)
             {
                 Fire(hit.Id, false);
@@ -1104,11 +1107,17 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>R5: the foot of the stair, then the way up, in the view; add_stair in one record. Esc adds nothing.</summary>
         void StairPick(DocThread thread, string userText)
         {
+            DrawPick(thread, userText, "stair.add", "prompt.stair", "add_stair", ForskStair.RunOnUi);
+        }
+
+        /// <summary>A draw tool: its prompt, the points in the view, then the tool calls in one undo record. Esc adds nothing.</summary>
+        void DrawPick(DocThread thread, string userText, string actionId, string promptKey, string tool, Func<bool, JObject> run)
+        {
             if (Refuse(thread)) return;
             var doc = RhinoDoc.ActiveDoc;
             thread.Add("user", userText);
-            thread.BeginReply(ForskRoles.MarkForAction("stair.add"));
-            thread.Add("line", ForskText.Get("prompt.stair"));
+            thread.BeginReply(ForskRoles.MarkForAction(actionId));
+            thread.Add("line", ForskText.Get(promptKey));
             Render();
             HandToRhino();
             _busy = true;
@@ -1116,15 +1125,15 @@ namespace RhinoMCPPlugin.Forsk
             JObject envelope;
             try
             {
-                envelope = ForskStair.RunOnUi(true);
+                envelope = run(true);
             }
             finally
             {
                 _busy = false;
             }
-            thread.Add(ForskReceipt.From("add_stair", envelope));
-            // ForskStair kept its own single record.
-            Finish(thread, "stair.add", null, doc?.RuntimeSerialNumber ?? 0, null, userText);
+            thread.Add(ForskReceipt.From(tool, envelope));
+            // The tool kept its own single record.
+            Finish(thread, actionId, null, doc?.RuntimeSerialNumber ?? 0, null, userText);
             TakeKeyboard();
         }
 

@@ -78,6 +78,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.split":
                 case "wall.move":
                 case "wall.drag":
+                case "wall.draw":
                 case "wall.delete":
                 case "room.push_pull":
                 case "exist.mark":

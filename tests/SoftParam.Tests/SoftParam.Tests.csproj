@@ -48,6 +48,8 @@
     <Compile Include="..\..\plugin\Forsk\FieldInk.cs" Link="FieldInk.cs" />
     <Compile Include="..\..\plugin\Functions\WallEdit.cs" Link="WallEdit.cs" />
     <Compile Include="..\..\plugin\Functions\WallDrag.cs" Link="WallDrag.cs" />
+    <Compile Include="..\..\plugin\Functions\WallDraw.cs" Link="WallDraw.cs" />
+    <Compile Include="..\..\plugin\Functions\WallSketch.cs" Link="WallSketch.cs" />
     <Compile Include="..\..\plugin\Functions\WallJoins.cs" Link="WallJoins.cs" />
     <Compile Include="..\..\plugin\Functions\WallSplit.cs" Link="WallSplit.cs" />
     <Compile Include="..\..\plugin\Functions\WallFollowPlan.cs" Link="WallFollowPlan.cs" />

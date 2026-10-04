@@ -62,6 +62,20 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>Draw walls in Top by clicking their corners. One add_wall per segment, one undo record.</summary>
+    public class ForskDrawWallCommand : Command
+    {
+        public override string EnglishName => ForskDrawWall.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            var envelope = ForskDrawWall.RunOnUi(true);
+            var ok = string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
+            RhinoApp.WriteLine(ok ? envelope["result"]?["message"]?.ToString() : envelope?["message"]?.ToString());
+            return ok ? Result.Success : Result.Cancel;
+        }
+    }
+
     /// <summary>Drag a cross-section line in Top, name it, store it with section_add.</summary>
     public class ForskSectionCommand : Command
     {

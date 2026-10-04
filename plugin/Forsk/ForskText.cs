@@ -113,6 +113,7 @@ namespace RhinoMCPPlugin.Forsk
             ["wall.delete.ask"] = "Which wall run goes? A click selects the whole wall record.",
             ["wall.delete.inner"] = "For an inner wall, say it: “delete the wall at 4000, 2500”.",
             ["exist.mark"] = "Treat this as the existing house?",
+            ["wall.draw"] = "Draw wall",
             ["stair.add"] = "Add stair",
             ["stair.edit"] = "Edit stair",
             ["stair.delete"] = "Delete stair",
@@ -253,6 +254,7 @@ namespace RhinoMCPPlugin.Forsk
             ["prompt.scale.set"] = "Set scale",
             ["prompt.section"] = "Pick the start of the section in the viewport, then its end. Esc cancels.",
             ["prompt.stair"] = "Pick the foot of the stair in the viewport, then the way up. Esc cancels.",
+            ["prompt.wall"] = "Click the corners of the walls in the plan. Type a length and Enter, C closes, Enter finishes, Esc steps back. Shift turns the angle snap off.",
             ["prompt.draw"] = "Draw the wall in the viewport, on the wall layer. Enter finishes, Esc cancels.",
 
             // Lines in the thread.
