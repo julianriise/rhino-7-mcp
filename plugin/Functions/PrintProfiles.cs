@@ -219,6 +219,36 @@ public static class PrintProfiles
         return profile.PocheSpacingMm * Math.Max(sheetScale, 1) / HatchLineSpacingAtScaleOne;
     }
 
+    /// <summary>The finest scale denominator drawn with the plan's pens. Finer, a detail's lines are heavier.</summary>
+    public const int DetailPenScale = 20;
+
+    /// <summary>
+    /// The profile at 1:<paramref name="scale"/>. At 1:20 and finer the cut is
+    /// at least 0.70, the silhouette 0.50 and what lies beyond 0.25, so a
+    /// detail reads heavier than the plan. Thin lines, dimensions and text
+    /// stay as they are: annotation does not scale. Coarser, the profile.
+    /// </summary>
+    public static PrintProfile AtScale(PrintProfile profile, int scale)
+    {
+        profile = profile ?? Default;
+        if (scale < 1 || scale > DetailPenScale) return profile;
+        PrintPen AtLeast(PrintPen pen, double mm) => new PrintPen(Math.Max(pen.Mm, mm), pen.Color);
+        return new PrintProfile
+        {
+            Name = profile.Name,
+            Label = profile.Label,
+            Cut = AtLeast(profile.Cut, 0.70),
+            Silhouette = AtLeast(profile.Silhouette, 0.50),
+            Beyond = AtLeast(profile.Beyond, 0.25),
+            Thin = profile.Thin,
+            Dashed = profile.Dashed,
+            Text = profile.Text,
+            Poche = profile.Poche,
+            PochePattern = profile.PochePattern,
+            PocheSpacingMm = profile.PocheSpacingMm
+        };
+    }
+
     /// <summary>"r,g,b" the way the plugin logs colours.</summary>
     public static string Rgb(Color color)
     {

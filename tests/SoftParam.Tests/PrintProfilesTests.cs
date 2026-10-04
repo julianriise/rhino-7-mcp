@@ -180,4 +180,22 @@ public class PrintProfilesTests
     {
         Assert.Equal(intent, ForskIntentRouter.Classify(said));
     }
+
+    [Fact]
+    public void At_1_20_a_detail_draws_heavier_cuts_and_keeps_thin_lines()
+    {
+        var p = PrintProfiles.AtScale(PrintProfiles.Default, 20);
+        Assert.Equal(0.70, p.Cut.Mm);
+        Assert.Equal(0.50, p.Silhouette.Mm);
+        Assert.Equal(0.25, p.Beyond.Mm);
+        Assert.Equal(0.13, p.Thin.Mm);
+        Assert.Equal(PrintProfiles.Default.Name, p.Name);
+    }
+
+    [Fact]
+    public void At_1_50_the_profile_is_unchanged()
+    {
+        var p = PrintProfiles.AtScale(PrintProfiles.Default, 50);
+        Assert.Equal(new[] { 0.50, 0.35, 0.18, 0.13 }, new[] { p.Cut.Mm, p.Silhouette.Mm, p.Beyond.Mm, p.Thin.Mm });
+    }
 }

@@ -226,6 +226,47 @@ public static class PlanDims
         public int Collisions;
     }
 
+    /// <summary>
+    /// Fixed chains (a detail's) laid out as the plan lays its own, in drawing
+    /// mm at 1:s: no witness lines, row 1 from FirstMm off its face and each
+    /// further row FirstMm past the row before on the same face. A chain with
+    /// a reach (a thickness) crosses walls and slides along its reach either
+    /// way. What it placed joins taken.
+    /// </summary>
+    public static List<Chain> LayoutFixed(IEnumerable<FixedChain> chains, double s, List<Obstacle> taken,
+        List<List<List<Pt>>> walls, Func<string, double> measure)
+    {
+        var placed = new List<Chain>();
+        if (s <= 0) return placed;
+        taken = taken ?? new List<Obstacle>();
+        walls = walls ?? new List<List<List<Pt>>>();
+        var index = 0;
+        foreach (var f in (chains ?? Enumerable.Empty<FixedChain>()).OrderBy(c => c.Row))
+        {
+            var chain = NewChain(f.Kind, f.Kind, f.Origin, f.Dir, f.Out, index++);
+            chain.Id = f.Id ?? chain.Id;
+            chain.Witness = false;
+            chain.CrossesWalls = f.Reach > 0;
+            for (var i = 0; i < f.Stops.Count; i++)
+                AddStop(chain, f.Stops[i], i < f.StopIds.Count ? f.StopIds[i] : null);
+            List<double> offsets;
+            if (f.Reach > 0) offsets = BothWays(f.Reach, StepMm * s);
+            else
+            {
+                var first = FirstMm * s;
+                foreach (var before in placed.Where(p => p.Placed && SameFace(p, chain)))
+                    first = Math.Max(first, before.Offset + FirstMm * s);
+                offsets = Offsets(first, ReachMm * s, StepMm * s);
+            }
+            Place(chain, offsets, taken, walls, s, measure, false);
+            placed.Add(chain);
+        }
+        return placed;
+    }
+
+    static bool SameFace(Chain a, Chain b) =>
+        Math.Abs(Dot(Sub(a.Origin, b.Origin), a.Out)) < 1.0 && Dot(a.Out, b.Out) > 0.999 && Math.Abs(Dot(a.Dir, b.Dir)) > 0.999;
+
     public static Result Layout(Scene scene)
     {
         var result = new Result();

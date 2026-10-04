@@ -1326,6 +1326,9 @@ public partial class RhinoMCPFunctions
         public SectionStats Section;
         // v3 P4: the ground line and level marks on a facade. Null on the plan and sections.
         public FacadeStats Facade;
+        /// <summary>A detail sheet's drawings: number, title, view and detail id. Null on every other sheet.</summary>
+        public JArray Details;
+        public int DetailsDropped;
     }
 
     private struct WeightedCurve
@@ -1351,7 +1354,9 @@ public partial class RhinoMCPFunctions
             case "east": return "East";
             case "south": return "South";
             case "west": return "West";
-            default: return Sections.TryLetter(view, out var letter) ? Sections.LayerName(letter) : null;
+            default:
+                if (Details.TrySheetId(view, out var scale, out var n)) return Details.LayerName(scale, n);
+                return Sections.TryLetter(view, out var letter) ? Sections.LayerName(letter) : null;
         }
     }
 
@@ -1367,6 +1372,8 @@ public partial class RhinoMCPFunctions
             Box = BoundingBox.Empty,
             Error = null
         };
+        if (Details.TrySheetId(view, out var detailScale, out var detailSheet))
+            return BakeDetailSheet(doc, detailScale, detailSheet, includeExisting);
         // F5.4: every stroke, fill and rule of this pass is drawn in the document's print profile.
         PrintProfiles.Active = ReadPrintProfile(doc);
         Sections.Def section = null;

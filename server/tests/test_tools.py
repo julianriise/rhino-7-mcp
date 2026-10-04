@@ -4535,3 +4535,18 @@ class TestStairTools:
         mock_conn.send_command.assert_called_once_with("delete_stair", {})
         delete_stair(ctx=None, id="S02")
         mock_conn.send_command.assert_called_with("delete_stair", {"id": "S02"})
+
+
+class TestDetailSheets:
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_layout_pack_takes_a_detail_sheet(self, mock_get_conn):
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"pages": [], "count": 1, "scale": 100, "message": "ok"}
+        mock_get_conn.return_value = mock_conn
+
+        assert layout_pack(ctx=None, views=["detail_20_1"])["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["views"] == ["detail_20_1"]
+        assert layout_pack(ctx=None, views=["detail_30_1"])["success"] is False
+        assert layout_pack(ctx=None, views=["detail_20_0"])["success"] is False

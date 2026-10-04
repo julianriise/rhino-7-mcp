@@ -14,10 +14,10 @@
     },
     "views": {
       "type": "array",
-      "description": "Pages to lay out, in order. Default plan, north, east, south, west, every stored section, schedules. schedules is its own A3 page (Forsk — Schedules) with the door, window and room lists from the model; each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws the lists again from the model. section_<letter> is a section stored by section_add (Forsk — Section A): its own sheet, and its marker A–A on the plan.",
+      "description": "Pages to lay out, in order. Default plan, north, east, south, west, every stored section, schedules. schedules is its own A3 page (Forsk — Schedules) with the door, window and room lists from the model; each door and window gets a stable mark (forsk:mark D01, V01) shown on the plan and on its row. export_pdf draws the lists again from the model. section_<letter> is a section stored by section_add (Forsk — Section A): its own sheet, and its marker A–A on the plan. detail_<scale>_<n> is the n-th detail sheet at 1:scale (Forsk — Details 1:20): the drawings of the details stored by details add, at their own scale.",
       "items": {
         "type": "string",
-        "pattern": "^(plan|north|east|south|west|schedules|section_[a-z])$"
+        "pattern": "^(plan|north|east|south|west|schedules|section_[a-z]|detail_(5|10|20|25|50)_[1-9][0-9]*)$"
       },
       "default": [
         "plan",

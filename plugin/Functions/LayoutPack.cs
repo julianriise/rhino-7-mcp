@@ -136,6 +136,12 @@ public partial class RhinoMCPFunctions
                 spec = LayoutSpec(key, TablePageName(key), Vector3d.Zero, Vector3d.ZAxis);
                 return true;
             default:
+                if (Details.TrySheetId(view, out var detailScale, out var detailSheet))
+                {
+                    spec = LayoutSpec(Details.SheetId(detailScale, detailSheet), Details.PageName(detailScale, detailSheet),
+                        -Vector3d.ZAxis, Vector3d.YAxis);
+                    return true;
+                }
                 // A section's page. Its look lives on the stored section (TryGetSectionView).
                 if (!Sections.TryLetter(view, out var letter)) return false;
                 spec = LayoutSpec(Sections.View(letter), Sections.PageName(letter), Vector3d.Zero, Vector3d.ZAxis);
@@ -241,8 +247,15 @@ public partial class RhinoMCPFunctions
         var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
         var detailSpan = new SheetScale.Span(detailW, detailH);
         var sheets = new List<PackSheet>();
+        // Detail sheets keep their own scale and take no part in the set's.
+        var detailViews = new List<string>();
         foreach (var viewName in views)
         {
+            if (Details.TrySheetId(viewName, out _, out _))
+            {
+                detailViews.Add(viewName);
+                continue;
+            }
             if (!TryGetLayoutView(viewName, out var spec))
                 throw new InvalidOperationException(UnknownLayoutViewMessage);
             var section = Sections.TryLetter(spec.View, out var sectionLetter);
@@ -438,6 +451,15 @@ public partial class RhinoMCPFunctions
             pages.Add(pageRecord);
         }
         var sheetCount = sheets.Count;
+        foreach (var detailView in detailViews)
+        {
+            if (replace)
+                RemoveLayoutPages(doc, detailView, false);
+            var detailPage = AddDetailSheetPage(doc, detailView, includeExisting, pages.Count + 1, wallLevel);
+            if (detailPage == null) continue;
+            pages.Add(detailPage);
+            sheetCount++;
+        }
         var scheduleNote = "";
         if (withSchedules)
         {
@@ -1065,6 +1087,8 @@ public partial class RhinoMCPFunctions
         if (page == null) return null;
         if (IsSchedulesPage(page))
             return SchedulesView;
+        if (Details.TryPage(page.PageName, out var detailScale, out var detailSheet))
+            return Details.SheetId(detailScale, detailSheet);
         foreach (var name in new[] { SheetSet.FrontId, SheetSet.TakeoffId, "plan", "north", "east", "south", "west" })
         {
             if (!TryGetLayoutView(name, out var spec)) continue;

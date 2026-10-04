@@ -224,6 +224,291 @@ public static class Details
         return names;
     }
 
+    /// <summary>A companion mark inside a drawing: which drawing it points to, where it sits and which way it looks, in frame mm.</summary>
+    public sealed class Mark
+    {
+        public string View;
+        public Pt At;
+        public Pt Look;
+    }
+
+    /// <summary>
+    /// One detail drawing in frame coordinates (model mm): u along X (the
+    /// paper's x), and v along Left(X) on a plan or up (z) on a vertical
+    /// drawing. A plan is cut at CutZ and seen from above. A vertical
+    /// drawing looks along Look = Left(X); a section keeps what lies at or
+    /// beyond Dot(p, Look) = Depth, an elevation is not cut. The crop is
+    /// U0..U1 by V0..V1.
+    /// </summary>
+    public sealed class Drawing
+    {
+        public Facts Facts;
+        public string View;
+        public Pt X;
+        public bool Vertical;
+        public double U0, U1, V0, V1;
+        public double CutZ;
+        public double Depth;
+        public bool Clipped;
+        public string Title;
+        public List<Mark> Marks = new List<Mark>();
+        public Pt Y => Vertical ? new Pt(0, 0) : new Pt(-X.Y, X.X);
+        public Pt Look => Vertical ? new Pt(-X.Y, X.X) : new Pt(0, 0);
+        public double Width => U1 - U0;
+        public double Height => V1 - V0;
+    }
+
+    /// <summary>Crop margin around a wall's plan detail, past its ends and both faces.</summary>
+    public const double WallMarginMm = 300;
+    /// <summary>Crop margin along a wall past an opening's jambs.</summary>
+    public const double OpeningAlongMm = 600;
+    /// <summary>Crop margin past both faces of an opening's wall, and of every section.</summary>
+    public const double AcrossMm = 400;
+    /// <summary>Paper band kept for dimensions on every side of a drawing, and for its title below.</summary>
+    public const double BandMm = 15;
+    public const double TitleBandMm = 12;
+    /// <summary>The sheet's detail area (A3 inside the margins and above the footer).</summary>
+    public const double AreaWidthMm = 400;
+    public const double AreaHeightMm = 254;
+    /// <summary>The scales a detail takes, finest first: a subset of SheetScale.Ladder.</summary>
+    public static readonly IReadOnlyList<int> Ladder = new[] { 5, 10, 20, 25, 50 };
+
+    /// <summary>The paper a drawing may take: the detail area less the bands.</summary>
+    public static double DrawWidthMm => AreaWidthMm - 2 * BandMm;
+    public static double DrawHeightMm => AreaHeightMm - 2 * BandMm - TitleBandMm;
+
+    /// <summary>
+    /// The finest detail scale at which every span (model mm) fits the paper
+    /// a drawing may take. The coarsest step when none does.
+    /// </summary>
+    public static int Scale(IEnumerable<SheetScale.Span> spans)
+    {
+        var list = (spans ?? Enumerable.Empty<SheetScale.Span>()).ToList();
+        foreach (var step in Ladder)
+            if (list.All(s => s.Width / step <= DrawWidthMm + 1e-9 && s.Height / step <= DrawHeightMm + 1e-9))
+                return step;
+        return Ladder[Ladder.Count - 1];
+    }
+
+    /// <summary>The paper x of a plan detail: the run's Normal turned a quarter clockwise, so the Normal is up.</summary>
+    public static Pt PlanX(WallEdit.Run run) => new Pt(run.Normal.Y, -run.Normal.X);
+
+    /// <summary>A distance along the run as u along X.</summary>
+    public static double U(Facts facts, double along) => Dot(PlanX(facts.Run), facts.Run.Dir) >= 0 ? along : -along;
+
+    /// <summary>The outer face's v (along the Normal), and the inner one's.</summary>
+    public static double OuterV(Facts facts) => facts.Outer > 0 ? facts.Run.Far : facts.Run.Near;
+    public static double InnerV(Facts facts) => facts.Outer > 0 ? facts.Run.Near : facts.Run.Far;
+
+    /// <summary>
+    /// Each face's extent along the run: from its own edges in the cluster's
+    /// shape, so the inner face stops where a joined wall's face starts.
+    /// </summary>
+    public static void FaceExtent(Facts facts, bool outer, out double lo, out double hi)
+    {
+        var run = facts.Run;
+        var v = outer ? OuterV(facts) : InnerV(facts);
+        lo = double.MaxValue;
+        hi = double.MinValue;
+        foreach (var (loop, edge) in run.Edges)
+        {
+            if (facts.Shape == null || loop >= facts.Shape.Count) continue;
+            var ring = facts.Shape[loop];
+            var a = ring[edge];
+            var b = ring[(edge + 1) % ring.Count];
+            if (Math.Abs(Dot(a, run.Normal) - v) > 1.0 || Math.Abs(Dot(b, run.Normal) - v) > 1.0) continue;
+            lo = Math.Min(lo, Math.Min(Dot(a, run.Dir), Dot(b, run.Dir)));
+            hi = Math.Max(hi, Math.Max(Dot(a, run.Dir), Dot(b, run.Dir)));
+        }
+        if (lo > hi)
+        {
+            lo = run.Lo;
+            hi = run.Hi;
+        }
+    }
+
+    /// <summary>
+    /// Where a wall is cut for its section: the middle of its longest stretch
+    /// clear of openings, along the run.
+    /// </summary>
+    public static double SectionAlong(Facts facts)
+    {
+        var run = facts.Run;
+        var cuts = new List<KeyValuePair<double, double>>();
+        foreach (var hosted in facts.Openings)
+            cuts.Add(new KeyValuePair<double, double>(hosted.U - hosted.Opening.Width / 2.0, hosted.U + hosted.Opening.Width / 2.0));
+        cuts.Sort((a, b) => a.Key.CompareTo(b.Key));
+        double from = run.Lo, bestLo = run.Lo, bestHi = run.Lo;
+        foreach (var cut in cuts.Concat(new[] { new KeyValuePair<double, double>(run.Hi, run.Hi) }))
+        {
+            if (cut.Key - from > bestHi - bestLo)
+            {
+                bestLo = from;
+                bestHi = cut.Key;
+            }
+            from = Math.Max(from, cut.Value);
+        }
+        return (bestLo + bestHi) / 2.0;
+    }
+
+    /// <summary>
+    /// A detail drawing's frame: its crop, cut, look, companion marks and
+    /// title. A wall's plan crop runs WallMarginMm past its ends and faces;
+    /// an opening's is its width plus OpeningAlongMm either side, by the wall
+    /// plus AcrossMm past each face. Null for a view the detail has not.
+    /// </summary>
+    public static Drawing Frame(Facts facts, string view, string name = null)
+    {
+        if (facts?.Run == null || !Views(facts.Record).Contains(view)) return null;
+        var run = facts.Run;
+        var title = (name ?? Name(facts)) + " — " + char.ToUpperInvariant(view[0]) + view.Substring(1);
+        if (view != Plan) return null;
+        var x = PlanX(run);
+        var drawing = new Drawing
+        {
+            Facts = facts,
+            View = Plan,
+            X = x,
+            CutZ = facts.FloorTop + ForskPlanCut.AboveFloorMm,
+            Clipped = true,
+            Title = title
+        };
+        double a, b, across;
+        if (facts.IsWall)
+        {
+            a = run.Lo - WallMarginMm;
+            b = run.Hi + WallMarginMm;
+            across = WallMarginMm;
+            drawing.Marks.Add(new Mark
+            {
+                View = Cut,
+                At = new Pt(U(facts, SectionAlong(facts)), OuterV(facts) + facts.Outer * WallMarginMm / 2.0),
+                Look = new Pt(1, 0)
+            });
+        }
+        else
+        {
+            var half = facts.Opening.Opening.Width / 2.0 + OpeningAlongMm;
+            a = facts.Opening.U - half;
+            b = facts.Opening.U + half;
+            across = AcrossMm;
+            var u = U(facts, facts.Opening.U);
+            var outside = OuterV(facts) + facts.Outer * AcrossMm / 2.0;
+            drawing.Marks.Add(new Mark { View = Elevation, At = new Pt(u, outside), Look = new Pt(0, -facts.Outer) });
+            drawing.Marks.Add(new Mark { View = Cut, At = new Pt(u, InnerV(facts) - facts.Outer * AcrossMm / 2.0), Look = new Pt(1, 0) });
+        }
+        drawing.U0 = Math.Min(U(facts, a), U(facts, b));
+        drawing.U1 = Math.Max(U(facts, a), U(facts, b));
+        drawing.V0 = run.Near - across;
+        drawing.V1 = run.Far + across;
+        return drawing;
+    }
+
+    /// <summary>Every drawing a detail has, in view order: plan, elevation, section.</summary>
+    public static List<Drawing> Drawings(Facts facts, string name = null) =>
+        facts == null
+            ? new List<Drawing>()
+            : Views(facts.Record).Select(v => Frame(facts, v, name)).Where(d => d != null).ToList();
+
+    /// <summary>A detail's scale: the finest at which every one of its drawings fits.</summary>
+    public static int ScaleOf(IEnumerable<Drawing> drawings) =>
+        Scale((drawings ?? Enumerable.Empty<Drawing>()).Select(d => new SheetScale.Span(d.Width, d.Height)));
+
+    public const string SheetPrefix = "detail_";
+
+    /// <summary>A detail sheet's view id: detail_20_1 is the first sheet at 1:20.</summary>
+    public static string SheetId(int scale, int n) =>
+        SheetPrefix + scale.ToString(CultureInfo.InvariantCulture) + "_" + n.ToString(CultureInfo.InvariantCulture);
+
+    public static bool TrySheetId(string view, out int scale, out int n)
+    {
+        scale = 0;
+        n = 0;
+        var key = (view ?? "").Trim().ToLowerInvariant();
+        if (!key.StartsWith(SheetPrefix, StringComparison.Ordinal)) return false;
+        var parts = key.Substring(SheetPrefix.Length).Split('_');
+        return parts.Length == 2
+            && int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out scale)
+            && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out n)
+            && Ladder.Contains(scale) && n >= 1;
+    }
+
+    /// <summary>"Details 1:20", "Detaljer 1:20".</summary>
+    public static string SheetTitle(int scale, bool norwegian = false) =>
+        SheetLang.Pick(norwegian, "Details 1:", "Detaljer 1:") + scale.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The page: "Forsk — Details 1:20", then " (2)" for the next sheet at that scale.</summary>
+    public static string PageName(int scale, int n) =>
+        "Forsk — " + SheetTitle(scale) + (n > 1 ? " (" + n.ToString(CultureInfo.InvariantCulture) + ")" : "");
+
+    /// <summary>The detail sheet a page name is, the other way from PageName.</summary>
+    public static bool TryPage(string pageName, out int scale, out int n)
+    {
+        scale = 0;
+        n = 1;
+        var prefix = "Forsk — " + SheetTitle(0).TrimEnd('0');
+        var name = (pageName ?? "").Trim();
+        if (!name.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var rest = name.Substring(prefix.Length);
+        var space = rest.IndexOf(' ');
+        var number = space < 0 ? rest : rest.Substring(0, space);
+        if (space >= 0)
+        {
+            var tail = rest.Substring(space + 1);
+            if (tail.Length < 3 || tail[0] != '(' || tail[tail.Length - 1] != ')'
+                || !int.TryParse(tail.Substring(1, tail.Length - 2), NumberStyles.None, CultureInfo.InvariantCulture, out n))
+                return false;
+        }
+        return int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out scale)
+            && Ladder.Contains(scale) && n >= 1 && PageName(scale, n) == name;
+    }
+
+    /// <summary>The S-DRAW child a detail sheet draws on: "Details 20-1".</summary>
+    public static string LayerName(int scale, int n) =>
+        "Details " + scale.ToString(CultureInfo.InvariantCulture) + "-" + n.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Where a detail sheet's drawings live in the model: each sheet its own
+    /// region, wide enough for the detail area at 1:50.
+    /// </summary>
+    public static Pt SheetOrigin(int scale, int n)
+    {
+        var k = Math.Max(0, IndexOfScale(scale)) * 20 + Math.Max(0, n - 1);
+        return new Pt(25000.0 * k, -60000.0);
+    }
+
+    static int IndexOfScale(int scale)
+    {
+        for (var i = 0; i < Ladder.Count; i++)
+            if (Ladder[i] == scale) return i;
+        return -1;
+    }
+
+    /// <summary>A drawing on its sheet: its crop's lower left at paper X, Y (mm) in the detail area.</summary>
+    public sealed class Placed
+    {
+        public Drawing Drawing;
+        public int Number;
+        public double X;
+        public double Y;
+    }
+
+    /// <summary>
+    /// Drawings in one plain row, left to right, each inside its band, the
+    /// row standing on the title band. The detail sheet packer replaces this.
+    /// </summary>
+    public static List<Placed> Row(IEnumerable<Drawing> drawings, int scale)
+    {
+        var placed = new List<Placed>();
+        var x = 0.0;
+        foreach (var drawing in drawings ?? Enumerable.Empty<Drawing>())
+        {
+            placed.Add(new Placed { Drawing = drawing, Number = placed.Count + 1, X = x + BandMm, Y = TitleBandMm + BandMm });
+            x += drawing.Width / scale + 2 * BandMm;
+        }
+        return placed;
+    }
+
     /// <summary>The Print receipt's clause for details that dropped. Empty for none.</summary>
     public static string DroppedLine(int count)
     {

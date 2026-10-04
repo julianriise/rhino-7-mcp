@@ -4,19 +4,21 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 
 | Slice | Commit | State |
 |---|---|---|
-| D1 Add detail replaces Add dimensions | see `git log` (`feat(print): D1 …`) | done headless |
+| D1 Add detail replaces Add dimensions | `679a547` | done headless |
+| D2 plan detail | see `git log` (`feat(print): D2 …`) | done headless; bake unverified |
 
 ## Gates (last run, Linux container)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
-- `dotnet test tests/SoftParam.Tests`: exit 0, 1946 passed, 1 skipped (base 1926 passed).
-- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 498 passed, 2 skipped (base 500: the two `check_user_dims` tests went).
+- `dotnet test tests/SoftParam.Tests`: exit 0, 1967 passed, 1 skipped (D1 1946; base 1926 passed).
+- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 499 passed, 2 skipped (D1 498; base 500: the two `check_user_dims` tests went).
 - `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
 - Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
 
 ## Unverified (needs Rhino)
 
 - D1: `details add` from a live selection (walls by `forsk:id`, markers by `forsk:id`), and the card names, which come from `ReadIfcModel` on the live document at every window refresh.
+- D2: the whole detail bake (`DetailBake.cs`): that `KeepSectionSide` trims the unioned wall cluster by the cut and the four crop planes (the 2D clip counts what it had to shorten and the page record's `note` says "N lines clipped in 2D"), that the HLD-to-frame map puts the drawing the right way up, the poché at the cut, the break lines where the crop cuts the end walls, the dimension text size, the heavier pens at 1:20, and that `layout_pack views ["detail_20_1"]` frames the page at 1:20 with the footer's Scale cell reading it.
 
 ## Changes from the brief
 
@@ -24,10 +26,16 @@ Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run wo
 - The card names come in through `DocInput.DetailNames` (resolved Rhino-side), so the classifier and the card stay pure.
 - An opening's host run is the run of its cluster whose band holds the opening's centre as `ReadIfcModel` gives it (projected on the host record's longest run). An opening on the short leg of an L-shaped record may miss; it then drops like a gone one.
 - Single wall or single opening: Add detail is on the "?" card only. Two or more walls: slot 2. Walls with openings: slot 1.
+- D2 plan detail draws doors and windows as their solids cut at 1200 (frames in section), not the 1:100 plan symbols; no swing arcs yet.
+- D2 lays a sheet out per sheet, not per drawing: each detail sheet has its own model region at `(25000·k, −60000)` (k from the scale's ladder index and n), wide enough for the 400 mm area at 1:50 (20000). Drawings sit in it at their paper place × scale. D2 puts every detail of a scale on sheet 1 in a plain row (`Details.Row`); D4's packer replaces that.
+- "The door's drawings give 20": the door's plan alone fits 1:10 (2100 × 1000). The pin uses the plan plus its 1000 × 3800 section crop; D3 switches it to the section frame.
+- The detail page is built by its own `AddDetailSheetPage` after the drawing sheets; it reuses `AddClayDetail` over the whole detail area box and `AddSheetFooter`. Its sheet number stays empty until D4 numbers `A-50-00n`.
+- Companion marks (section marker, elevation arrow) are placed by `Details.Frame` but drawn in D4 with their numbers.
+- `layout_pack` accepts `detail_<5|10|20|25|50>_<n>` (contract pattern, server wrapper).
 
 ## Left
 
-- D2, D2b, D3, D4, D5.
+- D2b, D3, D4, D5.
 
 ## Forsk-side follow-ups (forsk repo not reachable)
 

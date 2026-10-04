@@ -9,12 +9,14 @@ from rhinomcp.server import get_rhino_connection, mcp, logger
 _VIEWS = ("plan", "north", "east", "south", "west", "schedules")
 # A section stored by section_add: section_a to section_z.
 _SECTION = re.compile(r"^section_[a-z]$")
+# A detail sheet: detail_20_1 is the first at 1:20.
+_DETAIL = re.compile(r"^detail_(5|10|20|25|50)_[1-9][0-9]*$")
 _SCHEDULE_KINDS = ("door", "window", "room")
-_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, or a stored section (section_a)."
+_UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, a stored section (section_a), or a detail sheet (detail_20_1)."
 
 
 def _known_view(view: Any) -> bool:
-    return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)))
+    return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)) or bool(_DETAIL.match(view)))
 _UNKNOWN_PAPER = "Unknown paper. Use A3."
 
 
