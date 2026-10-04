@@ -297,9 +297,12 @@ public static class SheetFlat
         return lines.Length > 2 && lines[2].Trim().StartsWith("AC10", StringComparison.Ordinal) ? lines[2].Trim() : "";
     }
 
-    /// <summary>AutoCAD 2013 (AC1027) or later.</summary>
+    /// <summary>
+    /// AutoCAD 2004 (AC1018) or later. Hatches and lineweights exist from
+    /// AutoCAD 2000; only R12 (AC1009) drops them. The bar is 2004.
+    /// </summary>
     public static bool ModernAcad(string version) =>
-        !string.IsNullOrEmpty(version) && string.CompareOrdinal(version, "AC1027") >= 0;
+        !string.IsNullOrEmpty(version) && string.CompareOrdinal(version, "AC1018") >= 0;
 
     static LayerDef Layer(string name, double weight, string what)
     {

@@ -204,7 +204,7 @@ public class SheetExportWindowTests
     }
 
     [Fact]
-    public void TheAcadVersion_IsReadOffTheFile_AndOnly2013OrLaterIsModern()
+    public void TheAcadVersion_IsReadOffTheFile_AndOnly2004OrLaterIsModern()
     {
         var dxf = System.Text.Encoding.ASCII.GetBytes("  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1032\r\n  9\r\n");
         Assert.Equal("AC1032", SheetFlat.AcadVersion(dxf));
@@ -213,10 +213,12 @@ public class SheetExportWindowTests
         Assert.Equal("", SheetFlat.AcadVersion(new byte[0]));
         Assert.Equal("", SheetFlat.AcadVersion(System.Text.Encoding.ASCII.GetBytes("  0\nSECTION\n")));
 
+        Assert.True(SheetFlat.ModernAcad("AC1018"));
+        Assert.True(SheetFlat.ModernAcad("AC1021"));
         Assert.True(SheetFlat.ModernAcad("AC1027"));
         Assert.True(SheetFlat.ModernAcad("AC1032"));
         Assert.False(SheetFlat.ModernAcad("AC1009"));
-        Assert.False(SheetFlat.ModernAcad("AC1021"));
+        Assert.False(SheetFlat.ModernAcad("AC1015"));
         Assert.False(SheetFlat.ModernAcad(""));
     }
 

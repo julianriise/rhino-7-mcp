@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Check a sheet the R3 export wrote (export_sheets), with ezdxf.
 
-A plan DXF must have the eight export layers, at least 4 entities on
-A-WALL-CUT, a HATCH on A-WALL-PATT, a 0.50 mm lineweight on an entity or a
-layer, the sheet number A-20-001 on A-ANNO-TTLB, and extents inside the A3
-sheet (420 x 297 mm). A DWG must exist, not be empty, and start with AC10.
-Either must be AutoCAD 2013 (AC1027) or later: R12 drops hatches and
-lineweights.
+A plan DXF must have the plan export layers (not A-GRND: a plan has no
+ground line), at least 4 entities on A-WALL-CUT, a HATCH on A-WALL-PATT, a
+0.50 mm lineweight on an entity or a layer, the sheet number A-20-001 on
+A-ANNO-TTLB, and extents inside the A3 sheet (420 x 297 mm). A DWG must
+exist, not be empty, and start with AC10. Either must be AutoCAD 2004
+(AC1018) or later. Hatches and lineweights exist from AutoCAD 2000; only
+R12 (AC1009) drops them.
 
 Usage:
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DXF/Garage A-20-001 Plan.dxf"
@@ -19,15 +20,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# A plan has no ground line, so A-GRND is not required here. Elevations and
+# sections are not layer-checked (check_elevation only wants facade lines).
 LAYERS = (
     "A-WALL-CUT", "A-WALL-PATT", "A-SYMB", "A-ELEV",
-    "A-GRND", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB",
+    "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB",
 )
 SHEET_W, SHEET_H = 420.0, 297.0
 # A text box is measured from its font; allow a little past the paper edge.
 SLACK_MM = 1.0
 HEAVY = 50  # 0.50 mm in DXF hundredths
-MODERN = "AC1027"  # AutoCAD 2013
+MODERN = "AC1018"  # AutoCAD 2004
+MODERN_NAME = "AutoCAD 2004"
 
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
@@ -36,7 +40,7 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
 
     problems = []
     if doc.dxfversion < MODERN:
-        problems.append(f"version {doc.dxfversion}, want {MODERN} (AutoCAD 2013) or later")
+        problems.append(f"version {doc.dxfversion}, want {MODERN} ({MODERN_NAME}) or later")
     names = {layer.dxf.name.upper() for layer in doc.layers}
     missing = [name for name in LAYERS if name not in names]
     if missing:
@@ -106,7 +110,7 @@ def check_dwg(path) -> list[str]:
     if not head.startswith(b"AC10"):
         return [f"{path.name} does not start with AC10"]
     if head.decode("ascii", "replace") < MODERN:
-        return [f"{path.name} is {head.decode('ascii', 'replace')}, want {MODERN} (AutoCAD 2013) or later"]
+        return [f"{path.name} is {head.decode('ascii', 'replace')}, want {MODERN} ({MODERN_NAME}) or later"]
     return []
 
 

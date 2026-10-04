@@ -22,8 +22,9 @@ namespace RhinoMCPPlugin.Functions;
 /// comes back as its centreline at its pen, and Rhino's own exporter writes
 /// the file: scripted from the active document with only the flat sheet
 /// selected and the scheme named (SheetFlat.AcadScheme), or, when that writes
-/// nothing of AutoCAD 2013 or later, from a headless document. The version
-/// the file has is read back and returned.
+/// nothing of AutoCAD 2004 or later, from a headless document. Whichever
+/// writer produced the file is kept. The version the file has is read back
+/// and returned.
 /// </summary>
 public partial class RhinoMCPFunctions
 {

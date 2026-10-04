@@ -22,8 +22,8 @@ LAYERS = [
 ]
 
 
-def plan_doc(*, cut=4, hatch=True, heavy=True, number="A-20-001", off_sheet=False, layers=LAYERS):
-    doc = ezdxf.new("R2018")
+def plan_doc(*, cut=4, hatch=True, heavy=True, number="A-20-001", off_sheet=False, layers=LAYERS, version="R2018"):
+    doc = ezdxf.new(version)
     for name, weight in layers:
         doc.layers.add(name, lineweight=weight if heavy or weight != 50 else 25)
     msp = doc.modelspace()
@@ -41,6 +41,11 @@ def plan_doc(*, cut=4, hatch=True, heavy=True, number="A-20-001", off_sheet=Fals
 
 def test_a_plan_as_exported_passes():
     assert dxf_check.check_plan(plan_doc()) == []
+
+
+def test_a_plan_without_a_ground_line_passes():
+    layers = [layer for layer in LAYERS if layer[0] != "A-GRND"]
+    assert dxf_check.check_plan(plan_doc(layers=layers)) == []
 
 
 @pytest.mark.parametrize(
@@ -69,22 +74,35 @@ def test_a_heavy_entity_counts_when_its_layer_is_light():
 def test_a_dwg_starts_with_its_version(tmp_path):
     good = tmp_path / "a.dwg"
     good.write_bytes(b"AC1027" + b"\0" * 100)
+    written = tmp_path / "ac1021.dwg"
+    written.write_bytes(b"AC1021" + b"\0" * 100)
+    year2004 = tmp_path / "ac1018.dwg"
+    year2004.write_bytes(b"AC1018" + b"\0" * 100)
     empty = tmp_path / "b.dwg"
     empty.write_bytes(b"")
     text = tmp_path / "c.dwg"
     text.write_bytes(b"0\nSECTION\n")
     assert dxf_check.check_dwg(good) == []
+    assert dxf_check.check_dwg(written) == []
+    assert dxf_check.check_dwg(year2004) == []
     assert dxf_check.check_dwg(empty)
     assert dxf_check.check_dwg(text)
     assert dxf_check.check_dwg(tmp_path / "missing.dwg")
     old = tmp_path / "d.dwg"
     old.write_bytes(b"AC1009" + b"\0" * 100)
-    assert dxf_check.check_dwg(old) == ["d.dwg is AC1009, want AC1027 (AutoCAD 2013) or later"]
+    assert dxf_check.check_dwg(old) == ["d.dwg is AC1009, want AC1018 (AutoCAD 2004) or later"]
+    year2000 = tmp_path / "ac1015.dwg"
+    year2000.write_bytes(b"AC1015" + b"\0" * 100)
+    assert dxf_check.check_dwg(year2000) == ["ac1015.dwg is AC1015, want AC1018 (AutoCAD 2004) or later"]
 
 
 def test_an_r12_plan_fails_on_its_version():
     doc = ezdxf.new("R12")
-    assert "version AC1009, want AC1027 (AutoCAD 2013) or later" in dxf_check.check_plan(doc)
+    assert "version AC1009, want AC1018 (AutoCAD 2004) or later" in dxf_check.check_plan(doc)
+
+
+def test_a_2007_plan_passes_the_version_bar():
+    assert dxf_check.check_plan(plan_doc(version="R2007")) == []
 
 
 def test_the_plan_file_is_found_by_its_number():
