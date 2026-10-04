@@ -1,3 +1,4 @@
+using System.Globalization;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -179,10 +180,119 @@ public class DetailSheetTests
         var frame = source.IndexOf("result.Box = new BoundingBox(", StringComparison.Ordinal);
         Assert.True(titles > 0 && centre > titles && frame > centre, "centred once everything is drawn, the page still framing the whole area");
         var body = source.Substring(source.IndexOf("private static void CentreDetailSheet(", StringComparison.Ordinal));
-        body = body.Substring(0, body.IndexOf("\n    }", StringComparison.Ordinal));
+        body = body.Substring(0, body.IndexOf("private static PrintPen DetailRulePen", StringComparison.Ordinal));
         Assert.Contains("DetailSheet.Centre(", body);
         Assert.Contains("CollectLayerDrawings(doc.Objects, layer, drawn)", body);
-        Assert.Contains("Transform.Translation(move.X * scale, move.Y * scale, 0)", body);
+        Assert.Contains("Transform.Translation(dx, dy, 0)", body);
+        Assert.Contains("SheetFlat.Shift(", body);
+        Assert.Contains("SheetFlat.StrokeKey", body);
+    }
+
+    [Fact]
+    public void AnExportedDetailDxf_MovesLineTextHatchAndPolylineTogether()
+    {
+        var sheets = Sheets(DetailFixtures.SmokeGarage(), ("w01", null), (null, "o-d01"));
+        var sheet = sheets[0];
+        var packed = Content(sheet, sheets);
+        var move = DetailSheet.Centre(packed);
+        var scale = sheet.Scale;
+        var drawing = sheet.Drawings[0];
+        var title = DetailSheet.TitleOf(drawing, scale);
+        var crop = new RoomDetect.Box(drawing.X, drawing.Y, drawing.X + drawing.Drawing.Width / scale, drawing.Y + drawing.Drawing.Height / scale);
+        var dim = new PlanDims.Seg(new Pt(crop.MinX, crop.MinY + 20), new Pt(crop.MaxX, crop.MinY + 20));
+        var dimText = new Pt((dim.A.X + dim.B.X) / 2.0, dim.A.Y + 2);
+        var name = drawing.Drawing.Title;
+
+        // Ribbons: title rule and the dimension line, in model mm. Export writes LINEs from this.
+        var stroke = SheetFlat.Encode(new[]
+        {
+            SheetFlat.Seg.Line(title.RuleFrom.X * scale, title.RuleFrom.Y * scale, title.RuleTo.X * scale, title.RuleTo.Y * scale),
+            SheetFlat.Seg.Line(dim.A.X * scale, dim.A.Y * scale, dim.B.X * scale, dim.B.Y * scale),
+            SheetFlat.Seg.Line(crop.MinX * scale, crop.MinY * scale, crop.MinX * scale, crop.MaxY * scale)
+        });
+        var page = new SheetFlat.Affine { A = 1.0 / scale, E = 1.0 / scale };
+        var lines = SheetFlat.OnPage(SheetFlat.Shift(stroke, move.X * scale, move.Y * scale), page);
+        Assert.Equal(3, lines.Count);
+
+        Pt At(Pt p) => new(p.X + move.X, p.Y + move.Y);
+        var hatch = new[] { At(new Pt(crop.MinX, crop.MinY)), At(new Pt(crop.MaxX, crop.MinY)), At(new Pt(crop.MaxX, crop.MaxY)), At(new Pt(crop.MinX, crop.MaxY)) };
+        var path = Path.Combine(Path.GetTempPath(), "forsk-detail-centre.dxf");
+        File.WriteAllText(path, DetailDxf(lines, At(title.Name), name, At(dimText), hatch));
+        var entities = OfficeRoomsTests.Entities(path);
+        var rule = entities.Single(e => e.Type == "LINE" && OfficeRoomsTests.On(e, "A-ANNO-TEXT"));
+        var dimLine = entities.Single(e => e.Type == "LINE" && OfficeRoomsTests.On(e, "A-ANNO-DIMS"));
+        var cut = entities.Single(e => e.Type == "LINE" && OfficeRoomsTests.On(e, "A-WALL-CUT"));
+        var label = entities.Single(e => e.Type == "TEXT" && e.Text == name);
+        var value = entities.Single(e => e.Type == "TEXT" && e.Text == "200");
+        var fill = entities.Single(e => e.Type == "HATCH");
+        var loop = entities.Single(e => e.Type == "LWPOLYLINE");
+
+        Assert.True(Gap(Box(rule), Box(label)) <= 5, "title underline is within 5 mm of its title text");
+        Assert.True(Gap(Box(dimLine), Box(value)) <= 5, "dimension text sits beside its dimension lines");
+        Assert.True(Gap(Box(cut), Box(fill)) <= 5 && Gap(Box(fill), Box(loop)) <= 5,
+            "LINE, HATCH and polyline extents move together");
+        Assert.Equal(move.X, lines[0].P[0] - title.RuleFrom.X, 6);
+        Assert.Equal(move.Y, lines[0].P[1] - title.RuleFrom.Y, 6);
+        Assert.Equal(move.X, At(title.Name).X - title.Name.X, 6);
+        Assert.Equal(move.Y, hatch[0].Y - crop.MinY, 6);
+
+        var stale = SheetFlat.OnPage(stroke, page);
+        Assert.True(Gap(LineBox(stale[0]), Box(label)) > 5, "a stroke left behind its text is the export bug");
+    }
+
+    static string DetailDxf(List<SheetFlat.Seg> lines, Pt titleAt, string title, Pt dimAt, Pt[] hatch)
+    {
+        string N(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+        string Line(string layer, double[] p) =>
+            "0\nLINE\n8\n" + layer + "\n10\n" + N(p[0]) + "\n20\n" + N(p[1]) + "\n11\n" + N(p[2]) + "\n21\n" + N(p[3]) + "\n";
+        string Text(string layer, Pt at, string text) =>
+            "0\nTEXT\n8\n" + layer + "\n10\n" + N(at.X) + "\n20\n" + N(at.Y) + "\n40\n2.5\n1\n" + text + "\n";
+        string Ring(string type, string layer, Pt[] pts)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("0\n").Append(type).Append("\n8\n").Append(layer).Append("\n");
+            if (type == "LWPOLYLINE")
+                sb.Append("90\n").Append(pts.Length).Append("\n70\n1\n");
+            foreach (var p in pts)
+                sb.Append("10\n").Append(N(p.X)).Append("\n20\n").Append(N(p.Y)).Append("\n");
+            return sb.ToString();
+        }
+        return "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1021\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n"
+            + Line("A-ANNO-TEXT", lines[0].P)
+            + Line("A-ANNO-DIMS", lines[1].P)
+            + Line("A-WALL-CUT", lines[2].P)
+            + Text("A-ANNO-TEXT", titleAt, title)
+            + Text("A-ANNO-DIMS", dimAt, "200")
+            + Ring("HATCH", "A-WALL-PATT", hatch)
+            + Ring("LWPOLYLINE", "A-SYMB", hatch)
+            + "0\nENDSEC\n0\nEOF\n";
+    }
+
+    static RoomDetect.Box Box(OfficeRoomsTests.Entity e)
+    {
+        var xs = e.Points.Select(p => p.X).ToList();
+        var ys = e.Points.Select(p => p.Y).ToList();
+        if (e.Type == "LINE")
+        {
+            xs.Add(e.End.X);
+            ys.Add(e.End.Y);
+        }
+        if (e.Type == "TEXT" && e.Points.Count > 0)
+        {
+            xs.Add(e.Points[0].X + DetailFixtures.Arial(e.Text) * (e.Height > 0 ? e.Height : 2.5));
+            ys.Add(e.Points[0].Y + (e.Height > 0 ? e.Height : 2.5));
+        }
+        return new RoomDetect.Box(xs.Min(), ys.Min(), xs.Max(), ys.Max());
+    }
+
+    static RoomDetect.Box LineBox(SheetFlat.Seg seg) =>
+        new(Math.Min(seg.P[0], seg.P[2]), Math.Min(seg.P[1], seg.P[3]), Math.Max(seg.P[0], seg.P[2]), Math.Max(seg.P[1], seg.P[3]));
+
+    static double Gap(RoomDetect.Box a, RoomDetect.Box b)
+    {
+        var dx = Math.Max(0, Math.Max(a.MinX - b.MaxX, b.MinX - a.MaxX));
+        var dy = Math.Max(0, Math.Max(a.MinY - b.MaxY, b.MinY - a.MaxY));
+        return Math.Max(dx, dy);
     }
 
     static string FunctionsDir()

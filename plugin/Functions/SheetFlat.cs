@@ -231,6 +231,9 @@ public static class SheetFlat
         /// <summary>Page objects: already paper millimetres.</summary>
         public static Affine Identity => new Affine { A = 1, E = 1 };
 
+        /// <summary>A translation in the stroke's own millimetres (model, before the page map).</summary>
+        public static Affine Translation(double dx, double dy) => new Affine { A = 1, E = 1, C = dx, F = dy };
+
         public void Apply(double x, double y, out double ox, out double oy)
         {
             ox = A * x + B * y + C;
@@ -248,6 +251,18 @@ public static class SheetFlat
             map.Apply(seg.P[i], seg.P[i + 1], out p[i], out p[i + 1]);
         return new Seg { Arc = seg.Arc, P = p };
     }
+
+    /// <summary>
+    /// The stroke after the drawings it came from were translated. Export
+    /// writes LINEs from this string, so a move that leaves it behind leaves
+    /// the walls, dims, bubbles and title rule in place.
+    /// </summary>
+    public static string Shift(string stroke, double dx, double dy) =>
+        Encode(Decode(stroke).Select(s => Map(s, Affine.Translation(dx, dy))));
+
+    /// <summary>A stroke's pieces on the page: the same affine the export applies to geometry.</summary>
+    public static List<Seg> OnPage(string stroke, Affine page) =>
+        Decode(stroke).Select(s => Map(s, page)).ToList();
 
     /// <summary>"Holmen A-20-001 Plan.dwg". Characters a file name cannot hold become a dash.</summary>
     public static string FileName(string project, string number, string title, string format)

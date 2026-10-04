@@ -132,7 +132,7 @@ public class SheetFlatTests
         Assert.Equal("L 1000,2000 5000,2000|A 5000,2000 5707.107,2292.893 6000,3000", stroke);
 
         var page = new SheetFlat.Affine { A = 1.0 / 50, E = 1.0 / 50, C = 210 - 3000.0 / 50, F = 148.5 - 2000.0 / 50 };
-        var segs = SheetFlat.Decode(stroke).Select(s => SheetFlat.Map(s, page)).ToList();
+        var segs = SheetFlat.OnPage(stroke, page);
 
         Assert.Equal(2, segs.Count);
         var wall = segs[0].P;
@@ -150,6 +150,19 @@ public class SheetFlatTests
         Assert.Equal(2, segs.Count);
         Assert.Equal(new[] { 10.0, 0, 10, 10 }, segs[1].P);
         Assert.Empty(SheetFlat.Decode(null));
+    }
+
+    [Fact]
+    public void ACentredStroke_KeepsItsLineWithThePageMap()
+    {
+        // A-50-001's title rule in model mm at 1:20, then the bake's +17 / −79 paper mm.
+        var packed = SheetFlat.Encode(new[] { SheetFlat.Seg.Line(400, 4220, 1600, 4220) });
+        var moved = SheetFlat.Shift(packed, 17 * 20, -79 * 20);
+        var page = new SheetFlat.Affine { A = 1.0 / 20, E = 1.0 / 20 };
+        var rule = Assert.Single(SheetFlat.OnPage(moved, page)).P;
+        Assert.Equal(new[] { 37.0, 132.0, 97.0, 132.0 }, rule.Select(v => Math.Round(v, 6)));
+        var left = SheetFlat.OnPage(packed, page)[0].P;
+        Assert.Equal(211, left[1], 6);
     }
 
     [Fact]

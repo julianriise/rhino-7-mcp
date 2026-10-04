@@ -13,7 +13,9 @@ R12 (AC1009) drops them.
 With --expect detail a DXF is a detail sheet (A-50-…): layers A-WALL-CUT,
 A-ANNO-DIMS and A-ANNO-TTLB, a 0.70 mm lineweight on an entity, a dimension
 value 200 on A-ANNO-DIMS, its number (from the file name, else A-50-001) on
-A-ANNO-TTLB, and extents inside the A3 sheet.
+A-ANNO-TTLB, extents inside the A3 sheet, and LINE / TEXT / HATCH / polyline
+extents together (title underline within 5 mm of its title, dimension text
+beside its lines).
 
 Usage:
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DXF/Garage A-20-001 Plan.dxf"
@@ -47,6 +49,8 @@ DETAIL_LAYERS = ("A-WALL-CUT", "A-ANNO-DIMS", "A-ANNO-TTLB")
 DETAIL_HEAVY = 70  # the cut pen at 1:20
 DETAIL_VALUE = "200"  # the garage wall's thickness
 DETAIL_NUMBER = re.compile(r"A-50-\d{3}")
+# Title rule vs title text, dim value vs dim line, cut vs poché: one move.
+TOGETHER_MM = 5.0
 
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
@@ -101,7 +105,57 @@ def check_detail(doc, number: str = "A-50-001") -> list[str]:
     if not any(number in t for t in texts):
         problems.append(f"A-ANNO-TTLB has no text {number}")
 
+    problems.extend(check_together(doc))
     problems.extend(check_fit(doc))
+    return problems
+
+
+def check_together(doc) -> list[str]:
+    """LINE, TEXT, HATCH and polyline extents sit together after one move.
+
+    The title underline is within 5 mm of its title text, dimension text
+    sits beside its dimension lines, and a cut LINE stays on its poché.
+    Empty when those pairs are missing or already together.
+    """
+    from ezdxf import bbox
+
+    problems = []
+    msp = list(doc.modelspace())
+
+    def boxes(layer, types):
+        found = []
+        for entity in msp:
+            if entity.dxftype() not in types:
+                continue
+            if entity.dxf.get("layer", "0").upper() != layer:
+                continue
+            box = bbox.extents([entity], fast=True)
+            if box.has_data:
+                found.append((box.extmin.x, box.extmin.y, box.extmax.x, box.extmax.y))
+        return found
+
+    def gap(a, b):
+        dx = max(0.0, a[0] - b[2], b[0] - a[2])
+        dy = max(0.0, a[1] - b[3], b[1] - a[3])
+        return max(dx, dy)
+
+    def nearest(ones, others):
+        return min(gap(a, b) for a in ones for b in others)
+
+    titles = boxes("A-ANNO-TEXT", ("TEXT", "MTEXT"))
+    rules = boxes("A-ANNO-TEXT", ("LINE",))
+    if titles and rules and nearest(titles, rules) > TOGETHER_MM:
+        problems.append("title underline is not within 5 mm of its title text")
+
+    values = boxes("A-ANNO-DIMS", ("TEXT", "MTEXT"))
+    dims = boxes("A-ANNO-DIMS", ("LINE", "LWPOLYLINE", "POLYLINE"))
+    if values and dims and nearest(values, dims) > TOGETHER_MM:
+        problems.append("dimension text is not beside its dimension lines")
+
+    cuts = boxes("A-WALL-CUT", ("LINE", "LWPOLYLINE", "POLYLINE"))
+    fills = boxes("A-WALL-PATT", ("HATCH",))
+    if cuts and fills and nearest(cuts, fills) > TOGETHER_MM:
+        problems.append("LINE and HATCH extents do not move together")
     return problems
 
 

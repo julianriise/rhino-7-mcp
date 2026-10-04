@@ -25,6 +25,8 @@ Tests: `NoBubbleOnAnyA50Sheet_TouchesLinesValuesOrAnotherBubble_ForTheWallAndD01
 
 **Detail sheets centred.** The packer starts each sheet at the area's top left, so the smoke door sheet's three views sat 0 mm from the left and 45 mm from the right. The page's detail window is the 400 × 254 detail area: the A3 sheet less its 10 mm margins and the 23 mm kept for the footer and title block. The camera is centred on that area. The bake now draws as before, then moves everything on the sheet's layer by one translation, `DetailSheet.Centre` of the box of what it added: views, fills, dimensions, levels, bubbles and titles. One move keeps the views' spacing and the 1:20. The DWG maps through the same page detail (`WorldToPageTransform`), so it shows the same layout. Test: `EachSmokeGarageSheet_IsCentredInItsUsableArea_TheDoorsThreeViewsAsAGroup_At1To20` (within 0.01 mm on all three sheets, using a headless model of that box), plus a source test of the bake's order. Unverified: the live box, which comes from Rhino's text and hatch extents.
 
+**DWG LINEs left behind.** The Mac PDF passed; the DXF did not. Root cause: a stroke ribbon stores its centreline in `forsk:stroke`. `CentreDetailSheet` moved the hatch and the texts, not that string, so `FlattenPage` wrote LINE (walls, dims, bubble outlines, title rule) where they were packed. TEXT, HATCH and real polylines took the move. Fix: the same translation updates `forsk:stroke` (`SheetFlat.Shift`) before the objects move. Test: `AnExportedDetailDxf_MovesLineTextHatchAndPolylineTogether` and `dxf_check.check_together`.
+
 ## Fixes after Julian's garage smoke on `ece9153`
 
 Office smoke passed; the garage export step failed. Root causes and fixes:

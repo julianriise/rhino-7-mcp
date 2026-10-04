@@ -125,7 +125,9 @@ public partial class RhinoMCPFunctions
     /// Moves everything the sheet drew (views, fills, dimensions, bubbles,
     /// titles: its layer's drawings, whose box is box) by the one move that
     /// centres box in the detail area. The page frames that area, and the
-    /// DWG flattens the page, so both show it centred.
+    /// DWG flattens the page, so both show it centred. Ribbons keep their
+    /// forsk:stroke in the same millimetres as the hatch, or the export
+    /// writes those LINEs where they were packed.
     /// </summary>
     private static void CentreDetailSheet(RhinoDoc doc, Layer layer, Pt origin, int scale, BoundingBox box)
     {
@@ -133,11 +135,25 @@ public partial class RhinoMCPFunctions
         var move = DetailSheet.Centre(new RoomDetect.Box(
             (box.Min.X - origin.X) / scale, (box.Min.Y - origin.Y) / scale,
             (box.Max.X - origin.X) / scale, (box.Max.Y - origin.Y) / scale));
-        var xform = Transform.Translation(move.X * scale, move.Y * scale, 0);
+        var dx = move.X * scale;
+        var dy = move.Y * scale;
+        var xform = Transform.Translation(dx, dy, 0);
         var drawn = new List<Guid>();
         CollectLayerDrawings(doc.Objects, layer, drawn);
         foreach (var id in drawn)
+            ShiftDrawnStroke(doc, id, dx, dy);
+        foreach (var id in drawn)
             doc.Objects.Transform(id, xform, true);
+    }
+
+    /// <summary>Keeps a ribbon's centreline with the hatch the bake just moved.</summary>
+    private static void ShiftDrawnStroke(RhinoDoc doc, Guid id, double dx, double dy)
+    {
+        var obj = doc.Objects.FindId(id);
+        var stroke = obj?.Attributes?.GetUserString(SheetFlat.StrokeKey);
+        if (obj == null || string.IsNullOrEmpty(stroke)) return;
+        obj.Attributes.SetUserString(SheetFlat.StrokeKey, SheetFlat.Shift(stroke, dx, dy));
+        doc.Objects.ModifyAttributes(obj, obj.Attributes, true);
     }
 
     /// <summary>The pen of a view title's rule.</summary>

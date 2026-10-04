@@ -235,7 +235,7 @@ public partial class RhinoMCPFunctions
             {
                 double.TryParse(pen, NumberStyles.Float, CultureInfo.InvariantCulture, out var penMm);
                 var weight = SheetFlat.Weight(how, penMm, false, 0);
-                foreach (var seg in SheetFlat.Decode(stroke).Select(s => SheetFlat.Map(s, affine)))
+                foreach (var seg in SheetFlat.OnPage(stroke, affine))
                 {
                     var p = seg.P;
                     Curve curve = seg.Arc
