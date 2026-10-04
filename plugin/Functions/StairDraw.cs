@@ -38,7 +38,7 @@ public static class StairDraw
     /// <summary>What the stair is drawn from: the floor to floor rise, and the sizes the tool defaults to.</summary>
     public sealed class Setup
     {
-        public double Rise = 3400;
+        public double Rise = 3000;
         public double Width = Stairs.WidthDefault;
         public double RiserMax = Stairs.RiserMaxDefault;
         public double Going = Stairs.GoingDefault;

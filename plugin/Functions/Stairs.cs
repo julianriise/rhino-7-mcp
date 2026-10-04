@@ -106,10 +106,11 @@ public static class Stairs
     }
 
     /// <summary>
-    /// Floor to floor: the walls' most common height (to the mm) plus the floor
-    /// build-up. No walls: the default wall height.
+    /// Floor to floor: the walls' most common height (to the mm). The floor
+    /// slab hangs below the walking surface, so it is not added; the upper
+    /// floor is the wall top. No walls: the default wall height.
     /// </summary>
-    public static double AutoRise(IEnumerable<double> wallHeights, double floorThickness, double fallbackHeight)
+    public static double AutoRise(IEnumerable<double> wallHeights, double fallbackHeight)
     {
         var common = (wallHeights ?? Enumerable.Empty<double>())
             .Where(h => h > 0)
@@ -117,7 +118,7 @@ public static class Stairs
             .OrderByDescending(g => g.Count()).ThenByDescending(g => g.Key)
             .Select(g => (double?)g.Key)
             .FirstOrDefault();
-        return (common ?? fallbackHeight) + Math.Max(0, floorThickness);
+        return common ?? fallbackHeight;
     }
 
     /// <summary>

@@ -61,8 +61,9 @@ def add_stair(
     - width: mm, default 900 (800 or more is the residential guidance).
     - riser_max: highest step, mm, default 180.
     - going: tread depth, mm, default 260.
-    - rise: total rise in mm, or "auto" (default): the walls' height plus the
-      floor slab, and it follows the walls when they are baked again.
+    - rise: total rise in mm, or "auto" (default): the walls' height. The
+      floor slab hangs below the walking surface, so it is not added. The
+      rise follows the walls when they are baked again.
     - against: "left" or "right", the side of the stair that stands against a
       wall, looking up it. Only with from_point and to_point.
 

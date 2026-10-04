@@ -314,29 +314,21 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Floor to floor: the walls' most common height plus the floor's
-    /// build-up, read off the model's slab (the bake made it from
-    /// model_settings), else the bake defaults.
+    /// Floor to floor: the walls' most common height. The slab hangs below
+    /// the walking surface, so the upper floor is the wall top.
     /// </summary>
     private static double StairAutoRise(RhinoDoc doc)
     {
         var heights = new List<double>();
-        var slabs = new List<double>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
-            if (!IsForskGenerated(obj)) continue;
+            if (!IsForskGenerated(obj) || !IsHostWall(doc, obj)) continue;
             var box = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
             if (!box.IsValid) continue;
             var depth = box.Max.Z - box.Min.Z;
-            if (IsHostWall(doc, obj))
-                heights.Add(ParseMm(obj.Attributes.GetUserString("forsk:height")) ?? depth);
-            else if (string.Equals(GetForskKind(obj), "floor", StringComparison.OrdinalIgnoreCase))
-                slabs.Add(ParseMm(obj.Attributes.GetUserString("forsk:thickness")) ?? depth);
+            heights.Add(ParseMm(obj.Attributes.GetUserString("forsk:height")) ?? depth);
         }
-        var floor = slabs.Count == 0
-            ? ForskDefaults.FloorThickness
-            : slabs.GroupBy(t => Math.Round(t)).OrderByDescending(g => g.Count()).First().Key;
-        return Stairs.AutoRise(heights, floor, ForskDefaults.WallHeight);
+        return Stairs.AutoRise(heights, ForskDefaults.WallHeight);
     }
 
     private static double? ReadSize(JObject parameters, string key)

@@ -527,7 +527,7 @@ namespace RhinoMCPPlugin.Forsk
                     },
                     "side", "distance_mm"),
                 Fn("add_stair",
-                    "Add a straight stair: one closed sawtooth solid you can walk, on A-STAIR. Risers = ceil(rise / riser_max), all equal, so the last lands on the upper floor; treads = risers - 1; run = treads x going. Place it with from and to (the foot of the first riser on the stair's centre line, then a point it climbs toward); or along_wall for the one picked wall (its room side, from the end nearer at); or give nothing (the longest room wall that holds the run). rise omitted is auto: the walls' height plus the floor slab, and it follows the walls. A size outside the comfort rule still builds and the receipt says so.",
+                    "Add a straight stair: one closed sawtooth solid you can walk, on A-STAIR. Risers = ceil(rise / riser_max), all equal, so the last lands on the upper floor; treads = risers - 1; run = treads x going. Place it with from and to (the foot of the first riser on the stair's centre line, then a point it climbs toward); or along_wall for the one picked wall (its room side, from the end nearer at); or give nothing (the longest room wall that holds the run). rise omitted is auto: the walls' height (the slab hangs below the floor, so it is not added), and it follows the walls. A size outside the comfort rule still builds and the receipt says so.",
                     new JObject
                     {
                         ["from"] = Pair("Foot of the first riser [x, y] in mm. With to."),

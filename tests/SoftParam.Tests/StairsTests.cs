@@ -41,20 +41,29 @@ public class StairsTests
     [Fact]
     public void WallHeightChange_ReplansCount_KeepsRisersEqual()
     {
-        var before = Stairs.Plan(Stairs.AutoRise(new double[] { 3000, 3000, 2400 }, 400, 3000), 180, 260, 900);
-        Assert.Equal(3400, before.Rise);
-        Assert.Equal(19, before.Risers);
-        var after = Stairs.Plan(Stairs.AutoRise(new double[] { 2400, 2400, 3000 }, 400, 3000), 180, 260, 900);
-        Assert.Equal(2800, after.Rise);
-        Assert.Equal(16, after.Risers);
-        Assert.Equal(2800 / 16.0, after.Riser);
+        // The slab hangs below the walking surface, so the rise is the wall top.
+        // 3000 / 180 ceils to 17; 2400 / 180 ceils to 14. The last tread stays under that top.
+        var before = Stairs.Plan(Stairs.AutoRise(new double[] { 3000, 3000, 2400 }, 3000), 180, 260, 900);
+        Assert.Equal(3000, before.Rise);
+        Assert.Equal(17, before.Risers);
+        Assert.Equal(16, before.Treads);
+        double top = 0;
+        foreach (var p in Stairs.Profile(before)) if (p.Y > top) top = p.Y;
+        Assert.Equal(before.Rise - before.Riser, top, 6);
+        Assert.True(top < 3000);
+        Assert.Equal(before.Rise, Stairs.StepTop(before, before.Risers));
+        var after = Stairs.Plan(Stairs.AutoRise(new double[] { 2400, 2400, 3000 }, 3000), 180, 260, 900);
+        Assert.Equal(2400, after.Rise);
+        Assert.Equal(14, after.Risers);
+        Assert.Equal(2400 / 14.0, after.Riser);
         Assert.Equal(after.Rise, Stairs.StepTop(after, after.Risers));
     }
 
     [Fact]
     public void AutoRise_NoWalls_UsesFallback()
     {
-        Assert.Equal(3400, Stairs.AutoRise(new double[0], 400, 3000));
+        Assert.Equal(3000, Stairs.AutoRise(new double[0], 3000));
+        Assert.Equal(3000, Stairs.AutoRise(new double[] { 3000 }, 3000));
     }
 
     [Fact]
