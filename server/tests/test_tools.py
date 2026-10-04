@@ -4096,7 +4096,13 @@ class TestPrintGuards:
         from pathlib import Path
 
         root = Path(__file__).resolve().parents[2]
-        return (root.joinpath(*parts)).read_text()
+        text = (root.joinpath(*parts)).read_text()
+        if parts[-1] == "LayoutPack.cs":
+            text += (root.joinpath(*parts[:-1], "LayoutPackMac.cs")).read_text()
+            text += (root.joinpath(*parts[:-1], "LayoutPackMore.cs")).read_text()
+        if parts[-1] == "PlanSymbols.cs":
+            text += (root.joinpath(*parts[:-1], "PlanSymbolsRooms.cs")).read_text()
+        return text
 
     def test_layout_uses_page_view_and_filepdf(self):
         src = self._text("plugin", "Functions", "LayoutPack.cs")

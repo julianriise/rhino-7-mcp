@@ -119,7 +119,17 @@ public class RoomPlateTests
         Assert.Contains("AddRoomPlates(", Source("RoomsDetect.cs"));
     }
 
-    static string Source(string file) => File.ReadAllText(Path.Combine(FunctionsDir(), file));
+    static string Source(string file)
+    {
+        var path = Path.Combine(FunctionsDir(), file);
+        var text = File.ReadAllText(path);
+        if (file == "LayoutPack.cs")
+        {
+            text += File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMac.cs"));
+            text += File.ReadAllText(Path.Combine(FunctionsDir(), "LayoutPackMore.cs"));
+        }
+        return text;
+    }
 
     static string FunctionsDir()
     {
