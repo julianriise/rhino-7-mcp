@@ -58,7 +58,28 @@ public static class DetailDims
                 chains.Add(Face(facts, outer, face + "_overall", new[] { lo, hi }, 2));
         }
         chains.Add(Thickness(facts, ThicknessAlong(facts)));
+        if (drawing.Breaks != null)
+            foreach (var chain in chains) Break(chain, drawing.Breaks);
         return chains;
+    }
+
+    /// <summary>
+    /// A chain drawn across a plan's breaks: its stops where they are drawn,
+    /// its values true, and a value whose span crosses a break underlined.
+    /// </summary>
+    public static void Break(PlanDims.FixedChain chain, DetailBreaks.Plan breaks)
+    {
+        if (chain == null || breaks == null) return;
+        if (Math.Abs(chain.Dir.Y) > 0.5)
+        {
+            chain.Origin = new Pt(breaks.Map(chain.Origin.X), chain.Origin.Y);
+            return;
+        }
+        chain.Values = Values(chain);
+        chain.Underline = new List<bool>();
+        for (var i = 0; i + 1 < chain.Stops.Count; i++)
+            chain.Underline.Add(breaks.Spans(chain.Stops[i], chain.Stops[i + 1]));
+        chain.Stops = chain.Stops.Select(breaks.Map).ToList();
     }
 
     /// <summary>
@@ -121,6 +142,7 @@ public static class DetailDims
     /// <summary>The values a chain prints, from stop to stop.</summary>
     public static List<int> Values(PlanDims.FixedChain chain)
     {
+        if (chain.Values != null) return new List<int>(chain.Values);
         var values = new List<int>();
         for (var i = 0; i + 1 < chain.Stops.Count; i++)
             values.Add((int)Math.Round(chain.Stops[i + 1] - chain.Stops[i], MidpointRounding.AwayFromZero));

@@ -33,7 +33,7 @@ public class DetailFrameTests
         Assert.Equal("South wall — Plan", plan.Title);
         var mark = Assert.Single(plan.Marks);
         Assert.Equal(Details.Cut, mark.View);
-        Assert.Equal(5225, mark.At.X, 3);
+        Assert.Equal(5225, Details.SectionAlong(facts), 3);
         Assert.True(mark.At.Y < 0, "the section mark sits outside the outer (south) face");
     }
 

@@ -26,7 +26,8 @@ public class DetailDimsTests
         var outer = Chain(chains, "outer");
         Assert.Equal(new[] { 1550, 900, 5550 }, DetailDims.Values(outer));
         Assert.Equal(8000, DetailDims.Values(outer).Sum());
-        Assert.Equal(new double[] { 0, 1550, 2450, 8000 }, outer.Stops);
+        // Drawn across the plan's break (D2b): 8000 sits at 4050.
+        Assert.Equal(new double[] { 0, 1550, 2450, 4050 }, outer.Stops);
         Assert.Equal(0, outer.Origin.Y, 3);
         Assert.Equal(-1, outer.Out.Y, 3);
         Assert.Equal(new[] { 8000 }, DetailDims.Values(Chain(chains, "outer_overall")));
@@ -50,7 +51,8 @@ public class DetailDimsTests
     {
         var thickness = Chain(Plan(wall: "w01"), "thickness");
         Assert.Equal(new[] { 200 }, DetailDims.Values(thickness));
-        Assert.Equal(7500, thickness.Origin.X, 3);
+        // 7500 along, drawn past the break at 3550.
+        Assert.Equal(3550, thickness.Origin.X, 3);
     }
 
     [Fact]

@@ -117,6 +117,10 @@ public static class PlanDims
         public List<string> StopIds = new List<string>();
         public double Reach;
         public int Row = 1;
+        /// <summary>The values printed, one per span, when the stops are not to scale (across a break). Null: from the stops.</summary>
+        public List<int> Values;
+        /// <summary>Per span: its value is underlined, not to scale.</summary>
+        public List<bool> Underline;
     }
 
     /// <summary>
@@ -165,6 +169,8 @@ public static class PlanDims
         public Pt To;
         public string FromId;
         public string ToId;
+        /// <summary>The value is not to scale: draw a line under it.</summary>
+        public bool Underline;
         public Box Box;
         public bool Clear;
     }
@@ -193,6 +199,8 @@ public static class PlanDims
         public List<Label> Texts = new List<Label>();
         public bool Placed;
         public int Collisions;
+        public List<int> Values;
+        public List<bool> Underline;
         /// <summary>A chain across walls (a thickness): its line may cross the poché.</summary>
         public bool CrossesWalls;
     }
@@ -249,6 +257,8 @@ public static class PlanDims
             chain.CrossesWalls = f.Reach > 0;
             for (var i = 0; i < f.Stops.Count; i++)
                 AddStop(chain, f.Stops[i], i < f.StopIds.Count ? f.StopIds[i] : null);
+            chain.Values = f.Values;
+            chain.Underline = f.Underline;
             List<double> offsets;
             if (f.Reach > 0) offsets = BothWays(f.Reach, StepMm * s);
             else
@@ -554,13 +564,14 @@ public static class PlanDims
         chain.Placed = false;
         if (chain.Stops.Count < 2) return;
         var rounded = chain.Stops.Select(t => Math.Round(t - chain.Stops[0], MidpointRounding.AwayFromZero)).ToList();
-        chain.Total = (int)rounded[rounded.Count - 1];
+        chain.Total = chain.Values != null ? chain.Values.Sum() : (int)rounded[rounded.Count - 1];
         if (offsets.Count == 0) return;
         var texts = new List<string>();
         var widths = new List<double>();
         for (var i = 0; i + 1 < rounded.Count; i++)
         {
-            var text = ((int)(rounded[i + 1] - rounded[i])).ToString(CultureInfo.InvariantCulture);
+            var value = chain.Values != null && i < chain.Values.Count ? chain.Values[i] : (int)(rounded[i + 1] - rounded[i]);
+            var text = value.ToString(CultureInfo.InvariantCulture);
             var paper = measure?.Invoke(text) ?? 0;
             if (paper <= 0) paper = 0.6 * TextMm * text.Length;
             texts.Add(text);
@@ -725,6 +736,7 @@ public static class PlanDims
             To = At(chain, chain.Stops[i + 1], 0),
             FromId = chain.StopIds[i],
             ToId = chain.StopIds[i + 1],
+            Underline = chain.Underline != null && i < chain.Underline.Count && chain.Underline[i],
             Box = new Box(centre.X - hx, centre.Y - hy, centre.X + hx, centre.Y + hy)
         };
     }

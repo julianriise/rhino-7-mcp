@@ -201,6 +201,10 @@ public partial class RhinoMCPFunctions
         int pattern, double tol, ref BoundingBox box, ref int index, ref int count, List<string> notes)
     {
         var rect = new DetailClip.Rect(d.U0, d.V0, d.U1, d.V1);
+        // Each stretch a break keeps, and how far along u it moves to be drawn.
+        var keep = (d.Breaks?.Keep() ?? new List<KeyValuePair<double, double>> { new KeyValuePair<double, double>(d.U0, d.U1) })
+            .Select(k => (Rect: new DetailClip.Rect(k.Key, d.V0, k.Value, d.V1), Du: d.Map(k.Key) - k.Key))
+            .ToList();
         var near = sources.Where(o => MeetsCrop(o, d, rect)).ToList();
         var stamp = new SymbolStamp
         {
@@ -270,9 +274,10 @@ public partial class RhinoMCPFunctions
                     var cut = IsSectionCut(seg);
                     var pen = cut ? PenCut : seg.IsSceneSilhouette ? PenSilhouette : PenBeyond;
                     var points = CurvePoints(seg.CurveGeometry, tol).Select(toFrame).ToList();
-                    foreach (var run in ClipRuns(points, rect, tol, ref clipped2d))
+                    foreach (var part in keep)
+                    foreach (var run in ClipRuns(points, part.Rect, tol, ref clipped2d))
                     {
-                        using (var curve = new PolylineCurve(run.Select(Sheet)))
+                        using (var curve = new PolylineCurve(run.Select(p => Sheet(new Pt(p.X + part.Du, p.Y)))))
                             added += AddStroke(doc, layer, curve, pen, scale, false, pattern, tol,
                                 cut ? "cut" : "beyond", null, null, null, ref box, ref index, ref count, stamp);
                     }
@@ -287,6 +292,7 @@ public partial class RhinoMCPFunctions
         if (clipped2d > 0) notes.Add(d.Title + ": " + clipped2d.ToString(CultureInfo.InvariantCulture) + " lines clipped in 2D");
 
         var rings = new List<List<Pt>>();
+        var breakEdges = new List<KeyValuePair<Pt, Pt>>();
         var fills = 0;
         if (d.Clipped)
         {
@@ -301,12 +307,19 @@ public partial class RhinoMCPFunctions
                     foreach (var loop in group ?? new List<Curve>())
                     {
                         if (loop == null) continue;
-                        var ring = DetailClip.Ring(CurvePoints(loop, tol).Select(p => DetailFrame(d, p)).ToList(), rect);
-                        if (ring.Count < 3) continue;
-                        rings.Add(ring);
-                        var closed = ring.Select(Sheet).ToList();
-                        closed.Add(closed[0]);
-                        sheetGroup.Add(new PolylineCurve(closed));
+                        var frame = CurvePoints(loop, tol).Select(p => DetailFrame(d, p)).ToList();
+                        foreach (var part in keep)
+                        {
+                            var ring = DetailClip.Ring(frame, part.Rect);
+                            if (ring.Count < 3) continue;
+                            breakEdges.AddRange(DetailClip.CropEdges(ring, part.Rect, Math.Max(tol, 0.5)).Select(e =>
+                                new KeyValuePair<Pt, Pt>(new Pt(e.Key.X + part.Du, e.Key.Y), new Pt(e.Value.X + part.Du, e.Value.Y))));
+                            ring = ring.Select(p => new Pt(p.X + part.Du, p.Y)).ToList();
+                            rings.Add(ring);
+                            var closed = ring.Select(Sheet).ToList();
+                            closed.Add(closed[0]);
+                            sheetGroup.Add(new PolylineCurve(closed));
+                        }
                     }
                     if (sheetGroup.Count > 0) sheetGroups.Add(sheetGroup);
                 }
@@ -319,15 +332,12 @@ public partial class RhinoMCPFunctions
             }
         }
 
-        foreach (var ring in rings)
+        foreach (var edge in breakEdges)
         {
-            foreach (var edge in DetailClip.CropEdges(ring, rect, Math.Max(tol, 0.5)))
-            {
-                var line = DetailClip.BreakLine(edge.Key, edge.Value, scale);
-                using (var curve = new PolylineCurve(line.Select(Sheet)))
-                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
-                        "break_line", null, null, null, ref box, ref index, ref count, stamp);
-            }
+            var line = DetailClip.BreakLine(edge.Key, edge.Value, scale);
+            using (var curve = new PolylineCurve(line.Select(Sheet)))
+                added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
+                    "break_line", null, null, null, ref box, ref index, ref count, stamp);
         }
 
         var chains = d.View == Details.Plan ? DetailDims.PlanChains(d.Facts, d) : new List<PlanDims.FixedChain>();
@@ -375,6 +385,13 @@ public partial class RhinoMCPFunctions
                     ["forsk:dim_total"] = chain.Total.ToString(CultureInfo.InvariantCulture)
                 };
                 if (AddDimensionText(doc, layer, label, scale, values, ref box, ref index, ref count)) added++;
+                if (!label.Underline) continue;
+                // Not to scale (ISO 129-1): a line under the value.
+                var reading = new Vector3d(label.Reading.X, label.Reading.Y, 0);
+                var under = DrawingPoint(label.Centre) - new Vector3d(-reading.Y, reading.X, 0) * (label.Height / 2.0 + PlanDims.TextPadMm * scale / 2.0);
+                using (var curve = new LineCurve(under - reading * (label.Width / 2.0), under + reading * (label.Width / 2.0)))
+                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
+                        "dimension", "underline", null, null, ref box, ref index, ref count, dimStamp);
             }
         }
         return fills;

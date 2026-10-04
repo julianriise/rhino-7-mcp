@@ -252,9 +252,13 @@ public static class Details
         public bool Clipped;
         public string Title;
         public List<Mark> Marks = new List<Mark>();
+        /// <summary>A long wall's plan breaks (D2b). Null when the drawing is whole.</summary>
+        public DetailBreaks.Plan Breaks;
         public Pt Y => Vertical ? new Pt(0, 0) : new Pt(-X.Y, X.X);
         public Pt Look => Vertical ? new Pt(-X.Y, X.X) : new Pt(0, 0);
-        public double Width => U1 - U0;
+        /// <summary>A true u where it is drawn: past the breaks before it.</summary>
+        public double Map(double u) => Breaks == null ? u : Breaks.Map(u);
+        public double Width => Breaks == null ? U1 - U0 : Breaks.DrawnLength;
         public double Height => V1 - V0;
     }
 
@@ -379,10 +383,11 @@ public static class Details
             a = run.Lo - WallMarginMm;
             b = run.Hi + WallMarginMm;
             across = WallMarginMm;
+            drawing.Breaks = WallBreaks(facts, Math.Min(U(facts, a), U(facts, b)), Math.Max(U(facts, a), U(facts, b)));
             drawing.Marks.Add(new Mark
             {
                 View = Cut,
-                At = new Pt(U(facts, SectionAlong(facts)), OuterV(facts) + facts.Outer * WallMarginMm / 2.0),
+                At = new Pt(CutU(facts, drawing.Breaks), OuterV(facts) + facts.Outer * WallMarginMm / 2.0),
                 Look = new Pt(1, 0)
             });
         }
@@ -507,6 +512,39 @@ public static class Details
             x += drawing.Width / scale + 2 * BandMm;
         }
         return placed;
+    }
+
+    /// <summary>
+    /// A wall plan's breaks, when its crop lo..hi (u) is longer than 1:20
+    /// allows: kept around both faces' ends and every jamb. Null when none.
+    /// </summary>
+    public static DetailBreaks.Plan WallBreaks(Facts facts, double lo, double hi)
+    {
+        var stops = new List<double>();
+        foreach (var outer in new[] { true, false })
+        {
+            FaceExtent(facts, outer, out var a, out var b);
+            stops.Add(U(facts, a));
+            stops.Add(U(facts, b));
+        }
+        foreach (var hosted in facts.Openings)
+        {
+            stops.Add(U(facts, hosted.U - hosted.Opening.Width / 2.0));
+            stops.Add(U(facts, hosted.U + hosted.Opening.Width / 2.0));
+        }
+        var plan = DetailBreaks.Make(stops, lo, hi, DrawWidthMm * DetailBreaks.Scale);
+        return plan.Breaks.Count > 0 ? plan : null;
+    }
+
+    /// <summary>
+    /// Where a wall's section cuts it, as u in its plan: beside the largest
+    /// break (its u0) when the plan breaks, else the middle of its longest
+    /// stretch clear of openings.
+    /// </summary>
+    public static double CutU(Facts facts, DetailBreaks.Plan breaks)
+    {
+        if (breaks == null || breaks.Breaks.Count == 0) return U(facts, SectionAlong(facts));
+        return breaks.Breaks.OrderByDescending(b => b.U1 - b.U0).ThenBy(b => b.U0).First().U0;
     }
 
     /// <summary>The Print receipt's clause for details that dropped. Empty for none.</summary>
