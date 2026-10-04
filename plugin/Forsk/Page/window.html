@@ -191,9 +191,15 @@ header.top {
 .card .rows { margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink); font-size: 14px; }
 .card .rows li { padding: 2px 0; }
 nav.bar { padding: 4px 16px 0; }
+/* A chip keeps its label. What does not fit moves into the ⋯ menu. */
+.slots-wrap { position: relative; }
 .slots { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow: hidden; }
-.slot { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slot.primary { flex: none; }
+.slots:focus-within { overflow: visible; }
+.slot { flex: none; max-width: none; white-space: nowrap; }
+.slot.wrap {
+  white-space: normal; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 .help-button {
   flex: none; margin-left: auto; width: 30px; height: 30px; padding: 0; border-radius: 50%;
   border: 0; background: var(--card); color: var(--ink); box-shadow: var(--shadow);
@@ -201,9 +207,13 @@ nav.bar { padding: 4px 16px 0; }
 }
 .help-button svg { display: block; }
 .help-button.open { background: var(--brand); color: #FFFFFF; box-shadow: none; }
-.reason { color: var(--meta); font-size: 12px; margin: 6px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reason {
+  color: var(--meta); font-size: 12px; line-height: 1.35; margin: 6px 2px 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .reason b { font-weight: 600; color: var(--ink); }
-@media (max-width: 359px) { .slots .slot:nth-child(3) { display: none; } }
+#slot-menu { top: auto; right: 0; left: auto; bottom: calc(100% + 6px); transform: none; margin-top: 0; z-index: 6; }
 .sheet {
   position: absolute; left: 12px; right: 12px; bottom: 100%; margin-bottom: 8px; max-height: 60vh; overflow-y: auto;
   background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; animation: rise 160ms ease-out;

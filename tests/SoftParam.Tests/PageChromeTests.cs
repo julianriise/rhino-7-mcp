@@ -310,7 +310,8 @@ public class PageChromeTests
     /// <summary>
     /// A layer name and a file path have no spaces. The bubble is a flex child,
     /// so it needs min-width 0 or the word paints past the panel. Card chips wrap.
-    /// The bar still ellipsizes, and the header column cannot grow the page.
+    /// A bar chip keeps one line until it is the only chip and wider than the
+    /// row. The header column cannot grow the page.
     /// </summary>
     [Fact]
     public void UnbreakableText_WrapsInsideThePanel()
@@ -367,5 +368,44 @@ public class PageChromeTests
         Assert.Contains("root.addEventListener('resize'", script);
         Assert.Contains("focus.focus({ preventScroll: true })", script);
         Assert.Contains("node.tabIndex = 0", script);
+    }
+
+    /// <summary>
+    /// A suggestion chip never shrinks to a fragment. The primary stays, and
+    /// wraps to two lines only when it is wider than the row. The rest move
+    /// into the ⋯ menu. The reason wraps to two lines instead of an ellipsis.
+    /// </summary>
+    [Fact]
+    public void AChipThatDoesNotFit_MovesIntoTheMenu()
+    {
+        var html = Html();
+        var slotAt = html.IndexOf(".slot {", StringComparison.Ordinal);
+        var slot = html.Substring(slotAt, html.IndexOf('}', slotAt) - slotAt);
+        Assert.Contains("flex: none", slot);
+        Assert.Contains("white-space: nowrap", slot);
+        Assert.DoesNotContain("text-overflow", slot);
+        Assert.DoesNotContain("min-width: 0", slot);
+        Assert.Contains("-webkit-line-clamp: 2", html);
+        Assert.DoesNotContain("nth-child(3) { display: none", html);
+
+        var reasonAt = html.IndexOf(".reason {", StringComparison.Ordinal);
+        var reason = html.Substring(reasonAt, html.IndexOf('}', reasonAt) - reasonAt);
+        Assert.Contains("-webkit-line-clamp: 2", reason);
+        Assert.DoesNotContain("text-overflow", reason);
+        Assert.DoesNotContain("white-space: nowrap", reason);
+
+        var engine = PageScript.Load();
+        Assert.Equal("0", engine.Evaluate("String(Forsk.visibleSlots(400, [], 30, 6))").ToString());
+        Assert.Equal("1", engine.Evaluate("String(Forsk.visibleSlots(320, [209, 97], 30, 6))").ToString());
+        Assert.Equal("1", engine.Evaluate("String(Forsk.visibleSlots(200, [400, 80], 30, 6))").ToString());
+        Assert.Equal("2", engine.Evaluate("String(Forsk.visibleSlots(420, [209, 97, 106], 30, 6))").ToString());
+        Assert.Equal("3", engine.Evaluate("String(Forsk.visibleSlots(800, [209, 97, 106], 30, 6))").ToString());
+        Assert.Equal("2", engine.Evaluate("String(Forsk.visibleSlots(300, [200, 58], 30, 6))").ToString());
+        Assert.Equal("1", engine.Evaluate("String(Forsk.visibleSlots(300, [200, 59], 30, 6))").ToString());
+
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("Forsk.visibleSlots(row.clientWidth, widths, helpW, gap)", script);
+        Assert.Contains("fitSlots();", script);
+        Assert.Contains("root.requestAnimationFrame(fitSlots)", script);
     }
 }

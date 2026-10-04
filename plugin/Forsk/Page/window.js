@@ -350,12 +350,44 @@
   var model = null;
   var sender = null;
   var barHovered = false;
+  var barModel = null;
   var lastPrefill = 0;
   /* The render in progress is keeping the reader on the newest line. */
   var followLatest = true;
 
   Forsk.nearEnd = function (scrollHeight, scrollTop, clientHeight) {
     return scrollHeight - scrollTop - clientHeight < 40;
+  };
+
+  /*
+   * How many chips stay on the row. widths are natural widths, primary first.
+   * The primary always stays; when it is wider than the row it wraps inside
+   * itself and nothing else sits beside it. help is the ⋯ width. A later chip
+   * stays only while the whole prefix still fits beside the ⋯.
+   */
+  Forsk.visibleSlots = function (row, widths, help, gap) {
+    row = +row;
+    help = +help;
+    gap = +gap;
+    if (!(row >= 0)) row = 0;
+    if (!(help >= 0)) help = 0;
+    if (!(gap >= 0)) gap = 0;
+    if (!widths || !widths.length) return 0;
+    var budget = row - help - (help > 0 ? gap : 0);
+    if (!(budget > 0)) return 1;
+    var used = 0;
+    for (var i = 0; i < widths.length; i++) {
+      var w = +widths[i];
+      if (!(w >= 0)) w = 0;
+      if (i === 0) {
+        used = w;
+        if (w > budget) return 1;
+        continue;
+      }
+      if (used + gap + w > budget + 0.5) return i;
+      used += gap + w;
+    }
+    return widths.length;
   };
 
   function el(tag, cls, text) {
@@ -759,25 +791,55 @@
   function renderBar(bar) {
     var nav = document.getElementById('bar');
     while (nav.firstChild) nav.removeChild(nav.firstChild);
+    barModel = bar || null;
     if (!bar) return;
+    var wrap = el('div', 'slots-wrap');
     var slots = el('div', 'slots');
     (bar.slots || []).forEach(function (slot, index) {
       var button = el('button', 'pill slot' + (index === 0 ? ' primary' : ''), slot.label);
       button.type = 'button';
       button.title = slot.label + '  ' + slot.key;
+      button.setAttribute('data-slot', slot.id);
       button.addEventListener('click', function () { sender.send({ kind: 'action', id: slot.id }); });
       slots.appendChild(button);
     });
     if (bar.help) {
       var help = el('button', 'help-button' + (model && model.help ? ' open' : ''));
+      help.id = 'help';
       help.type = 'button';
       help.title = bar.help.title + '  ' + bar.help.key;
       help.setAttribute('aria-label', bar.help.title);
+      help.setAttribute('aria-expanded', 'false');
       help.appendChild(moreMark());
-      help.addEventListener('click', function () { sender.send({ kind: 'help' }); });
+      help.addEventListener('click', function () {
+        var menu = document.getElementById('slot-menu');
+        var items = menu ? menu.getElementsByTagName('button').length : 0;
+        if (menu && !menu.hidden) {
+          closeMenus(true);
+          return;
+        }
+        if (items) {
+          openMenu('slot-menu', help);
+          return;
+        }
+        sender.send({ kind: 'help' });
+      });
+      help.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        var menu = document.getElementById('slot-menu');
+        if (!menu || !menu.getElementsByTagName('button').length) return;
+        e.preventDefault();
+        openMenu('slot-menu', help);
+      });
       slots.appendChild(help);
     }
-    nav.appendChild(slots);
+    wrap.appendChild(slots);
+    var menu = el('div', 'menu');
+    menu.id = 'slot-menu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+    wrap.appendChild(menu);
+    nav.appendChild(wrap);
     if (bar.reason) {
       var reason = el('div', 'reason');
       reason.appendChild(el('b', null, bar.because || ''));
@@ -785,6 +847,89 @@
       reason.title = reason.textContent;
       nav.appendChild(reason);
     }
+    fitSlots();
+    if (root.requestAnimationFrame) root.requestAnimationFrame(fitSlots);
+  }
+
+  /* Hide every chip that does not fit, and list those chips in the ⋯ menu. */
+  function fitSlots() {
+    var nav = document.getElementById('bar');
+    var row = nav ? nav.getElementsByClassName('slots')[0] : null;
+    if (!row || !barModel) return;
+    var chips = [];
+    var nodes = row.getElementsByClassName('slot');
+    for (var i = 0; i < nodes.length; i++) chips.push(nodes[i]);
+    var help = document.getElementById('help');
+    for (var n = 0; n < chips.length; n++) {
+      chips[n].hidden = false;
+      chips[n].classList.remove('wrap');
+      chips[n].style.maxWidth = '';
+    }
+    var gap = 6;
+    if (root.getComputedStyle) {
+      var parsed = parseFloat(root.getComputedStyle(row).columnGap);
+      if (parsed >= 0) gap = parsed;
+    }
+    var widths = [];
+    for (var w = 0; w < chips.length; w++) widths.push(chips[w].offsetWidth);
+    var helpW = help ? help.offsetWidth : 0;
+    var count = Forsk.visibleSlots(row.clientWidth, widths, helpW, gap);
+    var hidden = [];
+    for (var h = 0; h < chips.length; h++) {
+      if (h >= count) {
+        chips[h].hidden = true;
+        hidden.push(chips[h]);
+      }
+    }
+    var budget = row.clientWidth - helpW - (helpW > 0 ? gap : 0);
+    if (chips.length && widths[0] > budget && budget > 0) {
+      chips[0].classList.add('wrap');
+      chips[0].style.maxWidth = Math.floor(budget) + 'px';
+    }
+    fillSlotMenu(hidden);
+  }
+
+  function fillSlotMenu(hidden) {
+    var menu = document.getElementById('slot-menu');
+    if (!menu) return;
+    var open = !menu.hidden;
+    while (menu.firstChild) menu.removeChild(menu.firstChild);
+    hidden.forEach(function (chip) {
+      var id = chip.getAttribute('data-slot');
+      var item = el('button', null, chip.textContent);
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      item.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'action', id: id });
+      });
+      menu.appendChild(item);
+    });
+    if (hidden.length && barModel && barModel.help) {
+      var helpItem = el('button', 'split', barModel.help.title || barModel.help.label);
+      helpItem.type = 'button';
+      helpItem.setAttribute('role', 'menuitem');
+      helpItem.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'help' });
+      });
+      menu.appendChild(helpItem);
+    }
+    var help = document.getElementById('help');
+    if (!hidden.length) {
+      menu.hidden = true;
+      if (help) {
+        help.setAttribute('aria-expanded', 'false');
+        help.removeAttribute('aria-haspopup');
+        help.removeAttribute('aria-controls');
+      }
+      return;
+    }
+    if (help) {
+      help.setAttribute('aria-haspopup', 'menu');
+      help.setAttribute('aria-controls', 'slot-menu');
+    }
+    menu.hidden = !open;
   }
 
   function renderSheet(help) {
@@ -911,6 +1056,8 @@
     if (roleMenu && !roleMenu.hidden) return roleMenu;
     var moreMenu = document.getElementById('more-menu');
     if (moreMenu && !moreMenu.hidden) return moreMenu;
+    var slotMenu = document.getElementById('slot-menu');
+    if (slotMenu && !slotMenu.hidden) return slotMenu;
     return null;
   }
 
@@ -922,8 +1069,12 @@
   function closeMenus(back) {
     document.getElementById('role-menu').hidden = true;
     document.getElementById('more-menu').hidden = true;
+    var slotMenu = document.getElementById('slot-menu');
+    if (slotMenu) slotMenu.hidden = true;
     document.getElementById('role-pill').setAttribute('aria-expanded', 'false');
     document.getElementById('more').setAttribute('aria-expanded', 'false');
+    var helpBtn = document.getElementById('help');
+    if (helpBtn) helpBtn.setAttribute('aria-expanded', 'false');
     var owner = menuOwner;
     menuOwner = null;
     if (back && owner) owner.focus();
@@ -996,6 +1147,7 @@
     });
     // Shrinking the panel does not fire a scroll. A reader who was on the newest line still is.
     root.addEventListener('resize', function () {
+      fitSlots();
       if (!followLatest) return;
       threadEl.scrollTop = threadEl.scrollHeight;
     });
@@ -1020,7 +1172,7 @@
     });
     document.addEventListener('mousedown', function (e) {
       if (!openMenuEl()) return;
-      if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target)) return;
+      if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
       closeMenus(false);
     });
     var hoverDown = false;
