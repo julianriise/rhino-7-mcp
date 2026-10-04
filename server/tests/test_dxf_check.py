@@ -23,7 +23,7 @@ LAYERS = [
 
 
 def plan_doc(*, cut=4, hatch=True, heavy=True, number="A-20-001", off_sheet=False, layers=LAYERS):
-    doc = ezdxf.new("R2000")
+    doc = ezdxf.new("R2018")
     for name, weight in layers:
         doc.layers.add(name, lineweight=weight if heavy or weight != 50 else 25)
     msp = doc.modelspace()
@@ -77,6 +77,14 @@ def test_a_dwg_starts_with_its_version(tmp_path):
     assert dxf_check.check_dwg(empty)
     assert dxf_check.check_dwg(text)
     assert dxf_check.check_dwg(tmp_path / "missing.dwg")
+    old = tmp_path / "d.dwg"
+    old.write_bytes(b"AC1009" + b"\0" * 100)
+    assert dxf_check.check_dwg(old) == ["d.dwg is AC1009, want AC1027 (AutoCAD 2013) or later"]
+
+
+def test_an_r12_plan_fails_on_its_version():
+    doc = ezdxf.new("R12")
+    assert "version AC1009, want AC1027 (AutoCAD 2013) or later" in dxf_check.check_plan(doc)
 
 
 def test_the_plan_file_is_found_by_its_number():
@@ -103,7 +111,7 @@ class FakeRhino:
             files.append(name)
         return {
             "folder": str(folder), "format": params["format"], "count": len(files), "files": files,
-            "writer": "headless", "misc": 0, "misc_roles": [],
+            "writer": "active_doc", "misc": 0, "misc_roles": [], "acad_version": "AC1032",
             "message": f"Exported {len(files)} sheets as {params['format'].upper()} to {folder}.",
         }
 
@@ -122,6 +130,7 @@ def test_the_export_step_passes_on_a_right_set(tmp_path):
     assert [c[1]["format"] for c in rhino.calls[:2]] == ["dxf", "dwg"]
     assert checked == [tmp_path / "Garage.ifc"]
     assert len(lines) <= 25
+    assert "dxf: 1 files · writer active_doc · AC1032" in lines
 
 
 def test_the_export_step_fails_on_a_bad_ifc(tmp_path):

@@ -264,6 +264,35 @@ public static class SheetFlat
         return Math.Round(value, 3).ToString("0.###", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>
+    /// The export scheme the sheets are written with. Rhino 7's standard
+    /// schemes are Default, 2007 …, R12 … and CAM …; Default is the only one
+    /// past 2007. A headless WriteFile names no scheme and came out R12
+    /// (AC1009): no hatches, no lineweights.
+    /// </summary>
+    public const string AcadScheme = "Default";
+
+    /// <summary>The scripted export of the selection to path with AcadScheme.</summary>
+    public static string ExportScript(string path) =>
+        "_-Export \"" + path + "\" _Scheme \"" + AcadScheme + "\" _Enter";
+
+    /// <summary>"AC1032" off a DWG's first bytes or a DXF's $ACADVER; empty when neither reads.</summary>
+    public static string AcadVersion(byte[] head)
+    {
+        if (head == null || head.Length < 6) return "";
+        var text = Encoding.ASCII.GetString(head);
+        if (text.StartsWith("AC10", StringComparison.Ordinal)) return text.Substring(0, 6);
+        var at = text.IndexOf("$ACADVER", StringComparison.Ordinal);
+        if (at < 0) return "";
+        var lines = text.Substring(at).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        // $ACADVER, the group code 1, then the value.
+        return lines.Length > 2 && lines[2].Trim().StartsWith("AC10", StringComparison.Ordinal) ? lines[2].Trim() : "";
+    }
+
+    /// <summary>AutoCAD 2013 (AC1027) or later.</summary>
+    public static bool ModernAcad(string version) =>
+        !string.IsNullOrEmpty(version) && string.CompareOrdinal(version, "AC1027") >= 0;
+
     static LayerDef Layer(string name, double weight, string what)
     {
         return new LayerDef { Name = name, WeightMm = weight, What = what };

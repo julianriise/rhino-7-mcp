@@ -202,4 +202,28 @@ public class SheetExportWindowTests
         Assert.Contains(card.Pills, p => p.Id == "export" && p.Label == "Export DWG");
         Assert.Contains(card.Pills, p => p.Id == "export_ifc" && p.Label == "Export IFC");
     }
+
+    [Fact]
+    public void TheAcadVersion_IsReadOffTheFile_AndOnly2013OrLaterIsModern()
+    {
+        var dxf = System.Text.Encoding.ASCII.GetBytes("  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1032\r\n  9\r\n");
+        Assert.Equal("AC1032", SheetFlat.AcadVersion(dxf));
+        Assert.Equal("AC1009", SheetFlat.AcadVersion(System.Text.Encoding.ASCII.GetBytes("  9\n$ACADVER\n  1\nAC1009\n")));
+        Assert.Equal("AC1027", SheetFlat.AcadVersion(System.Text.Encoding.ASCII.GetBytes("AC1027\0\0\0\0\0")));
+        Assert.Equal("", SheetFlat.AcadVersion(new byte[0]));
+        Assert.Equal("", SheetFlat.AcadVersion(System.Text.Encoding.ASCII.GetBytes("  0\nSECTION\n")));
+
+        Assert.True(SheetFlat.ModernAcad("AC1027"));
+        Assert.True(SheetFlat.ModernAcad("AC1032"));
+        Assert.False(SheetFlat.ModernAcad("AC1009"));
+        Assert.False(SheetFlat.ModernAcad("AC1021"));
+        Assert.False(SheetFlat.ModernAcad(""));
+    }
+
+    [Fact]
+    public void TheExportScript_NamesTheFileAndTheScheme()
+    {
+        Assert.Equal("_-Export \"/tmp/a b/Holmen A-20-001 Plan.dwg\" _Scheme \"Default\" _Enter",
+            SheetFlat.ExportScript("/tmp/a b/Holmen A-20-001 Plan.dwg"));
+    }
 }

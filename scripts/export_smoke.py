@@ -49,6 +49,7 @@ def run(send, root: Path, check_ifc=ifc_check.check_path) -> tuple[list[str], bo
         files = list(result.get("files") or [])
         lines.append(
             f"{fmt}: {result.get('count', 0)} files · writer {result.get('writer') or '-'}"
+            + f" · {result.get('acad_version') or '-'}"
             + (f" · misc roles {','.join(result.get('misc_roles') or [])}" if result.get("misc") else "")
         )
         if not files or not str(result.get("message", "")).startswith("Exported"):

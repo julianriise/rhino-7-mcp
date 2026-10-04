@@ -982,7 +982,7 @@ def test_responses():
     sheets_result = {
         "folder": "/tmp/forsk-export-garage/Garage DWG", "format": "dwg", "count": 2,
         "files": ["Garage A-20-001 Plan.dwg", "Garage A-00-001 Front sheet.dwg"],
-        "writer": "headless", "misc": 0, "misc_roles": [],
+        "writer": "active_doc", "misc": 0, "misc_roles": [], "acad_version": "AC1032",
         "message": "Exported 2 sheets as DWG to /tmp/forsk-export-garage/Garage DWG.",
     }
     if not validate("responses/export_sheets_result.json", sheets_result):

@@ -5,6 +5,8 @@ A plan DXF must have the eight export layers, at least 4 entities on
 A-WALL-CUT, a HATCH on A-WALL-PATT, a 0.50 mm lineweight on an entity or a
 layer, the sheet number A-20-001 on A-ANNO-TTLB, and extents inside the A3
 sheet (420 x 297 mm). A DWG must exist, not be empty, and start with AC10.
+Either must be AutoCAD 2013 (AC1027) or later: R12 drops hatches and
+lineweights.
 
 Usage:
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DXF/Garage A-20-001 Plan.dxf"
@@ -25,6 +27,7 @@ SHEET_W, SHEET_H = 420.0, 297.0
 # A text box is measured from its font; allow a little past the paper edge.
 SLACK_MM = 1.0
 HEAVY = 50  # 0.50 mm in DXF hundredths
+MODERN = "AC1027"  # AutoCAD 2013
 
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
@@ -32,6 +35,8 @@ def check_plan(doc, number: str = "A-20-001") -> list[str]:
     from ezdxf import bbox
 
     problems = []
+    if doc.dxfversion < MODERN:
+        problems.append(f"version {doc.dxfversion}, want {MODERN} (AutoCAD 2013) or later")
     names = {layer.dxf.name.upper() for layer in doc.layers}
     missing = [name for name in LAYERS if name not in names]
     if missing:
@@ -83,6 +88,8 @@ def check_dwg(path) -> list[str]:
         return [f"{path.name} is empty"]
     if not head.startswith(b"AC10"):
         return [f"{path.name} does not start with AC10"]
+    if head.decode("ascii", "replace") < MODERN:
+        return [f"{path.name} is {head.decode('ascii', 'replace')}, want {MODERN} (AutoCAD 2013) or later"]
     return []
 
 

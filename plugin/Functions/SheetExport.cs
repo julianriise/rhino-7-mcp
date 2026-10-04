@@ -20,8 +20,10 @@ namespace RhinoMCPPlugin.Functions;
 /// detail's S-DRAW drawing through the detail's world-to-page map. Each piece
 /// goes to an export layer by its forsk:role (SheetFlat), a stroke ribbon
 /// comes back as its centreline at its pen, and Rhino's own exporter writes
-/// the file: from a headless document, or, when that writes nothing, from the
-/// active document with only the flat sheet selected.
+/// the file: scripted from the active document with only the flat sheet
+/// selected and the scheme named (SheetFlat.AcadScheme), or, when that writes
+/// nothing of AutoCAD 2013 or later, from a headless document. The version
+/// the file has is read back and returned.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -73,6 +75,7 @@ public partial class RhinoMCPFunctions
         var files = new JArray();
         var misc = new SortedSet<string>(StringComparer.Ordinal);
         string writer = null;
+        string version = null;
         string failed = null;
         foreach (var page in InSetOrder(doc, MatchingForskPages(doc, null)))
         {
@@ -85,16 +88,23 @@ public partial class RhinoMCPFunctions
             var pieces = FlattenPage(doc, page, misc);
             try
             {
-                // The headless write first. Once it writes nothing, the rest of the set skips it.
-                if (writer != WriterActiveDoc && WriteHeadless(doc, pieces, path))
-                    writer = WriterHeadless;
-                else if (WriteFromActiveDoc(doc, pieces, path))
+                // The scripted write first. Once it writes nothing modern, the rest of the set skips it.
+                string wrote;
+                if (writer != WriterHeadless && WriteFromActiveDoc(doc, pieces, path)
+                    && SheetFlat.ModernAcad(wrote = FileAcadVersion(path)))
                     writer = WriterActiveDoc;
+                else if (WriteHeadless(doc, pieces, path))
+                {
+                    writer = WriterHeadless;
+                    wrote = FileAcadVersion(path);
+                }
                 else
                 {
                     failed = name;
                     break;
                 }
+                // The set's version is its oldest file's.
+                if (version == null || string.CompareOrdinal(wrote, version) < 0) version = wrote;
                 files.Add(name);
             }
             finally
@@ -104,7 +114,7 @@ public partial class RhinoMCPFunctions
             }
         }
         UseModelView(doc);
-        LogPrint(full, files.Count, "sheets " + format + " writer " + (writer ?? "none")
+        LogPrint(full, files.Count, "sheets " + format + " writer " + (writer ?? "none") + " " + (version ?? "")
             + (misc.Count > 0 ? " misc " + string.Join(",", misc) : "") + (failed != null ? " failed " + failed : ""));
 
         var label = format.ToUpperInvariant();
@@ -114,6 +124,7 @@ public partial class RhinoMCPFunctions
               + " as " + label + " to " + full + ".";
         var result = SheetExportResult(full, format, files, writer ?? "", misc.Count, message);
         result["misc_roles"] = new JArray(misc.ToArray());
+        result["acad_version"] = version ?? "";
         return result;
     }
 
@@ -273,7 +284,7 @@ public partial class RhinoMCPFunctions
                 foreach (var def in SheetFlat.Layers)
                     layers[def.Name] = target.Layers.Add(ExportLayer(def));
                 AddPieces(source, target, pieces, layers, null);
-                return WriteAndCheck(target, path, false);
+                return WriteAndCheck(target, path);
             }
         }
         catch (Exception)
@@ -308,7 +319,9 @@ public partial class RhinoMCPFunctions
             doc.Objects.UnselectAll(true);
             AddPieces(doc, doc, pieces, layers, added);
             doc.Objects.Select(added, true);
-            return WriteAndCheck(doc, path, true);
+            if (File.Exists(path)) File.Delete(path);
+            RhinoApp.RunScript(SheetFlat.ExportScript(path), false);
+            return File.Exists(path) && new FileInfo(path).Length > 0;
         }
         catch (Exception)
         {
@@ -325,19 +338,37 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    private static bool WriteAndCheck(RhinoDoc doc, string path, bool selectedOnly)
+    private static bool WriteAndCheck(RhinoDoc doc, string path)
     {
         if (File.Exists(path)) File.Delete(path);
         using (var options = new FileWriteOptions
         {
             SuppressAllInput = true,
-            SuppressDialogBoxes = true,
-            WriteSelectedObjectsOnly = selectedOnly
+            SuppressDialogBoxes = true
         })
         {
             if (!doc.WriteFile(path, options)) return false;
         }
         return File.Exists(path) && new FileInfo(path).Length > 0;
+    }
+
+    /// <summary>The written file's AutoCAD version off its first 4 KB; empty when it does not read.</summary>
+    private static string FileAcadVersion(string path)
+    {
+        try
+        {
+            using (var stream = File.OpenRead(path))
+            {
+                var head = new byte[4096];
+                var read = stream.Read(head, 0, head.Length);
+                Array.Resize(ref head, read);
+                return SheetFlat.AcadVersion(head);
+            }
+        }
+        catch (Exception)
+        {
+            return "";
+        }
     }
 
     private static Layer ExportLayer(SheetFlat.LayerDef def)
