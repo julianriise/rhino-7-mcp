@@ -98,7 +98,7 @@ public class WindowViewTests
         string[] Ids(string fixture) => ((JArray)View(fixture)["settings"]!).Select(s => s["id"]!.ToString()).ToArray();
 
         Assert.Equal(new[] { "meta.title", "debug.copy" }, Ids("empty"));
-        Assert.Equal(new[] { "Ink", "Title block", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "Ink", "Project info", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
         Assert.Equal(new[] { "ink.set", "meta.title", "bridge.start", "debug.copy" }, Ids("bridge down, grey ink"));
         Assert.DoesNotContain("file.print", Ids("house"));
         Assert.Equal(new[] { "meta.title" }, ((JArray)View("empty")["attention"]!).Select(a => a["id"]!.ToString()));
@@ -118,7 +118,7 @@ public class WindowViewTests
 
         var empty = Row(Docs.Facts("empty"));
         Assert.Equal("meta.title", empty["id"]!.ToString());
-        Assert.Equal("Title block", empty["label"]!.ToString());
+        Assert.Equal("Project info", empty["label"]!.ToString());
         Assert.True(empty["needs"]!.Value<bool>());
 
         var clientOnly = Row(FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta["client"] = "Holmen")));
@@ -129,7 +129,7 @@ public class WindowViewTests
 
         var named = Row(FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta["project"] = "Tilbygg Holmen")));
         Assert.Equal("meta.title", named["id"]!.ToString());
-        Assert.Equal("Title block", named["label"]!.ToString());
+        Assert.Equal("Project info", named["label"]!.ToString());
         Assert.False(named["needs"]!.Value<bool>());
     }
 

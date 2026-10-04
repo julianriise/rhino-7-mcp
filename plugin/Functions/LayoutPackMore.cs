@@ -244,22 +244,21 @@ public partial class RhinoMCPFunctions
             doc.Strings.SetString(LayoutMetaSection, key, text.Trim());
     }
 
+    /// <summary>The stored project info, every key (empty when unset), with date defaulting to today and scale_label to 1:100.</summary>
     private static JObject ProjectMetaRecord(RhinoDoc doc)
     {
-        return new JObject
-        {
-            ["project"] = MetaOrEmpty(doc, "project"),
-            ["client"] = MetaOrEmpty(doc, "client"),
-            ["address"] = MetaOrEmpty(doc, "address"),
-            ["revision"] = MetaOrEmpty(doc, "revision"),
-            ["date"] = MetaOr(doc, "date", DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-            ["scale_label"] = MetaOr(doc, "scale_label", "1:100")
-        };
+        var info = ReadProjectInfo(doc);
+        var record = new JObject();
+        foreach (var key in ProjectInfo.Keys)
+            record[key] = info[key];
+        record[ProjectInfo.Date] = ProjectInfo.SheetDate(info, DateTime.Now);
+        record["scale_label"] = MetaOr(doc, "scale_label", "1:100");
+        return record;
     }
 
-    private static string MetaOrEmpty(RhinoDoc doc, string key)
+    private static ProjectInfo.Record ReadProjectInfo(RhinoDoc doc)
     {
-        return MetaOr(doc, key, "");
+        return ProjectInfo.Read(key => doc.Strings.GetValue(ProjectInfo.Section, key));
     }
 
     private static string MetaOr(RhinoDoc doc, string key, string fallback)
@@ -905,43 +904,61 @@ public partial class RhinoMCPFunctions
         var tx1 = A3WidthMm - LayoutMarginMm;
         var ty0 = LayoutMarginMm;
         var ty1 = LayoutMarginMm + FooterBandMm;
-        var meta = ProjectMetaRecord(doc);
+        var info = ReadProjectInfo(doc);
         var cells = TitleBlock.Cells(new TitleBlock.Fields
         {
             Drawing = viewTitle,
             Number = sheetNo,
             Scale = pageScale > 0 ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture) : "",
             Format = "A3",
-            // The day the sheet is printed. A date stored on the file is not used.
-            Date = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            Revision = meta["revision"]?.ToString(),
-            Project = meta["project"]?.ToString(),
-            Client = meta["client"]?.ToString(),
-            Address = meta["address"]?.ToString()
+            // Project info: a stored date wins, none is the day the sheet is printed.
+            Date = ProjectInfo.SheetDate(info, DateTime.Now),
+            Revision = info[ProjectInfo.Revision],
+            ProjectNo = info[ProjectInfo.ProjectNo],
+            Project = info[ProjectInfo.Project],
+            Client = info[ProjectInfo.Client],
+            Address = info[ProjectInfo.Address],
+            Architect = info[ProjectInfo.Architect]
         });
         // Widths from Rhino's own layout of each text at its height, not a glyph guess.
-        var widths = TitleBlock.Widths(cells, TitleBlockWidthMm, (text, mm) => PaperTextWidth(doc,
-            OneToOneTextStyle(doc, "Forsk paper " + mm.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, mm)), text));
+        Func<string, double, double> measure = (text, mm) => PaperTextWidth(doc,
+            OneToOneTextStyle(doc, "Forsk paper " + mm.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, mm)), text);
+        // One row, or Project no. and Architect in a smaller second row at the bottom of the band.
+        var rows = TitleBlock.Rows(cells, TitleBlockWidthMm, measure);
         var titleStart = ids.Count;
         var frameId = Rect(tx0, ty0, tx1, ty1, Attr("title_block"));
         var cellRows = new JArray();
-        var cx = tx0;
-        for (var i = 0; i < cells.Count; i++)
+        var firstBottom = rows.Count > 1 ? ty0 + TitleBlock.SecondRowMm : ty0;
+        if (rows.Count > 1)
+            Line(tx0, firstBottom, tx1, firstBottom, Attr("title_block"));
+        for (var r = 0; r < rows.Count; r++)
         {
-            if (i > 0)
-                Line(cx, ty0, cx, ty1, Attr("title_block"));
-            // forsk:cell is the English key the smokes read; the caption is Norwegian.
-            var captionAttr = Attr("title_cell");
-            captionAttr.SetUserString("forsk:cell", cells[i].Key);
-            captionAttr.SetUserString("forsk:part", "caption");
-            Text(cells[i].Caption, cx + TitleBlock.PadMm, ty1 - 2.0 - TitleBlock.CaptionMm, TitleBlock.CaptionMm,
-                TextHorizontalAlignment.Left, captionAttr);
-            var valueAttr = Attr("title_cell");
-            valueAttr.SetUserString("forsk:cell", cells[i].Key);
-            valueAttr.SetUserString("forsk:part", "value");
-            Text(cells[i].Value, cx + TitleBlock.PadMm, ty0 + 4.0, cells[i].Mm, TextHorizontalAlignment.Left, valueAttr);
-            cellRows.Add(new JObject { ["name"] = cells[i].Key, ["caption"] = cells[i].Caption, ["text"] = cells[i].Value });
-            cx += widths[i];
+            var row = rows[r];
+            var rowBottom = r == 0 ? firstBottom : ty0;
+            var rowTop = r == 0 ? ty1 : firstBottom;
+            // The first row's value sits 4 mm up a full band, 2 mm up a split one; the second row's 1.2 mm.
+            var valueY = r > 0 ? rowBottom + 1.2 : rowBottom + (rows.Count > 1 ? 2.0 : 4.0);
+            var captionY = rowTop - (r > 0 ? 1.2 : 2.0) - TitleBlock.CaptionMm;
+            var widths = TitleBlock.Widths(row, TitleBlockWidthMm, measure);
+            var cx = tx0;
+            for (var i = 0; i < row.Count; i++)
+            {
+                if (i > 0)
+                    Line(cx, rowBottom, cx, rowTop, Attr("title_block"));
+                // forsk:cell is the English key the smokes read; the caption may be Norwegian.
+                var captionAttr = Attr("title_cell");
+                captionAttr.SetUserString("forsk:cell", row[i].Key);
+                captionAttr.SetUserString("forsk:part", "caption");
+                Text(row[i].Caption, cx + TitleBlock.PadMm, captionY, TitleBlock.CaptionMm, TextHorizontalAlignment.Left, captionAttr);
+                var valueAttr = Attr("title_cell");
+                valueAttr.SetUserString("forsk:cell", row[i].Key);
+                valueAttr.SetUserString("forsk:part", "value");
+                Text(row[i].Value, cx + TitleBlock.PadMm, valueY, row[i].Mm, TextHorizontalAlignment.Left, valueAttr);
+                var cellRow = new JObject { ["name"] = row[i].Key, ["caption"] = row[i].Caption, ["text"] = row[i].Value };
+                if (rows.Count > 1) cellRow["row"] = r + 1;
+                cellRows.Add(cellRow);
+                cx += widths[i];
+            }
         }
         var titleBox = PaperBox(doc, new[] { frameId });
         titleBox["cells"] = cellRows;

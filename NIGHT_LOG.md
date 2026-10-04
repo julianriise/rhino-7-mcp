@@ -1,3 +1,39 @@
+# Night log: v3b project info, CSV, vector PDF on `night-v3b`
+
+Base: main `de87b2a` (per the launch note; the brief was written at `6a2a456`). This cloud session's designated branch is `claude/forsk-night-v3b-235eob`, so the work is there, not on `night-v3b`; nothing is pushed to `main`.
+
+| Slice | Commit | State |
+|---|---|---|
+| N1 project info entered once | (this commit) | done headless; title block, card and IFC unverified live |
+
+## Gates
+
+Base `de87b2a`: build 0 warnings; `SoftParam.Tests` 2188 passed, 1 skipped; pytest 517 passed, 2 skipped; contracts exit 0.
+
+- N1: build exit 0, 0 warnings; `SoftParam.Tests` exit 0, 2209 passed (+21), 1 skipped (nb-NO); pytest exit 0, 518 passed (+1), 2 skipped; `contracts/test_schemas.py` exit 0.
+
+## Unverified (needs Rhino)
+
+- N1: the Project info card in the window (seven fields, Save and print / Print without, the pending Print or Export running after the answer, `info_asked` set on the file, the gear dot clearing); `forsk.architect` in the plug-in settings across files; the two-row title block on paper (the first row in the top 11 mm, Project no. and Architect in the bottom 7 mm at 2.0, a full-width rule between) with Rhino's text measure; the IFC project, site address and `Forsk_ProjectInfo` from the live document.
+
+## Changes from the brief
+
+- Branch: `claude/forsk-night-v3b-235eob` (the session's designated branch) instead of `night-v3b`; base `de87b2a`.
+- N1 risk 1 happened: at the smoke values the eleven cells want 284.2 mm (char-share), over 280. `TitleBlock.Rows` keeps one row when everything fits and otherwise moves Project no. and Architect to a second, smaller row (caption 1.8, value 2.0, 7 mm at the bottom of the band). The page record's cells gain `row` (1 or 2) when the band is split.
+- N1 the API names: `ProjectInfo.IfcInfo(record, fallbackName)` returns `ProjectInfo.Ifc` (a method and a class cannot both be `Ifc`); `ProjectInfo.SheetDate(record, today)` gives the title block's date; `PdfInfo(record, first, last)` takes the sheet numbers.
+- N1 IFC: `IfcExport.Model.Project` is gone; `Model.Info` (from `ProjectInfo.IfcInfo`) is the one source. A file with no project name keeps the file name, as before.
+- N1 the ask-once card: Print, Print one, Export DWG/DXF (bar, card pill or typed) ask; the Choose sheets card's own Print/Export pills do not (they run `print_pages` first, and that card is already the deliberate path). Export IFC does not ask (not in the brief's list).
+- N1 the field labels come from `ProjectInfo.Caption`; the `meta.project|client|address|revision` strings are gone.
+
+## Left
+
+- PDF metadata pending N3.
+
+## Forsk-side follow-ups (forsk repo not reachable)
+
+- ROADMAP v3 gate: tick "Project info once for all title blocks" after the live check.
+- `docs/SMOKE.md`: the title block has Project no. and Architect (second row when the first is full).
+
 # Night log: v4 detail slices on `cursor/add-detail-2118`
 
 Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief named `night-v4` and main `8783beb`; this run works on its own cloud branch. Built on `b82f07b`, then rebased onto `0f51473` with no conflicts; the SHAs below are after the rebase.

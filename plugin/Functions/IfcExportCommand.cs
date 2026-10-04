@@ -61,8 +61,7 @@ public partial class RhinoMCPFunctions
     private static IfcExport.Model ReadIfcModel(RhinoDoc doc)
     {
         var model = new IfcExport.Model();
-        var project = ProjectMetaRecord(doc)["project"]?.ToString();
-        model.Project = string.IsNullOrWhiteSpace(project) ? Path.GetFileNameWithoutExtension(doc.Name ?? "") : project.Trim();
+        model.Info = ProjectInfo.IfcInfo(ReadProjectInfo(doc), Path.GetFileNameWithoutExtension(doc.Name ?? ""));
         var wallObjects = new Dictionary<Guid, IfcExport.Wall>();
         var floorTop = double.MinValue;
         var unnamed = 0;

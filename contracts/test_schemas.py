@@ -341,6 +341,15 @@ def test_new_commands():
             "date": "2026-09-21",
             "scale_label": "1:100",
         }),
+        ("commands/set_project_meta.json", {
+            "project": "Garage",
+            "project_no": "2026-07",
+            "client": "Ola Nordmann",
+            "address": "Storgata 1, 0150 Oslo",
+            "architect": "Riise Arkitekter",
+            "date": "2026-10-04",
+            "revision": "B",
+        }),
         ("commands/layout_pack.json", {"views": ["plan", "schedules"]}),
         ("commands/layout_pack.json", {"views": ["plan", "section_a", "section_b"]}),
         ("commands/layout_pack.json", {"views": ["plan", "detail_20_1", "detail_25_2"]}),
@@ -888,9 +897,12 @@ def test_responses():
     print("  set_project_meta_result:")
     meta_result = {
         "project": "Villa X",
+        "project_no": "2026-07",
         "client": "",
         "address": "Oslo",
+        "architect": "Riise Arkitekter",
         "date": "2026-09-21",
+        "revision": "B",
         "scale_label": "1:100",
     }
     if not validate("responses/set_project_meta_result.json", meta_result):
@@ -1427,6 +1439,8 @@ def test_invalid_examples():
         ("commands/clear_drawings.json", {"bogus": 1}, "clear_drawings unknown field"),
         ("commands/set_project_meta.json", {"bogus": 1}, "set_project_meta unknown field"),
         ("commands/set_project_meta.json", {"project": 1}, "set_project_meta project not string"),
+        ("commands/set_project_meta.json", {"project_no": 2026}, "set_project_meta project_no not string"),
+        ("commands/set_project_meta.json", {"project": "Garage", "firm": "X"}, "set_project_meta unknown key"),
         ("commands/layout_pack.json", {"views": ["section"]}, "layout_pack unknown view"),
         ("commands/layout_pack.json", {"views": ["section_ab"]}, "layout_pack section is one letter"),
         ("commands/layout_pack.json", {"views": ["detail_30_1"]}, "layout_pack detail scale is on the ladder"),

@@ -70,8 +70,10 @@ namespace RhinoMCPPlugin.Forsk
         public int Layouts;
         /// <summary>The letters of the sections stored with section_add.</summary>
         public List<string> SectionLetters = new List<string>();
-        /// <summary>The title block as stored: project, client, address. A stored date or scale label is not shown.</summary>
+        /// <summary>The project info as stored (ProjectInfo.Keys), the asked flag and the scale label.</summary>
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
+        /// <summary>The architect last saved on this Mac (plug-in settings), which prefills an empty Architect.</summary>
+        public string FirmArchitect;
         /// <summary>The set as the user left it (SheetSet JSON), or null when Forsk infers it.</summary>
         public string PrintPages;
         /// <summary>The set's scale: the one asked for, else the plan page's from the last Print. 0 when neither.</summary>
@@ -120,6 +122,7 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> SectionLetters = new List<string>();
         public int Sections => SectionLetters.Count;
         public Dictionary<string, string> Meta = new Dictionary<string, string>();
+        public string FirmArchitect;
         /// <summary>The stored set (SheetSet JSON), or null.</summary>
         public string PrintPages;
         /// <summary>The set's scale denominator, 0 when it is not known yet.</summary>
@@ -176,6 +179,7 @@ namespace RhinoMCPPlugin.Forsk
                 Layouts = input.Layouts,
                 SectionLetters = new List<string>(input.SectionLetters ?? new List<string>()),
                 Meta = new Dictionary<string, string>(input.Meta ?? new Dictionary<string, string>()),
+                FirmArchitect = input.FirmArchitect,
                 PrintPages = input.PrintPages,
                 PrintScale = input.PrintScale,
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,

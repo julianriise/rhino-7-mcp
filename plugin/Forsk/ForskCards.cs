@@ -45,7 +45,6 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskCards
     {
         public const int MaxPages = 24;
-        static readonly string[] MetaKeys = { "project", "client", "address", "revision" };
 
         /// <summary>The card a registry card action opens, or null for help, the bridge, and an action that is not a card.</summary>
         public static CardSpec For(string actionId, FileFacts f)
@@ -231,22 +230,67 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
-        public static CardSpec TitleBlock(FileFacts f)
+        /// <summary>
+        /// ⋯ → Project info: the seven ProjectInfo fields, Save and Cancel. With
+        /// pending (file.print, print.one, export.dwg, export.dxf, export.csv)
+        /// it is the ask-once card before that action: Save and print (or
+        /// export), Print without, Cancel; Data carries the action and its
+        /// sheet so the answer runs it. An empty Architect takes the firm saved
+        /// on this Mac.
+        /// </summary>
+        public static CardSpec TitleBlock(FileFacts f, string pending = null, string view = null)
         {
+            var exports = pending != null && pending.StartsWith("export.", StringComparison.Ordinal);
             var card = new CardSpec
             {
                 Kind = "meta.title",
-                Question = ForskText.Get("meta.title.ask"),
-                Fields = new List<CardField>(),
-                Pills = { new CardPill("save", ForskText.Get("word.save")), new CardPill("cancel", ForskText.Get("word.cancel")) }
+                Question = ForskText.Get(pending == null ? "meta.title.ask" : "meta.title.first"),
+                Fields = new List<CardField>()
             };
-            foreach (var key in MetaKeys)
+            if (pending == null)
+            {
+                card.Pills.Add(new CardPill("save", ForskText.Get("word.save")));
+            }
+            else
+            {
+                card.Data = new JObject { ["pending"] = pending };
+                if (view != null) card.Data["view"] = view;
+                card.Pills.Add(new CardPill("save", ForskText.Get(exports ? "meta.save.export" : "meta.save.print")));
+                card.Pills.Add(new CardPill("skip", ForskText.Get(exports ? "meta.skip.export" : "meta.skip.print")));
+            }
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
+            foreach (var key in ProjectInfo.Keys)
             {
                 string value = null;
                 f?.Meta?.TryGetValue(key, out value);
-                card.Fields.Add(new CardField { Key = key, Label = ForskText.Get("meta." + key), Value = value ?? "" });
+                if (string.IsNullOrWhiteSpace(value) && key == ProjectInfo.Architect) value = f?.FirmArchitect;
+                card.Fields.Add(new CardField { Key = key, Label = ProjectInfo.Caption(key), Value = value?.Trim() ?? "" });
             }
             return card;
+        }
+
+        /// <summary>
+        /// The Project info card to answer before pending runs, or null to run
+        /// it now: once a project name is stored, or once the file was asked.
+        /// </summary>
+        public static CardSpec AskInfoFirst(FileFacts f, string pending, string view = null)
+        {
+            if (f == null || !InfoMissing(f)) return null;
+            string asked = null;
+            f.Meta?.TryGetValue(ProjectInfo.AskedKey, out asked);
+            if (!string.IsNullOrWhiteSpace(asked)) return null;
+            return TitleBlock(f, pending, view);
+        }
+
+        /// <summary>No project name is stored: the gear's dot and the ask-once card.</summary>
+        public static bool InfoMissing(FileFacts f)
+        {
+            return ProjectInfo.Missing(ProjectInfo.Read(key =>
+            {
+                string value = null;
+                f?.Meta?.TryGetValue(key, out value);
+                return value;
+            }));
         }
 
         /// <summary>Every sheet of the set in set order, those switched off too: one sheet prints on its own.</summary>

@@ -2,13 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "set_project_meta.json",
   "title": "SetProjectMeta Command",
-  "description": "Store project, client, address, date, and scale label on the document for the layout title block. Omitted keys stay as they are. An empty string clears that key.",
+  "description": "Store the project info every title block, the PDF metadata, the takeoff CSV header and the IFC read: project, project number, client, address, architect, date and revision, plus the stored scale label. Omitted keys stay as they are. An empty string clears that key.",
   "type": "object",
   "properties": {
     "project": { "type": "string", "description": "Project / job name." },
+    "project_no": { "type": "string", "description": "Project number, such as 2026-07." },
     "client": { "type": "string" },
     "address": { "type": "string", "description": "Site or address." },
-    "date": { "type": "string", "description": "Override date string. Default display is today ISO when unset." },
+    "architect": { "type": "string", "description": "Architect or firm." },
+    "date": { "type": "string", "description": "The date the title blocks print. Unset prints the day of the Print." },
+    "revision": { "type": "string", "description": "Revision letter or number, such as B. Unset drops the Rev. cell." },
     "scale_label": { "type": "string", "default": "1:100", "description": "Stored scale text. The detail scale on a layout still comes from layout_pack." }
   },
   "additionalProperties": false
