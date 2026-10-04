@@ -357,7 +357,7 @@ public static class WallEdit
     /// own: the wall is a record of its own even where it touches exactly one
     /// (Draw wall: one run, one wall, one id).
     /// </summary>
-    public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why, bool own = false)
+    public static bool TryAdd(IList<List<List<Pt>>> records, Pt from, Pt to, double thickness, double tol, out Added added, out string why, bool own = false, List<Pt> outline = null)
     {
         added = null;
         why = null;
@@ -374,7 +374,7 @@ public static class WallEdit
         var dir = Unit(from, to);
         from = Reach(records, from, new Pt(-dir.X, -dir.Y), tol);
         to = Reach(records, to, dir, tol);
-        var band = Strip(from, to, thickness);
+        var band = outline != null && outline.Count >= 3 ? outline : Strip(from, to, thickness);
         var joined = new List<int>();
         for (var i = 0; i < records.Count; i++)
             if (Group(RoomDetect.Union(new[] { records[i], new List<List<Pt>> { band } }, tol)).Count == 1)

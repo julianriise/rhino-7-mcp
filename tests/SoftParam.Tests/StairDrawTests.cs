@@ -26,7 +26,7 @@ public class StairDrawTests
         var corners = new List<Pt> { new Pt(0, 0), new Pt(4000, 0), new Pt(4000, 3000), new Pt(0, 3000) };
         foreach (var segment in WallDraw.Plan(corners, true, 200))
         {
-            Assert.True(WallEdit.TryAdd(records, segment.From, segment.To, 200, Tol, out var added, out var why), why);
+            Assert.True(WallEdit.TryAdd(records, segment.From, segment.To, 200, Tol, out var added, out var why, outline: segment.Ring), why);
             if (added.Joined >= 0) records[added.Joined] = added.Rings;
             else records.Add(added.Rings);
         }

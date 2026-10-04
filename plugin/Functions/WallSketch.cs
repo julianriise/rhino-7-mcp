@@ -42,6 +42,10 @@ public sealed class WallSketch
         public string Why;
         /// <summary>The rubber-band wall as it will be laid down, corner included. Null before the first click.</summary>
         public List<Pt> Band;
+        /// <summary>How far the previous wall's end runs on to meet this one. 0 on the first wall.</summary>
+        public double Join;
+        /// <summary>The previous segment recut to this corner, so the preview matches the rubber band. Null on the first wall.</summary>
+        public List<Pt> Previous;
     }
 
     public Preview Hover(Pt raw, bool shift)
@@ -59,9 +63,12 @@ public sealed class WallSketch
         preview.Label = WallDraw.Dimension(length, _dir);
         preview.Valid = length > Thickness;
         if (!preview.Valid) preview.Why = WallDraw.TooShort;
-        var extension = _points.Count >= 2 ? WallDraw.CornerExtension(_points[_points.Count - 2], last, snapped.Point, Thickness) : 0;
-        var from = new Pt(last.X - _dir.X * extension, last.Y - _dir.Y * extension);
-        preview.Band = WallDraw.Band(from, snapped.Point, Thickness);
+        Pt? back = _points.Count >= 2 ? _points[_points.Count - 2] : (Pt?)null;
+        Pt? earlier = _points.Count >= 3 ? _points[_points.Count - 3] : (Pt?)null;
+        preview.Join = back.HasValue ? WallDraw.CornerExtension(back.Value, last, snapped.Point, Thickness) : 0;
+        if (back.HasValue)
+            preview.Previous = WallDraw.SegmentRing(earlier, back.Value, last, snapped.Point, Thickness);
+        preview.Band = WallDraw.SegmentRing(back, last, snapped.Point, null, Thickness);
         return preview;
     }
 

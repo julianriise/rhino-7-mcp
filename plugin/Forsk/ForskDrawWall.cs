@@ -125,6 +125,13 @@ namespace RhinoMCPPlugin.Forsk
             public WallDraw.Placed Place(WallDraw.Segment segment, double thickness)
             {
                 var args = WallDraw.ToolCalls(new[] { segment }, thickness)[0];
+                if (segment.Ring != null && segment.Ring.Count >= 3)
+                {
+                    var ring = new JArray();
+                    foreach (var p in segment.Ring)
+                        ring.Add(new JArray(p.X, p.Y));
+                    args["outline"] = ring;
+                }
                 var envelope = Solid
                     ? ForskTools.Write("add_wall", () => _functions.AddDrawnWall(args))
                     : ForskTools.Write("add_wall", () => _functions.AddPlanWall(args));
@@ -190,8 +197,14 @@ namespace RhinoMCPPlugin.Forsk
                 if (scale > 0) _sketch.Reach = Math.Max(20, Math.Min(800, 14.0 / scale));
                 var preview = _sketch.Hover(ToPt(e.CurrentPoint), Shift());
 
-                foreach (var segment in _sketch.Segments())
-                    Outline(e, WallDraw.Band(segment.From, segment.To, _sketch.Thickness), Blue);
+                var drawn = _sketch.Segments();
+                for (var i = 0; i < drawn.Count; i++)
+                {
+                    var ring = drawn[i].Ring;
+                    if (i == drawn.Count - 1 && preview.Previous != null) ring = preview.Previous;
+                    if (ring == null) ring = WallDraw.Band(drawn[i].From, drawn[i].To, _sketch.Thickness);
+                    Outline(e, ring, Blue);
+                }
                 if (preview.Band != null)
                     Outline(e, preview.Band, preview.Valid ? Blue : Red);
 

@@ -36,7 +36,7 @@ public class WallDrawTests
     /// <summary>What add_wall does to the document's records for one wall.</summary>
     static void AddWall(List<List<List<Pt>>> records, WallDraw.Segment s, double thickness)
     {
-        Assert.True(WallEdit.TryAdd(records, s.From, s.To, thickness, Tol, out var added, out var why), why);
+        Assert.True(WallEdit.TryAdd(records, s.From, s.To, thickness, Tol, out var added, out var why, outline: s.Ring), why);
         if (added.Joined >= 0) records[added.Joined] = added.Rings;
         else records.Add(added.Rings);
     }
@@ -271,16 +271,20 @@ public class WallDrawTests
     }
 
     [Fact]
-    public void Plan_AnOpenPolyline_ExtendsEachLaterWallBackByHalfTheThickness()
+    public void Plan_AnOpenPolyline_MitresTheSharedEnd_AndLeavesTheFreeEndsSquare()
     {
         var segments = WallDraw.Plan(new[] { new Pt(0, 0), new Pt(4000, 0), new Pt(4000, 3000) }, false, T);
         Assert.Equal(2, segments.Count);
         Assert.Equal(new Pt(0, 0), segments[0].From);
         Assert.Equal(new Pt(4000, 0), segments[0].To);
-        Assert.Equal(new Pt(4000, -100), segments[1].From);
+        Assert.Equal(new Pt(4000, 0), segments[1].From);
         Assert.Equal(new Pt(4000, 3000), segments[1].To);
         Assert.Equal(4000, segments[0].Length, 6);
         Assert.Equal(3000, segments[1].Length, 6);
+        Assert.Contains(segments[0].Ring, p => p.X == 4100 && p.Y == -100);
+        Assert.Contains(segments[1].Ring, p => p.X == 4100 && p.Y == -100);
+        Assert.Contains(segments[0].Ring, p => p.X == 0 && p.Y == -100);
+        Assert.Contains(segments[1].Ring, p => p.X == 4100 && p.Y == 3000);
     }
 
     [Fact]
@@ -291,13 +295,15 @@ public class WallDrawTests
     }
 
     [Fact]
-    public void Plan_AClosedLoop_ExtendsTheFirstWallToo()
+    public void Plan_AClosedLoop_MitresEveryCorner()
     {
         var segments = WallDraw.Plan(Rect(0, 0, 4000, 3000), true, T);
         Assert.Equal(4, segments.Count);
-        Assert.Equal(new Pt(-100, 0), segments[0].From);
-        Assert.Equal(new Pt(0, 3100), segments[3].From);
+        Assert.Equal(new Pt(0, 0), segments[0].From);
+        Assert.Equal(new Pt(0, 3000), segments[3].From);
         Assert.Equal(new Pt(0, 0), segments[3].To);
+        Assert.Contains(segments[0].Ring, p => p.X == -100 && p.Y == -100);
+        Assert.Contains(segments[3].Ring, p => p.X == -100 && p.Y == -100);
     }
 
     [Fact]
@@ -350,6 +356,26 @@ public class WallDrawTests
         var stroke = T * 7000;
         // Exact at 90; a smaller turn leaves a sliver at most as wide as the wall.
         Assert.InRange(Math.Abs(RoomDetect.Area(ring)), stroke - T * T / 2, stroke + T * T / 2);
+    }
+
+    [Theory]
+    [InlineData(45)]
+    [InlineData(120)]
+    public void Corner_At45And120_IsTheMitre_WithNoSliver(double turn)
+    {
+        var rad = turn * Math.PI / 180.0;
+        var a = new Pt(0, 0);
+        var b = new Pt(4000, 0);
+        var c = new Pt(Math.Round(4000 + 3000 * Math.Cos(rad), 6), Math.Round(3000 * Math.Sin(rad), 6));
+        var records = Draw(new[] { a, b, c }, false);
+        var ring = Assert.Single(Assert.Single(records));
+        var mitre = WallJoinsTests.Mitre(new List<Pt> { a, b, c }, T);
+        var drawn = Math.Abs(RoomDetect.Area(ring));
+        var wanted = Math.Abs(RoomDetect.Area(mitre));
+        Assert.InRange(drawn, wanted - 5, wanted + 5);
+        Assert.Equal(mitre.Count, ring.Count);
+        foreach (var point in mitre)
+            Assert.Contains(ring, p => Math.Abs(p.X - point.X) < 1 && Math.Abs(p.Y - point.Y) < 1);
     }
 
     [Fact]
@@ -453,6 +479,21 @@ public class WallDrawTests
         Assert.NotNull(hover.Band);
         Assert.Equal(3000, hover.Length, 6);
         Assert.Equal("3000 mm", hover.Label);
-        Assert.Equal(3100.0 * 200, Math.Abs(RoomDetect.Area(hover.Band)), 6);
+        Assert.InRange(Math.Abs(RoomDetect.Area(hover.Band)), T * 3000 - 1, T * 3000 + 1);
+        Assert.Contains(hover.Band, p => Math.Abs(p.X - 4100) < 1 && Math.Abs(p.Y + 100) < 1);
+    }
+
+    [Fact]
+    public void Hover_RunsThePreviousWallOutToASharpCorner()
+    {
+        var sketch = Sketch();
+        Click(sketch, 0, 0);
+        Click(sketch, 4000, 0);
+        var rad = 120 * Math.PI / 180.0;
+        var hover = sketch.Hover(new Pt(4000 + 3000 * Math.Cos(rad), 3000 * Math.Sin(rad)), false);
+        var join = WallDraw.CornerExtension(new Pt(0, 0), new Pt(4000, 0), hover.Point, T);
+        Assert.Equal(join, hover.Join, 6);
+        // The old corner stopped at the 90 degree extension, half the thickness.
+        Assert.True(join > T / 2 + 1);
     }
 }

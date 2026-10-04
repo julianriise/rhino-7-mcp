@@ -25,8 +25,8 @@ public static class WallDraw
 
     /// <summary>Two walls with a turn under this many degrees between them meet as one straight run.</summary>
     const double StraightDeg = 1;
-    /// <summary>A corner is cleaned up for turns up to here. A sharper one keeps the 90 degree extension.</summary>
-    const double CleanTurnDeg = 90;
+    /// <summary>A sharper turn than this keeps this extension, so a hairpin does not run off.</summary>
+    const double SharpTurnDeg = 179;
 
     public enum SnapKind { None, Angle, Start, End, Mid, Face }
 
@@ -90,7 +90,10 @@ public static class WallDraw
         return new Pt(Clean(Math.Cos(snapped)), Clean(Math.Sin(snapped)));
     }
 
-    /// <summary>How far to run the later wall back so the corner is square: half the thickness at 90 degrees.</summary>
+    /// <summary>
+    /// How far each wall runs past the corner so the square ends meet on the mitre.
+    /// Half the thickness at 90 degrees; h·tan(turn/2) at any other turn.
+    /// </summary>
     public static double CornerExtension(Pt before, Pt corner, Pt after, double thickness)
     {
         var d1 = Unit(before, corner);
@@ -98,16 +101,19 @@ public static class WallDraw
         var cos = Math.Max(-1, Math.Min(1, d1.X * d2.X + d1.Y * d2.Y));
         var turn = Math.Acos(cos) * 180.0 / Math.PI;
         if (turn < StraightDeg) return 0;
-        var half = Math.Min(turn, CleanTurnDeg) * Math.PI / 360.0;
+        if (turn > SharpTurnDeg) turn = SharpTurnDeg;
+        var half = turn * Math.PI / 360.0;
         return thickness / 2.0 * Math.Tan(half);
     }
 
-    /// <summary>One wall: the centreline add_wall takes, and the drawn length without the corner extension.</summary>
+    /// <summary>One wall: the clicked centreline, and the outline with mitred ends where the run turns.</summary>
     public sealed class Segment
     {
         public Pt From, To;
         public Pt Start;
         public double Length;
+        /// <summary>Square at a free end, cut on the mitre where the next segment of this run meets it.</summary>
+        public List<Pt> Ring;
     }
 
     /// <summary>The walls for a point list. Fewer than two points: none.</summary>
@@ -121,15 +127,19 @@ public static class WallDraw
         {
             var a = points[i];
             var b = points[(i + 1) % n];
-            var corner = i > 0 || count == n;
-            var extension = corner ? CornerExtension(points[(i - 1 + n) % n], a, b, thickness) : 0;
-            var dir = Unit(a, b);
+            var atStart = i > 0 || count == n;
+            var atEnd = i < count - 1 || count == n;
             list.Add(new Segment
             {
                 Start = a,
+                From = a,
                 To = b,
-                From = new Pt(Round(a.X - dir.X * extension), Round(a.Y - dir.Y * extension)),
-                Length = Dist(a, b)
+                Length = Dist(a, b),
+                Ring = SegmentRing(
+                    atStart ? points[(i - 1 + n) % n] : (Pt?)null,
+                    a, b,
+                    atEnd ? points[(i + 2) % n] : (Pt?)null,
+                    thickness)
             });
         }
         return list;
@@ -144,6 +154,47 @@ public static class WallDraw
             ["to"] = new JArray(s.To.X, s.To.Y),
             ["thickness"] = thickness
         }).ToList();
+    }
+
+    /// <summary>
+    /// One segment's outline. A free end is square. An end that meets prev or next
+    /// is the mitre, the same cut on both segments, so the corner has no sliver and no spike.
+    /// </summary>
+    public static List<Pt> SegmentRing(Pt? prev, Pt a, Pt b, Pt? next, double thickness)
+    {
+        var h = thickness / 2.0;
+        var n = LeftNormal(a, b);
+        return new List<Pt>
+        {
+            prev.HasValue ? Meet(prev.Value, a, b, -h) : Cap(a, n, -h),
+            next.HasValue ? Meet(a, b, next.Value, -h) : Cap(b, n, -h),
+            next.HasValue ? Meet(a, b, next.Value, h) : Cap(b, n, h),
+            prev.HasValue ? Meet(prev.Value, a, b, h) : Cap(a, n, h)
+        };
+    }
+
+    static Pt Cap(Pt at, Pt normal, double offset) =>
+        new Pt(Round(at.X + normal.X * offset), Round(at.Y + normal.Y * offset));
+
+    static Pt LeftNormal(Pt a, Pt b)
+    {
+        var u = Unit(a, b);
+        return new Pt(-u.Y, u.X);
+    }
+
+    /// <summary>Where the two segments' lines, each offset by h to the left, meet.</summary>
+    static Pt Meet(Pt a, Pt b, Pt c, double h)
+    {
+        var n1 = LeftNormal(a, b);
+        var n2 = LeftNormal(b, c);
+        var p = new Pt(a.X + n1.X * h, a.Y + n1.Y * h);
+        var q = new Pt(b.X + n2.X * h, b.Y + n2.Y * h);
+        var d1 = new Pt(b.X - a.X, b.Y - a.Y);
+        var d2 = new Pt(c.X - b.X, c.Y - b.Y);
+        var denom = d1.X * d2.Y - d1.Y * d2.X;
+        if (Math.Abs(denom) < 1e-9) return new Pt(Round(b.X + n1.X * h), Round(b.Y + n1.Y * h));
+        var t = ((q.X - p.X) * d2.Y - (q.Y - p.Y) * d2.X) / denom;
+        return new Pt(Round(p.X + d1.X * t), Round(p.Y + d1.Y * t));
     }
 
     /// <summary>The wall outline for a segment, as the band add_wall will lay down.</summary>
@@ -273,7 +324,8 @@ public static class WallDraw
     }
 
     /// <summary>The closed outline a wall has on the plan's wall layer: the band add_wall would lay down.</summary>
-    public static List<Pt> PlanRing(Segment segment, double thickness) => Band(segment.From, segment.To, thickness);
+    public static List<Pt> PlanRing(Segment segment, double thickness) =>
+        segment?.Ring != null && segment.Ring.Count >= 3 ? segment.Ring : Band(segment.From, segment.To, thickness);
 
     /// <summary>"Drew 4 walls, 200 mm thick, 14.2 m in all, closed."</summary>
     public static string Receipt(int drawn, int planned, double thickness, double totalMm, bool closed)

@@ -341,7 +341,8 @@ public partial class RhinoMCPFunctions
             Name = PlanWallNamePrefix + number.ToString("D2", CultureInfo.InvariantCulture),
             LayerIndex = layer.Index
         };
-        var id = doc.Objects.AddCurve(RoomOutline(WallDraw.PlanRing(segment, thickness), 0), attr);
+        var ring = ReadOutline(parameters) ?? WallDraw.PlanRing(segment, thickness);
+        var id = doc.Objects.AddCurve(RoomOutline(ring, 0), attr);
         if (id == Guid.Empty)
             throw new InvalidOperationException("Wall not added. Rhino did not take the outline.");
         doc.Views.Redraw();
@@ -404,7 +405,7 @@ public partial class RhinoMCPFunctions
         // A new wall takes the nearest wall's thickness, height and level unless told otherwise.
         var thickness = ReadOptionalDouble(parameters, "thickness")
             ?? ParseMm(nearest?.Attributes.GetUserString("forsk:thickness")) ?? 200.0;
-        if (!WallEdit.TryAdd(records, from, to, thickness, tol, out var added, out var why, own))
+        if (!WallEdit.TryAdd(records, from, to, thickness, tol, out var added, out var why, own, ReadOutline(parameters)))
             throw new InvalidOperationException(why);
 
         JObject result;
@@ -849,6 +850,19 @@ public partial class RhinoMCPFunctions
         }
         if (!TryReadPoint(parameters?["from"], out from) || !TryReadPoint(parameters?["to"], out to))
             throw new ArgumentException("Give the wall's centreline: from and to [x, y] in mm, or line_id.");
+    }
+
+    /// <summary>Draw wall's mitred outline. Absent on add_wall, which keeps the square band.</summary>
+    static List<RoomDetect.Pt> ReadOutline(JObject parameters)
+    {
+        if (!(parameters?["outline"] is JArray ring) || ring.Count < 3) return null;
+        var pts = new List<RoomDetect.Pt>();
+        foreach (var token in ring)
+        {
+            if (!(token is JArray pair) || pair.Count < 2) return null;
+            pts.Add(new RoomDetect.Pt(pair[0].ToObject<double>(), pair[1].ToObject<double>()));
+        }
+        return pts;
     }
 
     private static int NextWallNumber(RhinoDoc doc)

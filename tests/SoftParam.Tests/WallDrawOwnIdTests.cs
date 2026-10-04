@@ -59,7 +59,7 @@ public class WallDrawOwnIdTests
                 Outlines.Add(WallDraw.PlanRing(segment, thickness));
                 return new WallDraw.Placed(null, null);
             }
-            Assert.True(WallEdit.TryAdd(Records, segment.From, segment.To, thickness, Tol, out var added, out var why, own: true), why);
+            Assert.True(WallEdit.TryAdd(Records, segment.From, segment.To, thickness, Tol, out var added, out var why, own: true, outline: segment.Ring), why);
             Records.Add(added.Rings);
             var id = "w" + (Records.Count).ToString("D2");
             Ids.Add(id);
@@ -152,7 +152,7 @@ public class WallDrawOwnIdTests
         var merged = new List<List<List<Pt>>>();
         foreach (var s in segments)
         {
-            Assert.True(WallEdit.TryAdd(merged, s.From, s.To, T, Tol, out var added, out var why), why);
+            Assert.True(WallEdit.TryAdd(merged, s.From, s.To, T, Tol, out var added, out var why, outline: s.Ring), why);
             if (added.Joined >= 0) merged[added.Joined] = added.Rings;
             else merged.Add(added.Rings);
         }
@@ -171,7 +171,7 @@ public class WallDrawOwnIdTests
         var records = new List<List<List<Pt>>>();
         foreach (var s in Segments(Run4(), false).Take(2))
         {
-            Assert.True(WallEdit.TryAdd(records, s.From, s.To, T, Tol, out var added, out var why), why);
+            Assert.True(WallEdit.TryAdd(records, s.From, s.To, T, Tol, out var added, out var why, outline: s.Ring), why);
             if (added.Joined >= 0) records[added.Joined] = added.Rings;
             else records.Add(added.Rings);
         }
