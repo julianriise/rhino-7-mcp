@@ -10,9 +10,10 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Imports Forsk White from a patched Shaded export, then assigns it to
-/// model views. An import from an earlier revision is replaced on load.
-/// A later UpdateDisplayMode is not called. Layout pages and their details
-/// are skipped.
+/// model views; a plan or an elevation takes Forsk Technical instead
+/// (ForskTechnicalHost). An import from an earlier revision is replaced on
+/// load. A later UpdateDisplayMode is not called. Layout pages and their
+/// details are skipped.
 /// </summary>
 internal static class ForskWhiteHost
 {
@@ -38,6 +39,7 @@ internal static class ForskWhiteHost
         if (_hooked) return;
         _hooked = true;
         ForskPlanCutHost.Start();
+        ForskTechnicalHost.Start();
         RhinoView.Create += ViewCreated;
         RhinoDoc.NewDocument += DocCreated;
         RhinoDoc.EndOpenDocumentInitialViewUpdate += DocOpened;
@@ -54,6 +56,7 @@ internal static class ForskWhiteHost
         RhinoDoc.NewDocument -= DocCreated;
         RhinoDoc.EndOpenDocumentInitialViewUpdate -= DocOpened;
         Command.EndCommand -= CommandEnded;
+        ForskTechnicalHost.Stop();
         ForskPlanCutHost.Stop();
     }
 
@@ -83,27 +86,29 @@ internal static class ForskWhiteHost
         try
         {
             var on = Enabled();
-            var target = on ? Ensure() : Shaded();
-            if (target != null)
+            var white = on ? Ensure() : Shaded();
+            var technical = on && ForskTechnicalHost.Enabled() ? ForskTechnicalHost.Ensure(doc) : null;
+            var changed = false;
+            foreach (var view in doc.Views)
             {
-                var changed = false;
-                foreach (var view in doc.Views)
-                {
-                    if (view == null || view is RhinoPageView) continue;
-                    var viewport = view.MainViewport;
-                    if (viewport == null) continue;
-                    var mode = viewport.DisplayMode;
-                    var current = mode?.EnglishName;
-                    var typeName = view.GetType().Name;
-                    var same = mode != null && mode.Id == target.Id;
-                    if (!ForskWhite.NeedsAssign(on, current, typeName)
-                        && !ForskWhite.NeedsReassign(on, current, typeName, same))
-                        continue;
-                    viewport.DisplayMode = target;
-                    changed = true;
-                }
-                if (changed) doc.Views.Redraw();
+                if (view == null || view is RhinoPageView) continue;
+                var viewport = view.MainViewport;
+                if (viewport == null) continue;
+                var target = technical != null && ForskTechnicalHost.LookOf(viewport) != ForskTechnical.Look.Model
+                    ? technical
+                    : white;
+                if (target == null) continue;
+                var mode = viewport.DisplayMode;
+                var current = mode?.EnglishName;
+                var typeName = view.GetType().Name;
+                var same = mode != null && mode.Id == target.Id;
+                if (!ForskWhite.NeedsAssign(on, current, target.EnglishName, typeName)
+                    && !ForskWhite.NeedsReassign(on, current, target.EnglishName, typeName, same))
+                    continue;
+                viewport.DisplayMode = target;
+                changed = true;
             }
+            if (changed) doc.Views.Redraw();
             ForskPlanCutHost.Apply(doc, on);
         }
         catch (Exception ex)
@@ -121,17 +126,21 @@ internal static class ForskWhiteHost
         return DisplayModeDescription.GetDisplayMode(DisplayModeDescription.ShadedId);
     }
 
+    /// <summary>The imported Forsk White, without importing it. Null when it is not loaded.</summary>
+    internal static DisplayModeDescription Loaded()
+    {
+        return Find(ForskWhite.ModeName);
+    }
+
     /// <summary>Find the imported mode. Replace it when its revision is behind.</summary>
     static DisplayModeDescription Ensure()
     {
-        var existing = Find();
+        var existing = Find(ForskWhite.ModeName);
         if (existing != null && !ForskWhite.NeedsReimport(StoredRevision()))
             return existing;
-        // Free the name before the Shaded copy, or the copy is renamed and kept.
-        if (existing != null) DropCopies();
-        if (TryImport(LiveExport) || TryImport(EmbeddedExport))
+        if (Import(ForskWhite.ModeName, ForskWhite.Patch))
             StoreRevision();
-        return Find();
+        return Find(ForskWhite.ModeName);
     }
 
     static int StoredRevision()
@@ -152,17 +161,28 @@ internal static class ForskWhiteHost
         catch (Exception) { }
     }
 
-    static bool TryImport(Func<string> source)
+    /// <summary>
+    /// Replace the mode named <paramref name="name"/> with a patched Shaded
+    /// export: the live one, else the embedded copy. True when it loaded.
+    /// The earlier import is dropped first, so its name is free for the copy.
+    /// </summary>
+    internal static bool Import(string name, Func<string, string> patch)
+    {
+        DropCopies(name);
+        return TryImport(name, patch, () => LiveExport(name)) || TryImport(name, patch, EmbeddedExport);
+    }
+
+    static bool TryImport(string name, Func<string, string> patch, Func<string> source)
     {
         try
         {
             var exported = source();
             if (string.IsNullOrEmpty(exported)) return false;
-            var path = Path.Combine(Path.GetTempPath(), "forsk-white.ini");
-            File.WriteAllText(path, ForskWhite.Patch(exported), new UTF8Encoding(false));
-            DropCopies();
+            var path = Path.Combine(Path.GetTempPath(), FileStem(name) + ".ini");
+            File.WriteAllText(path, patch(exported), new UTF8Encoding(false));
+            DropCopies(name);
             DisplayModeDescription.ImportFromFile(path);
-            return Find() != null;
+            return Find(name) != null;
         }
         catch (Exception ex)
         {
@@ -171,16 +191,16 @@ internal static class ForskWhiteHost
         }
     }
 
-    static string LiveExport()
+    static string LiveExport(string name)
     {
-        var copied = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.ShadedId, ForskWhite.ModeName);
+        var copied = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.ShadedId, name);
         var mode = copied == Guid.Empty ? null : DisplayModeDescription.GetDisplayMode(copied);
-        if (mode == null || !NamedWhite(mode))
+        if (mode == null || !Named(mode, name))
         {
-            DropCopy(copied);
+            DropCopy(copied, name);
             return null;
         }
-        var path = Path.Combine(Path.GetTempPath(), "forsk-white-export.ini");
+        var path = Path.Combine(Path.GetTempPath(), FileStem(name) + "-export.ini");
         var wrote = false;
         try
         {
@@ -191,7 +211,7 @@ internal static class ForskWhiteHost
         {
             // The copy is the unpatched source. The import replaces it.
             // A taken name makes Rhino rename the copy; still drop that id.
-            DropCopy(copied);
+            DropCopy(copied, name);
         }
     }
 
@@ -204,42 +224,48 @@ internal static class ForskWhiteHost
             return reader.ReadToEnd();
     }
 
-    static DisplayModeDescription Find()
+    internal static DisplayModeDescription Find(string name)
     {
-        var named = DisplayModeDescription.FindByName(ForskWhite.ModeName);
-        if (named == null || !NamedWhite(named)) return null;
+        var named = DisplayModeDescription.FindByName(name);
+        if (named == null || !Named(named, name)) return null;
         if (named.Id == DisplayModeDescription.ShadedId) return null;
         return DisplayModeDescription.GetDisplayMode(named.Id) ?? named;
     }
 
-    static void DropCopies()
+    static void DropCopies(string name)
     {
-        var named = DisplayModeDescription.FindByName(ForskWhite.ModeName);
-        if (named != null) DropId(named.Id);
+        var named = DisplayModeDescription.FindByName(name);
+        if (named != null) DropId(named.Id, name);
     }
 
-    static void DropId(Guid id)
+    static void DropId(Guid id, string name)
     {
         if (id == Guid.Empty || id == DisplayModeDescription.ShadedId) return;
         var mode = DisplayModeDescription.GetDisplayMode(id);
-        if (!NamedWhite(mode)) return;
+        if (!Named(mode, name)) return;
         try { DisplayModeDescription.DeleteDisplayMode(id); }
         catch (Exception) { }
     }
 
-    static void DropCopy(Guid id)
+    static void DropCopy(Guid id, string name)
     {
         if (id == Guid.Empty || id == DisplayModeDescription.ShadedId) return;
-        var name = DisplayModeDescription.GetDisplayMode(id)?.EnglishName ?? "";
-        if (!name.StartsWith(ForskWhite.ModeName, StringComparison.Ordinal)) return;
+        var copyName = DisplayModeDescription.GetDisplayMode(id)?.EnglishName ?? "";
+        if (!copyName.StartsWith(name, StringComparison.Ordinal)) return;
         try { DisplayModeDescription.DeleteDisplayMode(id); }
         catch (Exception) { }
     }
 
-    static bool NamedWhite(DisplayModeDescription mode)
+    static bool Named(DisplayModeDescription mode, string name)
     {
-        var name = mode?.EnglishName;
-        return name != null && name.Equals(ForskWhite.ModeName, StringComparison.Ordinal);
+        var englishName = mode?.EnglishName;
+        return englishName != null && englishName.Equals(name, StringComparison.Ordinal);
+    }
+
+    /// <summary>"forsk-white", "forsk-technical".</summary>
+    static string FileStem(string name)
+    {
+        return name.ToLowerInvariant().Replace(' ', '-');
     }
 
     static void Report(Exception ex)

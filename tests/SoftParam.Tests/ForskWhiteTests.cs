@@ -81,11 +81,11 @@ public class ForskWhiteTests
         Assert.False(ForskWhite.AssignsDisplayMode("RhinoPageView"));
         Assert.False(ForskWhite.AssignsDisplayMode("DetailViewObject"));
         Assert.True(ForskWhite.AssignsDisplayMode("RhinoView"));
-        Assert.False(ForskWhite.NeedsAssign(true, "Shaded", "RhinoPageView"));
-        Assert.True(ForskWhite.NeedsAssign(true, "Shaded", "RhinoView"));
-        Assert.False(ForskWhite.NeedsAssign(true, "Forsk White", "RhinoView"));
-        Assert.True(ForskWhite.NeedsAssign(false, "Forsk White", "RhinoView"));
-        Assert.False(ForskWhite.NeedsAssign(false, "Rendered", "RhinoView"));
+        Assert.False(ForskWhite.NeedsAssign(true, "Shaded", "Forsk White", "RhinoPageView"));
+        Assert.True(ForskWhite.NeedsAssign(true, "Shaded", "Forsk White", "RhinoView"));
+        Assert.False(ForskWhite.NeedsAssign(true, "Forsk White", "Forsk White", "RhinoView"));
+        Assert.True(ForskWhite.NeedsAssign(false, "Forsk White", "Forsk White", "RhinoView"));
+        Assert.False(ForskWhite.NeedsAssign(false, "Rendered", "Forsk White", "RhinoView"));
         Assert.Equal("Shaded", ForskWhite.TargetMode(false));
         Assert.True(ForskWhite.ReassignsAfterCommand("4View"));
         Assert.True(ForskWhite.ReassignsAfterCommand("Open"));
@@ -98,12 +98,12 @@ public class ForskWhiteTests
         Assert.Equal(1, ForskWhite.ModeRevision);
         Assert.True(ForskWhite.NeedsReimport(0));
         Assert.False(ForskWhite.NeedsReimport(ForskWhite.ModeRevision));
-        Assert.True(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoView", false));
-        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoView", true));
-        Assert.False(ForskWhite.NeedsReassign(true, "Rendered", "RhinoView", false));
-        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "RhinoPageView", false));
-        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "DetailViewObject", false));
-        Assert.False(ForskWhite.NeedsReassign(false, "Forsk White", "RhinoView", false));
+        Assert.True(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "RhinoView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "RhinoView", true));
+        Assert.False(ForskWhite.NeedsReassign(true, "Rendered", "Forsk White", "RhinoView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "RhinoPageView", false));
+        Assert.False(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "DetailViewObject", false));
+        Assert.False(ForskWhite.NeedsReassign(false, "Forsk White", "Forsk White", "RhinoView", false));
 
         var host = File.ReadAllText(Path.Combine(FunctionsDir(), "ForskWhiteHost.cs"));
         Assert.Contains("ForskWhite.NeedsReimport", host, StringComparison.Ordinal);

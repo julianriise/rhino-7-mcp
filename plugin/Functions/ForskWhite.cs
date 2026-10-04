@@ -55,15 +55,23 @@ public static class ForskWhite
         return true;
     }
 
+    /// <summary>Forsk White or Forsk Technical: a mode Forsk put on the view and may change.</summary>
+    public static bool IsForskMode(string modeName)
+    {
+        return string.Equals(modeName, ModeName, StringComparison.Ordinal)
+            || string.Equals(modeName, ForskTechnical.ModeName, StringComparison.Ordinal);
+    }
+
     /// <summary>
-    /// On: a model view that is not already Forsk White. Off: only a model
-    /// view still in Forsk White, so a Rendered view is left where it was.
+    /// On: a model view that is not already on its target (Forsk White, or
+    /// Forsk Technical for a plan or an elevation). Off: only a model view
+    /// still on a Forsk mode, so a Rendered view is left where it was.
     /// </summary>
-    public static bool NeedsAssign(bool polishOn, string currentModeName, string rhinoTypeName)
+    public static bool NeedsAssign(bool polishOn, string currentModeName, string targetModeName, string rhinoTypeName)
     {
         if (!AssignsDisplayMode(rhinoTypeName)) return false;
-        var white = string.Equals(currentModeName, ModeName, StringComparison.Ordinal);
-        return polishOn ? !white : white;
+        if (!polishOn) return IsForskMode(currentModeName);
+        return !string.Equals(currentModeName, targetModeName, StringComparison.Ordinal);
     }
 
     public static string TargetMode(bool polishOn)
@@ -80,15 +88,15 @@ public static class ForskWhite
     }
 
     /// <summary>
-    /// A model view still named Forsk White, but not on the current mode, is
+    /// A model view still named for its target, but not on the current mode, is
     /// the one that was just replaced. Assign the new one. A layout is skipped.
-    /// Off does not pull a view back onto Forsk White.
+    /// Off does not pull a view back onto a Forsk mode.
     /// </summary>
-    public static bool NeedsReassign(bool polishOn, string currentModeName, string rhinoTypeName, bool sameMode)
+    public static bool NeedsReassign(bool polishOn, string currentModeName, string targetModeName, string rhinoTypeName, bool sameMode)
     {
         if (!polishOn || sameMode) return false;
         if (!AssignsDisplayMode(rhinoTypeName)) return false;
-        return string.Equals(currentModeName, ModeName, StringComparison.Ordinal);
+        return string.Equals(currentModeName, targetModeName, StringComparison.Ordinal);
     }
 
     /// <summary>4View, a new view, a split, and Open put the file's modes back.</summary>
@@ -106,6 +114,12 @@ public static class ForskWhite
 
     public static string Patch(string exported)
     {
+        return PatchWith(exported, Rules);
+    }
+
+    /// <summary>Rewrite the keys <paramref name="rules"/> names. A key the export lacks stays absent.</summary>
+    internal static string PatchWith(string exported, IReadOnlyDictionary<string, Rule> rules)
+    {
         var lines = Lines(exported);
         var section = "";
         for (var i = 0; i < lines.Length; i++)
@@ -119,7 +133,7 @@ public static class ForskWhite
             string key, value;
             if (!TryKey(lines[i], out key, out value)) continue;
             string next;
-            if (!TryRewrite(section, key, value, out next)) continue;
+            if (!TryRewrite(rules, section, key, value, out next)) continue;
             if (string.Equals(value, next, StringComparison.Ordinal)) continue;
             lines[i] = key + "=" + next;
         }
@@ -152,11 +166,11 @@ public static class ForskWhite
         return null;
     }
 
-    static bool TryRewrite(string section, string key, string value, out string next)
+    static bool TryRewrite(IReadOnlyDictionary<string, Rule> rules, string section, string key, string value, out string next)
     {
         next = null;
         Rule rule;
-        if (Rules.TryGetValue(RuleKey(section, key), out rule))
+        if (rules.TryGetValue(RuleKey(section, key), out rule))
         {
             next = rule.Apply(value);
             return next != null;
@@ -175,7 +189,7 @@ public static class ForskWhite
         return (section ?? "") + "\n" + (key ?? "");
     }
 
-    sealed class Rule
+    internal sealed class Rule
     {
         public string Section;
         public string Key;
@@ -186,7 +200,7 @@ public static class ForskWhite
 
     static Dictionary<string, Rule> BuildRules()
     {
-        var list = new[]
+        return RuleMap(new[]
         {
             Text("", "Name", ModeName),
             Rgb("View settings", "SolidColor", GroundR, GroundG, GroundB),
@@ -233,19 +247,23 @@ public static class ForskWhite
             Bool("Objects\\Meshes", "ShowMeshWires", false),
             Rgb("Objects\\Technical", "TSiColor", 0, 0, 0),
             Int("Objects\\Technical", "TSiThickness", EdgePx)
-        };
+        });
+    }
+
+    internal static Dictionary<string, Rule> RuleMap(IEnumerable<Rule> list)
+    {
         var map = new Dictionary<string, Rule>(StringComparer.OrdinalIgnoreCase);
         foreach (var rule in list)
             map[RuleKey(rule.Section, rule.Key)] = rule;
         return map;
     }
 
-    static Rule Text(string section, string key, string text)
+    internal static Rule Text(string section, string key, string text)
     {
         return new Rule { Section = section, Key = key, Apply = _ => text };
     }
 
-    static Rule Bool(string section, string key, bool flag)
+    internal static Rule Bool(string section, string key, bool flag)
     {
         return new Rule
         {
@@ -255,7 +273,7 @@ public static class ForskWhite
         };
     }
 
-    static Rule Int(string section, string key, int number)
+    internal static Rule Int(string section, string key, int number)
     {
         return new Rule
         {
@@ -265,7 +283,7 @@ public static class ForskWhite
         };
     }
 
-    static Rule Rgb(string section, string key, int r, int g, int b)
+    internal static Rule Rgb(string section, string key, int r, int g, int b)
     {
         return new Rule
         {
