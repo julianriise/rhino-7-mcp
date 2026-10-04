@@ -43,9 +43,7 @@ The cut follows Forsk White. Off deletes the plane. On puts it back.
 
 ## VP4 — selected wall
 
-- Click a wall: a blue hatch (`41,72,245`, `#2948f5`) and the same blue selection colour. Click a floor: the blue highlight, and no hatch.
-- Other objects use that same blue. `IgnoreHighlights` stays false. If grips or feedback disappear, leave it false.
-- The hatch is not stored in the file. A mesh wall gets the blue highlight and no hatch.
-- The hatch draws in front of the view. If it paints over the model, the next step is `PostDrawObjects`, not a bake.
-- If the shaded selection wash fights the hatch, the next edit is that key in the Forsk White ini, and only when the key is already present.
-- A failure line is `Forsk wall hatch did not load: ...`. A missing Solid pattern uses that line and draws no hatch.
+- Click a wall in Perspective and pan. The wall is blue (`41,72,245`, `#2948f5`) and the top face does not tear white. The blue is Rhino's selection colour on the wall's own mesh.
+- A floor uses that same blue. Nothing extra is drawn on the faces.
+- `IgnoreHighlights` is off, so the mesh takes the selection colour. If grips or feedback disappear, leave it off.
+- A failure line is `Forsk wall hatch did not load: ...`.

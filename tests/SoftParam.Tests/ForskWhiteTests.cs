@@ -71,7 +71,7 @@ public class ForskWhiteTests
         Assert.Equal("255,255,255", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "Diffuse"));
         Assert.Equal("y", ForskWhite.Read(ini, "Shading\\Material\\Back Material", "FlatShaded"));
         Assert.Equal("n", ForskWhite.Read(ini, "", "XrayAllObjects"));
-        Assert.Equal("y", ForskWhite.Read(ini, "", "IgnoreHighlights"));
+        Assert.Equal("n", ForskWhite.Read(ini, "", "IgnoreHighlights"));
         Assert.Equal("0", ForskWhite.Read(ini, "Shading\\Material\\Front Material", "Transparency"));
     }
 
@@ -111,7 +111,7 @@ public class ForskWhiteTests
     [Fact]
     public void White_replaces_an_older_import_and_keeps_shadows_off()
     {
-        Assert.Equal(2, ForskWhite.ModeRevision);
+        Assert.Equal(3, ForskWhite.ModeRevision);
         Assert.True(ForskWhite.NeedsReimport(0));
         Assert.False(ForskWhite.NeedsReimport(ForskWhite.ModeRevision));
         Assert.True(ForskWhite.NeedsReassign(true, "Forsk White", "Forsk White", "RhinoView", false));

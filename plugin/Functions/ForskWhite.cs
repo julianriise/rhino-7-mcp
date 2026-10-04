@@ -23,10 +23,11 @@ public static class ForskWhite
     public const string PageViewType = "RhinoPageView";
     public const string DetailType = "DetailViewObject";
     /// <summary>
-    /// 2 is flat white, lighting and the ground plane off. 1 was cast shadows
-    /// off. A missing plugin setting is 0, so an earlier import is replaced.
+    /// 3 lets a selected object take the selection colour on its own mesh.
+    /// 2 was flat white with highlights ignored. 1 was cast shadows off.
+    /// A missing plugin setting is 0, so an earlier import is replaced.
     /// </summary>
-    public const int ModeRevision = 2;
+    public const int ModeRevision = 3;
 
     public const int GroundR = 245;
     public const int GroundG = 245;
@@ -221,7 +222,7 @@ public static class ForskWhite
             Rgb("View settings", "ClippingEdgeColor", 0, 0, 0),
             Int("View settings", "ClippingEdgeThickness", EdgePx),
             Bool("", "DisableTransparency", true),
-            Bool("", "IgnoreHighlights", true),
+            Bool("", "IgnoreHighlights", false),
             Bool("Shading", "CullBackfaces", true),
             Bool("Shading", "ShadeVertexColors", false),
             Bool("Shading", "ShadeSurface", true),

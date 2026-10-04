@@ -1,33 +1,34 @@
+using System.Drawing;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 
 namespace SoftParam.Tests;
 
-/// <summary>The hatch draws for a selected wall, in the selection colour.</summary>
+/// <summary>Selection is a colour on the mesh. No face hatch is drawn over it.</summary>
 public class ForskWallHatchTests
 {
     [Fact]
-    public void Draw_runs_only_for_a_selected_wall()
-    {
-        var objects = new[]
-        {
-            new ForskWallHatch.Candidate(true, "wall"),
-            new ForskWallHatch.Candidate(true, "Wall"),
-            new ForskWallHatch.Candidate(true, "floor"),
-            new ForskWallHatch.Candidate(false, "wall"),
-            new ForskWallHatch.Candidate(true, "opening"),
-            new ForskWallHatch.Candidate(true, null)
-        };
-        Assert.Equal(new[] { 0, 1 }, ForskWallHatch.DrawIndexes(objects));
-        Assert.False(ForskWallHatch.Draws(true, "roof"));
-        Assert.False(ForskWallHatch.Draws(false, "WALL"));
-    }
-
-    [Fact]
-    public void Colour_is_the_selection_colour()
+    public void Colour_is_the_selection_colour_and_no_hatch_is_drawn()
     {
         Assert.Equal(41, ForskWallHatch.Red);
         Assert.Equal(72, ForskWallHatch.Green);
         Assert.Equal(245, ForskWallHatch.Blue);
+        Assert.Equal(Color.FromArgb(41, 72, 245).ToArgb(), ForskWallHatch.Colour.ToArgb());
+
+        var host = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "ForskWallHatchHost.cs"));
+        Assert.Contains("SelectedObjectColor", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("Hatch.Create", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("DrawHatch", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisplayConduit", host, StringComparison.Ordinal);
+    }
+
+    static string PluginDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin");
+            if (Directory.Exists(Path.Combine(path, "Functions"))) return path;
+        }
+        throw new DirectoryNotFoundException("plugin above " + AppContext.BaseDirectory);
     }
 }
