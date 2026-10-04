@@ -181,6 +181,11 @@ public class PageChromeTests
             Eval("JSON.stringify(Forsk.cardAction({id:'c2', fields:[{key:'project'}]}, 'save', {project:'x'}, ['project']))"));
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Daylight'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[]})"));
+        // The turn running now: its role shows at once, before any reply, over the last answer and the override.
+        Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step', text:'Generating', mark:'Modeller'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'planner'}, busy:{kind:'thinking', mark:'Modeller'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step', mark:'Daylight'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'planner'}})"));
         Assert.Equal("auto \u00b7 office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'auto'}})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm'})"));

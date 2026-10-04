@@ -121,16 +121,19 @@
   };
 
   /*
-   * The face in the header. An override wins. Otherwise the latest answer
-   * whose mark is a role, and Planner when the thread has none. A mark that
-   * is not a role is skipped.
+   * The face in the header, the same role the chat shows. The turn running
+   * now wins (its busy line carries the role), then an override, then the
+   * latest answer whose mark is a role, and Planner when the thread has none.
+   * A mark that is not a role is skipped.
    */
   Forsk.shownRole = function (model) {
     model = model || {};
     var faces = { planner: 1, modeller: 1, plotter: 1, analyser: 1, support: 1, render: 1 };
+    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Support: 'support', Render: 'render' };
+    var active = model.busy && marks[model.busy.mark];
+    if (active) return active;
     var value = model.role && model.role.value;
     if (value && faces[value]) return value;
-    var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Support: 'support', Render: 'render' };
     var thread = model.thread || [];
     for (var i = thread.length - 1; i >= 0; i--) {
       var id = marks[thread[i].mark];
