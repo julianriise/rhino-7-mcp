@@ -13,7 +13,7 @@ static class PageScript
         engine.Execute(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js")));
         engine.Execute(@"
             var sent = [];
-            function press(k, mods, card, text, composer) {
+            function press(k, mods, card, text, composer, cancel) {
               var m = {};
               (mods || '').split('+').forEach(function (x) { if (x) m[x] = true; });
               var e = { key: k, keyCode: m.ime ? 229 : 0, isComposing: !!m.composing,
@@ -21,7 +21,7 @@ static class PageScript
               e.preventDefault = function () { e.prevented = true; };
               e.stopPropagation = function () {};
               var before = sent.length;
-              var state = { composer: composer !== false, card: card || null, text: text == null ? 'hello' : text };
+              var state = { composer: composer !== false, card: card || null, text: text == null ? 'hello' : text, cancel: !!cancel };
               var a = Forsk.handleKey(e, state, function (x) { sent.push(x); });
               return JSON.stringify({ kind: a ? a.kind : null, prevented: e.prevented, sent: sent.length - before,
                                       last: sent.length > before ? sent[sent.length - 1] : null });
@@ -29,10 +29,10 @@ static class PageScript
         return engine;
     }
 
-    public static JObject Press(Engine engine, string key, string mods = "", string card = null, string text = null, bool composer = true)
+    public static JObject Press(Engine engine, string key, string mods = "", string card = null, string text = null, bool composer = true, bool cancel = false)
     {
         var js = "press(" + Quote(key) + "," + Quote(mods) + "," + (card == null ? "null" : Quote(card)) + ","
-            + (text == null ? "null" : Quote(text)) + "," + (composer ? "true" : "false") + ")";
+            + (text == null ? "null" : Quote(text)) + "," + (composer ? "true" : "false") + "," + (cancel ? "true" : "false") + ")";
         return JObject.Parse(engine.Evaluate(js).AsString());
     }
 
@@ -128,6 +128,33 @@ public class PageKeyboardTests
         Assert.Equal("card.close", r["kind"]!.ToString());
         Assert.True(r["prevented"]!.Value<bool>());
         Assert.Equal("m4", r["last"]!["card"]!.ToString());
+    }
+
+    [Fact]
+    public void Escape_OnAForm_SendsCancel()
+    {
+        var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "m4", cancel: true);
+        Assert.Equal("card", r["kind"]!.ToString());
+        Assert.True(r["prevented"]!.Value<bool>());
+        Assert.Equal("m4", r["last"]!["card"]!.ToString());
+        Assert.Equal("cancel", r["last"]!["pill"]!.ToString());
+    }
+
+    [Fact]
+    public void AForm_IsAnOpenCardThatAsksForAValue()
+    {
+        var engine = PageScript.Load();
+        string Eval(string js) => engine.Evaluate(js).ToString();
+
+        Assert.Equal("true", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'project', value:''}]}))"));
+        Assert.Equal("true", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'scale', options:['Fit']}]}))"));
+        Assert.Equal("true", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'description', long:true}]}))"));
+        Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'front', check:true, value:'1'}]}))"));
+        Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'answered', answer:'Cancel', fields:[{key:'project'}]}))"));
+        Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'open', pills:[{id:'save'},{id:'cancel'}]}))"));
+        Assert.Equal("false", Eval("String(Forsk.isForm({role:'receipt', ok:true, text:'Printed'}))"));
+        Assert.Equal("true", Eval("String(Forsk.cardCancels({thread:[{id:'m4', pills:[{id:'save'},{id:'cancel'}]}]}, 'm4'))"));
+        Assert.Equal("false", Eval("String(Forsk.cardCancels({thread:[{id:'m4', pills:[{id:'save'}]}]}, 'm4'))"));
     }
 
     [Fact]

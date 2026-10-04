@@ -13,7 +13,8 @@
    * state.card: the id of the open card, if any. Returns the action, or null
    * to leave the key to the field, so letters, æ ø å, a dead key and an IME
    * composition always type. Enter sends, Shift+Enter breaks the line,
-   * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?", Esc closes a card.
+   * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?", Esc cancels a
+   * form and closes any other card.
    */
   Forsk.keyAction = function (e, state) {
     if (!e) return null;
@@ -23,7 +24,11 @@
       if (!state.composer || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return null;
       return { kind: 'send' };
     }
-    if (e.key === 'Escape') return state.card ? { kind: 'card.close', card: state.card } : null;
+    if (e.key === 'Escape') {
+      if (!state.card) return null;
+      if (state.cancel) return { kind: 'card', card: state.card, pill: 'cancel' };
+      return { kind: 'card.close', card: state.card };
+    }
     if (e.metaKey && !e.ctrlKey && !e.altKey) {
       if (!e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) return { kind: 'slot', slot: Number(e.key) };
       // Slash is Shift+7 on a Norwegian keyboard, so Shift does not matter here.
@@ -214,6 +219,29 @@
     return 'text';
   };
 
+  /* An open card that asks for a typed or chosen value. A tick list is not one. No DOM. */
+  Forsk.isForm = function (item) {
+    if (!item || item.role !== 'card' || item.state !== 'open') return false;
+    var fields = item.fields || [];
+    for (var i = 0; i < fields.length; i++) {
+      var kind = Forsk.fieldKind(fields[i]);
+      if (kind === 'text' || kind === 'long' || kind === 'select') return true;
+    }
+    return false;
+  };
+
+  /* True when that card has a Cancel pill. Esc uses it. No DOM. */
+  Forsk.cardCancels = function (model, id) {
+    if (!id || !model || !model.thread) return false;
+    var thread = model.thread;
+    for (var i = 0; i < thread.length; i++) {
+      if (thread[i].id !== id) continue;
+      var pills = thread[i].pills || [];
+      for (var p = 0; p < pills.length; p++) if (pills[p].id === 'cancel') return true;
+    }
+    return false;
+  };
+
   /* A bullet's lead, up to the colon or the period, else its first four words. */
   Forsk.leadWords = function (line) {
     var match = /^([ \t]*[-*\u2013\u2022]\s+)(\S.*)$/.exec(line || '');
@@ -354,6 +382,9 @@
   var lastPrefill = 0;
   /* The render in progress is keeping the reader on the newest line. */
   var followLatest = true;
+  /* The pinned form already drawn, so a later render does not rebuild it or steal the caret. */
+  var pinKey = '';
+  var pinNewest = '';
 
   Forsk.nearEnd = function (scrollHeight, scrollTop, clientHeight) {
     return scrollHeight - scrollTop - clientHeight < 40;
@@ -445,7 +476,7 @@
     return node;
   }
 
-  function card(item) {
+  function card(item, opts) {
     if (item.state !== 'open') {
       var done = el('div', 'card ' + (item.state === 'stale' ? 'stale' : 'done'));
       done.textContent = item.state === 'answered' ? item.question + ' · ' + (item.answer || '') : item.question;
@@ -499,6 +530,7 @@
           if (field.unit === 'mm') input.inputMode = 'decimal';
         } else input.rows = 4;
         input.value = field.value || '';
+        if (field.placeholder) input.setAttribute('placeholder', field.placeholder);
         wrap.appendChild(input);
         if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
       }
@@ -541,10 +573,17 @@
       });
     });
     if (inputs.length) setTimeout(function () {
-      // A reader who left the newest line keeps their place. select() would pull the field up.
-      if (!followLatest) return;
       var focus = inputs[0];
       for (var i = 0; i < inputs.length; i++) if (inputs[i].type !== 'checkbox') { focus = inputs[i]; break; }
+      // A pinned form takes the first field wherever the thread is scrolled, and does not move it.
+      if (opts && opts.pin) {
+        if (!opts.focus) return;
+        focus.focus({ preventScroll: true });
+        if (focus.value && focus.tagName !== 'SELECT' && focus.type !== 'checkbox' && focus.select) focus.select();
+        return;
+      }
+      // A reader who left the newest line keeps their place. select() would pull the field up.
+      if (!followLatest) return;
       focus.focus({ preventScroll: true });
       if (focus.tagName !== 'SELECT' && focus.type !== 'checkbox' && focus.select) focus.select();
       document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight;
@@ -959,6 +998,49 @@
     q.setSelectionRange(prefill.start, prefill.end);
   }
 
+  /* Open forms, newest first. They draw in the pin, not in the thread. */
+  function openForms() {
+    var forms = [];
+    (model.thread || []).forEach(function (entry) {
+      if (Forsk.isForm(entry)) forms.push(entry);
+    });
+    forms.reverse();
+    return forms;
+  }
+
+  function formKey(forms) {
+    return forms.map(function (item) {
+      return (item.id || '') + '|' + (item.question || '') + '|' + (item.note || '') + '|'
+        + JSON.stringify(item.fields || []) + '|' + JSON.stringify(item.pills || []) + '|' + JSON.stringify(item.rows || []);
+    }).join('\n');
+  }
+
+  function renderPin(forms) {
+    var pin = document.getElementById('pin');
+    if (!pin) return;
+    if (!forms.length) {
+      pinKey = '';
+      pinNewest = '';
+      pin.hidden = true;
+      while (pin.firstChild) pin.removeChild(pin.firstChild);
+      return;
+    }
+    var key = formKey(forms);
+    if (key === pinKey && pin.firstChild) {
+      pin.hidden = false;
+      return;
+    }
+    var newest = forms[0].id || '';
+    var focus = newest !== pinNewest;
+    pinKey = key;
+    pinNewest = newest;
+    while (pin.firstChild) pin.removeChild(pin.firstChild);
+    pin.hidden = false;
+    forms.forEach(function (form, index) {
+      pin.appendChild(card(form, { pin: true, focus: focus && index === 0 }));
+    });
+  }
+
   Forsk.render = function (next) {
     model = next || {};
     var thread = document.getElementById('thread');
@@ -967,10 +1049,18 @@
     // A reader who has not moved stays with the newest line, including after a resize.
     var follow = followLatest || Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
     followLatest = follow;
+    var keep = thread.scrollTop;
+    var forms = openForms();
+    var skip = {};
+    forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
     while (thread.firstChild) thread.removeChild(thread.firstChild);
-    (model.thread || []).forEach(function (entry) { thread.appendChild(item(entry)); });
+    (model.thread || []).forEach(function (entry) {
+      if (entry.id && skip[entry.id]) return;
+      thread.appendChild(item(entry));
+    });
     if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
     if (follow) thread.scrollTop = thread.scrollHeight;
+    else thread.scrollTop = keep;
     var placed = thread.scrollTop;
     // The write above lands about 15px short. Layout has finished on the next turn.
     if (follow) root.setTimeout(function () {
@@ -979,6 +1069,7 @@
       followLatest = true;
     }, 0);
     else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
+    renderPin(forms);
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
     renderRole(model);
@@ -1132,7 +1223,8 @@
         }
         return;
       }
-      Forsk.handleKey(e, { composer: e.target === q, card: openCard(), text: q.value }, send);
+      var cardId = openCard();
+      Forsk.handleKey(e, { composer: e.target === q, card: cardId, cancel: Forsk.cardCancels(model, cardId), text: q.value }, send);
     }, true);
     document.getElementById('composer').addEventListener('submit', function (e) {
       e.preventDefault();
