@@ -1,21 +1,22 @@
 # Night log: v4 detail slices on `cursor/add-detail-2118`
 
-Base: main `b82f07b`. The brief named `night-v4` and main `8783beb`; this run works on its own cloud branch, and main has two commits more (chat hover focus `8c2fac6`, DWG sheet text at printed size `b82f07b`).
+Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief named `night-v4` and main `8783beb`; this run works on its own cloud branch. Built on `b82f07b`, then rebased onto `0f51473` with no conflicts; the SHAs below are after the rebase.
 
 | Slice | Commit | State |
 |---|---|---|
-| D1 Add detail replaces Add dimensions | `679a547` | done headless |
-| D2 plan detail | `0e35401` | done headless; bake unverified |
-| D2b break lines for long walls | `f58fa08` | done headless; bake unverified |
-| D3 wall section, opening elevation and section | `4740c2e` | done headless; bake unverified |
-| D4 detail sheets and callouts | `ff87673` | done headless; bake unverified |
-| D5 detail sheets in DWG | see `git log` (`feat(export): D5 …`) | done headless; export unverified |
+| D1 Add detail replaces Add dimensions | `9fce4dc` | done headless |
+| D2 plan detail | `84e52b6` | done headless; bake unverified |
+| D2b break lines for long walls | `dbba948` | done headless; bake unverified |
+| D3 wall section, opening elevation and section | `48aeec0` | done headless; bake unverified |
+| D4 detail sheets and callouts | `0a16918` | done headless; bake unverified |
+| D5 detail sheets in DWG | `bea17e8` | done headless; export unverified |
 
-## Gates (last run, Linux container)
+## Gates (last run, Linux container, after the rebase)
 
 - `dotnet build plugin/rhinomcp.csproj -c Debug -p:UseWindowsForms=false`: exit 0, 0 warnings.
-- `dotnet test tests/SoftParam.Tests`: exit 0, 2004 passed, 1 skipped (D4 2001, D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed).
-- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 510 passed, 2 skipped (D4 499, D2 499, D1 498; base 500: the two `check_user_dims` tests went). `test_dxf_check.py` runs with `ezdxf` 1.4.4 in the venv.
+- `dotnet test tests/SoftParam.Tests`: exit 0, 2092 passed, 1 skipped, under `CommaCulture` (nb-NO). Before the rebase: D5 2004, D4 2001, D3 1986, D2b 1974, D2 1967, D1 1946; base 1926 passed.
+- `server/.venv/bin/pytest -q server/tests contracts/test_schemas.py`: exit 0, 511 passed, 2 skipped. Before the rebase: D5 510, D4 499, D2 499, D1 498; base 500 (the two `check_user_dims` tests went). `test_dxf_check.py` runs with `ezdxf` 1.4.4 in the venv.
+- `WindowViewTests.TheViewModelsBar_IsTheRegistrysBar("house, door selected")` (flaky once on the Mac): the detail slices leave the single-opening bar as it was (Add detail comes in for walls with openings and for two or more walls only); 5 of 5 runs of `WindowViewTests` passed here. Not changed.
 - `server/.venv/bin/python contracts/test_schemas.py`: exit 0.
 - Container: `apt-get update` was needed before `apt-get install -y dotnet-sdk-8.0 python3.12-venv`. The venv's `mcp` resolved to 2.x, which has no `mcp.server.fastmcp`, so `pip install "mcp<2"` (1.30.0; `uv.lock` pins 1.26.0 and is untouched).
 
