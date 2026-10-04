@@ -12,6 +12,7 @@ namespace RhinoMCPPlugin.Functions;
 /// together in one row (plan, elevation, section), the next sheet of that
 /// scale when one is full. Each box is the drawing, its 15 mm band on every
 /// side and its 12 mm title band below. Deterministic from the record order.
+/// Once a sheet is drawn, what it drew is centred in the area (Centre).
 /// Pure, no RhinoCommon.
 /// </summary>
 public static class DetailSheet
@@ -99,6 +100,15 @@ public static class DetailSheet
         }
         return sheets;
     }
+
+    /// <summary>
+    /// The move (paper mm) that centres a sheet's drawn content, its box in
+    /// detail-area paper mm, in the detail area: the page's usable area,
+    /// which it frames inside the margins and above the title block. One
+    /// move for all of it, so the views keep their spacing.
+    /// </summary>
+    public static Pt Centre(RoomDetect.Box content) =>
+        new Pt((Details.AreaWidthMm - content.MinX - content.MaxX) / 2.0, (Details.AreaHeightMm - content.MinY - content.MaxY) / 2.0);
 
     /// <summary>A detail sheet's number in the set: A-50-001 onwards in id order, scale ascending, then n.</summary>
     public static string Number(string id, IEnumerable<string> ids)

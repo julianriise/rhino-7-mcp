@@ -1,5 +1,6 @@
 using RhinoMCPPlugin.Functions;
 using Xunit;
+using static SoftParam.Tests.DetailFixtures;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
 namespace SoftParam.Tests;
@@ -20,12 +21,6 @@ public class DetailCalloutTests
         Assert.Equal(-6, bubble.DividerFrom.X, 6);
         Assert.Equal(6, bubble.DividerTo.X, 6);
     }
-
-    /// <summary>Arial's advance widths, mm at 1 mm high: what Rhino measures and the DWG's Arial draws.</summary>
-    static double Arial(string text) => text.Sum(c => c switch
-    {
-        'A' => 0.667, '-' => 0.333, ' ' => 0.278, >= '0' and <= '9' => 0.556, _ => 0.6
-    });
 
     [Theory]
     [InlineData("A-50-002", DetailCallout.MarkMm)]

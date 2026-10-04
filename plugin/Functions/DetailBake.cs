@@ -108,6 +108,7 @@ public partial class RhinoMCPFunctions
                 ["detail"] = d.Facts.Record.Id
             });
         }
+        CentreDetailSheet(doc, layer, origin, scale, box);
         result.Layer = layer.FullPath ?? layer.Name;
         result.Count = count;
         result.Fills = fills;
@@ -118,6 +119,25 @@ public partial class RhinoMCPFunctions
         result.SymbolNote = notes.Count == 0 ? null : string.Join("; ", notes);
         if (count == 0) result.Error = "No visible curves for " + view + ".";
         return result;
+    }
+
+    /// <summary>
+    /// Moves everything the sheet drew (views, fills, dimensions, bubbles,
+    /// titles: its layer's drawings, whose box is box) by the one move that
+    /// centres box in the detail area. The page frames that area, and the
+    /// DWG flattens the page, so both show it centred.
+    /// </summary>
+    private static void CentreDetailSheet(RhinoDoc doc, Layer layer, Pt origin, int scale, BoundingBox box)
+    {
+        if (!box.IsValid || scale < 1) return;
+        var move = DetailSheet.Centre(new RoomDetect.Box(
+            (box.Min.X - origin.X) / scale, (box.Min.Y - origin.Y) / scale,
+            (box.Max.X - origin.X) / scale, (box.Max.Y - origin.Y) / scale));
+        var xform = Transform.Translation(move.X * scale, move.Y * scale, 0);
+        var drawn = new List<Guid>();
+        CollectLayerDrawings(doc.Objects, layer, drawn);
+        foreach (var id in drawn)
+            doc.Objects.Transform(id, xform, true);
     }
 
     /// <summary>The pen of a view title's rule.</summary>

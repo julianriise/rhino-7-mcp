@@ -60,6 +60,12 @@ static class DetailFixtures
         Centre = new Pt((lo + hi) / 2, 100), Along = new Pt(1, 0), Width = hi - lo, Sill = sill, Head = head
     };
 
+    /// <summary>Arial's advance widths, mm at 1 mm high: what Rhino measures and the DWG's Arial draws.</summary>
+    public static double Arial(string text) => text.Sum(c => c switch
+    {
+        'A' => 0.667, '-' => 0.333, ' ' => 0.278, >= '0' and <= '9' => 0.556, _ => 0.6
+    });
+
     /// <summary>
     /// Where the smoke garage's pocket door parks, along the south wall: a
     /// slot in the wall with the leaf in it, which leaves the plan's poché
