@@ -13,9 +13,10 @@ R12 (AC1009) drops them.
 With --expect detail a DXF is a detail sheet (A-50-…): layers A-WALL-CUT,
 A-ANNO-DIMS and A-ANNO-TTLB, a 0.70 mm lineweight on an entity, a dimension
 value 200 on A-ANNO-DIMS, its number (from the file name, else A-50-001) on
-A-ANNO-TTLB, extents inside the A3 sheet, and LINE / TEXT / HATCH / polyline
+A-ANNO-TTLB, extents inside the A3 sheet, LINE / TEXT / HATCH / polyline
 extents together (title underline within 5 mm of its title, dimension text
-beside its lines).
+beside its lines), and at least 8 drawing LINEs when the sheet has text or
+a hatch (a dropped stroke leaves only the title-block's 4).
 
 Usage:
   python3 scripts/dxf_check.py "/tmp/forsk-export-garage/Garage DXF/Garage A-20-001 Plan.dxf"
@@ -51,6 +52,10 @@ DETAIL_VALUE = "200"  # the garage wall's thickness
 DETAIL_NUMBER = re.compile(r"A-50-\d{3}")
 # Title rule vs title text, dim value vs dim line, cut vs poché: one move.
 TOGETHER_MM = 5.0
+# A title block has 4 LINEs. A detail with text or poché and only those
+# has dropped its stroke ribbons (walls, dims, underlines, bubbles).
+DETAIL_DRAW_LINES = 8
+TTLB = "A-ANNO-TTLB"
 
 
 def check_plan(doc, number: str = "A-20-001") -> list[str]:
@@ -115,7 +120,8 @@ def check_together(doc) -> list[str]:
 
     The title underline is within 5 mm of its title text, dimension text
     sits beside its dimension lines, and a cut LINE stays on its poché.
-    Empty when those pairs are missing or already together.
+    A sheet with text or a hatch and fewer than 8 drawing LINEs has
+    dropped its strokes; missing underlines and dim lines fail too.
     """
     from ezdxf import bbox
 
@@ -142,19 +148,34 @@ def check_together(doc) -> list[str]:
     def nearest(ones, others):
         return min(gap(a, b) for a in ones for b in others)
 
+    draw_lines = sum(
+        1 for e in msp
+        if e.dxftype() == "LINE" and e.dxf.get("layer", "0").upper() != TTLB
+    )
+    has_text = any(e.dxftype() in ("TEXT", "MTEXT") and e.dxf.get("layer", "0").upper() != TTLB for e in msp)
+    has_hatch = any(e.dxftype() == "HATCH" for e in msp)
+    if (has_text or has_hatch) and draw_lines < DETAIL_DRAW_LINES:
+        problems.append(f"{draw_lines} drawing LINEs, want {DETAIL_DRAW_LINES} or more")
+
     titles = boxes("A-ANNO-TEXT", ("TEXT", "MTEXT"))
     rules = boxes("A-ANNO-TEXT", ("LINE",))
-    if titles and rules and nearest(titles, rules) > TOGETHER_MM:
+    if titles and not rules:
+        problems.append("title underline is missing")
+    elif titles and nearest(titles, rules) > TOGETHER_MM:
         problems.append("title underline is not within 5 mm of its title text")
 
     values = boxes("A-ANNO-DIMS", ("TEXT", "MTEXT"))
     dims = boxes("A-ANNO-DIMS", ("LINE", "LWPOLYLINE", "POLYLINE"))
-    if values and dims and nearest(values, dims) > TOGETHER_MM:
+    if values and not dims:
+        problems.append("dimension lines are missing")
+    elif values and nearest(values, dims) > TOGETHER_MM:
         problems.append("dimension text is not beside its dimension lines")
 
     cuts = boxes("A-WALL-CUT", ("LINE", "LWPOLYLINE", "POLYLINE"))
     fills = boxes("A-WALL-PATT", ("HATCH",))
-    if cuts and fills and nearest(cuts, fills) > TOGETHER_MM:
+    if fills and not cuts:
+        problems.append("LINE and HATCH extents do not move together")
+    elif cuts and fills and nearest(cuts, fills) > TOGETHER_MM:
         problems.append("LINE and HATCH extents do not move together")
     return problems
 

@@ -163,6 +163,11 @@ public class SheetFlatTests
         Assert.Equal(new[] { 37.0, 132.0, 97.0, 132.0 }, rule.Select(v => Math.Round(v, 6)));
         var left = SheetFlat.OnPage(packed, page)[0].P;
         Assert.Equal(211, left[1], 6);
+        Assert.Single(SheetFlat.OnPage(packed, page));
+        Assert.Single(SheetFlat.OnPage(packed, page, 17 * 20, -79 * 20));
+        Assert.True(SheetFlat.TryCentre(SheetFlat.FormatCentre(340, -1580), out var dx, out var dy));
+        Assert.Equal(340, dx, 9);
+        Assert.Equal(-1580, dy, 9);
     }
 
     [Fact]

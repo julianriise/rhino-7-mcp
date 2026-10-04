@@ -184,8 +184,13 @@ public class DetailSheetTests
         Assert.Contains("DetailSheet.Centre(", body);
         Assert.Contains("CollectLayerDrawings(doc.Objects, layer, drawn)", body);
         Assert.Contains("Transform.Translation(dx, dy, 0)", body);
-        Assert.Contains("SheetFlat.Shift(", body);
-        Assert.Contains("SheetFlat.StrokeKey", body);
+        Assert.Contains("SheetFlat.FormatCentre(", body);
+        Assert.Contains("SheetFlat.CentreEntry(", body);
+        Assert.DoesNotContain("ModifyAttributes", body);
+        Assert.DoesNotContain("SheetFlat.StrokeKey", body);
+        var export = File.ReadAllText(Path.Combine(FunctionsDir(), "SheetExport.cs"));
+        Assert.Contains("SheetFlat.OnPage(stroke, affine, dx, dy)", export);
+        Assert.Contains("SheetFlat.TryCentre(", export);
     }
 
     [Fact]
@@ -238,6 +243,56 @@ public class DetailSheetTests
 
         var stale = SheetFlat.OnPage(stroke, page);
         Assert.True(Gap(LineBox(stale[0]), Box(label)) > 5, "a stroke left behind its text is the export bug");
+    }
+
+    [Fact]
+    public void EachSmokeGarageSheet_KeepsItsStrokeLineCount_AfterTheCentreMove()
+    {
+        var sheets = Sheets(DetailFixtures.SmokeGarage(), ("w01", null), (null, "o-d01"));
+        var counts = new List<int>();
+        foreach (var sheet in sheets)
+        {
+            var packed = Content(sheet, sheets);
+            var move = DetailSheet.Centre(packed);
+            var stroke = Strokes(sheet, sheets);
+            var page = new SheetFlat.Affine { A = 1.0 / sheet.Scale, E = 1.0 / sheet.Scale };
+            var before = SheetFlat.OnPage(stroke, page);
+            var after = SheetFlat.OnPage(stroke, page, move.X * sheet.Scale, move.Y * sheet.Scale);
+            Assert.Equal(before.Count, after.Count);
+            Assert.True(before.Count >= 8, sheet.Id + " has " + before.Count + " stroke LINEs");
+            Assert.Equal(SheetFlat.Draw.Stroke, SheetFlat.HowToDraw(true, true, stroke.Length > 0));
+            counts.Add(before.Count);
+        }
+        Assert.Equal(new[] { 32, 14, 34 }, counts);
+    }
+
+    /// <summary>The bake's stroke LINEs for a sheet: title rules, dim lines and ticks, level marks.</summary>
+    static string Strokes(DetailSheet.Sheet sheet, List<DetailSheet.Sheet> all)
+    {
+        var s = (double)sheet.Scale;
+        var segs = new List<SheetFlat.Seg>();
+        foreach (var p in sheet.Drawings)
+        {
+            var d = p.Drawing;
+            var shift = new Pt(p.X * s - d.U0, p.Y * s - d.V0);
+            var title = DetailSheet.TitleOf(p, sheet.Scale);
+            segs.Add(SheetFlat.Seg.Line(title.RuleFrom.X * s, title.RuleFrom.Y * s, title.RuleTo.X * s, title.RuleTo.Y * s));
+            var chains = DetailDims.Chains(d.Facts, d);
+            foreach (var chain in chains) chain.Origin = new Pt(chain.Origin.X + shift.X, chain.Origin.Y + shift.Y);
+            var taken = new List<PlanDims.Obstacle>();
+            var walls = new List<List<List<Pt>>>();
+            foreach (var chain in PlanDims.LayoutFixed(chains, sheet.Scale, taken, walls, t => DetailFixtures.Arial(t) * PlanDims.TextMm).Where(c => c.Placed))
+            {
+                foreach (var line in chain.Lines.Concat(chain.Ticks))
+                    segs.Add(SheetFlat.Seg.Line(line.A.X, line.A.Y, line.B.X, line.B.Y));
+            }
+            foreach (var level in DetailDims.Levels(d.Facts, d))
+            {
+                var at = new Pt(level.U + shift.X, level.Z + shift.Y);
+                segs.Add(SheetFlat.Seg.Line(at.X, at.Y, at.X + level.Side * 10 * s, at.Y));
+            }
+        }
+        return SheetFlat.Encode(segs);
     }
 
     static string DetailDxf(List<SheetFlat.Seg> lines, Pt titleAt, string title, Pt dimAt, Pt[] hatch)

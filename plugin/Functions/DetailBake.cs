@@ -124,10 +124,10 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// Moves everything the sheet drew (views, fills, dimensions, bubbles,
     /// titles: its layer's drawings, whose box is box) by the one move that
-    /// centres box in the detail area. The page frames that area, and the
-    /// DWG flattens the page, so both show it centred. Ribbons keep their
-    /// forsk:stroke in the same millimetres as the hatch, or the export
-    /// writes those LINEs where they were packed.
+    /// centres box in the detail area. The page frames that area. Ribbons
+    /// keep the packed forsk:stroke; the move is stored for the DWG so
+    /// FlattenPage writes those LINEs with the same translation (rewriting
+    /// the string then Transform drops it, and HowToDraw skips the ribbon).
     /// </summary>
     private static void CentreDetailSheet(RhinoDoc doc, Layer layer, Pt origin, int scale, BoundingBox box)
     {
@@ -137,23 +137,13 @@ public partial class RhinoMCPFunctions
             (box.Max.X - origin.X) / scale, (box.Max.Y - origin.Y) / scale));
         var dx = move.X * scale;
         var dy = move.Y * scale;
+        doc.Strings.SetString(SheetFlat.CentreSection, SheetFlat.CentreEntry(layer.FullPath ?? layer.Name),
+            SheetFlat.FormatCentre(dx, dy));
         var xform = Transform.Translation(dx, dy, 0);
         var drawn = new List<Guid>();
         CollectLayerDrawings(doc.Objects, layer, drawn);
         foreach (var id in drawn)
-            ShiftDrawnStroke(doc, id, dx, dy);
-        foreach (var id in drawn)
             doc.Objects.Transform(id, xform, true);
-    }
-
-    /// <summary>Keeps a ribbon's centreline with the hatch the bake just moved.</summary>
-    private static void ShiftDrawnStroke(RhinoDoc doc, Guid id, double dx, double dy)
-    {
-        var obj = doc.Objects.FindId(id);
-        var stroke = obj?.Attributes?.GetUserString(SheetFlat.StrokeKey);
-        if (obj == null || string.IsNullOrEmpty(stroke)) return;
-        obj.Attributes.SetUserString(SheetFlat.StrokeKey, SheetFlat.Shift(stroke, dx, dy));
-        doc.Objects.ModifyAttributes(obj, obj.Attributes, true);
     }
 
     /// <summary>The pen of a view title's rule.</summary>

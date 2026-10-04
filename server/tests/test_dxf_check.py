@@ -293,26 +293,39 @@ def test_a_dimension_at_model_size_fails():
     assert any("dimension arrow" in p and "100" in p for p in problems), problems
 
 
-def detail_doc(*, heavy=True, value="200", number="A-50-001", off_sheet=False, together=True):
+def detail_doc(*, heavy=True, value="200", number="A-50-001", off_sheet=False, together=True, draw_lines=True):
     doc = ezdxf.new("R2018")
-    for name in ("A-WALL-CUT", "A-WALL-PATT", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-SYMB"):
+    for name in ("A-WALL-CUT", "A-WALL-PATT", "A-ELEV", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-SYMB"):
         doc.layers.add(name)
     msp = doc.modelspace()
     # Together: one translation. Apart: the A-50-001 smoke, LINEs left packed.
-    wall = (40, 150, 40, 180) if together else (40, 245, 40, 273)
+    # Title block only: the 108fd5b failure (4 TTLB LINEs, strokes dropped).
+    wall_y = (150, 180) if together else (245, 273)
     title_y, rule_y = (120, 120) if together else (129, 211)
-    dim_text, dim_line = ((58, 156), (40, 156, 80, 156)) if together else ((58, 156), (40, 245, 80, 245))
-    hatch_y = (150, 180) if together else (150, 180)
-    msp.add_line((wall[0], wall[1]), (wall[2], wall[3]), dxfattribs={"layer": "A-WALL-CUT", "lineweight": 70 if heavy else 50})
+    dim_text, dim_y = ((58, 156), 156 if together else 245)
+    hatch_y = (150, 180)
+    msp.add_line((10, 10), (410, 10), dxfattribs={"layer": "A-ANNO-TTLB"})
+    msp.add_line((10, 10), (10, 40), dxfattribs={"layer": "A-ANNO-TTLB"})
+    msp.add_line((410, 10), (410, 40), dxfattribs={"layer": "A-ANNO-TTLB"})
+    msp.add_line((10, 40), (410, 40), dxfattribs={"layer": "A-ANNO-TTLB"})
+    msp.add_text(number, dxfattribs={"layer": "A-ANNO-TTLB", "height": 3.5, "insert": (300, 14)})
+    msp.add_mtext(value, dxfattribs={"layer": "A-ANNO-DIMS", "char_height": 1.8, "insert": dim_text})
+    msp.add_text("Wall plan", dxfattribs={"layer": "A-ANNO-TEXT", "height": 2.5, "insert": (20, title_y)})
     fill = msp.add_hatch(dxfattribs={"layer": "A-WALL-PATT"})
     fill.paths.add_polyline_path([(42, hatch_y[0]), (48, hatch_y[0]), (48, hatch_y[1]), (42, hatch_y[1])])
     msp.add_lwpolyline([(50, hatch_y[0]), (70, hatch_y[0]), (70, hatch_y[0] + 20), (50, hatch_y[0] + 20)],
                        close=True, dxfattribs={"layer": "A-SYMB"})
-    msp.add_line((dim_line[0], dim_line[1]), (dim_line[2], dim_line[3]), dxfattribs={"layer": "A-ANNO-DIMS"})
-    msp.add_mtext(value, dxfattribs={"layer": "A-ANNO-DIMS", "char_height": 1.8, "insert": dim_text})
-    msp.add_text("Wall plan", dxfattribs={"layer": "A-ANNO-TEXT", "height": 2.5, "insert": (20, title_y)})
-    msp.add_line((20, rule_y), (80, rule_y), dxfattribs={"layer": "A-ANNO-TEXT"})
-    msp.add_text(number, dxfattribs={"layer": "A-ANNO-TTLB", "height": 3.5, "insert": (300, 14)})
+    if draw_lines:
+        msp.add_line((40, wall_y[0]), (40, wall_y[1]), dxfattribs={"layer": "A-WALL-CUT", "lineweight": 70 if heavy else 50})
+        msp.add_line((48, wall_y[0]), (48, wall_y[1]), dxfattribs={"layer": "A-WALL-CUT"})
+        msp.add_line((40, wall_y[0]), (48, wall_y[0]), dxfattribs={"layer": "A-WALL-CUT"})
+        msp.add_line((40, wall_y[1]), (48, wall_y[1]), dxfattribs={"layer": "A-WALL-CUT"})
+        msp.add_line((55, wall_y[0]), (55, wall_y[1]), dxfattribs={"layer": "A-ELEV"})
+        msp.add_line((75, wall_y[0]), (75, wall_y[1]), dxfattribs={"layer": "A-ELEV"})
+        msp.add_line((40, dim_y), (80, dim_y), dxfattribs={"layer": "A-ANNO-DIMS"})
+        msp.add_line((20, rule_y), (80, rule_y), dxfattribs={"layer": "A-ANNO-TEXT"})
+    elif heavy:
+        msp.add_lwpolyline([(40, 150), (40, 151)], dxfattribs={"layer": "A-WALL-CUT", "lineweight": 70})
     if off_sheet:
         msp.add_line((0, 0), (500, 0), dxfattribs={"layer": "A-WALL-CUT"})
     return doc
@@ -330,6 +343,13 @@ def test_a_detail_sheet_with_lines_left_behind_fails():
     assert any("title underline" in p for p in problems), problems
     assert any("dimension text" in p for p in problems), problems
     assert any("LINE and HATCH" in p for p in problems), problems
+
+
+def test_a_detail_sheet_that_dropped_its_strokes_fails():
+    problems = dxf_check.check_detail(detail_doc(draw_lines=False))
+    assert any("drawing LINEs" in p for p in problems), problems
+    assert any("title underline is missing" in p for p in problems), problems
+    assert any("dimension lines are missing" in p for p in problems), problems
 
 
 @pytest.mark.parametrize(

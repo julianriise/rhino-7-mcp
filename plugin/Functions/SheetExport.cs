@@ -173,7 +173,7 @@ public partial class RhinoMCPFunctions
         {
             if (obj == null || obj is DetailViewObject) continue;
             if (obj.Attributes.Space != ActiveSpace.PageSpace) continue;
-            AddFlat(doc, obj, toMm, pieces, misc);
+            AddFlat(doc, obj, toMm, pieces, misc, 0, 0);
         }
 
         var detail = page.GetDetailViews()?.FirstOrDefault(d => d != null);
@@ -181,6 +181,8 @@ public partial class RhinoMCPFunctions
         if (drawLayer != null)
         {
             var map = toMm * detail.WorldToPageTransform;
+            SheetFlat.TryCentre(doc.Strings.GetValue(SheetFlat.CentreSection, SheetFlat.CentreEntry(drawLayer.FullPath)),
+                out var dx, out var dy);
             foreach (var layer in doc.Layers)
             {
                 if (layer == null || layer.IsDeleted || !SheetFlat.InDrawing(layer.FullPath, drawLayer.FullPath)) continue;
@@ -188,14 +190,15 @@ public partial class RhinoMCPFunctions
                 {
                     if (obj == null || !IsPrintDrawing(doc, obj) || obj.IsHidden) continue;
                     if (obj.Attributes.Space != ActiveSpace.ModelSpace) continue;
-                    AddFlat(doc, obj, map, pieces, misc);
+                    AddFlat(doc, obj, map, pieces, misc, dx, dy);
                 }
             }
         }
         return pieces;
     }
 
-    private static void AddFlat(RhinoDoc doc, RhinoObject obj, Transform map, List<FlatPiece> pieces, ISet<string> misc)
+    private static void AddFlat(RhinoDoc doc, RhinoObject obj, Transform map, List<FlatPiece> pieces, ISet<string> misc,
+        double dx, double dy)
     {
         var attr = obj.Attributes;
         var role = attr.GetUserString("forsk:role");
@@ -235,7 +238,7 @@ public partial class RhinoMCPFunctions
             {
                 double.TryParse(pen, NumberStyles.Float, CultureInfo.InvariantCulture, out var penMm);
                 var weight = SheetFlat.Weight(how, penMm, false, 0);
-                foreach (var seg in SheetFlat.OnPage(stroke, affine))
+                foreach (var seg in SheetFlat.OnPage(stroke, affine, dx, dy))
                 {
                     var p = seg.P;
                     Curve curve = seg.Arc

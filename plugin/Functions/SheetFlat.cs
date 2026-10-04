@@ -20,7 +20,16 @@ public static class SheetFlat
     public const string StrokeKey = "forsk:stroke";
     /// <summary>The stroke's pen width in paper millimetres.</summary>
     public const string PenKey = "forsk:pen";
+    /// <summary>
+    /// The one model-mm translation a detail bake applied after packing
+    /// (doc.Strings, section forsk). Export adds it to LINEs; the objects
+    /// keep the packed stroke so a Transform cannot drop the centreline.
+    /// </summary>
+    public const string CentreSection = "forsk";
     public const string Misc = "A-ANNO-MISC";
+
+    /// <summary>The Strings key for a drawing layer's centre move.</summary>
+    public static string CentreEntry(string layerPath) => "centre " + (layerPath ?? "");
 
     public sealed class LayerDef
     {
@@ -254,15 +263,35 @@ public static class SheetFlat
 
     /// <summary>
     /// The stroke after the drawings it came from were translated. Export
-    /// writes LINEs from this string, so a move that leaves it behind leaves
-    /// the walls, dims, bubbles and title rule in place.
+    /// applies this at write time; the object keeps the packed string.
     /// </summary>
-    public static string Shift(string stroke, double dx, double dy) =>
-        Encode(Decode(stroke).Select(s => Map(s, Affine.Translation(dx, dy))));
+    public static string Shift(string stroke, double dx, double dy)
+    {
+        if (Math.Abs(dx) < 1e-12 && Math.Abs(dy) < 1e-12) return stroke ?? "";
+        return Encode(Decode(stroke).Select(s => Map(s, Affine.Translation(dx, dy))));
+    }
 
-    /// <summary>A stroke's pieces on the page: the same affine the export applies to geometry.</summary>
-    public static List<Seg> OnPage(string stroke, Affine page) =>
-        Decode(stroke).Select(s => Map(s, page)).ToList();
+    /// <summary>A stroke's pieces on the page, after the bake's one model-mm move.</summary>
+    public static List<Seg> OnPage(string stroke, Affine page, double dx = 0, double dy = 0)
+    {
+        IEnumerable<Seg> segs = Decode(stroke);
+        if (Math.Abs(dx) > 1e-12 || Math.Abs(dy) > 1e-12)
+            segs = segs.Select(s => Map(s, Affine.Translation(dx, dy)));
+        return segs.Select(s => Map(s, page)).ToList();
+    }
+
+    /// <summary>"dx,dy" in model millimetres, what Centre / TryCentre read back.</summary>
+    public static string FormatCentre(double dx, double dy) =>
+        dx.ToString("R", CultureInfo.InvariantCulture) + "," + dy.ToString("R", CultureInfo.InvariantCulture);
+
+    public static bool TryCentre(string text, out double dx, out double dy)
+    {
+        dx = dy = 0;
+        var parts = (text ?? "").Split(',');
+        return parts.Length == 2
+            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out dx)
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out dy);
+    }
 
     /// <summary>"Holmen A-20-001 Plan.dwg". Characters a file name cannot hold become a dash.</summary>
     public static string FileName(string project, string number, string title, string format)
