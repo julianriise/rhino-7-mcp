@@ -36,6 +36,10 @@ public static class Takeoff
     /// <summary>One wall record: forsk:path rings (outer, then holes), forsk:thickness, forsk:height, X-EXIST or not.</summary>
     public sealed class Wall
     {
+        /// <summary>forsk:id, or the caller's x01… for an X-EXIST wall without one.</summary>
+        public string Id;
+        /// <summary>forsk:level, or null.</summary>
+        public string Level;
         public List<List<Pt>> Rings;
         public double ThicknessMm;
         public double HeightMm;
@@ -68,11 +72,23 @@ public static class Takeoff
         public string Summary;
     }
 
-    sealed class RunFigures
+    /// <summary>
+    /// One run of the F2 join graph, as the takeoff counts it: its record's
+    /// id (w03, or w03.1, w03.2 in run order when a record has more than
+    /// one run), outer or not, X-EXIST or not, thickness, length, height,
+    /// area net of its openings (one side) and volume, in mm, mm² and mm³.
+    /// </summary>
+    public sealed class Run
     {
+        public string Id;
+        /// <summary>The record's index in the walls given.</summary>
+        public int Index;
+        public string Level;
         public bool Outer;
+        public bool Existing;
         public double Thickness;
         public double Length;
+        public double Height;
         public double Area;
         public double Volume;
     }
@@ -84,10 +100,11 @@ public static class Takeoff
         walls = walls ?? new Wall[0];
         openings = openings ?? new Schedules.Opening[0];
         var result = new Result();
-        var built = WallRuns(walls.Where(w => !w.Existing).ToList(), openings, tol);
+        var runs = Runs(walls, openings, tol);
+        var built = runs.Where(r => !r.Existing).ToList();
         AddWalls(result, built.Where(r => r.Outer), Group(Outer, "Yttervegger", norwegian), SheetLang.Pick(norwegian, "Exterior wall", "Yttervegg"));
         AddWalls(result, built.Where(r => !r.Outer), Group(Inner, "Innervegger", norwegian), SheetLang.Pick(norwegian, "Interior wall", "Innervegg"));
-        var standing = WallRuns(walls.Where(w => w.Existing).ToList(), new Schedules.Opening[0], tol);
+        var standing = runs.Where(r => r.Existing).ToList();
         var existing = Group(Existing, "Eksisterende", norwegian);
         AddWalls(result, standing.Where(r => r.Outer), existing, SheetLang.Pick(norwegian, "Existing exterior wall", "Eksisterende yttervegg"));
         AddWalls(result, standing.Where(r => !r.Outer), existing, SheetLang.Pick(norwegian, "Existing interior wall", "Eksisterende innervegg"));
@@ -162,10 +179,33 @@ public static class Takeoff
         return norwegian ? text.Replace('.', ',') : text;
     }
 
-    /// <summary>Every run of every cluster of these walls, with its openings taken out.</summary>
-    static List<RunFigures> WallRuns(IList<Wall> walls, IList<Schedules.Opening> openings, double tol)
+    /// <summary>
+    /// The takeoff's wall runs, the new walls' then the X-EXIST walls': the
+    /// card's lines and the CSV's wall rows both come from these. Openings
+    /// come out of the new walls only.
+    /// </summary>
+    public static List<Run> Runs(IList<Wall> walls, IList<Schedules.Opening> openings, double tol)
     {
-        var figures = new List<RunFigures>();
+        walls = walls ?? new Wall[0];
+        var built = Enumerable.Range(0, walls.Count).Where(i => walls[i] != null && !walls[i].Existing).ToList();
+        var standing = Enumerable.Range(0, walls.Count).Where(i => walls[i] != null && walls[i].Existing).ToList();
+        var runs = WallRuns(walls, built, openings ?? new Schedules.Opening[0], tol);
+        runs.AddRange(WallRuns(walls, standing, new Schedules.Opening[0], tol));
+        // A record with more than one run numbers them in run order.
+        foreach (var byRecord in runs.GroupBy(r => r.Index).Where(g => g.Count() > 1))
+        {
+            var k = 0;
+            foreach (var run in byRecord)
+                run.Id = run.Id + "." + (++k).ToString(CultureInfo.InvariantCulture);
+        }
+        return runs;
+    }
+
+    /// <summary>Every run of every cluster of these walls (indices into all), with its openings taken out.</summary>
+    static List<Run> WallRuns(IList<Wall> all, IList<int> indices, IList<Schedules.Opening> openings, double tol)
+    {
+        var figures = new List<Run>();
+        var walls = indices.Select(i => all[i]).ToList();
         var records = walls.Select(w => w.Rings).ToList();
         if (records.Count == 0) return figures;
         var taken = new HashSet<Schedules.Opening>();
@@ -182,7 +222,8 @@ public static class Takeoff
                 {
                     var length = MeanFaceExtent(g.Shape, run);
                     if (length <= 0) continue;
-                    var height = HeightOf(walls, records, members, run);
+                    var record = RecordOf(walls, records, members, run);
+                    var height = walls[record].HeightMm;
                     var open = 0.0;
                     foreach (var opening in openings)
                     {
@@ -190,8 +231,13 @@ public static class Takeoff
                         taken.Add(opening);
                         open += opening.Width * Math.Max(0, opening.Head - opening.Sill);
                     }
-                    figures.Add(new RunFigures
+                    figures.Add(new Run
                     {
+                        Id = walls[record].Id ?? "",
+                        Index = indices[record],
+                        Level = walls[record].Level,
+                        Existing = walls[record].Existing,
+                        Height = height,
                         Outer = run.Edges.Any(e => e.Loop == 0),
                         Thickness = Math.Round(run.Thickness, MidpointRounding.AwayFromZero),
                         Length = length,
@@ -234,13 +280,13 @@ public static class Takeoff
         return 0.5 * (near + far);
     }
 
-    /// <summary>The height of the record that holds the run's middle; the cluster's tallest when none does.</summary>
-    static double HeightOf(IList<Wall> walls, IList<List<List<Pt>>> records, IList<int> members, WallEdit.Run run)
+    /// <summary>The record that holds the run's middle; the cluster's tallest when none does. Its height is the run's.</summary>
+    static int RecordOf(IList<Wall> walls, IList<List<List<Pt>>> records, IList<int> members, WallEdit.Run run)
     {
         var middle = WallJoins.Middle(run);
         foreach (var i in members)
-            if (WallEdit.InRegion(records[i], middle)) return walls[i].HeightMm;
-        return members.Max(i => walls[i].HeightMm);
+            if (WallEdit.InRegion(records[i], middle)) return i;
+        return members.OrderByDescending(i => walls[i].HeightMm).First();
     }
 
     /// <summary>An opening's centre inside the run's band: between its faces and along its extent.</summary>
@@ -254,7 +300,7 @@ public static class Takeoff
 
     static double Dot(Pt p, Pt v) => p.X * v.X + p.Y * v.Y;
 
-    static void AddWalls(Result result, IEnumerable<RunFigures> runs, string group, string name)
+    static void AddWalls(Result result, IEnumerable<Run> runs, string group, string name)
     {
         foreach (var byThickness in runs.GroupBy(r => r.Thickness).OrderByDescending(g => g.Key))
         {

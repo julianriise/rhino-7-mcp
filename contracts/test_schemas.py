@@ -384,6 +384,7 @@ def test_new_commands():
         ("commands/details.json", {"action": "remove"}),
         ("commands/details.json", {"action": "list"}),
         ("commands/export_ifc.json", {"path": "/tmp/forsk-ifc-garage.ifc"}),
+        ("commands/export_csv.json", {"path": "/tmp/Garage Takeoff.csv"}),
         ("commands/add_stair.json", {}),
         ("commands/add_stair.json", {"from": [1000, 650], "to": [5000, 650], "width": 1000, "riser_max": 170, "going": 280}),
         ("commands/add_stair.json", {"from": [1500, 550], "to": [6180, 550], "width": 900, "going": 260, "against": "right"}),
@@ -982,6 +983,14 @@ def test_responses():
     if not validate("responses/export_ifc_result.json", ifc_written):
         all_passed = False
 
+    print("  export_csv_result:")
+    csv_written = {
+        "path": "/tmp/Garage Takeoff.csv", "rooms": 6, "walls": 14, "doors": 4, "windows": 1, "stairs": 1,
+        "message": "✓ Exported takeoff CSV · 6 rooms, 14 walls, 5 doors and windows, 1 stair · Garage Takeoff.csv",
+    }
+    if not validate("responses/export_csv_result.json", csv_written):
+        all_passed = False
+
     print("  details_result:")
     details_added = {
         "details": [
@@ -1466,6 +1475,8 @@ def test_invalid_examples():
         ("commands/export_sheets.json", {}, "export_sheets missing folder"),
         ("commands/details.json", {}, "details missing action"),
         ("commands/export_ifc.json", {}, "export_ifc missing path"),
+        ("commands/export_csv.json", {}, "export_csv missing path"),
+        ("commands/export_csv.json", {"path": "/tmp/a.csv", "locale": "nb"}, "export_csv unknown field"),
         ("commands/add_stair.json", {"from": [0, 0]}, "add_stair from only one point"),
         ("commands/add_stair.json", {"riser_max": 50}, "add_stair riser too low"),
         ("commands/add_stair.json", {"rise": "high"}, "add_stair rise word"),

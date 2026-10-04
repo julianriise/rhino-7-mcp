@@ -242,7 +242,7 @@ public class RegistryTests
 
         Assert.Equal(new[] { "file.import", "file.draw", "wall.draw", "meta.title" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "wall.draw", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "area.stats", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "export.csv", "takeoff", "meta.title", "daylight.run", "section.add", "ink.set" },
             Ids("house"));
     }
 
@@ -339,5 +339,16 @@ public class RegistryTests
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("empty")).Actions, a => a.Id == "export.ifc");
         Assert.Equal("Export IFC", ForskRegistry.Find("export.ifc").Label);
         Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("export.ifc"));
+    }
+
+    /// <summary>N2: Export CSV sits after Export IFC on the card, for a file with walls.</summary>
+    [Fact]
+    public void ExportCsv_IsOnTheCard_WithWalls_AfterExportIfc()
+    {
+        var ids = ForskRegistry.Card(Docs.Facts("house")).Actions.Select(a => a.Id).ToList();
+        Assert.Equal(ids.IndexOf("export.ifc") + 1, ids.IndexOf("export.csv"));
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("empty")).Actions, a => a.Id == "export.csv");
+        Assert.Equal("Export CSV", ForskRegistry.Find("export.csv").Label);
+        Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("export.csv"));
     }
 }

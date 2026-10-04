@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_csv_result.json",
+  "title": "ExportCsvResult",
+  "description": "The CSV written and how many rows of each kind went in it.",
+  "type": "object",
+  "properties": {
+    "path": { "type": "string" },
+    "rooms": { "type": "integer", "minimum": 0 },
+    "walls": { "type": "integer", "minimum": 0 },
+    "doors": { "type": "integer", "minimum": 0 },
+    "windows": { "type": "integer", "minimum": 0 },
+    "stairs": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["path", "rooms", "walls", "doors", "windows", "stairs", "message"],
+  "additionalProperties": false
+}

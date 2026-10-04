@@ -194,6 +194,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("export.dwg", Runs.Run, "group.print", f => f.HasWalls),
             // R4: the model as IFC4, one file.
             new ForskAction("export.ifc", Runs.Run, "group.print", f => f.HasWalls),
+            // N2: the takeoff as one CSV table. Print and Export DWG also write it beside their files.
+            new ForskAction("export.csv", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
             new ForskAction("takeoff", Runs.Run, "group.print", f => f.HasWalls),
             new ForskAction("meta.title", Runs.Card, "group.print", f => true),

@@ -47,6 +47,8 @@ public static class Schedules
         public double Head;
         /// <summary>Tagged room names on each side of the wall, null where there is none.</summary>
         public string[] Rooms = new string[2];
+        /// <summary>The host wall's forsk:id (the marker's forsk:host_id), or null.</summary>
+        public string HostId;
     }
 
     public sealed class Room

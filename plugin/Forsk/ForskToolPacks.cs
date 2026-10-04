@@ -78,6 +78,7 @@ namespace RhinoMCPPlugin.Forsk
             "export_sheets",
             "details",
             "export_ifc",
+            "export_csv",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -93,6 +94,7 @@ namespace RhinoMCPPlugin.Forsk
             "export_pdf",
             "export_sheets",
             "export_ifc",
+            "export_csv",
             "clear_layouts",
             "section_add",
             "section_clear",
@@ -103,8 +105,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>No rooms: rooms_detect. No windows: add_opening. area_stats is read only.</summary>
         static readonly string[] DaylightPack = { DaylightTool, "rooms_detect", "add_opening", "area_stats" };
 
-        /// <summary>Quantities: the takeoff alone.</summary>
-        static readonly string[] TakeoffPack = { TakeoffTool };
+        /// <summary>Quantities: the takeoff, and the takeoff as a CSV.</summary>
+        static readonly string[] TakeoffPack = { TakeoffTool, "export_csv" };
 
         /// <summary>The figures. rooms_detect when the file has no rooms yet.</summary>
         static readonly string[] AreaPack = { "area_stats", "rooms_detect" };
@@ -651,6 +653,9 @@ namespace RhinoMCPPlugin.Forsk
                 Fn("export_ifc",
                     "Write the model as IFC4: walls, doors and windows in their openings, slabs, the roof and the rooms as spaces. In this panel, omit path: a save dialog supplies it. Use for export ifc, eksporter ifc.",
                     new JObject { ["path"] = Str("Omit in the panel. The save dialog sets an absolute .ifc path.") }),
+                Fn("export_csv",
+                    "Write the takeoff as one CSV table for a spreadsheet: the project info on top, then rooms, walls (one row per run), doors, windows and stairs. In this panel, omit path: a save dialog supplies it. Use for export csv, export schedule, eksporter csv.",
+                    new JObject { ["path"] = Str("Omit in the panel. The save dialog sets an absolute .csv path.") }),
                 Fn("export_sheets",
                     "Write the sheet set as DWG or DXF, one file per sheet, in paper mm at 1:1 with named layers and lineweights. It lays the set out first, as Print does. In this panel, omit folder: a folder dialog supplies it. Use for export dwg, send dwg, eksporter dxf.",
                     new JObject

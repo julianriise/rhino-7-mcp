@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
@@ -182,17 +183,34 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    /// <summary>
-    /// The takeoff from the model's own records: each wall's forsk:path,
-    /// thickness and height (Forsk walls, and walls kept on X-EXIST apart),
-    /// each slab and roof, the doors and windows the lists read, and
-    /// area_stats' figures.
-    /// </summary>
+    /// <summary>The takeoff from the model's own records, and area_stats' figures.</summary>
     private Takeoff.Result ReadTakeoff(RhinoDoc doc)
     {
-        var walls = new List<Takeoff.Wall>();
-        var slabs = new List<Takeoff.Slab>();
-        var roofs = new List<Takeoff.Slab>();
+        var inputs = ReadTakeoffInputs(doc);
+        return Takeoff.Compute(inputs.Walls, inputs.Openings, inputs.Slabs, inputs.Roofs, ReadAreaStats(doc), inputs.Tol,
+            stairs: inputs.Stairs.Select(s => s.Flight).ToList());
+    }
+
+    private sealed class TakeoffInputs
+    {
+        public List<Takeoff.Wall> Walls = new List<Takeoff.Wall>();
+        public List<Takeoff.Slab> Slabs = new List<Takeoff.Slab>();
+        public List<Takeoff.Slab> Roofs = new List<Takeoff.Slab>();
+        public List<Schedules.Opening> Openings = new List<Schedules.Opening>();
+        public List<TakeoffCsv.Stair> Stairs = new List<TakeoffCsv.Stair>();
+        public double Tol;
+    }
+
+    /// <summary>
+    /// One walk of the document for the takeoff and the CSV: each wall's
+    /// forsk:id, level, path, thickness and height (Forsk walls, and walls
+    /// kept on X-EXIST apart, x01… when they have no id), each slab and
+    /// roof, the doors and windows the lists read, and each stair as built.
+    /// </summary>
+    private TakeoffInputs ReadTakeoffInputs(RhinoDoc doc)
+    {
+        var inputs = new TakeoffInputs { Tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0) };
+        var unnamed = 0;
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj?.Attributes == null) continue;
@@ -205,8 +223,11 @@ public partial class RhinoMCPFunctions
             var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
             if (rings != null && (existing || kind.Equals("wall", StringComparison.OrdinalIgnoreCase)))
             {
-                walls.Add(new Takeoff.Wall
+                var id = obj.Attributes.GetUserString("forsk:id");
+                inputs.Walls.Add(new Takeoff.Wall
                 {
+                    Id = string.IsNullOrWhiteSpace(id) ? "x" + (++unnamed).ToString("00", CultureInfo.InvariantCulture) : id,
+                    Level = obj.Attributes.GetUserString("forsk:level"),
                     Rings = rings,
                     ThicknessMm = ParseMm(obj.Attributes.GetUserString("forsk:thickness")) ?? 0,
                     HeightMm = ParseMm(obj.Attributes.GetUserString("forsk:height")) ?? depth,
@@ -220,20 +241,51 @@ public partial class RhinoMCPFunctions
             var thickness = ParseMm(obj.Attributes.GetUserString("forsk:thickness")) ?? depth;
             var volume = SolidVolume(obj.Geometry);
             if (thickness <= 0 || volume <= 0) continue;
-            (slab ? slabs : roofs).Add(new Takeoff.Slab { AreaMm2 = volume / thickness, ThicknessMm = thickness });
+            (slab ? inputs.Slabs : inputs.Roofs).Add(new Takeoff.Slab { AreaMm2 = volume / thickness, ThicknessMm = thickness });
         }
-        var openings = OpeningRows(doc, null, out _);
-        return Takeoff.Compute(walls, openings, slabs, roofs, ReadAreaStats(doc), Math.Max(doc.ModelAbsoluteTolerance, 1.0),
-            stairs: StairFlights(doc));
+        inputs.Openings = OpeningRows(doc, null, out _);
+        // R5: each stair as it was last built: its record's rise, risers and sizes.
+        foreach (var obj in StairObjects(doc))
+            if (TryStairAsBuilt(obj, out _, out var flight))
+                inputs.Stairs.Add(new TakeoffCsv.Stair { Id = obj.Attributes.GetUserString("forsk:id") ?? obj.Id.ToString(), Flight = flight });
+        return inputs;
     }
 
-    /// <summary>R5: each stair as it was last built: its record's rise, risers and sizes.</summary>
-    private static List<Stairs.Flight> StairFlights(RhinoDoc doc)
+    /// <summary>
+    /// v3 N2 export_csv: the takeoff as a CSV at path, UTF-8 with a BOM. The
+    /// project info heads it; rooms, walls (one row per run), doors, windows
+    /// and stairs follow, each figure the takeoff's own.
+    /// </summary>
+    [McpCommand("export_csv", ReadOnly = true)]
+    public JObject ExportCsv(JObject parameters)
     {
-        var flights = new List<Stairs.Flight>();
-        foreach (var obj in StairObjects(doc))
-            if (TryStairAsBuilt(obj, out _, out var flight)) flights.Add(flight);
-        return flights;
+        var doc = RhinoDoc.ActiveDoc;
+        if (doc == null)
+            throw new InvalidOperationException("No active document.");
+        var path = parameters?["path"]?.ToString();
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("path is required.");
+        path = Path.GetFullPath(path.Trim());
+        if (!path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) path += ".csv";
+        var inputs = ReadTakeoffInputs(doc);
+        var rooms = ReadAreaStats(doc).Rooms;
+        var runs = Takeoff.Runs(inputs.Walls, inputs.Openings, inputs.Tol);
+        var text = TakeoffCsv.Write(ReadProjectInfo(doc), rooms, runs, inputs.Openings, inputs.Stairs, DateTime.Now);
+        var folder = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+        File.WriteAllBytes(path, TakeoffCsv.Bytes(text));
+        var doors = inputs.Openings.Count(o => o.Record?.Kind == "door");
+        var windows = inputs.Openings.Count(o => o.Record?.Kind == "window");
+        return new JObject
+        {
+            ["path"] = path,
+            ["rooms"] = rooms.Count,
+            ["walls"] = runs.Count,
+            ["doors"] = doors,
+            ["windows"] = windows,
+            ["stairs"] = inputs.Stairs.Count,
+            ["message"] = TakeoffCsv.Receipt(rooms.Count, runs.Count, doors + windows, inputs.Stairs.Count, path)
+        };
     }
 
     /// <summary>A closed solid's volume in mm³, 0 when Rhino cannot measure it.</summary>

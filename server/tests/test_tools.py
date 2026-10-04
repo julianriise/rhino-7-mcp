@@ -4479,6 +4479,32 @@ class TestExportIfcTool:
         assert export_ifc(ctx=None, path="/tmp/g.ifc")["success"] is False
 
 
+class TestExportCsvTool:
+    @patch("rhinomcp.tools.export_csv.get_rhino_connection")
+    def test_sends_the_path(self, mock_get_conn):
+        from rhinomcp.tools.export_csv import export_csv
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "path": "/tmp/Garage Takeoff.csv", "rooms": 1, "walls": 4, "doors": 4, "windows": 1, "stairs": 0,
+            "message": "✓ Exported takeoff CSV · 1 room, 4 walls, 5 doors and windows · Garage Takeoff.csv",
+        }
+        mock_get_conn.return_value = mock_conn
+        result = export_csv(ctx=None, path="/tmp/Garage Takeoff.csv")
+        mock_conn.send_command.assert_called_once_with("export_csv", {"path": "/tmp/Garage Takeoff.csv"})
+        assert result["success"] is True
+        assert result["walls"] == 4
+
+    @patch("rhinomcp.tools.export_csv.get_rhino_connection")
+    def test_refuses_a_bad_path(self, mock_get_conn):
+        from rhinomcp.tools.export_csv import export_csv
+
+        assert export_csv(ctx=None, path="takeoff.csv")["success"] is False
+        assert export_csv(ctx=None, path="/tmp/takeoff.xlsx")["success"] is False
+        assert export_csv(ctx=None, path="")["success"] is False
+        mock_get_conn.assert_not_called()
+
+
 class TestStairTools:
     @patch("rhinomcp.tools.add_stair.get_rhino_connection")
     def test_add_sends_the_two_points_and_sizes(self, mock_get_conn):

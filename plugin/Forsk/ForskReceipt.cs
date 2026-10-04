@@ -91,8 +91,13 @@ namespace RhinoMCPPlugin.Forsk
         /// scale 0: the sheets have none (a list alone). Detail sheets name
         /// their own scales after the set's, and details that dropped end it.
         /// </summary>
+        /// <summary>
+        /// "✓ Printed 9 sheets at 1:100 on A3 · Garage.pdf + Takeoff CSV". csv:
+        /// null when none was asked for, "" when it was written beside the PDF,
+        /// else why not ("· CSV not written: …").
+        /// </summary>
         public static string PrintLine(int sheets, int scale, string written, string revision, string bumped, string blank,
-            IEnumerable<int> detailScales = null, int detailsDropped = 0)
+            IEnumerable<int> detailScales = null, int detailsDropped = 0, string csv = null)
         {
             var text = "Printed " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture) + (sheets == 1 ? " sheet" : " sheets");
             if (scale > 0) text += " at 1:" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -104,17 +109,24 @@ namespace RhinoMCPPlugin.Forsk
             var bump = (bumped ?? "").Trim().TrimEnd('.');
             if (bump.Length > 0) text += " (" + bump + ")";
             var dropped = Details.DroppedLine(detailsDropped);
-            return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + (blank ?? "")
+            return Done + text + " · " + System.IO.Path.GetFileName(written ?? "") + Csv(csv, " + Takeoff CSV") + (blank ?? "")
                 + (dropped.Length > 0 ? " · " + dropped : "");
         }
 
-        /// <summary>"✓ Exported 7 sheets as DWG · Holmen DWG/": the folder's name, never its path.</summary>
-        public static string ExportLine(int sheets, string format, string folder)
+        /// <summary>"✓ Exported 7 sheets as DWG · Holmen DWG/ + CSV": the folder's name, never its path. csv as PrintLine's.</summary>
+        public static string ExportLine(int sheets, string format, string folder, string csv = null)
         {
             var name = System.IO.Path.GetFileName((folder ?? "").TrimEnd('/', '\\'));
             return Done + "Exported " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 + (sheets == 1 ? " sheet" : " sheets") + " as " + (format ?? "dwg").Trim().ToUpperInvariant()
-                + " · " + name + "/";
+                + " · " + name + "/" + Csv(csv, " + CSV");
+        }
+
+        /// <summary>The takeoff CSV's part of a receipt: written, not written and why, or nothing.</summary>
+        static string Csv(string csv, string written)
+        {
+            if (csv == null) return "";
+            return csv.Length == 0 ? written : " · CSV not written: " + OneLine(csv).TrimEnd('.');
         }
 
         /// <summary>A line that starts with this is a finished receipt as it stands.</summary>

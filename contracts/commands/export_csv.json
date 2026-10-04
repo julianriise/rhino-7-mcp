@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "export_csv.json",
+  "title": "ExportCsv Command",
+  "description": "Write the takeoff as one CSV table (UTF-8 with a BOM, comma separated, decimal point, CRLF): the project info on top, then rooms, walls (one row per run), doors, windows and stairs, each figure the takeoff's own. No save dialog. The document does not change.",
+  "type": "object",
+  "properties": {
+    "path": { "type": "string", "minLength": 1, "description": "Absolute path ending in .csv." }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}
