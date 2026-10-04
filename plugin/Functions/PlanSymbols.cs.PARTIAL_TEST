@@ -1,0 +1,69 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Globalization;
+using System.Linq;
+using Rhino;
+using Rhino.DocObjects;
+using Rhino.Geometry;
+
+namespace RhinoMCPPlugin.Functions;
+
+/// <summary>
+/// Plan symbols and line weights at print. Marks come from the opening
+/// record. Nothing is stored on the marker. Frames stay out of the plan cut.
+/// </summary>
+public partial class RhinoMCPFunctions
+{
+    private struct PlanStats
+    {
+        public int Symbols;
+        public int Arcs;
+        public int Dashed;
+        public int Roof;
+        // R5: stairs drawn as their plan symbol.
+        public int Stairs;
+        // Every room marker ends in exactly one of three counts: Rooms (tagged:
+        // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
+        // RoomsNoOutline (no outline to read). Of the
+        // tagged rooms, RoomAreasDropped show the name alone (the ≈ X m² line
+        // did not fit), RoomsLeader have their tag outside the room on a
+        // leader (the name did not fit), and RoomsOverflow are those whose name
+        // runs past the room edge (no clear spot for a leader either).
+        // RoomsUntagged says why, by room id, for each room without a tag;
+        // RoomsLeading and RoomsOverflowing give those names and widths.
+        public int Rooms;
+        public int RoomAreasDropped;
+        public int RoomsLeader;
+        public int RoomsOverflow;
+        public int RoomsTooSmall;
+        public int RoomsNoOutline;
+        public List<string> RoomsUntagged;
+        public List<string> RoomsLeading;
+        public List<string> RoomsOverflowing;
+        public int Skipped;
+        // Openings whose mark (forsk:mark) is printed beside them, and those
+        // that found no spot clear of the room tags ("D08 on Wet Room").
+        public int Marks;
+        public List<string> MarksOnTags;
+        // F5.2: chains drawn (exterior and room), their values, chains with no
+        // clear place (left out), values with no clear spot, and the openings
+        // in an outer wall with those on a drawn facade chain.
+        public int Dims;
+        public int DimsExterior;
+        public int DimsRoom;
+        public int DimTexts;
+        public int DimsSkipped;
+        public int DimsCollisions;
+        public int DimOpenings;
+        public int DimOpeningsShown;
+        // F5.3: the sections whose marker A–A is on the plan, and those whose
+        // marker found no spot clear of everything (drawn at its first spot).
+        public List<string> SectionMarkers;
+        public List<string> SectionMarkersBlocked;
+        // The details whose callout is on the plan, and those with no clear spot (not drawn).
+        public List<string> Callouts;
+        public List<string> CalloutsBlocked;
+        public string Note;
+        public string RoomText;
+    }
