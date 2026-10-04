@@ -1,3 +1,4 @@
+using System.Globalization;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -176,7 +177,7 @@ public class WallJoinsTests
         Assert.Single(cut.Shape);
         // The corners went with the north wall's band, so east and west stand 200 mm shorter.
         Assert.Equal(new[] { "the east wall -200 [3]", "the west wall -200 [2]" },
-            cut.Followed.Select(f => f.Wall + " " + f.ChangeMm + " [" + string.Join(",", f.Records) + "]").OrderBy(x => x));
+            cut.Followed.Select(f => f.Wall + " " + f.ChangeMm.ToString(CultureInfo.InvariantCulture) + " [" + string.Join(",", f.Records) + "]").OrderBy(x => x));
     }
 
     [Fact]
@@ -212,7 +213,7 @@ public class WallJoinsTests
     }
 
     static string[] Lines(WallJoins.Moved moved) => moved.Followed
-        .Select(f => f.Wall + " " + (f.ChangeMm > 0 ? "+" : "") + f.ChangeMm + " [" + string.Join(",", f.Records) + "]")
+        .Select(f => f.Wall + " " + (f.ChangeMm > 0 ? "+" : "") + f.ChangeMm.ToString(CultureInfo.InvariantCulture) + " [" + string.Join(",", f.Records) + "]")
         .OrderBy(x => x).ToArray();
 
     static (double, double, double, double) Sorted(List<Pt> ring) =>

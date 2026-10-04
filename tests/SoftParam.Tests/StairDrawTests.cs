@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using RhinoMCPPlugin.Forsk;
@@ -268,8 +269,8 @@ public class StairDrawTests
         var draft = StairDraw.Plan(Setup(), Free(500, 500), new Pt(500 + 4000 * Math.Cos(30 * Math.PI / 180), 500 + 4000 * Math.Sin(30 * Math.PI / 180)), false);
         var tool = AsTheToolWritesIt(StairDraw.ToolParams(draft), 3400);
         var drawn = Stairs.Write(draft.Spec, draft.Flight);
-        var a = tool[Stairs.DirectionKey].Split(',').Select(double.Parse).ToArray();
-        var b = drawn[Stairs.DirectionKey].Split(',').Select(double.Parse).ToArray();
+        var a = tool[Stairs.DirectionKey].Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+        var b = drawn[Stairs.DirectionKey].Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
         Assert.Equal(b[0], a[0], 4);
         Assert.Equal(b[1], a[1], 4);
         Assert.Equal(tool[Stairs.RisersKey], drawn[Stairs.RisersKey]);
