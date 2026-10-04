@@ -145,27 +145,25 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// A plan detail's marks for its companion drawings: a 9 mm bubble,
-    /// number over sheet number, and an arrow its way; one moved off its
+    /// A plan detail's marks for its companion drawings: a bubble of at least
+    /// 9 mm, number over sheet number, and an arrow its way; one moved off its
     /// point has a leader back ending in a dot.
     /// </summary>
     private void BakeDetailMarks(RhinoDoc doc, Layer layer, string view, Details.Drawing d, List<DetailCallout.PlacedMark> marks,
-        List<DetailSheet.Sheet> plan, int scale, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
+        int scale, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
     {
-        var ids = plan.Select(sh => sh.Id).ToList();
         foreach (var placed in marks)
         {
             var mark = placed.Mark;
-            if (!DetailSheet.Find(plan, d.Facts.Record.Id, mark.View, out var sheet, out var target)) continue;
             var centre = new Point3d(placed.Centre.X, placed.Centre.Y, 0);
             var look = new Vector3d(mark.Look.X, mark.Look.Y, 0);
             var stamp = DetailStamp(view, d);
             stamp.Extra["forsk:detail_target"] = mark.View;
-            BakeBubble(doc, layer, centre, DetailCallout.MarkMm, target.Number, DetailSheet.Number(sheet.Id, ids), scale, "detail_marker",
+            BakeBubble(doc, layer, centre, placed.Bubble, placed.Number, placed.Sheet, scale, "detail_marker",
                 stamp, pattern, tol, ref box, ref index, ref count);
             if (placed.Moved)
             {
-                var start = DetailCallout.LeaderStart(placed.Centre, placed.At, DetailCallout.MarkMm / 2.0, scale);
+                var start = DetailCallout.LeaderStart(placed.Centre, placed.At, placed.Bubble.Radius, scale);
                 var at = new Point3d(placed.At.X, placed.At.Y, 0);
                 using (var leader = new LineCurve(new Point3d(start.X, start.Y, 0), at))
                     AddStroke(doc, layer, leader, PenThin, scale, false, pattern, tol, "detail_marker", "leader", null, null,
@@ -173,7 +171,7 @@ public partial class RhinoMCPFunctions
                 AddLeaderDot(doc, layer, at, scale, pattern, tol, stamp.Extra, ref box, ref index, ref count, "detail_marker");
             }
             if (!look.Unitize()) continue;
-            var r = DetailCallout.MarkMm / 2.0 * scale;
+            var r = placed.Bubble.Radius * scale;
             var tip = centre + look * (r + DetailCallout.MarkArrowMm * scale);
             var side = new Vector3d(-look.Y, look.X, 0) * (1.2 * scale);
             using (var arrow = new PolylineCurve(new[] { centre + look * r + side, tip, centre + look * r - side }))
@@ -182,11 +180,13 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    /// <summary>Paper mm of a text 1 mm high, as the detail texts print: what DetailCallout.Of sizes a bubble by.</summary>
+    private static Func<string, double> PaperTextWidth(RhinoDoc doc, int scale) => text => ModelTextWidth(doc, text, scale) / scale;
+
     /// <summary>A numbered bubble: circle, divider, number above, sheet number below.</summary>
-    private int BakeBubble(RhinoDoc doc, Layer layer, Point3d centre, double diameter, int number, string sheetNo, int scale,
+    private int BakeBubble(RhinoDoc doc, Layer layer, Point3d centre, DetailCallout.Bubble bubble, int number, string sheetNo, int scale,
         string role, SymbolStamp stamp, int pattern, double tol, ref BoundingBox box, ref int index, ref int count)
     {
-        var bubble = DetailCallout.Of(sheetNo, diameter, text => ModelTextWidth(doc, text, scale) / scale);
         Point3d At(Pt p) => new Point3d(centre.X + p.X * scale, centre.Y + p.Y * scale, 0);
         var added = 0;
         using (var circle = new ArcCurve(new Circle(centre, bubble.Radius * scale)))
@@ -204,7 +204,7 @@ public partial class RhinoMCPFunctions
 
     /// <summary>
     /// Each detail's callout on the main plan: last, after the section
-    /// markers, a 12 mm bubble at the nearest spot PlanDims.PlaceLeader finds
+    /// markers, a bubble of at least 12 mm at the nearest spot PlanDims.PlaceLeader finds
     /// clear of the poché and of what is drawn, with a leader to the element
     /// ending in a dot. One with no clear spot is not drawn and is named.
     /// </summary>
@@ -213,13 +213,16 @@ public partial class RhinoMCPFunctions
         ref BoundingBox box, ref int index, ref int count, ref PlanStats stats)
     {
         var callouts = DetailCallout.Callouts(DetailSheetPlan(doc, out _));
-        var r = DetailCallout.CalloutMm / 2.0 * scale;
+        var measure = PaperTextWidth(doc, scale);
         var near = LeaderDotMm * scale;
         var added = 0;
         foreach (var callout in callouts)
         {
             var target = ToDrawing(new Point3d(callout.Target.X, callout.Target.Y, 0), worldToHld, delta);
             var at = new Pt(target.X, target.Y);
+            var bubble = DetailCallout.Of(callout.Sheet, DetailCallout.CalloutMm, measure,
+                callout.Number.ToString(CultureInfo.InvariantCulture));
+            var r = bubble.Radius * scale;
             var ring = new List<Pt>
             {
                 new Pt(at.X - near, at.Y - near), new Pt(at.X + near, at.Y - near),
@@ -232,8 +235,8 @@ public partial class RhinoMCPFunctions
             }
             var stamps = new Dictionary<string, string> { ["forsk:detail"] = callout.Detail };
             var stamp = new SymbolStamp { Extra = stamps };
-            var start = DetailCallout.LeaderStart(centre, at, DetailCallout.CalloutMm / 2.0, scale);
-            added += BakeBubble(doc, layer, new Point3d(centre.X, centre.Y, 0), DetailCallout.CalloutMm, callout.Number, callout.Sheet, scale,
+            var start = DetailCallout.LeaderStart(centre, at, bubble.Radius, scale);
+            added += BakeBubble(doc, layer, new Point3d(centre.X, centre.Y, 0), bubble, callout.Number, callout.Sheet, scale,
                 "callout", stamp, pattern, tol, ref box, ref index, ref count);
             using (var leader = new LineCurve(new Point3d(start.X, start.Y, 0), new Point3d(at.X, at.Y, 0)))
                 added += AddStroke(doc, layer, leader, PenThin, scale, false, pattern, tol, "callout", "leader", null, null,
@@ -585,8 +588,8 @@ public partial class RhinoMCPFunctions
         }
         foreach (var level in DetailDims.Levels(d.Facts, d))
             added += BakeDetailLevel(doc, layer, level, shift, scale, pattern, tol, ref box, ref index, ref count, stamp);
-        BakeDetailMarks(doc, layer, view, d, DetailCallout.PlaceMarks(d, shift, scale, taken, walls), plan, scale, pattern, tol,
-            ref box, ref index, ref count);
+        BakeDetailMarks(doc, layer, view, d, DetailCallout.PlaceMarks(d, plan, shift, scale, taken, walls, PaperTextWidth(doc, scale)),
+            scale, pattern, tol, ref box, ref index, ref count);
         return fills;
     }
 

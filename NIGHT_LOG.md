@@ -11,6 +11,10 @@ Base: main `0f51473` (Draw wall, Draw stair, the suite under nb-NO). The brief n
 | D4 detail sheets and callouts | `0a16918` | done headless; bake unverified |
 | D5 detail sheets in DWG | `bea17e8` | done headless; export unverified |
 
+## Follow-up: bubbles fit their sheet number (`cursor/callout-bubble-fit-2118`)
+
+Root cause: `DetailCallout.Of` worked out whether the sheet number fitted (`Fits`), but nothing acted on it. A 9 mm mark has about 6.1 mm of room on the sheet number's line, and "A-50-002" in Arial at 1.8 mm is about 7.4 mm wide. Now `Of` grows the radius until the number and the sheet number each clear the circle by 0.8 mm. The 9 and 12 mm sizes are minimums. The text stays 1.8 / 2.5 mm. Mark placement (`PlaceMarks`, which now also reads each mark's number and sheet), the plan callouts' `PlaceLeader`, the leaders and the arrows all use that one radius. The DWG flattens the same circle and writes the texts at their paper height, so it matches the PDF. Unverified: the live widths come from Rhino's text measure.
+
 ## Fixes after Julian's garage smoke on `ece9153`
 
 Office smoke passed; the garage export step failed. Root causes and fixes:

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
@@ -30,24 +31,36 @@ public static class DetailCallout
         public Pt Number;
         public Pt Sheet;
         public double SheetWidth;
-        /// <summary>The lower chord the sheet number must fit: the circle's width at the text's top and bottom.</summary>
+        /// <summary>The lower chord the sheet number must fit: the circle's width at the text's bottom, less ClearMm each side.</summary>
         public double SheetRoom;
-        public bool Fits => SheetWidth <= SheetRoom + 1e-9;
+        public double NumberWidth;
+        /// <summary>The upper chord the number must fit: the circle's width at the text's top, less ClearMm each side.</summary>
+        public double NumberRoom;
+        public bool Fits => SheetWidth <= SheetRoom + 1e-6 && NumberWidth <= NumberRoom + 1e-6;
     }
 
     /// <summary>
-    /// The bubble of a diameter (paper mm): the divider through the centre,
-    /// the number above it and the sheet number below, measured by measure
-    /// (paper mm of a text at 1 mm high) or 0.6 mm a character.
+    /// The bubble for its texts (paper mm): at least the diameter, wider when
+    /// the number or the sheet number would not clear the circle; the
+    /// divider through the centre, the number above it and the sheet number
+    /// below. Texts are measured by measure (paper mm of a text 1 mm high),
+    /// else 0.6 mm a character.
     /// </summary>
-    public static Bubble Of(string sheetNo, double diameter = CalloutMm, Func<string, double> measure = null)
+    public static Bubble Of(string sheetNo, double diameter = CalloutMm, Func<string, double> measure = null, string number = null)
     {
-        var r = diameter / 2.0;
-        var width = (measure?.Invoke(sheetNo ?? "") ?? 0) * SheetMm;
-        if (width <= 0) width = 0.6 * SheetMm * (sheetNo ?? "").Length;
-        var gap = 0.5;
+        double Width(string text, double height)
+        {
+            var w = (measure?.Invoke(text ?? "") ?? 0) * height;
+            return w > 0 ? w : 0.6 * height * (text ?? "").Length;
+        }
+        double Need(double width, double y) => Math.Sqrt((width / 2.0 + ClearMm) * (width / 2.0 + ClearMm) + y * y);
+        double Room(double r, double y) => 2 * Math.Sqrt(Math.Max(0, r * r - y * y)) - 2 * ClearMm;
+        const double gap = 0.5;
         var low = gap + SheetMm;
-        var chord = 2 * Math.Sqrt(Math.Max(0, r * r - low * low));
+        var high = gap + NumberMm;
+        var sheetWidth = Width(sheetNo, SheetMm);
+        var numberWidth = string.IsNullOrEmpty(number) ? 0 : Width(number, NumberMm);
+        var r = Math.Max(diameter / 2.0, Math.Max(Need(sheetWidth, low), numberWidth > 0 ? Need(numberWidth, high) : 0));
         return new Bubble
         {
             Radius = r,
@@ -55,8 +68,10 @@ public static class DetailCallout
             DividerTo = new Pt(r, 0),
             Number = new Pt(0, gap + NumberMm / 2.0),
             Sheet = new Pt(0, -gap - SheetMm / 2.0),
-            SheetWidth = width,
-            SheetRoom = chord - 2 * ClearMm
+            SheetWidth = sheetWidth,
+            SheetRoom = Room(r, low),
+            NumberWidth = numberWidth,
+            NumberRoom = Room(r, high)
         };
     }
 
@@ -108,41 +123,49 @@ public static class DetailCallout
 
     /// <summary>Paper mm a mark's arrow reaches past its bubble.</summary>
     public const double MarkArrowMm = 2.0;
-    /// <summary>Half the square a mark keeps clear: its bubble and the arrow past it.</summary>
-    public const double MarkHalfMm = MarkMm / 2.0 + MarkArrowMm;
 
-    /// <summary>A companion mark where it is drawn, drawing mm: the point it marks, its bubble's centre, moved off the point (then a leader runs back).</summary>
+    /// <summary>
+    /// A companion mark where it is drawn, drawing mm: what it reads (its
+    /// drawing's number over that sheet's number) in its bubble, the point it
+    /// marks, its bubble's centre, moved off the point (then a leader runs back).
+    /// </summary>
     public sealed class PlacedMark
     {
         public Details.Mark Mark;
+        public int Number;
+        public string Sheet;
+        public Bubble Bubble;
         public Pt At;
         public Pt Centre;
         public bool Moved;
+        /// <summary>Half the square it keeps clear, paper mm: its bubble and the arrow past it.</summary>
+        public double HalfMm => Bubble.Radius + MarkArrowMm;
     }
 
     /// <summary>
-    /// A plan detail's marks in drawing mm (frame u through Map, then
-    /// shifted): each bubble on its point when it clears what is drawn
-    /// (taken: the dimensions as LayoutFixed laid them) and the poché, else
-    /// at the nearest clear spot inside the drawing's band that
-    /// PlanDims.PlaceLeader finds, else on its point. Each joins taken.
+    /// A plan detail's marks whose drawing is on a sheet, in drawing mm
+    /// (frame u through Map, then shifted), each in a bubble sized to its
+    /// texts: on its point when it clears what is drawn (taken: the
+    /// dimensions as LayoutFixed laid them) and the poché, else at the
+    /// nearest clear spot inside the drawing's band that PlanDims.PlaceLeader
+    /// finds, else on its point. Each joins taken.
     /// </summary>
-    public static List<PlacedMark> PlaceMarks(Details.Drawing d, Pt shift, int scale, List<PlanDims.Obstacle> taken,
-        List<List<List<Pt>>> walls)
+    public static List<PlacedMark> PlaceMarks(Details.Drawing d, IList<DetailSheet.Sheet> plan, Pt shift, int scale,
+        List<PlanDims.Obstacle> taken, List<List<List<Pt>>> walls, Func<string, double> measure = null)
     {
         var placed = new List<PlacedMark>();
         if (d == null || scale < 1) return placed;
         taken = taken ?? new List<PlanDims.Obstacle>();
         walls = walls ?? new List<List<List<Pt>>>();
+        var ids = (plan ?? new List<DetailSheet.Sheet>()).Select(sh => sh.Id).ToList();
         var s = (double)scale;
-        var h = MarkHalfMm * s;
         var clear = PlanDims.ClearMm * s;
         var band = Details.BandMm * s;
         var x0 = d.Map(d.U0) + shift.X - band;
         var x1 = d.Map(d.U0) + d.Width + shift.X + band;
         var y0 = d.V0 + shift.Y - band;
         var y1 = d.V1 + shift.Y + band;
-        var far = (PlanDims.LeaderReachMm + MarkHalfMm) * s * 2;
+        var far = 4 * PlanDims.LeaderReachMm * s;
         var outside = new[]
         {
             new RoomDetect.Box(x0 - far, y0 - far, x0, y1 + far),
@@ -153,6 +176,11 @@ public static class DetailCallout
         RoomDetect.Box Square(Pt c, double half) => new RoomDetect.Box(c.X - half, c.Y - half, c.X + half, c.Y + half);
         foreach (var mark in d.Marks)
         {
+            if (!DetailSheet.Find(plan, d.Facts.Record.Id, mark.View, out var sheet, out var target)) continue;
+            var sheetNo = DetailSheet.Number(sheet.Id, ids);
+            var number = target.Number.ToString(CultureInfo.InvariantCulture);
+            var one = new PlacedMark { Mark = mark, Number = target.Number, Sheet = sheetNo, Bubble = Of(sheetNo, MarkMm, measure, number) };
+            var h = one.HalfMm * s;
             var at = new Pt(d.Map(mark.At.X) + shift.X, mark.At.Y + shift.Y);
             var drawn = outside.Concat(taken).ToList();
             var centre = at;
@@ -169,8 +197,11 @@ public static class DetailCallout
             }
             taken.Add(new PlanDims.Obstacle(Square(centre, h), PlanDims.Kind.Text));
             if (moved)
-                taken.Add(new PlanDims.Obstacle(PlanDims.SegBox(new PlanDims.Seg(at, LeaderStart(centre, at, MarkMm / 2.0, scale))), PlanDims.Kind.Line));
-            placed.Add(new PlacedMark { Mark = mark, At = at, Centre = centre, Moved = moved });
+                taken.Add(new PlanDims.Obstacle(PlanDims.SegBox(new PlanDims.Seg(at, LeaderStart(centre, at, one.Bubble.Radius, scale))), PlanDims.Kind.Line));
+            one.At = at;
+            one.Centre = centre;
+            one.Moved = moved;
+            placed.Add(one);
         }
         return placed;
     }
