@@ -337,9 +337,9 @@ public class PageChromeTests
     /// <summary>
     /// The reader stays on the newest line until they scroll away. A card's
     /// field takes focus without pulling that line off the screen. WebKit only
-    /// tabs to a button that has tabindex. Keyboard focus is a 3px glow at
-    /// 20% of the brand. A click does not draw it. Secondary text is #66707A,
-    /// 4.66:1 on #F5F6F8.
+    /// tabs to a button that has tabindex. The field has no ring. A button's
+    /// ring is 1.5px, and only after Tab sets data-kbd. Secondary text is
+    /// #66707A, 4.66:1 on #F5F6F8.
     /// </summary>
     [Fact]
     public void TheNewestLine_StaysPut_AndButtonsTakeTheKeyboard()
@@ -347,12 +347,13 @@ public class PageChromeTests
         var html = Html();
         Assert.Contains("tabindex=\"0\"", html);
         Assert.Contains("-webkit-tap-highlight-color: transparent", html);
-        Assert.Contains("--glow: rgba(41, 72, 245, 0.20)", html);
-        Assert.Contains("button:focus { outline: none; }", html);
-        Assert.Contains("button:focus-visible { outline: 3px solid var(--glow);", html);
-        Assert.Contains(".field:focus-within { box-shadow: var(--shadow), 0 0 0 3px var(--glow);", html);
-        Assert.Contains(".menu button:focus-visible", html);
+        Assert.Contains("button:focus, textarea:focus, input:focus, select:focus { outline: none; }", html);
+        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid rgba(41, 72, 245, 0.55); outline-offset: 2px; }", html);
+        Assert.Contains("html[data-kbd] .menu button:focus-visible", html);
+        Assert.DoesNotContain("--glow", html);
+        Assert.DoesNotContain(".field:focus-within", html);
         Assert.DoesNotContain("outline: 2px solid var(--brand)", html);
+        Assert.DoesNotContain("outline: 3px", html);
         Assert.DoesNotContain("0 0 0 2px var(--brand)", html);
         Assert.Contains("--meta: #66707A", html);
         Assert.Contains("-webkit-user-select: none; user-select: none;", html);
@@ -368,6 +369,8 @@ public class PageChromeTests
         Assert.Contains("root.addEventListener('resize'", script);
         Assert.Contains("focus.focus({ preventScroll: true })", script);
         Assert.Contains("node.tabIndex = 0", script);
+        Assert.Contains("if (e.key === 'Tab') document.documentElement.setAttribute('data-kbd', '')", script);
+        Assert.Contains("document.documentElement.removeAttribute('data-kbd')", script);
     }
 
     /// <summary>

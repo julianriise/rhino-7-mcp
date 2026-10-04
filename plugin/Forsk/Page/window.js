@@ -1107,6 +1107,7 @@
       sender.send(action);
     }
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') document.documentElement.setAttribute('data-kbd', '');
       var menu = openMenuEl();
       if (menu && e.key === 'Escape') {
         e.preventDefault();
@@ -1171,6 +1172,7 @@
       openMenu('role-menu', pill);
     });
     document.addEventListener('mousedown', function (e) {
+      document.documentElement.removeAttribute('data-kbd');
       if (!openMenuEl()) return;
       if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
       closeMenus(false);
@@ -1207,7 +1209,10 @@
       postHover('enter', e);
     });
     document.documentElement.addEventListener('mouseleave', function (e) { postHover('leave', e); });
-    document.addEventListener('pointerdown', function () { hoverDown = true; });
+    document.addEventListener('pointerdown', function () {
+      hoverDown = true;
+      document.documentElement.removeAttribute('data-kbd');
+    });
     document.addEventListener('pointerup', function () { hoverDown = false; });
     document.addEventListener('pointercancel', function () { hoverDown = false; });
     var nav = document.getElementById('bar');
