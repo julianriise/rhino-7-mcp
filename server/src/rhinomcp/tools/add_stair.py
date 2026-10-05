@@ -4,25 +4,12 @@ from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import Context
 from rhinomcp.server import get_rhino_connection, mcp, logger
-
-_COMPASS = ("north", "south", "east", "west")
-
-
-def _is_pair(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and len(value) == 2
-        and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
-    )
-
-
-def _is_mm(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+from rhinomcp.args import COMPASS, is_mm, is_pair
 
 
 def stair_rise(rise: Any) -> Optional[str]:
     """Why a rise is not a number above 0 or "auto", else None."""
-    if rise is None or rise == "auto" or _is_mm(rise):
+    if rise is None or rise == "auto" or is_mm(rise):
         return None
     return 'rise is a number in mm, or "auto".'
 
@@ -76,12 +63,12 @@ def add_stair(
         if (from_point is None) != (to_point is None):
             return {"success": False, "message": "Give from_point and to_point together."}
         for name, value in (("from_point", from_point), ("to_point", to_point), ("at", at)):
-            if value is not None and not _is_pair(value):
+            if value is not None and not is_pair(value):
                 return {"success": False, "message": f"{name} is [x, y] in mm."}
-        if side is not None and side not in _COMPASS:
+        if side is not None and side not in COMPASS:
             return {"success": False, "message": "side is north, south, east or west."}
         for name, value in (("width", width), ("riser_max", riser_max), ("going", going)):
-            if value is not None and not _is_mm(value):
+            if value is not None and not is_mm(value):
                 return {"success": False, "message": f"{name} must be a positive number in mm."}
         if against is not None and (against not in ("left", "right") or from_point is None):
             return {"success": False, "message": "against is left or right, with from_point and to_point."}

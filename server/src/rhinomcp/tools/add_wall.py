@@ -5,18 +5,7 @@ from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 from rhinomcp.server import get_rhino_connection, mcp, logger
-
-
-def _is_pair(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and len(value) == 2
-        and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
-    )
-
-
-def _is_mm(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+from rhinomcp.args import is_mm, is_pair
 
 
 @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
@@ -58,11 +47,11 @@ def add_wall(
             return {"success": False, "message": "Give from_point and to_point, or line_id, not both."}
         if from_point is None and not line_id:
             return {"success": False, "message": "Give the wall's centreline: from_point and to_point, or line_id."}
-        if from_point is not None and not (_is_pair(from_point) and _is_pair(to_point)):
+        if from_point is not None and not (is_pair(from_point) and is_pair(to_point)):
             return {"success": False, "message": "from_point and to_point are [x, y] in mm."}
-        if thickness is not None and (not _is_mm(thickness) or thickness > 600):
+        if thickness is not None and (not is_mm(thickness) or thickness > 600):
             return {"success": False, "message": "thickness is above 0 and at most 600 mm."}
-        if height is not None and not _is_mm(height):
+        if height is not None and not is_mm(height):
             return {"success": False, "message": "height must be positive."}
 
         params: Dict[str, Any] = {}

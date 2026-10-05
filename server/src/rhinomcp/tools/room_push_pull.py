@@ -5,8 +5,8 @@ from typing import Any, Dict, Optional
 from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 from rhinomcp.server import get_rhino_connection, mcp, logger
+from rhinomcp.args import COMPASS
 
-_COMPASS = ("north", "south", "east", "west")
 _WAYS = ("out", "in")
 
 
@@ -40,7 +40,7 @@ def room_push_pull(
     followed (the walls that followed), records, rebuilt, ok, message.
     """
     try:
-        if side not in _COMPASS:
+        if side not in COMPASS:
             return {"success": False, "message": "side is north, south, east or west."}
         if way not in _WAYS:
             return {"success": False, "message": "way is out or in."}

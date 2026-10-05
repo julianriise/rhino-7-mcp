@@ -4,17 +4,10 @@ from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import Context
 from rhinomcp.server import get_rhino_connection, mcp, logger
+from rhinomcp.args import is_pair
 
 _AXES = ("cross", "long")
 _LOOKS = ("north", "south", "east", "west")
-
-
-def _is_pair(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and len(value) == 2
-        and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
-    )
 
 
 @mcp.tool()
@@ -60,7 +53,7 @@ def section_add(
             return {"success": False, "message": "look is north, south, east or west."}
         if (from_point is None) != (to_point is None):
             return {"success": False, "message": "Give both from_point and to_point."}
-        if from_point is not None and not (_is_pair(from_point) and _is_pair(to_point)):
+        if from_point is not None and not (is_pair(from_point) and is_pair(to_point)):
             return {"success": False, "message": "from_point and to_point are [x, y] in mm."}
         if room is None and from_point is None and not line_id:
             return {"success": False, "message": "No section. Give a room, from and to points, or a line_id."}
