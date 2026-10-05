@@ -414,10 +414,7 @@ public partial class RhinoMCPFunctions
         BakePace.Commit(block);
     }
 
-    /// <summary>
-    /// Markers and blocks, including ones on a layer that is off.
-    /// GetObjectList skips that layer. FindByLayer does not.
-    /// </summary>
+    /// <summary>Markers and blocks, including ones on a layer that is off.</summary>
     private static IEnumerable<RhinoObject> OpeningLayerObjects(RhinoDoc doc)
     {
         if (doc == null) yield break;
@@ -427,26 +424,6 @@ public partial class RhinoMCPFunctions
             yield return obj;
         foreach (var obj in ObjectsOnLayer(doc, "A-OPEN::Block"))
             yield return obj;
-    }
-
-    private static IEnumerable<RhinoObject> ObjectsOnLayer(RhinoDoc doc, string name)
-    {
-        if (doc == null || string.IsNullOrEmpty(name)) yield break;
-        for (var i = 0; i < doc.Layers.Count; i++)
-        {
-            var layer = doc.Layers[i];
-            if (layer == null || layer.IsDeleted) continue;
-            var full = layer.FullPath ?? "";
-            if (!layer.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
-                && !full.Equals(name, StringComparison.OrdinalIgnoreCase))
-                continue;
-            RhinoObject[] found = null;
-            try { found = doc.Objects.FindByLayer(layer); }
-            catch (Exception) { found = null; }
-            if (found == null) continue;
-            foreach (var obj in found)
-                if (obj != null) yield return obj;
-        }
     }
 
     private static void PurgeOpeningBlockDefinitions(RhinoDoc doc)

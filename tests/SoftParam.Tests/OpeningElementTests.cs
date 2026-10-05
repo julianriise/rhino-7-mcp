@@ -67,7 +67,8 @@ public class OpeningElementTests
         Assert.Contains("OpeningElement.LeafSpan", blocks, StringComparison.Ordinal);
         Assert.Contains("AddHingeLeaves", blocks, StringComparison.Ordinal);
         Assert.Contains("InstanceDefinitions.Add", blocks, StringComparison.Ordinal);
-        Assert.Contains("FindByLayer", blocks, StringComparison.Ordinal);
+        Assert.Contains("ObjectsOnLayer(doc, \"A-OPEN\")", blocks, StringComparison.Ordinal);
+        Assert.Contains("FindByLayer", Read("LayerLookup.cs"), StringComparison.Ordinal);
 
         var commit = Slice(facade, "JObject CommitOpeningThenRebuild", "JObject HostOpeningReport");
         Assert.Contains("RebuildHostWall", commit, StringComparison.Ordinal);

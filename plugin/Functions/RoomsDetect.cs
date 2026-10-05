@@ -41,9 +41,9 @@ public partial class RhinoMCPFunctions
         var earlierRings = new List<KeyValuePair<string, List<RoomDetect.Pt>>>();
         if (roomLayer != null)
         {
-            foreach (var obj in EnumerateDocObjects(doc))
+            foreach (var obj in ObjectsOnLayer(doc, roomLayer.Name))
             {
-                if (!ObjectOnLayer(doc, obj, roomLayer) || !(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
+                if (!(obj.Geometry is Curve curve) || !curve.IsClosed) continue;
                 var pts = LoopPoints(FlattenToWorldXY(curve, tol), tol);
                 if (pts == null || pts.Count < 3) continue;
                 var plan = PlanPoints(pts);
@@ -258,9 +258,9 @@ public partial class RhinoMCPFunctions
         var dividerLayer = FindLayerCaseInsensitive(doc, DividerLayerName);
         if (dividerLayer != null)
         {
-            foreach (var obj in EnumerateDocObjects(doc))
+            foreach (var obj in ObjectsOnLayer(doc, dividerLayer.Name))
             {
-                if (!ObjectOnLayer(doc, obj, dividerLayer) || !(obj.Geometry is Curve curve)) continue;
+                if (!(obj.Geometry is Curve curve)) continue;
                 var pts = PathPoints(curve);
                 if (pts.Count >= 2) scene.Dividers.Add(pts);
             }
@@ -350,12 +350,9 @@ public partial class RhinoMCPFunctions
     private static List<RoomDetect.Label> RoomLabels(RhinoDoc doc, List<RoomDetect.Label> suspect = null)
     {
         var labels = new List<RoomDetect.Label>();
-        foreach (var obj in EnumerateDocObjects(doc))
+        foreach (var obj in ObjectsOnLayer(doc, RoomLabelLayerName))
         {
             if (!(obj.Geometry is TextEntity text)) continue;
-            var index = obj.Attributes.LayerIndex;
-            if (index < 0 || index >= doc.Layers.Count) continue;
-            if (!doc.Layers[index].Name.Equals(RoomLabelLayerName, StringComparison.OrdinalIgnoreCase)) continue;
             var raw = text.PlainText;
             var label = new RoomDetect.Label(DxfText.RepairRemnant(raw), text.TextHeight,
                 new RoomDetect.Pt(text.Plane.Origin.X, text.Plane.Origin.Y));

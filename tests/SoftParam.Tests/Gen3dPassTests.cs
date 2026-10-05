@@ -164,6 +164,25 @@ public class Gen3dPassTests
         Assert.Contains("LockFloors(", Source("Functions", "WallFollow.cs"));
     }
 
+    /// <summary>
+    /// A 2D layer that is off still feeds Generate 3D. doc.Objects and
+    /// GetObjectList skip a layer that is off; FindByLayer does not.
+    /// </summary>
+    [Theory]
+    [InlineData("PlanCurves.cs", "ObjectsOnLayer(doc, sourceLayer.Name)")]
+    [InlineData("OpeningsFromLayer.cs", "ObjectsOnLayer(doc, sourceLayer.Name)")]
+    [InlineData("OpeningsFromLayer.cs", "ObjectsOnLayer(doc, layer.Name)")]
+    [InlineData("RoomsDetect.cs", "ObjectsOnLayer(doc, roomLayer.Name)")]
+    [InlineData("RoomsDetect.cs", "ObjectsOnLayer(doc, dividerLayer.Name)")]
+    [InlineData("RoomsDetect.cs", "ObjectsOnLayer(doc, RoomLabelLayerName)")]
+    [InlineData("LayerLookup.cs", "doc.Objects.FindByLayer(layer)")]
+    public void TheBake_ReadsA2DLayerThatIsOff(string file, string needle)
+    {
+        var source = Source("Functions", file);
+        Assert.Contains(needle, source, StringComparison.Ordinal);
+        Assert.DoesNotContain("foreach (var obj in doc.Objects)", source, StringComparison.Ordinal);
+    }
+
     static string Source(string folder, string file)
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)

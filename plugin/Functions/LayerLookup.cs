@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using Rhino;
@@ -11,6 +12,30 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public partial class RhinoMCPFunctions
 {
+    /// <summary>
+    /// Every object on each layer with this name or full path, including a layer
+    /// that is off. GetObjectList and doc.Objects skip that layer. FindByLayer does not.
+    /// </summary>
+    private static IEnumerable<RhinoObject> ObjectsOnLayer(RhinoDoc doc, string name)
+    {
+        if (doc == null || string.IsNullOrEmpty(name)) yield break;
+        for (var i = 0; i < doc.Layers.Count; i++)
+        {
+            var layer = doc.Layers[i];
+            if (layer == null || layer.IsDeleted) continue;
+            var full = layer.FullPath ?? "";
+            if (!layer.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+                && !full.Equals(name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            RhinoObject[] found = null;
+            try { found = doc.Objects.FindByLayer(layer); }
+            catch (Exception) { found = null; }
+            if (found == null) continue;
+            foreach (var obj in found)
+                if (obj != null) yield return obj;
+        }
+    }
+
     private static bool ObjectOnLayer(RhinoDoc doc, RhinoObject obj, Layer layer)
     {
         if (obj == null || layer == null) return false;

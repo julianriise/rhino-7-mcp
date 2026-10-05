@@ -57,9 +57,9 @@ public partial class RhinoMCPFunctions
         var rawCurves = new List<Curve>();
         var holes = new List<Curve>();
         var imported = false;
-        foreach (var obj in doc.Objects)
+        foreach (var obj in ObjectsOnLayer(doc, sourceLayer.Name))
         {
-            if (!ObjectOnLayer(doc, obj, sourceLayer) || IsRoomRecord(obj)) continue;
+            if (IsRoomRecord(obj)) continue;
             if (obj.Geometry is Curve curve)
             {
                 // A hole of an imported wall outline is no outline of its own: it is read with the outline around it.

@@ -560,9 +560,8 @@ public partial class RhinoMCPFunctions
         var layer = FindLayerCaseInsensitive(doc, targetLayerName);
         if (layer == null) return result;
 
-        foreach (var obj in doc.Objects)
+        foreach (var obj in ObjectsOnLayer(doc, layer.Name))
         {
-            if (!ObjectOnLayer(doc, obj, layer)) continue;
             var brep = GetBrepFromObject(obj);
             if (brep == null) continue;
             result.Add(new WallSolid
@@ -580,9 +579,8 @@ public partial class RhinoMCPFunctions
         var curves = new List<OpeningFootprint>();
         var instances = new List<OpeningFootprint>();
 
-        foreach (var obj in doc.Objects)
+        foreach (var obj in ObjectsOnLayer(doc, sourceLayer.Name))
         {
-            if (!ObjectOnLayer(doc, obj, sourceLayer)) continue;
 
             if (obj is InstanceObject inst)
             {
