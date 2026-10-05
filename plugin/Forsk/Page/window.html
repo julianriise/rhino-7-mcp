@@ -316,9 +316,8 @@ textarea::placeholder { color: var(--faint); }
 </head>
 <body>
 <header class="top">
-  <button id="history" class="round" type="button" tabindex="0" aria-label="History" title="History">
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4.2 4.2v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8.2V12l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
+  <!-- v4: the floor picker goes in this spot (ROADMAP v4, multiple storeys). Empty until then, so the role stays centred. -->
+  <span class="top-left" aria-hidden="true"></span>
   <div class="identity">
     <div id="avatar" class="avatar" aria-hidden="true"></div>
     <button id="role-pill" class="role-pill" type="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu">

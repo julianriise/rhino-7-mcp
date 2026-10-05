@@ -1415,7 +1415,6 @@
       q.focus();
     });
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
-    // One thread per file. There is no separate history list, so this scrolls that thread.
     var threadEl = document.getElementById('thread');
     threadThumb.bind();
     threadEl.addEventListener('scroll', function () {
@@ -1430,12 +1429,6 @@
       syncThreadThumb();
       if (!followLatest) return;
       threadEl.scrollTop = threadEl.scrollHeight;
-    });
-    document.getElementById('history').addEventListener('click', function () {
-      followLatest = false;
-      threadEl.scrollTop = 0;
-      syncThreadThumb();
-      revealThreadThumb();
     });
     var pill = document.getElementById('role-pill');
     var more = document.getElementById('more');

@@ -24,7 +24,9 @@ public class PageChromeTests
 
         Assert.Contains("id=\"role-pill\"", header);
         Assert.Contains("id=\"role-menu\"", header);
-        Assert.Contains("id=\"history\"", header);
+        // The history button is gone (Julian, 2026-10-05). Its spot stays empty for the v4 floor picker.
+        Assert.DoesNotContain("id=\"history\"", html);
+        Assert.Contains("class=\"top-left\"", header);
         Assert.Contains("id=\"more\"", header);
         Assert.Contains("aria-label=\"Settings\"", header);
         Assert.Contains("id=\"file\"", header);
