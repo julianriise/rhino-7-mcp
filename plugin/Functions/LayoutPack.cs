@@ -616,7 +616,20 @@ public partial class RhinoMCPFunctions
             if (sheets.OtherFonts > 0) notes.Add("non-Arial texts in Helvetica " + sheets.OtherFonts);
             if (unmapped > 0) notes.Add("unmapped " + unmapped);
             LogPrint(full, sheets.Names.Count, "vector " + string.Join(" ", notes) + " " + GreyscaleMake2dNote(doc));
-            var result = ExportPdfResult(full, sheets.Names, $"Wrote {sheets.Names.Count} page(s) to {full}.");
+            var wrote = $"Wrote {sheets.Names.Count} page(s) to {full}.";
+            if (_lastPlanStatsSet)
+            {
+                wrote += " Symbols "
+                    + _lastPlanStats.Symbols.ToString(CultureInfo.InvariantCulture)
+                    + ", arcs "
+                    + _lastPlanStats.Arcs.ToString(CultureInfo.InvariantCulture)
+                    + ", dashed "
+                    + _lastPlanStats.Dashed.ToString(CultureInfo.InvariantCulture)
+                    + ".";
+                if (!string.IsNullOrEmpty(_lastPlanStats.Note))
+                    wrote += " " + _lastPlanStats.Note;
+            }
+            var result = ExportPdfResult(full, sheets.Names, wrote);
             result["vector"] = true;
             result["hatch_fallback"] = sheets.HatchFallback;
             return result;
