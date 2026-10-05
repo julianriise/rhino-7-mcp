@@ -438,4 +438,76 @@ public class PageChromeTests
         var hint = html.Substring(html.IndexOf(".key-hint {", StringComparison.Ordinal), 80);
         Assert.Contains("margin-left: auto", hint);
     }
+
+    /// <summary>
+    /// The message list draws a 6px thumb over the text. The native bar is
+    /// zero-width, so the lines do not shift when the thumb fades in. The
+    /// pin and the composer keep their own bars. The geometry is headless.
+    /// </summary>
+    [Fact]
+    public void TheMessageList_DrawsAThinThumb_ThatDoesNotReserveAGutter()
+    {
+        var html = Html();
+        var frameAt = html.IndexOf("<div id=\"thread-frame\">", StringComparison.Ordinal);
+        var dockAt = html.IndexOf("<div class=\"dock\">", frameAt, StringComparison.Ordinal);
+        Assert.True(frameAt >= 0 && dockAt > frameAt);
+        var frame = html.Substring(frameAt, dockAt - frameAt);
+        Assert.Contains("<main id=\"thread\"", frame);
+        Assert.Contains("id=\"thread-bar\" hidden", frame);
+        Assert.Contains("id=\"thread-thumb\"", frame);
+        Assert.Contains("aria-hidden=\"true\"", frame);
+
+        Assert.Contains("padding: 8px 20px 12px", html);
+        Assert.Equal(1, html.Split("scrollbar-width: none").Length - 1);
+        Assert.DoesNotContain("scrollbar-gutter", html);
+        var native = html.Substring(html.IndexOf("#thread::-webkit-scrollbar", StringComparison.Ordinal), 80);
+        Assert.Contains("width: 0", native);
+        var ink = html.Substring(html.IndexOf("#thread-thumb::before", StringComparison.Ordinal), 220);
+        Assert.Contains("width: 6px", ink);
+        Assert.Contains("border-radius: 3px", ink);
+        Assert.DoesNotContain("scrollerStyle", html);
+        Assert.DoesNotContain("NSWindow", html);
+        Assert.DoesNotContain("NSScrollView", html);
+
+        var pinAt = html.IndexOf("#pin {", StringComparison.Ordinal);
+        var pin = html.Substring(pinAt, html.IndexOf("#pin .card", pinAt, StringComparison.Ordinal) - pinAt);
+        Assert.Contains("overflow-y: auto", pin);
+        Assert.DoesNotContain("scrollbar-width", pin);
+        var fieldAt = html.IndexOf("\ntextarea {", StringComparison.Ordinal);
+        var field = html.Substring(fieldAt, html.IndexOf("#q {", fieldAt, StringComparison.Ordinal) - fieldAt);
+        Assert.Contains("overflow-y: auto", field);
+        Assert.DoesNotContain("scrollbar-width", field);
+        Assert.Contains("button:focus, textarea:focus, input:focus, select:focus { outline: none; }", html);
+        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid rgba(41, 72, 245, 0.55); outline-offset: 2px; }", html);
+
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("Forsk.scrollThumb = function", script);
+        Assert.Contains("Forsk.scrollForThumb = function", script);
+        Assert.Contains("syncThreadThumb();", script);
+        Assert.Contains("revealThreadThumb();", script);
+        Assert.Contains("thread.scrollTop = thread.scrollHeight", script);
+        Assert.Contains("thumb.addEventListener('mousedown'", script);
+        Assert.Contains("thumb.addEventListener('wheel'", script);
+        Assert.DoesNotContain("scrollerStyle", script);
+        Assert.DoesNotContain("NSWindow", script);
+
+        var engine = PageScript.Load();
+        Assert.Equal("null", engine.Evaluate("JSON.stringify(Forsk.scrollThumb(200, 200, 0))").ToString());
+        Assert.Equal("null", engine.Evaluate("JSON.stringify(Forsk.scrollThumb(300, 300.4, 0))").ToString());
+        Assert.Equal("null", engine.Evaluate("JSON.stringify(Forsk.scrollThumb(0, 400, 0))").ToString());
+        Assert.Equal("null", engine.Evaluate("JSON.stringify(Forsk.scrollThumb(NaN, 400, 0))").ToString());
+        Assert.Equal("40", engine.Evaluate("String(Forsk.scrollThumb(200, 1000, 400).h)").ToString());
+        Assert.Equal("80", engine.Evaluate("String(Forsk.scrollThumb(200, 1000, 400).y)").ToString());
+        Assert.Equal("0", engine.Evaluate("String(Forsk.scrollThumb(200, 1000, -20).y)").ToString());
+        Assert.Equal("160", engine.Evaluate("String(Forsk.scrollThumb(200, 1000, 5000).y)").ToString());
+        Assert.Equal("24", engine.Evaluate("String(Forsk.scrollThumb(200, 10000, 0).h)").ToString());
+        Assert.Equal("176", engine.Evaluate("String(Forsk.scrollThumb(200, 10000, 9800).y)").ToString());
+        Assert.Equal("24", engine.Evaluate("String(Forsk.scrollThumb(180, 9000, 4410, 170, 24).h)").ToString());
+        Assert.Equal("73", engine.Evaluate("String(Forsk.scrollThumb(180, 9000, 4410, 170, 24).y)").ToString());
+        Assert.Equal("4410", engine.Evaluate("String(Forsk.scrollForThumb(180, 9000, 73, 170, 24))").ToString());
+        Assert.Equal("400", engine.Evaluate("String(Forsk.scrollForThumb(200, 1000, 80))").ToString());
+        Assert.Equal("0", engine.Evaluate("String(Forsk.scrollForThumb(200, 1000, -10))").ToString());
+        Assert.Equal("800", engine.Evaluate("String(Forsk.scrollForThumb(200, 1000, 999))").ToString());
+        Assert.Equal("0", engine.Evaluate("String(Forsk.scrollForThumb(200, 180, 10))").ToString());
+    }
 }
