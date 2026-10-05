@@ -52,6 +52,17 @@ public class FileClassifierTests
     }
 
     [Fact]
+    public void ThePlanCutAlone_IsAnEmptyDocument_NotForeignGeometry()
+    {
+        var f = FileClassifier.Read(new DocInput
+        {
+            Rows = new List<ChipRow> { new ChipRow { Id = "cut", Layer = "Forsk Cut", PlanCut = true } }
+        });
+        Assert.Equal(FileKind.Empty, f.Kind);
+        Assert.Equal(new[] { "Import a plan", "Open sample house", "Trace walls" }, Bar(f));
+    }
+
+    [Fact]
     public void PlanCurvesAndNoGeneratedObject_Slot1IsGenerate()
     {
         var f = Docs.Facts("plan curves");

@@ -54,6 +54,7 @@ public partial class RhinoMCPFunctions
                 Closed = geometry is Curve curve ? curve.IsClosed : solid,
                 Solid = solid,
                 Stale = obj.Attributes.GetUserString(DaylightStaleKey) == "1",
+                PlanCut = obj.Attributes.GetUserString(ForskPlanCut.TagKey) == ForskPlanCut.TagValue,
                 Review = obj.Attributes.GetUserString(ImportReviewRowsKey),
                 Stamp = generated ? EditStamp(obj) : null,
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,

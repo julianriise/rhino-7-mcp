@@ -189,7 +189,8 @@ namespace RhinoMCPPlugin.Forsk
         public static FileFacts Read(DocInput input)
         {
             input = input ?? new DocInput();
-            var rows = input.Rows ?? new List<ChipRow>();
+            // The plan cut is Forsk's own view helper, not something in the file.
+            var rows = (input.Rows ?? new List<ChipRow>()).Where(r => r != null && !r.PlanCut).ToList();
             var facts = new FileFacts
             {
                 Layouts = input.Layouts,

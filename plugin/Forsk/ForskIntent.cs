@@ -741,6 +741,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool Solid;
         /// <summary>forsk:daylight_stale=1 on a daylight mesh: the model changed after the map was made.</summary>
         public bool Stale;
+        /// <summary>Forsk's own Top plan cut (forsk:plan_cut). A view helper: the file classifier skips it.</summary>
+        public bool PlanCut;
         /// <summary>forsk:import_review_rows on the underlay: the import's review rows, as JSON.</summary>
         public string Review;
         /// <summary>The edit stamp of a generated object: its geometry and its forsk strings, hashed.</summary>
