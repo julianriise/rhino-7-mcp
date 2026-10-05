@@ -35,6 +35,21 @@ public partial class RhinoMCPFunctions
         if (IsExistingLayerName(layerName))
             return ExistingBakeRefusal();
 
+        // The slab is locked when it exists. Unlock the layer before the add, then lock again.
+        UnlockFloors(doc);
+        try
+        {
+            return AddFloorSlabs(doc, layerName, thickness, targetLayerName, namePrefix, joinTolerance, applyDefaultMaterials);
+        }
+        finally
+        {
+            LockFloors(doc);
+        }
+    }
+
+    JObject AddFloorSlabs(RhinoDoc doc, string layerName, double thickness, string targetLayerName,
+        string namePrefix, double joinTolerance, bool applyDefaultMaterials)
+    {
         var profiles = CollectClosedPlanCurves(doc, layerName, joinTolerance, true);
         if (profiles.SourceCount == 0)
             return profiles.EmptyResult($"No curves on layer '{profiles.SourceLayer.Name}'.");
@@ -105,6 +120,51 @@ public partial class RhinoMCPFunctions
 
         BakePace.Redraw(doc);
         return result;
+    }
+
+    /// <summary>
+    /// The floor slab stays visible and is not a click. The layer and each
+    /// slab stay locked, the same way as the daylight map, so a click falls
+    /// through to the room plate. Unlock the layer first, then the slabs,
+    /// before a replace or a delete. An object reports locked when either it
+    /// or its layer is. Room plates stay unlocked: they are the room pick.
+    /// </summary>
+    private static void UnlockFloors(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        SetFloorLayerLocked(doc, false);
+        foreach (var obj in FloorSlabs(doc))
+            if (obj != null && obj.IsLocked) doc.Objects.Unlock(obj.Id, false);
+    }
+
+    /// <summary>Lock each floor slab, then the layer, so a click misses the slab.</summary>
+    private static void LockFloors(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        foreach (var obj in FloorSlabs(doc))
+            if (obj != null && !obj.IsLocked) doc.Objects.Lock(obj.Id, false);
+        SetFloorLayerLocked(doc, true);
+    }
+
+    private static IEnumerable<RhinoObject> FloorSlabs(RhinoDoc doc)
+    {
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (IsForskGenerated(obj) && string.Equals(GetForskKind(obj), "floor", StringComparison.OrdinalIgnoreCase))
+                yield return obj;
+        }
+    }
+
+    private static void SetFloorLayerLocked(RhinoDoc doc, bool locked)
+    {
+        foreach (var candidate in doc.Layers)
+        {
+            if (candidate == null || candidate.IsDeleted) continue;
+            if (!candidate.Name.Equals("A-FLOR", StringComparison.OrdinalIgnoreCase)) continue;
+            if (candidate.IsLocked == locked) continue;
+            candidate.IsLocked = locked;
+            doc.Layers.Modify(candidate, candidate.Index, true);
+        }
     }
 
     private static List<Curve> OutermostClosedCurves(List<Curve> closed, double tol)

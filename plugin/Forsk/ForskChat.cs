@@ -1046,11 +1046,6 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 return lines;
             }
 
-            lines.Add("Defaults: walls " + FormatMm(settings.WallHeight)
-                + ", floor " + FormatMm(settings.FloorThickness)
-                + ", roof " + FormatMm(settings.RoofThickness)
-                + ". Origin (0,0,0) is the existing-building corner.");
-
             if (rebuild) next();
             if (rebuild && !Step("clear_generated", new JObject(), lines, true))
                 return Finish(lines);
@@ -1105,12 +1100,19 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         static List<string> Finish(List<string> lines)
         {
-            // The pass redraws once, when it restores RedrawEnabled. A bake with no pass still redraws.
+            // Types go on the plates, then the colour cache drops, then the 2D
+            // layers hide. The pass redraws once, when it restores RedrawEnabled.
+            // A bake with no pass still redraws. That redraw is the colour pass.
+            var planHidden = false;
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
-                BakePace.Redraw(RhinoDoc.ActiveDoc);
+                var doc = RhinoDoc.ActiveDoc;
+                RhinoMCPFunctions.ApplyRoomTypeColours(doc);
+                if (BakeReply.HasWalls(lines))
+                    planHidden = PlanLayerHost.Hide(doc);
+                BakePace.Redraw(doc);
             }));
-            return lines;
+            return BakeReply.Format(lines, planHidden);
         }
 
         static string PhaseOf(string name)
@@ -1174,11 +1176,6 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (string.IsNullOrEmpty(units)) return false;
             return units.Equals("Millimeters", StringComparison.OrdinalIgnoreCase)
                 || units.Equals("Millimetres", StringComparison.OrdinalIgnoreCase);
-        }
-
-        static string FormatMm(double value)
-        {
-            return value.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         static BakeNumbers LoadSettings()

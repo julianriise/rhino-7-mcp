@@ -41,9 +41,11 @@ public partial class RhinoMCPFunctions
         var layer = EnsureRoomPlateLayer(doc);
         foreach (var marker in markers)
         {
-            var name = marker.Attributes.GetUserString(RoomNameKey);
-            if (string.IsNullOrWhiteSpace(name)) name = marker.Name ?? "a room";
-            var outline = RoomMarkerOutline(marker);
+            // ModifyAttributes during the stamp does not refresh the object we already hold.
+            var live = doc.Objects.FindId(marker.Id) ?? marker;
+            var name = live.Attributes.GetUserString(RoomNameKey);
+            if (string.IsNullOrWhiteSpace(name)) name = live.Name ?? "a room";
+            var outline = RoomMarkerOutline(live);
             var points = outline == null ? null : LoopPoints(outline, tol);
             var why = RoomPlate.Open(points == null ? null : PlanPoints(points), walls);
             Brep plate = null;
@@ -59,13 +61,13 @@ public partial class RhinoMCPFunctions
                 continue;
             }
             var attr = new ObjectAttributes { Name = name, LayerIndex = layer.Index, MaterialSource = ObjectMaterialSource.MaterialFromLayer };
-            StampForskTags(attr, new ForskStamp { Kind = RoomPlate.Kind, Level = marker.Attributes.GetUserString("forsk:level") ?? "0" });
+            StampForskTags(attr, new ForskStamp { Kind = RoomPlate.Kind, Level = live.Attributes.GetUserString("forsk:level") ?? "0" });
             foreach (var key in new[] { RoomIdKey, RoomNameKey, "forsk:area", RoomTypes.Key, RoomTypes.SourceKey })
             {
-                var value = marker.Attributes.GetUserString(key);
+                var value = live.Attributes.GetUserString(key);
                 if (!string.IsNullOrEmpty(value)) attr.SetUserString(key, value);
             }
-            attr.SetUserString("forsk:marker", marker.Id.ToString());
+            attr.SetUserString("forsk:marker", live.Id.ToString());
             var id = BakePace.AddBreps(doc, new[] { plate }, new[] { attr }, null)[0];
             if (id == Guid.Empty) none.Add(new JObject { ["room"] = name, ["why"] = "Rhino did not take its plate" });
             else plates.Add(id.ToString());
@@ -82,6 +84,9 @@ public partial class RhinoMCPFunctions
         var note = plates["note"]?.ToString();
         if (!string.IsNullOrEmpty(note)) result["message"] = (result["message"]?.ToString() ?? "") + " " + note;
         LockPlatedRoomCurves(doc);
+        // Plates exist and carry their types. Drop the perspective colour cache
+        // so the next redraw paints them. Generate 3D redraws once, at the end.
+        ApplyRoomTypeColours(doc);
         BakePace.Redraw(doc);
     }
 

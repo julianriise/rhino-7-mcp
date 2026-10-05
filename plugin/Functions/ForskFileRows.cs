@@ -139,6 +139,8 @@ public partial class RhinoMCPFunctions
             if (!string.IsNullOrWhiteSpace(value)) input.Meta[key] = value.Trim();
         }
         input.PrintPages = doc.Strings.GetValue(SheetSet.MetaSection, SheetSet.MetaEntry);
+        input.PlanLayers = PlanLayerHost.Record(doc);
+        input.PlanHidden = PlanLayerHost.AreHidden(doc);
         input.PrintScale = KnownPrintScale(doc);
         input.Ink = ReadPrintProfile(doc).Name;
         var units = doc.ModelUnitSystem;

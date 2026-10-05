@@ -169,6 +169,15 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.rebuild":
                     Job(thread, action.Id, label, sink => Bake(sink, true));
                     return;
+                case "plan.show":
+                case "plan.hide":
+                    Job(thread, action.Id, label, sink =>
+                    {
+                        var line = "";
+                        RhinoApp.InvokeOnUiThread(new Action(() => line = PlanLayerHost.Toggle(RhinoDoc.ActiveDoc)));
+                        sink.Line(line);
+                    });
+                    return;
                 case "file.print":
                     Print(thread, null);
                     return;

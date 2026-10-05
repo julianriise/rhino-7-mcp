@@ -469,4 +469,66 @@ public partial class RhinoMCPFunctions
         if (curve.IsClosed && pts.Count > 0) pts.Add(pts[0]);
         return pts;
     }
+
+    /// <summary>
+    /// End of a bake or a plate rebuild: every room has a type, each plate
+    /// carries that type, and the perspective colour cache is dropped. The
+    /// cache otherwise survives until rooms_set_type, so the floors stay
+    /// white until one room is edited. The next redraw paints the pastels.
+    /// </summary>
+    internal static void ApplyRoomTypeColours(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        var doors = OpeningBoxes(doc, false);
+        var windows = OpeningBoxes(doc, true);
+        foreach (var marker in RoomMarkers(doc))
+        {
+            var live = doc.Objects.FindId(marker.Id) ?? marker;
+            if (string.IsNullOrEmpty(live.Attributes.GetUserString(RoomTypes.Key))
+                && TryRoomPolygon(live, out var polygon))
+            {
+                var attr = live.Attributes.Duplicate();
+                var name = attr.GetUserString(RoomNameKey);
+                if (string.IsNullOrWhiteSpace(name)) name = live.Name;
+                WriteRoomType(attr, PlanPoints(polygon), ParseMm(attr.GetUserString("forsk:area")) ?? 0, name ?? "", doors, windows);
+                var locked = live.IsLocked;
+                if (locked) doc.Objects.Unlock(live.Id, false);
+                BakePace.Modify(doc, live.Id, attr, true);
+                if (locked) doc.Objects.Lock(live.Id, false);
+                live = doc.Objects.FindId(live.Id) ?? live;
+            }
+            MirrorRoomType(doc, live);
+        }
+        RoomTypeColorHost.Invalidate();
+    }
+
+    /// <summary>The plate stores the marker's type. A user type stays a user type.</summary>
+    static void MirrorRoomType(RhinoDoc doc, RhinoObject marker)
+    {
+        if (doc == null || marker?.Attributes == null) return;
+        var key = marker.Attributes.GetUserString(RoomTypes.Key);
+        if (string.IsNullOrEmpty(key)) return;
+        var source = marker.Attributes.GetUserString(RoomTypes.SourceKey);
+        var id = marker.Id.ToString();
+        var plates = new List<RhinoObject>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), RoomPlate.Kind, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(obj.Attributes.GetUserString("forsk:marker"), id, StringComparison.OrdinalIgnoreCase)) continue;
+            plates.Add(obj);
+        }
+        foreach (var obj in plates)
+        {
+            if (string.Equals(obj.Attributes.GetUserString(RoomTypes.Key), key, StringComparison.Ordinal)
+                && string.Equals(obj.Attributes.GetUserString(RoomTypes.SourceKey) ?? "", source ?? "", StringComparison.Ordinal))
+                continue;
+            var attr = obj.Attributes.Duplicate();
+            attr.SetUserString(RoomTypes.Key, key);
+            attr.SetUserString(RoomTypes.SourceKey, string.IsNullOrEmpty(source) ? null : source);
+            var locked = obj.IsLocked;
+            if (locked) doc.Objects.Unlock(obj.Id, false);
+            doc.Objects.ModifyAttributes(obj, attr, true);
+            if (locked) doc.Objects.Lock(obj.Id, false);
+        }
+    }
 }

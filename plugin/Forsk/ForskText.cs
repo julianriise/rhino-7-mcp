@@ -21,6 +21,8 @@ namespace RhinoMCPPlugin.Forsk
             ["file.use_curves.ask"] = "Select the curves that are the walls, then click Use these curves as the plan again.",
             ["file.scale"] = "Set scale",
             ["file.scale.reason"] = "The scale is not confirmed.",
+            ["plan.show"] = "Show 2D",
+            ["plan.hide"] = "Hide 2D",
             ["file.generate"] = "Generate 3D",
             ["file.generate.reason"] = "The plan is 2D. Scale is settled.",
             ["file.rebuild"] = "Rebuild",

@@ -39,30 +39,39 @@ public partial class RhinoMCPFunctions
         var roof = outer == null ? null : ChooseSlab(doc, sourceLayer, outer, roof: true, outlineTol);
         var daylight = DaylightShown(doc);
         var snaps = new List<SlabUndo>();
+        // The slab is locked. Unlock it for the replace, then lock it again.
+        UnlockFloors(doc);
         try
         {
-            var floorDone = false;
-            var roofDone = false;
-            if (after == null)
+            try
             {
-                floorDone = DeleteSlab(doc, floor, snaps);
-                roofDone = DeleteSlab(doc, roof, snaps);
+                var floorDone = false;
+                var roofDone = false;
+                if (after == null)
+                {
+                    floorDone = DeleteSlab(doc, floor, snaps);
+                    roofDone = DeleteSlab(doc, roof, snaps);
+                }
+                else if (after.Count > 0 && after[0] != null && after[0].Count >= 3)
+                {
+                    floorDone = RebuildFloor(doc, floor, after[0], tol, snaps);
+                    roofDone = RebuildRoof(doc, roof, after[0], tol, snaps);
+                }
+                var rooms = RoomsDetect(new JObject());
+                var count = rooms?["count"]?.ToObject<int>() ?? 0;
+                // The dispatcher hides the map and marks it stale (Map = MapEdit.Wall).
+                return WallFollowPlan.Sentence(floorDone, roofDone, count, daylight, ForskSpeech.Norwegian);
             }
-            else if (after.Count > 0 && after[0] != null && after[0].Count >= 3)
+            catch (Exception ex)
             {
-                floorDone = RebuildFloor(doc, floor, after[0], tol, snaps);
-                roofDone = RebuildRoof(doc, roof, after[0], tol, snaps);
+                RestoreSlabs(doc, snaps);
+                if (ex is InvalidOperationException) throw;
+                throw new InvalidOperationException(ex.Message, ex);
             }
-            var rooms = RoomsDetect(new JObject());
-            var count = rooms?["count"]?.ToObject<int>() ?? 0;
-            // The dispatcher hides the map and marks it stale (Map = MapEdit.Wall).
-            return WallFollowPlan.Sentence(floorDone, roofDone, count, daylight, ForskSpeech.Norwegian);
         }
-        catch (Exception ex)
+        finally
         {
-            RestoreSlabs(doc, snaps);
-            if (ex is InvalidOperationException) throw;
-            throw new InvalidOperationException(ex.Message, ex);
+            LockFloors(doc);
         }
     }
 

@@ -133,6 +133,8 @@ static class Docs
         ("sheet cache, sections", () => Of(House().Append(Row.Drawing("S-PLAN")).ToArray()).With(d => d.SectionLetters = new List<string> { "A", "B" })),
         ("bridge down, grey ink", () => Of(House()).With(d => { d.ListenerUp = false; d.Ink = "grey"; })),
         ("forsk undo newest", () => Of(House()).With(d => d.UndoNewest = true)),
+        ("house, 2d hidden", () => Of(House()).With(d => { d.PlanLayers = "wall\ndoor\nwindow"; d.PlanHidden = true; })),
+        ("house, 2d shown", () => Of(House()).With(d => { d.PlanLayers = "wall\ndoor\nwindow"; d.PlanHidden = false; })),
         ("inches", () => Of(Row.PlanCurve("wall")).With(d => d.Millimetres = false)),
     };
 
