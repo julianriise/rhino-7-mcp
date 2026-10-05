@@ -180,8 +180,8 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
     public void TheTitleBlock_ShowsEnglishHints_AndTreatsTheNorwegianSeedsAsEmpty()
     {
         var empty = ForskCards.For("meta.title", Docs.Facts("empty"))!;
-        Assert.Equal(new[] { "", "", "", "" }, empty.Fields!.Select(f => f.Value));
-        Assert.Equal(new[] { "Project name", "Client", "Address", null }, empty.Fields!.Select(f => f.Placeholder));
+        Assert.Equal(new[] { "", "", "", "", "", "", "" }, empty.Fields!.Select(f => f.Value));
+        Assert.Equal(new[] { "Project name", null, "Client", "Address", null, null, null }, empty.Fields!.Select(f => f.Placeholder));
 
         var seeded = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
         {
@@ -190,10 +190,10 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
             ["address"] = "Adresse"
         }));
         var card = ForskCards.For("meta.title", seeded)!;
-        Assert.Equal(new[] { "", "", "", "" }, card.Fields!.Select(f => f.Value));
+        Assert.Equal(new[] { "", "", "", "", "", "", "" }, card.Fields!.Select(f => f.Value));
         Assert.Equal("Project name", card.Fields![0].Placeholder);
-        Assert.Equal("Client", card.Fields![1].Placeholder);
-        Assert.Equal("Address", card.Fields![2].Placeholder);
+        Assert.Equal("Client", card.Fields![2].Placeholder);
+        Assert.Equal("Address", card.Fields![3].Placeholder);
     }
 
     [Fact]
