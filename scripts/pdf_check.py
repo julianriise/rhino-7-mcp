@@ -8,6 +8,8 @@ sheet. A page fails when:
   together cover more than 25 % (from each image's `cm` placement);
 - extract_text() finds no text, no sheet number (A-dd-ddd), or misses an
   --expect-text string;
+- the text holds a "?": the PDF's Helvetica (WinAnsi) has no glyph for a
+  character such as ≈ and writes "?" instead, and no sheet text asks a question;
 - its content holds fewer than --min-paths path operators (m, l, c, re;
   default 20).
 
@@ -94,6 +96,9 @@ def check_page(page, number, expect_text, min_paths):
         return f"page {number}: no selectable text"
     if not SHEET_NO.search(text):
         return f"page {number}: no sheet number A-dd-ddd in the text"
+    if "?" in text:
+        line = next(l for l in text.splitlines() if "?" in l)
+        return f"page {number}: a glyph printed as '?' ({line.strip()[:40]!r})"
     missing = [s for s in expect_text if s not in text]
     if missing:
         return f"page {number}: text misses {', '.join(repr(s) for s in missing)}"

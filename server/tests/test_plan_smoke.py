@@ -209,7 +209,7 @@ def _schedule_case():
     ]
     plan_rows = [{"text": m, "attributes": {"forsk:role": "opening_mark"}} for m in ("D01", "D02", "V01")] + [
         {"text": "Kontor", "attributes": {"forsk:role": "room_tag", "forsk:tag": "name", "forsk:room_id": "rd-01"}},
-        {"text": "≈ 12,4 m²", "attributes": {"forsk:role": "room_tag", "forsk:tag": "area", "forsk:room_id": "rd-01"}},
+        {"text": "~ 12,4 m²", "attributes": {"forsk:role": "room_tag", "forsk:tag": "area", "forsk:room_id": "rd-01"}},
     ]
     sheets = [{"view": "schedules", "schedules": {"lists": {
         "door": {"rows": [{"id": "D01", "cells": ["D01"]}, {"id": "D02", "cells": ["D02"]}]},

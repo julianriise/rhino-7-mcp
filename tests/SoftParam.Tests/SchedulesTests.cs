@@ -261,7 +261,7 @@ public class SchedulesTests
         for (var i = 0; i < table.Rows.Count; i++)
         {
             var room = rooms.Single(r => r.Id == table.Ids[i]);
-            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "≈ " + table.Rows[i][1]);
+            Assert.Equal(OpeningTypes.RoomTag(room.AreaMm2), "~ " + table.Rows[i][1]);
             Assert.Equal(room.Name, table.Rows[i][0]);
         }
         Assert.Equal(new[] { "Sum", "32.6 m²" }, table.Total);

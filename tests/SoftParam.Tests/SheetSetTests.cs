@@ -248,7 +248,7 @@ public class SheetSetTests
         Assert.Equal("Dørliste", Schedules.SheetTitle(new[] { "door" }, true));
         Assert.Equal("Dør-, vindus- og romliste", Schedules.SheetTitle(new[] { "door", "window", "room" }, true));
         Assert.Equal("ca. 12,4 m²", OpeningTypes.RoomTag(12_400_000, true));
-        Assert.Equal("≈ 27.4 m²", OpeningTypes.RoomTag(27_400_000));
+        Assert.Equal("~ 27.4 m²", OpeningTypes.RoomTag(27_400_000));
         Assert.Equal("Rom", RoomDetect.UnnamedRoom(true));
         Assert.Equal("Room", RoomDetect.UnnamedRoom());
         Assert.True(OpeningTypes.TryRead("window", null, null, null, out var window, out _));

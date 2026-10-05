@@ -62,6 +62,13 @@ def write(tmp_path, name, data):
     return path
 
 
+def test_a_lost_glyph_fails(tmp_path):
+    # Rhino writes a character Helvetica lacks (the room tag's old ≈) as "?".
+    lost = b"BT /F1 9 Tf 400 400 Td (? 27.4 m) Tj ET\n"
+    path = write(tmp_path, "lost.pdf", pdf_bytes(LINES + TEXT + lost))
+    assert pdf_check.check(path) == ["page 1: a glyph printed as '?' ('? 27.4 m')"]
+
+
 def test_a_vector_sheet_passes(tmp_path):
     path = write(tmp_path, "vector.pdf", pdf_bytes(LINES + TEXT))
     assert pdf_check.check(path, ["Garage"]) == ["ok 1 page vector"]

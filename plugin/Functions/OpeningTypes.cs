@@ -752,10 +752,10 @@ public static class OpeningTypes
         };
     }
 
-    /// <summary>Room tag area line: ≈ 12.4 m². Bokmål keeps ca. and the comma. ≈ is shorter than ca., so the line still fits.</summary>
+    /// <summary>Room tag area line: ~ 12.4 m². Bokmål keeps ca. and the comma. The PDF's Helvetica has no ≈ (it printed "?"); ~ is in it and still shorter than ca.</summary>
     public static string RoomTag(double areaMm2, bool norwegian = false)
     {
-        return SheetLang.Pick(norwegian, "≈ ", "ca. ") + AreaText(areaMm2, norwegian);
+        return SheetLang.Pick(norwegian, "~ ", "ca. ") + AreaText(areaMm2, norwegian);
     }
 
     /// <summary>
