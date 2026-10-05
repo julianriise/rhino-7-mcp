@@ -47,6 +47,7 @@
     <Compile Include="..\..\plugin\Functions\Sections.cs" Link="Sections.cs" />
     <Compile Include="..\..\plugin\Functions\SheetSet.cs" Link="SheetSet.cs" />
     <Compile Include="..\..\plugin\Functions\SheetFlat.cs" Link="SheetFlat.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanNotes.cs" Link="PlanNotes.cs" />
     <Compile Include="..\..\plugin\Functions\SheetScale.cs" Link="SheetScale.cs" />
     <Compile Include="..\..\plugin\Functions\TitleBlock.cs" Link="TitleBlock.cs" />
     <Compile Include="..\..\plugin\Functions\PrintTemplate.cs" Link="PrintTemplate.cs" />

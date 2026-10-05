@@ -195,6 +195,8 @@ public partial class RhinoMCPFunctions
         // and prints a blank sheet. The registry also switches first.
         UseModelView(doc);
         ApplyDocumentPrintInk(doc);
+        // The layer the user's own notes go on: whatever is on it prints on the plan sheet.
+        EnsureLayer(doc, PlanNotes.LayerName, Color.Black);
 
         var paper = parameters?["paper"]?.ToString();
         if (string.IsNullOrWhiteSpace(paper))

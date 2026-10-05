@@ -74,6 +74,7 @@ public static class SheetFlat
         ["level"] = "A-ANNO-TEXT",
         ["opening_mark"] = "A-ANNO-TEXT",
         ["room_tag"] = "A-ANNO-TEXT",
+        [PlanNotes.Role] = "A-ANNO-TEXT",
         ["room_leader"] = "A-ANNO-TEXT",
         ["detail_title"] = "A-ANNO-TEXT",
         ["schedule_title"] = "A-ANNO-TEXT",

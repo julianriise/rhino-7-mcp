@@ -1390,6 +1390,96 @@ public partial class RhinoMCPFunctions
     /// <summary>The weight of a S-DRAW layer and of an object that sets none. The sheet's pens come from the print profile.</summary>
     private const double DrawHairlineMm = 0.18;
 
+    /// <summary>
+    /// Every note on A-NOTE and the layers under it, copied into the plan's drawing
+    /// layer with the drawing's own transform. A dimension or leader is exploded into
+    /// its lines and text, which is what the PDF and the DWG read. Returns the count added.
+    /// </summary>
+    private static int BakePlanNotes(RhinoDoc doc, Layer layer, Transform worldToHld, Vector3d delta, ref BoundingBox box, ref int index)
+    {
+        var added = 0;
+        var map = Transform.Translation(delta) * worldToHld;
+        foreach (var noteLayer in doc.Layers)
+        {
+            if (noteLayer == null || noteLayer.IsDeleted || !PlanNotes.IsNoteLayer(noteLayer.FullPath)) continue;
+            foreach (var obj in doc.Objects.FindByLayer(noteLayer) ?? new RhinoObject[0])
+            {
+                if (obj == null || obj.IsHidden || obj.Attributes.Space != ActiveSpace.ModelSpace || obj.Geometry == null) continue;
+                var pieces = new List<GeometryBase>();
+                if (obj.Geometry is LinearDimension linear)
+                    pieces.AddRange(DimensionPieces(doc, linear));
+                else if (obj.Geometry is Leader leader)
+                {
+                    var line = leader.Curve?.DuplicateCurve();
+                    if (line != null) pieces.Add(line);
+                    if (!string.IsNullOrEmpty(leader.PlainText))
+                    {
+                        // As tall as the leader shows in the model: its style's height at the style's scale.
+                        var style = doc.DimStyles.FindId(leader.DimensionStyleId) ?? doc.DimStyles.Current;
+                        var plane = leader.Plane;
+                        var tip = leader.Points2D?.Length > 0 ? leader.Points2D[leader.Points2D.Length - 1] : new Point2d(0, 0);
+                        plane.Origin = plane.PointAt(tip.X, tip.Y);
+                        var text = new TextEntity { Plane = plane, PlainText = leader.PlainText, TextHeight = style.TextHeight * style.DimensionScale };
+                        pieces.Add(text);
+                    }
+                }
+                else if (obj.Geometry is TextEntity || obj.Geometry is Curve || obj.Geometry is Hatch)
+                    pieces.Add(obj.Geometry.Duplicate());
+                foreach (var piece in pieces)
+                {
+                    if (piece == null || !piece.Transform(map)) continue;
+                    var stableId = FormatStableId("d", index);
+                    var attr = new ObjectAttributes
+                    {
+                        LayerIndex = layer.Index,
+                        Name = stableId,
+                        Space = ActiveSpace.ModelSpace,
+                        ViewportId = Guid.Empty,
+                        ColorSource = ObjectColorSource.ColorFromObject,
+                        ObjectColor = Color.Black,
+                        PlotColorSource = ObjectPlotColorSource.PlotColorFromObject,
+                        PlotColor = Color.Black,
+                        PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromObject,
+                        PlotWeight = DrawHairlineMm
+                    };
+                    StampForskTags(attr, new ForskStamp { Kind = "drawing", Level = "0", Id = stableId, View = "plan" });
+                    attr.SetUserString("forsk:role", PlanNotes.Role);
+                    if (doc.Objects.Add(piece, attr) == Guid.Empty) continue;
+                    box.Union(piece.GetBoundingBox(true));
+                    index++;
+                    added++;
+                }
+            }
+        }
+        return added;
+    }
+
+    /// <summary>A linear dimension as the lines Rhino draws for it and its distance text.</summary>
+    private static List<GeometryBase> DimensionPieces(RhinoDoc doc, LinearDimension dim)
+    {
+        var pieces = new List<GeometryBase>();
+        var style = doc.DimStyles.FindId(dim.DimensionStyleId) ?? doc.DimStyles.Current;
+        if (dim.GetDisplayLines(style, 1.0, out IEnumerable<Line> lines) && lines != null)
+            foreach (var line in lines)
+                if (line.IsValid) pieces.Add(new LineCurve(line));
+        var text = dim.GetDistanceDisplayText(doc.ModelUnitSystem, style);
+        if (!string.IsNullOrEmpty(text))
+        {
+            var plane = dim.Plane;
+            var at = dim.TextPosition;
+            plane.Origin = plane.PointAt(at.X, at.Y);
+            pieces.Add(new TextEntity
+            {
+                Plane = plane,
+                PlainText = text,
+                TextHeight = style.TextHeight * style.DimensionScale,
+                TextHorizontalAlignment = TextHorizontalAlignment.Center,
+                TextVerticalAlignment = TextVerticalAlignment.Bottom
+            });
+        }
+        return pieces;
+    }
+
     private static string DrawChildName(string view)
     {
         if (string.IsNullOrEmpty(view)) return null;
@@ -1840,6 +1930,10 @@ public partial class RhinoMCPFunctions
                 count++;
                 index++;
             }
+
+            // The user's own notes (A-NOTE) at the drawing's offset, so every Print carries them.
+            if (plan && haveWorldToHld)
+                count += BakePlanNotes(doc, layer, worldToHld, delta, ref box, ref index);
 
             // A facade at section quality: the ground line and the level marks over its lines.
             if (section == null && !plan && strokeScale > 0 && haveWorldToHld && count > 0)
