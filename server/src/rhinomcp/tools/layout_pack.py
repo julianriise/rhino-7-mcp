@@ -17,13 +17,14 @@ _UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, a 
 
 def _known_view(view: Any) -> bool:
     return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)) or bool(_DETAIL.match(view)))
-_UNKNOWN_PAPER = "Unknown paper. Use A3."
+_PAPERS = ("A4", "A3", "A2", "A1")
+_UNKNOWN_PAPER = "Unknown paper. Use A4, A3, A2 or A1."
 
 
 @mcp.tool()
 def layout_pack(
     ctx: Context,
-    paper: str = "A3",
+    paper: Optional[str] = None,
     views: Optional[List[str]] = None,
     scale: Optional[int] = None,
     replace: bool = True,
@@ -43,7 +44,7 @@ def layout_pack(
     Forsk pages for those views so a re-run does not duplicate tabs. Not a PDF.
 
     Parameters:
-    - paper: A3 only (default A3)
+    - paper: A4, A3, A2 or A1, landscape. Omit to keep the paper kept on the file (A3 when none).
     - views: Optional list of plan, north, east, south, west, schedules,
       and section_<letter> for a section stored by section_add (its own
       sheet; the plan carries its marker A–A). Omit for plan, four
@@ -64,7 +65,7 @@ def layout_pack(
     Dictionary with pages, count, scale, and message.
     """
     try:
-        if not isinstance(paper, str) or paper != "A3":
+        if paper is not None and (not isinstance(paper, str) or paper not in _PAPERS):
             return {"success": False, "message": _UNKNOWN_PAPER}
         if views is not None and not isinstance(views, list):
             return {"success": False, "message": "views must be a list."}
@@ -85,10 +86,11 @@ def layout_pack(
 
         rhino = get_rhino_connection()
         params: Dict[str, Any] = {
-            "paper": paper,
             "replace": replace,
             "include_existing": include_existing,
         }
+        if paper is not None:
+            params["paper"] = paper
         if views is not None:
             params["views"] = views
         if scale is not None:

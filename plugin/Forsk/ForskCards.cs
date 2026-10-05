@@ -422,6 +422,15 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         public const string ScaleKey = "scale";
+        public const string PaperKey = "paper";
+
+        /// <summary>The paper the set prints on: the one kept on the file, else A3.</summary>
+        static string PaperOf(FileFacts f)
+        {
+            string stored = null;
+            f?.Meta?.TryGetValue(PrintTemplate.PaperKey, out stored);
+            return PrintTemplate.Stored(stored).Name;
+        }
 
         /// <summary>
         /// Choose sheets: a scale for the whole set, then one tick per sheet
@@ -440,7 +449,7 @@ namespace RhinoMCPPlugin.Forsk
                 Fields = new List<CardField>(),
                 Depends = "model",
                 Note = shown > 0
-                    ? "1:" + shown.ToString(CultureInfo.InvariantCulture) + " · A3"
+                    ? "1:" + shown.ToString(CultureInfo.InvariantCulture) + " · " + PaperOf(f)
                     : ForskText.Get("print.pages.fit"),
                 Pills =
                 {
@@ -458,6 +467,13 @@ namespace RhinoMCPPlugin.Forsk
                 Label = ForskText.Get("print.pages.scale"),
                 Options = ScaleOptions(),
                 Value = shown > 0 ? "1:" + shown.ToString(CultureInfo.InvariantCulture) : "Fit"
+            });
+            card.Fields.Add(new CardField
+            {
+                Key = PaperKey,
+                Label = ForskText.Get("print.pages.paper"),
+                Options = PrintTemplate.Papers.Select(p => p.Name).ToList(),
+                Value = PaperOf(f)
             });
             foreach (var sheet in Set(f))
                 card.Fields.Add(new CardField { Key = sheet.Id, Label = SheetLine(sheet.Id, f), Check = true, Order = true, Value = sheet.On ? "1" : "0" });
@@ -484,14 +500,16 @@ namespace RhinoMCPPlugin.Forsk
             var off = new JArray();
             foreach (var pair in values ?? new JObject())
             {
-                if (pair.Key == ScaleKey) continue;
+                if (pair.Key == ScaleKey || pair.Key == PaperKey) continue;
                 (pair.Value?.ToString() == "0" ? off : on).Add(pair.Key);
             }
             var args = new JObject { ["on"] = on, ["off"] = off };
             if (order != null && order.Count > 0)
-                args["order"] = new JArray(order.Select(t => t.ToString()).Where(id => id != ScaleKey));
+                args["order"] = new JArray(order.Select(t => t.ToString()).Where(id => id != ScaleKey && id != PaperKey));
             if (values?["scale"] != null)
                 args["scale"] = SheetScale.Parse(values["scale"].ToString());
+            if (PrintTemplate.Find(values?[PaperKey]?.ToString()) is PrintTemplate.Paper paper)
+                args["paper"] = paper.Name;
             return args;
         }
 

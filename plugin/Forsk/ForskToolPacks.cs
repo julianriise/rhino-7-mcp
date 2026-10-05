@@ -627,10 +627,10 @@ namespace RhinoMCPPlugin.Forsk
                         ["revision"] = Str("Revision letter or number, such as B. An empty string removes the Rev. cell.")
                     }),
                 Fn("layout_pack",
-                    "A3 Layout pages of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the front sheet with the Drawing list and Areas, the plan, the four facades, each stored section, the lists). The schedules page holds the Door, Window and Room schedules from the model; doors and windows get marks (D01, W01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
+                    "Landscape Layout pages (A4 to A1, A3 by default) of a greyscale drawing. One Detail per view shows black S-DRAW curves, plus a title block bottom-right. Not a PDF. Requires walls. With no views it lays out the set: the sheets that are on, in the set's order (the front sheet with the Drawing list and Areas, the plan, the four facades, each stored section, the lists). The schedules page holds the Door, Window and Room schedules from the model; doors and windows get marks (D01, W01) on the plan and in their rows. The plan carries dimensions from the model (a chain outside each facade to the opening centres, jogs and overall per side, each rectangular room's width and depth); a room name too wide for its room sits outside on a leader.",
                     new JObject
                     {
-                        ["paper"] = Str("A3 only. Default A3."),
+                        ["paper"] = Str("A4, A3, A2 or A1, landscape. Kept for the next Print. Omit to keep the kept paper (A3 when none)."),
                         ["views"] = new JObject
                         {
                             ["type"] = "array",
@@ -735,7 +735,8 @@ namespace RhinoMCPPlugin.Forsk
                         ["off"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids to switch off." },
                         ["order"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" }, ["description"] = "Sheet ids in the order they should print, from where the first of them stands." },
                         ["reset"] = Bool("Forget the user's set and the asked scale: Forsk infers the set and fits the scale again."),
-                        ["scale"] = Num("The scale denominator for the whole set, one of " + SheetScale.Denominators + ". Off the list snaps to the next coarser step. 0 fits again. Omit to leave the kept scale.")
+                        ["scale"] = Num("The scale denominator for the whole set, one of " + SheetScale.Denominators + ". Off the list snaps to the next coarser step. 0 fits again. Omit to leave the kept scale."),
+                        ["paper"] = Str("A4, A3, A2 or A1, landscape, for the whole set; kept for the next Print. Omit to keep the kept paper (A3 when none).")
                     }),
                 Fn("print_profile",
                     "Choose how the sheets are inked: default (solid black poché, black lines), grey (grey poché, grey lines) or hatch (hatched poché, lighter cut line). It is stored in the document and drives the plan, the sections and the schedule rules; the next layout_pack or Print draws with it, and pages already made keep their old look until then. Omit name to read the current profile.",

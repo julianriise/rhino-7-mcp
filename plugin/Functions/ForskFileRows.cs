@@ -134,7 +134,7 @@ public partial class RhinoMCPFunctions
         input.Layouts = MatchingForskPages(doc, null).Count;
         foreach (var def in ReadSectionDefs(doc))
             if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);
-        foreach (var key in ProjectInfo.Keys.Concat(new[] { ProjectInfo.AskedKey, "scale_label", OfficeLogo.NameKey }))
+        foreach (var key in ProjectInfo.Keys.Concat(new[] { ProjectInfo.AskedKey, "scale_label", OfficeLogo.NameKey, PrintTemplate.PaperKey }))
         {
             var value = doc.Strings.GetValue(LayoutMetaSection, key);
             if (!string.IsNullOrWhiteSpace(value)) input.Meta[key] = value.Trim();

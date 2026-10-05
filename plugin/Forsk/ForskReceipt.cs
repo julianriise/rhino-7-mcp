@@ -97,11 +97,11 @@ namespace RhinoMCPPlugin.Forsk
         /// else why not ("· CSV not written: …").
         /// </summary>
         public static string PrintLine(int sheets, int scale, string written, string revision, string bumped, string blank,
-            IEnumerable<int> detailScales = null, int detailsDropped = 0, string csv = null)
+            IEnumerable<int> detailScales = null, int detailsDropped = 0, string csv = null, string paper = null)
         {
             var text = "Printed " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture) + (sheets == 1 ? " sheet" : " sheets");
             if (scale > 0) text += " at 1:" + scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            text += " on A3";
+            text += " on " + (string.IsNullOrWhiteSpace(paper) ? PrintTemplate.DefaultPaper : paper.Trim());
             var details = (detailScales ?? Enumerable.Empty<int>())
                 .Select(s => "1:" + s.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToList();
             if (details.Count > 0) text += ", details at " + string.Join(" and ", details);

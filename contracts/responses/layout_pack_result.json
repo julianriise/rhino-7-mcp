@@ -11,6 +11,7 @@
     },
     "count": { "type": "integer" },
     "scale": { "type": "integer" },
+    "paper": { "type": "string", "enum": ["A4", "A3", "A2", "A1"], "description": "The paper the set was laid out on." },
     "message": { "type": "string" }
   },
   "required": ["pages", "count", "scale", "message"]

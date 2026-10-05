@@ -477,8 +477,8 @@ public partial class RhinoMCPFunctions
         scaleLocked = false;
         var left = MmToPage(doc, LayoutMarginMm);
         var bottom = MmToPage(doc, LayoutMarginMm + FooterReserveMm);
-        var right = MmToPage(doc, A3WidthMm - LayoutMarginMm);
-        var top = MmToPage(doc, A3HeightMm - LayoutMarginMm);
+        var right = MmToPage(doc, SheetWidthMm - LayoutMarginMm);
+        var top = MmToPage(doc, SheetHeightMm - LayoutMarginMm);
         var detail = page.AddDetailView(
             spec.View,
             new Point2d(left, bottom),
@@ -834,8 +834,8 @@ public partial class RhinoMCPFunctions
         }
 
         // Title block: flush right, full band height, one cell per field.
-        var tx0 = A3WidthMm - LayoutMarginMm - TitleBlockWidthMm;
-        var tx1 = A3WidthMm - LayoutMarginMm;
+        var tx0 = SheetWidthMm - LayoutMarginMm - TitleBlockWidthMm;
+        var tx1 = SheetWidthMm - LayoutMarginMm;
         var ty0 = LayoutMarginMm;
         var ty1 = LayoutMarginMm + FooterBandMm;
         var info = ReadProjectInfo(doc);
@@ -844,7 +844,7 @@ public partial class RhinoMCPFunctions
             Drawing = viewTitle,
             Number = sheetNo,
             Scale = pageScale > 0 ? "1:" + pageScale.ToString(CultureInfo.InvariantCulture) : "",
-            Format = "A3",
+            Format = _sheet.Name,
             // Project info: a stored date wins, none is the day the sheet is printed.
             Date = ProjectInfo.SheetDate(info, DateTime.Now),
             Revision = info[ProjectInfo.Revision],

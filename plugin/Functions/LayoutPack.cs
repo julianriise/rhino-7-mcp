@@ -54,7 +54,6 @@ public partial class RhinoMCPFunctions
     private const string NothingToLayOutMessage = "Nothing to lay out. Bake walls first.";
     private const string UnknownLayoutViewMessage =
         "Unknown view. Use front, plan, north, east, south, west, schedules, takeoff, or a stored section (section_a).";
-    private const string UnknownPaperMessage = "Unknown paper. Use A3.";
     private const string ExportNeedsPathMessage = "export_pdf requires a file path.";
     private const string ExportNeedsPdfMessage = "export_pdf path must be an absolute .pdf file.";
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
@@ -72,20 +71,34 @@ public partial class RhinoMCPFunctions
     private static PlanStats _lastPlanStats;
     private static bool _lastPlanStatsSet;
 
-    private const double A3WidthMm = PrintTemplate.WidthMm;
-    private const double A3HeightMm = PrintTemplate.HeightMm;
+    /// <summary>The paper the set is laid out on: set at each layout_pack and export from the stored choice.</summary>
+    private static PrintTemplate.Paper _sheet = PrintTemplate.Stored(null);
+    private static double SheetWidthMm => _sheet.WidthMm;
+    private static double SheetHeightMm => _sheet.HeightMm;
+    private static double TitleBlockWidthMm => PrintTemplate.TitleBlockWidthMm(_sheet, LayoutMarginMm);
     private const double LayoutMarginMm = 10.0;
     // Space under the detail: the footer band plus a 5 mm gap.
     private const double FooterReserveMm = 23.0;
     // Footer band along the bottom margin: north arrow, scale bar, title block.
     private const double FooterBandMm = 18.0;
-    private const double TitleBlockWidthMm = 280.0;
     private const double NorthArrowMm = 12.0;
     private const double ScaleBarLeftMm = 26.0;
     private const double ScaleBarHeightMm = 2.0;
     private const double FooterTextMm = 2.5;
     private const double PdfDpi = 150.0;
     private const string PrintLogPath = "/tmp/forsk-print.log";
+
+    /// <summary>The paper asked for (kept for the next Print), else the kept one, else A3.</summary>
+    private static PrintTemplate.Paper SheetPaper(RhinoDoc doc, string asked)
+    {
+        if (!string.IsNullOrWhiteSpace(asked))
+        {
+            var paper = PrintTemplate.Find(asked) ?? throw new InvalidOperationException(PrintTemplate.UnknownPaper);
+            doc?.Strings.SetString(LayoutMetaSection, PrintTemplate.PaperKey, paper.Name);
+            return paper;
+        }
+        return PrintTemplate.Stored(doc?.Strings.GetValue(LayoutMetaSection, PrintTemplate.PaperKey));
+    }
 
     private static bool TryGetLayoutView(string view, out LayoutViewSpec spec)
     {
@@ -198,11 +211,7 @@ public partial class RhinoMCPFunctions
         // The layer the user's own notes go on: whatever is on it prints on the plan sheet.
         EnsureLayer(doc, PlanNotes.LayerName, Color.Black);
 
-        var paper = parameters?["paper"]?.ToString();
-        if (string.IsNullOrWhiteSpace(paper))
-            paper = PrintTemplate.Paper(doc.Strings.GetValue(LayoutMetaSection, PrintTemplate.Key));
-        if (!paper.Trim().Equals("A3", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(UnknownPaperMessage);
+        _sheet = SheetPaper(doc, parameters?["paper"]?.ToString());
 
         // One scale for the set: asked (and kept for the next Print), or picked from the ladder.
         var asked = ReadAskedScale(doc, parameters);
@@ -252,8 +261,8 @@ public partial class RhinoMCPFunctions
         if (replace && offViews.Count > 0)
             RemoveLayoutPages(doc, new HashSet<string>(offViews, StringComparer.OrdinalIgnoreCase), false);
         var wallLevel = WallLevel(doc);
-        var detailW = A3WidthMm - (2.0 * LayoutMarginMm);
-        var detailH = A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
+        var detailW = SheetWidthMm - (2.0 * LayoutMarginMm);
+        var detailH = SheetHeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm;
 
         var pages = new JArray();
         var drawingNotes = new List<string>();
@@ -328,7 +337,7 @@ public partial class RhinoMCPFunctions
             var scale = picked.Scales[i];
             var fitNeed = SheetScale.Need(PackSpan(sheet), detailSpan);
 
-            var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
+            var page = doc.Views.AddPageView(spec.PageName, SheetWidthMm, SheetHeightMm);
             if (page == null)
                 throw new InvalidOperationException(LayoutDetailFailedMessage);
 
@@ -531,8 +540,9 @@ public partial class RhinoMCPFunctions
             ["detail_scales"] = new JArray(detailScales),
             ["details_dropped"] = detailsDropped,
             ["asked"] = asked.HasValue,
+            ["paper"] = _sheet.Name,
             // "on A3 at 1:N." then the drawing notes: smoke_compare reads "at 1:N. Greyscale drawing: plan".
-            ["message"] = SheetCountText(sheetCount) + " on A3 at 1:" + reported.ToString(CultureInfo.InvariantCulture) + "."
+            ["message"] = SheetCountText(sheetCount) + " on " + _sheet.Name + " at 1:" + reported.ToString(CultureInfo.InvariantCulture) + "."
                 + curveNote + cutNote + bumpNote + scheduleNote
         };
     }
@@ -552,7 +562,7 @@ public partial class RhinoMCPFunctions
         for (var i = 0; i < count; i++)
         {
             var name = SchedulesPageNameFor(i + 1);
-            var page = doc.Views.AddPageView(name, A3WidthMm, A3HeightMm);
+            var page = doc.Views.AddPageView(name, SheetWidthMm, SheetHeightMm);
             if (page == null)
                 throw new InvalidOperationException(LayoutDetailFailedMessage);
             page.SetPageAsActive();

@@ -1296,7 +1296,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (view == null)
                 csv = WriteCsv(Path.Combine(Path.GetDirectoryName(written) ?? "", TakeoffCsv.FileName(Path.GetFileNameWithoutExtension(written))));
             var line = ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank,
-                detailScales, packed?["details_dropped"]?.Value<int>() ?? 0, csv);
+                detailScales, packed?["details_dropped"]?.Value<int>() ?? 0, csv, packed?["paper"]?.ToString());
             FirstRunGate.Note(line);
             return line;
         }

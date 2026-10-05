@@ -87,8 +87,8 @@ public partial class RhinoMCPFunctions
         var perMm = MmToPage(doc, 1.0);
         var result = new SheetPdf.Page
         {
-            WidthMm = perMm > 0 && page.PageWidth > 0 ? page.PageWidth / perMm : A3WidthMm,
-            HeightMm = perMm > 0 && page.PageHeight > 0 ? page.PageHeight / perMm : A3HeightMm
+            WidthMm = perMm > 0 && page.PageWidth > 0 ? page.PageWidth / perMm : SheetWidthMm,
+            HeightMm = perMm > 0 && page.PageHeight > 0 ? page.PageHeight / perMm : SheetHeightMm
         };
         foreach (var piece in pieces)
         {

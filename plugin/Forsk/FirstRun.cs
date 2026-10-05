@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using RhinoMCPPlugin.Functions;
 using Newtonsoft.Json.Linq;
 
 namespace RhinoMCPPlugin.Forsk
@@ -21,7 +23,7 @@ namespace RhinoMCPPlugin.Forsk
             if (string.IsNullOrEmpty(line)) return false;
             if (line.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0) return false;
             if (line.IndexOf("cancelled", StringComparison.OrdinalIgnoreCase) >= 0) return false;
-            return line.Contains("Printed ") && line.Contains(" on A3");
+            return line.Contains("Printed ") && PrintTemplate.Papers.Any(p => line.Contains(" on " + p.Name));
         }
 
         public static JObject Guide()

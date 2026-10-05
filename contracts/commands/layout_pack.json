@@ -2,15 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "layout_pack.json",
   "title": "LayoutPack Command",
-  "description": "Create A3 landscape Layout pages. Each page has one parallel Detail of the greyscale HiddenLineDrawing on S-DRAW and a title block at the bottom-right. The plan drawing is a cut 1200 mm above the floor.",
+  "description": "Create landscape Layout pages on A4, A3, A2 or A1 (A3 by default). Each page has one parallel Detail of the greyscale HiddenLineDrawing on S-DRAW and a title block at the bottom-right. The plan drawing is a cut 1200 mm above the floor.",
   "type": "object",
   "properties": {
     "paper": {
       "type": "string",
       "enum": [
-        "A3"
+        "A4",
+        "A3",
+        "A2",
+        "A1"
       ],
-      "default": "A3"
+      "description": "Landscape paper for the whole set. Omit to keep the paper kept on the file (A3 when none). A named paper is kept for the next Print."
     },
     "views": {
       "type": "array",

@@ -325,7 +325,7 @@ public partial class RhinoMCPFunctions
             RhinoApp.WriteLine("Forsk " + view + ": " + (drawn.Error ?? "nothing drawn"));
             return null;
         }
-        var page = doc.Views.AddPageView(spec.PageName, A3WidthMm, A3HeightMm);
+        var page = doc.Views.AddPageView(spec.PageName, SheetWidthMm, SheetHeightMm);
         if (page == null)
             throw new InvalidOperationException(LayoutDetailFailedMessage);
         page.SetPageAsActive();

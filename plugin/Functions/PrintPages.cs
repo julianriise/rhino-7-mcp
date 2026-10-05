@@ -25,6 +25,7 @@ public partial class RhinoMCPFunctions
         {
             doc.Strings.Delete(SheetSet.MetaSection, SheetSet.MetaEntry);
             doc.Strings.Delete(LayoutMetaSection, PrintScaleEntry);
+            doc.Strings.Delete(LayoutMetaSection, PrintTemplate.PaperKey);
             set = PrintSet(doc);
         }
         else
@@ -39,6 +40,7 @@ public partial class RhinoMCPFunctions
             var scale = parameters?["scale"];
             if (scale != null && scale.Type != JTokenType.Null)
                 StoreAskedScale(doc, scale.ToObject<int>());
+            SheetPaper(doc, parameters?["paper"]?.ToString());
         }
         var sheets = new JArray();
         var ids = set.Select(s => s.Id).ToList();

@@ -210,6 +210,7 @@ namespace RhinoMCPPlugin.Forsk
             ["pdf.page.more"] = "Showing the first {n} pages.",
             ["word.done"] = "Done",
             ["word.save"] = "Save",
+            ["print.pages.paper"] = "Paper",
             ["meta.logo.choose"] = "Choose logo",
             ["meta.logo.change"] = "Change logo",
             ["meta.logo.remove"] = "Remove logo",

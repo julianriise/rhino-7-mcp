@@ -274,7 +274,7 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         var card = ForskCards.For("print.pages", facts)!;
         Assert.Equal("print.pages", card.Kind);
         Assert.Equal("model", card.Depends);
-        Assert.Equal(new[] { "scale", "front", "plan", "north", "east", "south", "west", "section_a", "schedules", "takeoff" }, card.Fields!.Select(f => f.Key));
+        Assert.Equal(new[] { "scale", "paper", "front", "plan", "north", "east", "south", "west", "section_a", "schedules", "takeoff" }, card.Fields!.Select(f => f.Key));
         var scale = card.Fields![0];
         Assert.Equal("Scale", scale.Label);
         Assert.Equal("1:200", scale.Value);
@@ -282,13 +282,18 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Contains("1:125", scale.Options!);
         Assert.Contains("1:1000", scale.Options!);
         Assert.False(scale.Check || scale.Order);
+        var paper = card.Fields![1];
+        Assert.Equal("Paper", paper.Label);
+        Assert.Equal("A3", paper.Value);
+        Assert.Equal(new[] { "A4", "A3", "A2", "A1" }, paper.Options!);
+        Assert.False(paper.Check || paper.Order);
         // Quantities is on the card, unticked.
         Assert.Equal("A-00-050 Quantities", card.Fields!.Last().Label);
         Assert.Equal("0", card.Fields!.Last().Value);
-        Assert.All(card.Fields!.Skip(1), f => Assert.True(f.Check && f.Order));
-        Assert.Equal("A-40-001 North elevation", card.Fields![3].Label);
-        Assert.Equal("0", card.Fields![3].Value);
-        Assert.Equal("1", card.Fields![2].Value);
+        Assert.All(card.Fields!.Skip(2), f => Assert.True(f.Check && f.Order));
+        Assert.Equal("A-40-001 North elevation", card.Fields![4].Label);
+        Assert.Equal("0", card.Fields![4].Value);
+        Assert.Equal("1", card.Fields![3].Value);
         Assert.Equal("1:200 · A3", card.Note);
         // Print is filled (the first pill); then Save and Reset.
         Assert.Equal(new[] { "print", "save", "reset", "export", "export_ifc", "export_csv" }, card.Pills.Select(p => p.Id));
@@ -330,6 +335,7 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         values["north"] = "0";
         values["takeoff"] = "0";
         values["scale"] = "1:75";
+        values["paper"] = "A2";
         // The page moved Section A–A above the plan with ↑ and posts the rows in their new order.
         var order = new JArray("front", "section_a", "plan", "north", "east", "south", "west", "section_b", "schedules", "takeoff");
         var args = ForskCards.PagesArgs("save", values, order);
@@ -337,6 +343,8 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Equal(new[] { "north", "takeoff" }, args["off"]!.Select(t => t.ToString()));
         Assert.DoesNotContain(args["on"]!.Select(t => t.ToString()), id => id == "scale");
         Assert.Equal(75, args["scale"]!.Value<int>());
+        Assert.Equal("A2", args["paper"]!.ToString());
+        Assert.DoesNotContain(args["on"]!.Select(t => t.ToString()), id => id == "paper");
         Assert.Equal(0, ForskCards.PagesArgs("save", new JObject { ["scale"] = "Fit", ["plan"] = "1" }, null)["scale"]!.Value<int>());
         var applied = SheetSet.Apply(ForskCards.Set(facts), args["on"]!.Select(t => t.ToString()).ToList(),
             args["off"]!.Select(t => t.ToString()).ToList(), args["order"]!.Select(t => t.ToString()).ToList(), out _);

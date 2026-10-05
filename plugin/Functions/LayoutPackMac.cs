@@ -29,8 +29,8 @@ public partial class RhinoMCPFunctions
     private JObject ExportMacPreviewPdf(RhinoDoc doc, List<RhinoPageView> pages, string full)
     {
         int dpi = (int)Math.Round(PdfDpi);
-        int dotsW = (int)Math.Round(A3WidthMm / 25.4 * dpi);
-        int dotsH = (int)Math.Round(A3HeightMm / 25.4 * dpi);
+        int dotsW = (int)Math.Round(SheetWidthMm / 25.4 * dpi);
+        int dotsH = (int)Math.Round(SheetHeightMm / 25.4 * dpi);
         var names = new JArray();
         var notes = new List<string>();
         var blanks = new List<string>();

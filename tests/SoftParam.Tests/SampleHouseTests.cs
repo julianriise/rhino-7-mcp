@@ -123,8 +123,8 @@ public class SampleHouseTests
         Assert.Equal(PrintTemplate.EnglishA3, PrintTemplate.Resolve(""));
         Assert.Equal(PrintTemplate.EnglishA3, PrintTemplate.Resolve("nope"));
         Assert.Equal(PrintTemplate.EnglishA3, PrintTemplate.Resolve(PrintTemplate.EnglishA3));
-        Assert.Equal("A3", PrintTemplate.Paper(null));
-        Assert.Equal("A3", PrintTemplate.Paper("nope"));
+        Assert.Equal("A3", PrintTemplate.Stored(null).Name);
+        Assert.Equal("A3", PrintTemplate.Stored("nope").Name);
         Assert.Equal(420, PrintTemplate.WidthMm);
         Assert.Equal(297, PrintTemplate.HeightMm);
         Assert.Equal("Sheet no.", TitleBlock.Cells(new TitleBlock.Fields { Number = "A-20-001" }).Single(cell => cell.Key == "number").Caption);

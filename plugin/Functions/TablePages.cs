@@ -33,7 +33,7 @@ public partial class RhinoMCPFunctions
     private JObject AddTablePage(RhinoDoc doc, string view, int number, int level)
     {
         var name = TablePageName(view);
-        var page = doc.Views.AddPageView(name, A3WidthMm, A3HeightMm);
+        var page = doc.Views.AddPageView(name, SheetWidthMm, SheetHeightMm);
         if (page == null)
             throw new InvalidOperationException(LayoutDetailFailedMessage);
         page.SetPageAsActive();

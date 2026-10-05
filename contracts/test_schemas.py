@@ -1470,7 +1470,7 @@ def test_invalid_examples():
         ("commands/print_profile.json", {"name": "neon"}, "print_profile name is a shipped profile"),
         ("commands/print_profile.json", {"bogus": 1}, "print_profile unknown field"),
         ("commands/section_pick.json", {"letter": "A"}, "section_pick takes no fields"),
-        ("commands/layout_pack.json", {"paper": "A1"}, "layout_pack paper not A3"),
+        ("commands/layout_pack.json", {"paper": "A5"}, "layout_pack paper not A4 to A1"),
         ("commands/layout_pack.json", {"scale": 0}, "layout_pack scale 0"),
         ("commands/layout_pack.json", {"bogus": 1}, "layout_pack unknown field"),
         ("commands/layout_pack.json", {"schedules": "sheet"}, "layout_pack schedules is a view, not a field"),

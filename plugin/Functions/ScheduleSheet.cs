@@ -254,7 +254,7 @@ public partial class RhinoMCPFunctions
         var layer = EnsureLayer(doc, "A-ANNO", Color.FromArgb(200, 160, 40));
         var pageId = page.MainViewport.Id;
         const double left = LayoutMarginMm;
-        const double top = A3HeightMm - LayoutMarginMm;
+        var top = SheetHeightMm - LayoutMarginMm;
         // F5.4: the rules are the profile's thin pen, the cells its text ink.
         var profile = ReadPrintProfile(doc);
         PrintProfiles.Active = profile;
@@ -415,7 +415,7 @@ public partial class RhinoMCPFunctions
     private static List<Schedules.Block> SheetBlocks(List<Schedules.Table> tables, out string why)
     {
         why = null;
-        var blocks = Schedules.Flow(tables, A3WidthMm - 2.0 * LayoutMarginMm, ScheduleAreaHeight);
+        var blocks = Schedules.Flow(tables, SheetWidthMm - 2.0 * LayoutMarginMm, ScheduleAreaHeight);
         if (blocks == null)
             why = "A schedule is wider than an A3 sheet, or the sheet cannot hold one of its lines.";
         return blocks;
@@ -512,7 +512,7 @@ public partial class RhinoMCPFunctions
     /// <summary>Same band as the detail: top margin down to the footer reserve.</summary>
     private static double ScheduleAreaHeight
     {
-        get { return A3HeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm; }
+        get { return SheetHeightMm - LayoutMarginMm - FooterReserveMm - LayoutMarginMm; }
     }
 
     private static string ScheduleCounts(List<Schedules.Table> tables)

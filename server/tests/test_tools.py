@@ -3838,8 +3838,8 @@ class TestLayoutPackTool:
         assert result["success"] is True
         assert result["message"].startswith("Nothing to lay out")
         params = mock_conn.send_command.call_args[0][1]
-        assert params["paper"] == "A3"
-        # No scale: the plugin fits the plan.
+        # No paper: the plugin keeps the file's paper (A3 when none). No scale: it fits the plan.
+        assert "paper" not in params
         assert "scale" not in params
         assert "views" not in params
 
@@ -3848,7 +3848,7 @@ class TestLayoutPackTool:
         from rhinomcp.tools.layout_pack import layout_pack
 
         assert layout_pack(ctx=None, views=["section"])["success"] is False
-        assert layout_pack(ctx=None, paper="A1")["success"] is False
+        assert layout_pack(ctx=None, paper="A5")["success"] is False
         assert layout_pack(ctx=None, scale=0)["success"] is False
         mock_get_conn.assert_not_called()
 
