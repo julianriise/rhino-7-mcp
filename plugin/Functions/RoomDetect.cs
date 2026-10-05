@@ -409,6 +409,10 @@ public static class RoomDetect
         /// <summary>Where the tag goes.</summary>
         public Pt At;
         public bool Detected;
+        /// <summary>forsk:room_type. Unassigned when nothing was stored or guessed.</summary>
+        public string RoomType;
+        /// <summary>label, guessed, user, or empty when unassigned and unset.</summary>
+        public string RoomTypeSource;
     }
 
     /// <summary>

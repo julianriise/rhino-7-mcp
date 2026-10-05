@@ -21,7 +21,8 @@ public static class TakeoffCsv
     public static readonly IReadOnlyList<string> Columns = new[]
     {
         "Kind", "Id", "Name", "Type", "Level", "Wall", "Length (m)", "Perimeter (m)", "Area (m²)",
-        "Height (mm)", "Thickness (mm)", "Width (mm)", "Sill (mm)", "Risers", "Riser (mm)", "Going (mm)"
+        "Height (mm)", "Thickness (mm)", "Width (mm)", "Sill (mm)", "Risers", "Riser (mm)", "Going (mm)",
+        "room_type"
     };
 
     /// <summary>One stair as built, with its forsk:id.</summary>
@@ -62,6 +63,7 @@ public static class TakeoffCsv
             Set(row, "Level", room.Level);
             Set(row, "Area (m²)", Two(room.AreaMm2 / 1e6));
             if (room.PerimeterMm > 0) Set(row, "Perimeter (m)", Two(room.PerimeterMm / 1000.0));
+            Set(row, "room_type", RoomTypes.Read(room.RoomType));
             Line(row);
         }
         foreach (var run in runs ?? new Takeoff.Run[0])

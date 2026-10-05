@@ -583,7 +583,8 @@ namespace RhinoMCPPlugin.Forsk
             + "The window prints that summary, and the room list on the card under it. "
             + "Do not repeat the net total, the floors, or the rooms. "
             + "No coordinates, no ids. Do not invent a figure. "
-            + "No rooms: the summary offers rooms_detect, which finds them from the walls.";
+            + "No rooms: the summary offers rooms_detect, which finds them from the walls. "
+            + "A typed room is grouped under its English type, such as Living. Unassigned keeps the name.";
 
         /// <summary>A successful area_stats is the whole answer. The model does not add a second line.</summary>
         public static bool Answered(string tool, string status)
@@ -748,6 +749,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Name;
         /// <summary>A room's area, forsk:area, in mm².</summary>
         public string Area;
+        /// <summary>forsk:room_type when stored. Empty on an old file, which reads as unassigned.</summary>
+        public string RoomType;
         /// <summary>A generated wall whose forsk:path reads as wall loops: the join graph can see it.</summary>
         public bool PathReads;
         /// <summary>How many straight runs a generated wall's path holds (WallJoins.Runs); 0 when it does not read.</summary>

@@ -137,7 +137,8 @@ namespace RhinoMCPPlugin.Forsk
                 case "room":
                     var room = string.IsNullOrWhiteSpace(row.Name) ? Text("pick.room", nb) : row.Name.Trim();
                     var area = Mm(row.Area);
-                    return area.HasValue && area.Value > 0 ? room + " · " + SquareMetres(area.Value, nb) : room;
+                    var line = area.HasValue && area.Value > 0 ? room + " · " + SquareMetres(area.Value, nb) : room;
+                    return line + global::RhinoMCPPlugin.Functions.RoomTypes.LineSuffix(row.RoomType);
                 case "door":
                 case "window":
                 case "opening":

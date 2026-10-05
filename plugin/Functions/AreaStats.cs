@@ -70,8 +70,10 @@ public static class AreaStats
         public double AreaMm2;
         /// <summary>The room outline's perimeter in mm, 0 when not known.</summary>
         public double PerimeterMm;
-        /// <summary>When set, the group. Otherwise the name map.</summary>
+        /// <summary>When set, the group. Otherwise a stored room type, else the name map.</summary>
         public string Use;
+        /// <summary>forsk:room_type. Missing reads as unassigned and does not change the name map.</summary>
+        public string RoomType;
     }
 
     public sealed class RoomLine
@@ -80,6 +82,8 @@ public static class AreaStats
         public string Name;
         public string Level;
         public string Use;
+        /// <summary>The stored key, or unassigned when the file has none.</summary>
+        public string RoomType;
         public double AreaMm2;
         public double PerimeterMm;
     }
@@ -160,12 +164,16 @@ public static class AreaStats
             foreach (var room in rooms)
             {
                 if (room == null) continue;
+                var type = RoomTypes.Read(room.RoomType);
                 var line = new RoomLine
                 {
                     Id = room.Id ?? "",
                     Name = string.IsNullOrWhiteSpace(room.Name) ? RoomDetect.UnnamedRoom(norwegian) : room.Name.Trim(),
                     Level = string.IsNullOrWhiteSpace(room.Level) ? "0" : room.Level.Trim(),
-                    Use = string.IsNullOrWhiteSpace(room.Use) ? UseOf(room.Name) : room.Use.Trim(),
+                    Use = string.IsNullOrWhiteSpace(room.Use)
+                        ? (type == RoomTypes.Unassigned ? UseOf(room.Name) : RoomTypes.English(type))
+                        : room.Use.Trim(),
+                    RoomType = type,
                     AreaMm2 = room.AreaMm2,
                     PerimeterMm = room.PerimeterMm
                 };
@@ -472,6 +480,7 @@ public static class AreaStats
                     ["name"] = room.Name,
                     ["level"] = FloorName(room.Level),
                     ["use"] = room.Use,
+                    ["room_type"] = room.RoomType ?? RoomTypes.Unassigned,
                     ["area"] = OpeningTypes.AreaText(room.AreaMm2)
                 });
         }

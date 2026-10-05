@@ -56,6 +56,8 @@ public static class Schedules
         public string Id;
         public string Name;
         public double AreaMm2;
+        /// <summary>forsk:room_type. Missing prints Unassigned.</summary>
+        public string RoomType;
     }
 
     public sealed class Table
@@ -440,8 +442,8 @@ public static class Schedules
         {
             Kind = "room",
             Title = SheetLang.Pick(norwegian, "Room schedule", "Romliste"),
-            Heads = norwegian ? new[] { "Rom", "Areal" } : new[] { "Room", "Area" },
-            Right = new[] { false, true }
+            Heads = norwegian ? new[] { "Rom", "Areal", "Type" } : new[] { "Room", "Area", "Type" },
+            Right = new[] { false, true, false }
         };
         var sorted = new List<Room>(rooms);
         sorted.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
@@ -449,7 +451,7 @@ public static class Schedules
         foreach (var room in sorted)
         {
             table.Ids.Add(room.Id);
-            table.Rows.Add(new[] { room.Name, OpeningTypes.AreaText(room.AreaMm2, norwegian) });
+            table.Rows.Add(new[] { room.Name, OpeningTypes.AreaText(room.AreaMm2, norwegian), RoomTypes.English(room.RoomType) });
             total += room.AreaMm2;
         }
         if (sorted.Count > 0)
