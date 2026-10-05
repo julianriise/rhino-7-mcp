@@ -41,11 +41,14 @@ public partial class RhinoMCPFunctions
         var sheets = new PdfSheets();
         firstSheet = null;
         lastSheet = null;
+        var logo = OfficeLogo.Decode(doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.Key));
         foreach (var page in pages)
         {
             var misc = new HashSet<string>(StringComparer.Ordinal);
             var pieces = FlattenPage(doc, page, misc);
-            sheets.Pages.Add(PdfPage(doc, page, pieces, sheets));
+            var pdfPage = PdfPage(doc, page, pieces, sheets);
+            if (logo != null) pdfPage.Images.AddRange(LogoImages(doc, page, logo));
+            sheets.Pages.Add(pdfPage);
             sheets.Names.Add(page.PageName ?? "");
             var number = SheetNumberOf(doc, page);
             if (!string.IsNullOrEmpty(number))
@@ -55,6 +58,27 @@ public partial class RhinoMCPFunctions
             }
         }
         return sheets;
+    }
+
+    /// <summary>The logo on this page, at the paper box its title block stamped on it.</summary>
+    private static List<SheetPdf.Image> LogoImages(RhinoDoc doc, RhinoPageView page, OfficeLogo.Picture logo)
+    {
+        var images = new List<SheetPdf.Image>();
+        var settings = new ObjectEnumeratorSettings
+        {
+            NormalObjects = true,
+            LockedObjects = true,
+            HiddenObjects = false,
+            ViewportFilter = page.MainViewport
+        };
+        foreach (var obj in doc.Objects.GetObjectList(settings))
+        {
+            if (obj?.Attributes == null || obj.Attributes.Space != ActiveSpace.PageSpace) continue;
+            if (obj.Attributes.GetUserString("forsk:role") != OfficeLogo.Role) continue;
+            if (OfficeLogo.TryParseBox(obj.Attributes.GetUserString(OfficeLogo.BoxKey), out var x0, out var y0, out var x1, out var y1))
+                images.Add(new SheetPdf.Image { Picture = logo, X0 = x0, Y0 = y0, X1 = x1, Y1 = y1 });
+        }
+        return images;
     }
 
     /// <summary>One flat page as a SheetPdf page in paper mm.</summary>

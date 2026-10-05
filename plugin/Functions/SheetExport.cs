@@ -175,6 +175,8 @@ public partial class RhinoMCPFunctions
         {
             if (obj == null || obj is DetailViewObject) continue;
             if (obj.Attributes.Space != ActiveSpace.PageSpace) continue;
+            // The logo is a picture: the PDF draws it from the stored file, the DWG leaves it out.
+            if (obj.Attributes.GetUserString("forsk:role") == OfficeLogo.Role) continue;
             AddFlat(doc, obj, toMm, pieces, misc, 0, 0);
         }
 

@@ -136,7 +136,22 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Equal("2020-01-01", card.Fields![5].Value);
         Assert.Null(card.Note);
         Assert.Null(card.Data);
-        Assert.Equal(new[] { "save", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "save", "logo", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("Choose logo", card.Pills[1].Label);
+    }
+
+    /// <summary>A file with a logo: the card names it, offers Change logo and Remove logo.</summary>
+    [Fact]
+    public void TheProjectInfoCard_NamesTheLogo_AndOffersChangeAndRemove()
+    {
+        var facts = House(new Dictionary<string, string> { ["project"] = "Holmen", [OfficeLogo.NameKey] = "office.png" });
+        var card = ForskCards.For("meta.title", facts)!;
+        Assert.Equal(new[] { "save", "logo", "logo_remove", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("Change logo", card.Pills[1].Label);
+        Assert.Equal("Remove logo", card.Pills[2].Label);
+        Assert.Equal("Logo: office.png", card.Note);
+        // The ask-once card before a Print keeps its own pills.
+        Assert.DoesNotContain(ForskCards.AskInfoFirst(House(new()), "file.print")!.Pills, p => p.Id == "logo");
     }
 
     static FileFacts House(Dictionary<string, string> meta, string firm = null) =>

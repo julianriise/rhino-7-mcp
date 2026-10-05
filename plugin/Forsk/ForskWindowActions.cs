@@ -410,7 +410,22 @@ namespace RhinoMCPPlugin.Forsk
                         field["value"] = typed;
                         meta[key] = typed.Trim();
                     }
-                    var save = pill.Id == "save";
+                    // The logo pills save what was typed as well, then choose or remove the logo.
+                    var logoPill = pill.Id == "logo" || pill.Id == "logo_remove";
+                    if (pill.Id == "logo")
+                    {
+                        var logoPath = PickLogo();
+                        if (logoPath == null)
+                        {
+                            Models.Persist(thread);
+                            Render();
+                            break;
+                        }
+                        meta["logo_path"] = logoPath;
+                    }
+                    else if (pill.Id == "logo_remove")
+                        meta["logo"] = "";
+                    var save = pill.Id == "save" || logoPill;
                     if (save)
                     {
                         // Today shown in the field is the print day, not a date the user typed.
@@ -421,7 +436,7 @@ namespace RhinoMCPPlugin.Forsk
                     var pending = card["data"]?["pending"]?.ToString();
                     if (string.IsNullOrEmpty(pending))
                     {
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta, quiet: true), userText: receipt ?? pill.Label, noteUser: receipt == null);
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta, quiet: !logoPill), userText: receipt ?? pill.Label, noteUser: receipt == null);
                         break;
                     }
                     // Asked once: either pill, then the action the card stood in front of.
@@ -1035,6 +1050,14 @@ namespace RhinoMCPPlugin.Forsk
         /// The import dialog, parented to this window. A PDF with more than one
         /// page asks which on a card in the thread; then plan_import or dxf_import.
         /// </summary>
+        /// <summary>The logo's file dialog, parented to this window. Null when cancelled.</summary>
+        string PickLogo()
+        {
+            var dialog = new Eto.Forms.OpenFileDialog { Title = "Office logo for the title block: a PNG or JPEG" };
+            dialog.Filters.Add(new Eto.Forms.FileFilter("PNG or JPEG", ".png", ".jpg", ".jpeg"));
+            return dialog.ShowDialog(this) == Eto.Forms.DialogResult.Ok ? dialog.FileName : null;
+        }
+
         void Import(DocThread thread, ForskAction action)
         {
             var path = ForskPlanImport.PickFile(this);

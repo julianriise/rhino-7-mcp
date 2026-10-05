@@ -63,6 +63,13 @@ public static class SheetPdf
         public double Grey;
     }
 
+    /// <summary>A picture (the office logo) stretched over a paper box in mm.</summary>
+    public sealed class Image
+    {
+        public OfficeLogo.Picture Picture;
+        public double X0, Y0, X1, Y1;
+    }
+
     public sealed class Page
     {
         public double WidthMm = 420;
@@ -70,6 +77,8 @@ public static class SheetPdf
         public List<Stroke> Strokes = new List<Stroke>();
         public List<Fill> Fills = new List<Fill>();
         public List<Text> Texts = new List<Text>();
+        /// <summary>Drawn over the fills and strokes, under the text, as /Im0, /Im1, … of the page.</summary>
+        public List<Image> Images = new List<Image>();
     }
 
     public sealed class Result
@@ -93,15 +102,35 @@ public static class SheetPdf
         objects.Add(Ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
         objects.Add(Ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"));
         objects.Add(Ascii(InfoDictionary(info ?? new ProjectInfo.Pdf(), created)));
+        // Each picture once, after the pages: the logo on every sheet is one image object.
+        var pictures = new List<OfficeLogo.Picture>();
+        foreach (var page in pages)
+            foreach (var image in page?.Images ?? new List<Image>())
+                if (image?.Picture != null && !pictures.Contains(image.Picture)) pictures.Add(image.Picture);
+        var pictureObjects = new List<byte[]>();
+        var pictureRef = new Dictionary<OfficeLogo.Picture, int>();
+        var firstPicture = 6 + 2 * pages.Count;
+        foreach (var picture in pictures)
+        {
+            pictureRef[picture] = firstPicture + pictureObjects.Count;
+            pictureObjects.AddRange(ImageObjects(picture, firstPicture + pictureObjects.Count));
+        }
         for (var i = 0; i < pages.Count; i++)
         {
             var page = pages[i] ?? new Page();
             var content = Deflate(Content(page, ref result.Unmapped));
+            var xobjects = "";
+            for (var k = 0; k < page.Images.Count; k++)
+                if (page.Images[k]?.Picture != null)
+                    xobjects += " /Im" + k.ToString(CultureInfo.InvariantCulture) + " "
+                        + pictureRef[page.Images[k].Picture].ToString(CultureInfo.InvariantCulture) + " 0 R";
             objects.Add(Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + Num(page.WidthMm * PtPerMm) + " " + Num(page.HeightMm * PtPerMm)
-                + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " + (7 + 2 * i).ToString(CultureInfo.InvariantCulture) + " 0 R >>"));
+                + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>" + (xobjects.Length > 0 ? " /XObject <<" + xobjects + " >>" : "")
+                + " >> /Contents " + (7 + 2 * i).ToString(CultureInfo.InvariantCulture) + " 0 R >>"));
             objects.Add(Concat(Ascii("<< /Length " + content.Length.ToString(CultureInfo.InvariantCulture) + " /Filter /FlateDecode >>\nstream\n"),
                 content, Ascii("\nendstream")));
         }
+        objects.AddRange(pictureObjects);
 
         using (var output = new MemoryStream())
         {
@@ -169,6 +198,14 @@ public static class SheetPdf
             Op(Pt2(stroke.Points[0]) + " m\n");
             for (var i = 1; i < stroke.Points.Count; i++) Op(Pt2(stroke.Points[i]) + " l\n");
             Op(stroke.Closed ? "s\n" : "S\n");
+        }
+
+        for (var k = 0; k < page.Images.Count; k++)
+        {
+            var image = page.Images[k];
+            if (image?.Picture == null || image.X1 <= image.X0 || image.Y1 <= image.Y0) continue;
+            Op("q " + Num((image.X1 - image.X0) * PtPerMm) + " 0 0 " + Num((image.Y1 - image.Y0) * PtPerMm) + " "
+                + Num(image.X0 * PtPerMm) + " " + Num(image.Y0 * PtPerMm) + " cm /Im" + k.ToString(CultureInfo.InvariantCulture) + " Do Q\n");
         }
 
         foreach (var text in page.Texts)
@@ -274,6 +311,30 @@ public static class SheetPdf
     }
 
     /// <summary>zlib: a header, the raw deflate, and the Adler-32 of the input.</summary>
+    /// <summary>
+    /// A picture's image XObject, numbered at, and for a PNG with transparency its
+    /// soft mask right after it. A JPEG goes in as it is (DCTDecode).
+    /// </summary>
+    static List<byte[]> ImageObjects(OfficeLogo.Picture picture, int at)
+    {
+        var size = "/Width " + picture.Width.ToString(CultureInfo.InvariantCulture)
+            + " /Height " + picture.Height.ToString(CultureInfo.InvariantCulture) + " /BitsPerComponent 8";
+        byte[] Stream(string dict, byte[] data) => Concat(
+            Ascii("<< " + dict + " /Length " + data.Length.ToString(CultureInfo.InvariantCulture) + " >>\nstream\n"), data, Ascii("\nendstream"));
+        var list = new List<byte[]>();
+        if (picture.Jpeg != null)
+        {
+            var space = picture.JpegComponents == 1 ? "/DeviceGray" : "/DeviceRGB";
+            list.Add(Stream("/Type /XObject /Subtype /Image " + size + " /ColorSpace " + space + " /Filter /DCTDecode", picture.Jpeg));
+            return list;
+        }
+        var mask = picture.Alpha != null ? " /SMask " + (at + 1).ToString(CultureInfo.InvariantCulture) + " 0 R" : "";
+        list.Add(Stream("/Type /XObject /Subtype /Image " + size + " /ColorSpace /DeviceRGB /Filter /FlateDecode" + mask, Deflate(picture.Rgb)));
+        if (picture.Alpha != null)
+            list.Add(Stream("/Type /XObject /Subtype /Image " + size + " /ColorSpace /DeviceGray /Filter /FlateDecode", Deflate(picture.Alpha)));
+        return list;
+    }
+
     public static byte[] Deflate(byte[] data)
     {
         using (var output = new MemoryStream())

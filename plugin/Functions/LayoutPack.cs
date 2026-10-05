@@ -150,7 +150,38 @@ public partial class RhinoMCPFunctions
         foreach (var key in ProjectInfo.Keys)
             MaybeStoreMeta(doc, parameters, key);
         MaybeStoreMeta(doc, parameters, "scale_label");
-        return ProjectMetaRecord(doc);
+        var logoMessage = StoreLogo(doc, parameters);
+        var record = ProjectMetaRecord(doc);
+        if (logoMessage != null) record["message"] = logoMessage;
+        return record;
+    }
+
+    /// <summary>
+    /// logo_path: a PNG or JPEG read and kept in the file; logo "": the logo removed.
+    /// Null when neither was asked. A file that cannot be read stores nothing and says why.
+    /// </summary>
+    private static string StoreLogo(RhinoDoc doc, JObject parameters)
+    {
+        var path = parameters?["logo_path"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            byte[] bytes;
+            try { bytes = System.IO.File.ReadAllBytes(path.Trim()); }
+            catch (Exception) { throw new InvalidOperationException(OfficeLogo.Unreadable); }
+            if (OfficeLogo.Read(bytes, out var error) == null)
+                throw new InvalidOperationException(error);
+            var name = System.IO.Path.GetFileName(path.Trim());
+            doc.Strings.SetString(ProjectInfo.Section, OfficeLogo.Key, OfficeLogo.Encode(bytes));
+            doc.Strings.SetString(ProjectInfo.Section, OfficeLogo.NameKey, name);
+            return "Logo saved · " + name + ". It prints at the right end of every title block.";
+        }
+        if (parameters?["logo"] != null && string.IsNullOrWhiteSpace(parameters["logo"].ToString()))
+        {
+            doc.Strings.Delete(ProjectInfo.Section, OfficeLogo.Key);
+            doc.Strings.Delete(ProjectInfo.Section, OfficeLogo.NameKey);
+            return "Logo removed.";
+        }
+        return null;
     }
 
     [McpCommand("layout_pack", ModelView = true)]

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "set_project_meta.json",
   "title": "SetProjectMeta Command",
-  "description": "Store the project info every title block, the PDF metadata, the takeoff CSV header and the IFC read: project, project number, client, address, architect, date and revision, plus the stored scale label. Omitted keys stay as they are. An empty string clears that key.",
+  "description": "Store the project info every title block, the PDF metadata, the takeoff CSV header and the IFC read: project, project number, client, address, architect, date and revision, plus the stored scale label and the office logo. Omitted keys stay as they are. An empty string clears that key.",
   "type": "object",
   "properties": {
     "project": { "type": "string", "description": "Project / job name." },
@@ -12,7 +12,9 @@
     "architect": { "type": "string", "description": "Architect or firm." },
     "date": { "type": "string", "description": "The date the title blocks print. Unset prints the day of the Print." },
     "revision": { "type": "string", "description": "Revision letter or number, such as B. Unset drops the Rev. cell." },
-    "scale_label": { "type": "string", "default": "1:100", "description": "Stored scale text. The detail scale on a layout still comes from layout_pack." }
+    "scale_label": { "type": "string", "default": "1:100", "description": "Stored scale text. The detail scale on a layout still comes from layout_pack." },
+    "logo_path": { "type": "string", "description": "A PNG or JPEG file: the office logo, kept in the 3dm and printed at the right end of every title block. A file that cannot be read stores nothing and says why." },
+    "logo": { "type": "string", "enum": [""], "description": "An empty string removes the logo." }
   },
   "additionalProperties": false
 }

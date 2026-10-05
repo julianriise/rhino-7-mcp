@@ -12,7 +12,9 @@
     "architect": { "type": "string" },
     "date": { "type": "string" },
     "revision": { "type": "string" },
-    "scale_label": { "type": "string" }
+    "scale_label": { "type": "string" },
+    "logo": { "type": "string", "description": "The logo's file name, or empty when there is none." },
+    "message": { "type": "string", "description": "Only when the logo changed: what was saved or removed." }
   },
   "required": ["project", "project_no", "client", "address", "architect", "date", "revision", "scale_label"],
   "additionalProperties": false

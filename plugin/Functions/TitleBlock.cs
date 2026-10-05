@@ -164,6 +164,40 @@ public static class TitleBlock
         return widths.Select(w => total * w / sum).ToArray();
     }
 
+    /// <summary>The logo cell's widest, so a long wordmark leaves the fields their room.</summary>
+    public const double LogoMaxMm = 60.0;
+    /// <summary>The logo's least width: a tall mark still gets a readable cell.</summary>
+    public const double LogoMinMm = 8.0;
+
+    /// <summary>The logo's cell at the right end of the band, and the picture inside it, in paper mm.</summary>
+    public sealed class LogoBox
+    {
+        /// <summary>The cell's width, padding included: the fields share the rest of the block.</summary>
+        public double CellMm;
+        public double X0, Y0, X1, Y1;
+    }
+
+    /// <summary>
+    /// The logo cell for a band from x1 - cell to x1 and y0 to y1: the picture
+    /// as tall as the band less the padding, as wide as its aspect allows up to
+    /// LogoMaxMm, and centred in the cell when the width caps it. Null for no logo.
+    /// </summary>
+    public static LogoBox Logo(double aspect, double x1, double y0, double y1)
+    {
+        if (double.IsNaN(aspect) || aspect <= 0 || y1 <= y0) return null;
+        var h = Math.Max(1, y1 - y0 - 2 * PadMm);
+        var w = h * aspect;
+        if (w > LogoMaxMm)
+        {
+            w = LogoMaxMm;
+            h = w / aspect;
+        }
+        var cell = Math.Max(LogoMinMm, w) + 2 * PadMm;
+        var cx = x1 - cell / 2;
+        var cy = (y0 + y1) / 2;
+        return new LogoBox { CellMm = cell, X0 = cx - w / 2, Y0 = cy - h / 2, X1 = cx + w / 2, Y1 = cy + h / 2 };
+    }
+
     /// <summary>The north arrow is on the plans.</summary>
     public static bool NorthArrow(string sheetId)
     {

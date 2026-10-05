@@ -272,6 +272,15 @@ namespace RhinoMCPPlugin.Forsk
             if (pending == null)
             {
                 card.Pills.Add(new CardPill("save", ForskText.Get("word.save")));
+                // The office logo prints at the right end of every title block.
+                string logo = null;
+                f?.Meta?.TryGetValue(OfficeLogo.NameKey, out logo);
+                card.Pills.Add(new CardPill("logo", ForskText.Get(string.IsNullOrEmpty(logo) ? "meta.logo.choose" : "meta.logo.change")));
+                if (!string.IsNullOrEmpty(logo))
+                {
+                    card.Pills.Add(new CardPill("logo_remove", ForskText.Get("meta.logo.remove")));
+                    card.Note = "Logo: " + logo;
+                }
             }
             else
             {

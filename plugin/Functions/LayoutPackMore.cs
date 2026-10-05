@@ -254,6 +254,7 @@ public partial class RhinoMCPFunctions
             record[key] = info[key];
         record[ProjectInfo.Date] = ProjectInfo.SheetDate(info, DateTime.Now);
         record["scale_label"] = MetaOr(doc, "scale_label", "1:100");
+        record["logo"] = doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.NameKey) ?? "";
         return record;
     }
 
@@ -856,14 +857,19 @@ public partial class RhinoMCPFunctions
         // Widths from Rhino's own layout of each text at its height, not a glyph guess.
         Func<string, double, double> measure = (text, mm) => PaperTextWidth(doc,
             OneToOneTextStyle(doc, "Forsk paper " + mm.ToString("0.0", CultureInfo.InvariantCulture), MmToPage(doc, mm)), text);
+        // The office logo, when Project info has one: its own cell at the right end, the fields share the rest.
+        var logo = OfficeLogo.Decode(doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.Key));
+        var logoBox = logo == null ? null : TitleBlock.Logo(logo.Aspect, tx1, ty0, ty1);
+        var fieldsWidth = TitleBlockWidthMm - (logoBox?.CellMm ?? 0);
+        var fx1 = tx0 + fieldsWidth;
         // One row, or Project no. and Architect in a smaller second row at the bottom of the band.
-        var rows = TitleBlock.Rows(cells, TitleBlockWidthMm, measure);
+        var rows = TitleBlock.Rows(cells, fieldsWidth, measure);
         var titleStart = ids.Count;
         var frameId = Rect(tx0, ty0, tx1, ty1, Attr("title_block"));
         var cellRows = new JArray();
         var firstBottom = rows.Count > 1 ? ty0 + TitleBlock.SecondRowMm : ty0;
         if (rows.Count > 1)
-            Line(tx0, firstBottom, tx1, firstBottom, Attr("title_block"));
+            Line(tx0, firstBottom, fx1, firstBottom, Attr("title_block"));
         for (var r = 0; r < rows.Count; r++)
         {
             var row = rows[r];
@@ -872,7 +878,7 @@ public partial class RhinoMCPFunctions
             // The first row's value sits 4 mm up a full band, 2 mm up a split one; the second row's 1.2 mm.
             var valueY = r > 0 ? rowBottom + 1.2 : rowBottom + (rows.Count > 1 ? 2.0 : 4.0);
             var captionY = rowTop - (r > 0 ? 1.2 : 2.0) - TitleBlock.CaptionMm;
-            var widths = TitleBlock.Widths(row, TitleBlockWidthMm, measure);
+            var widths = TitleBlock.Widths(row, fieldsWidth, measure);
             var cx = tx0;
             for (var i = 0; i < row.Count; i++)
             {
@@ -892,6 +898,12 @@ public partial class RhinoMCPFunctions
                 cellRows.Add(cellRow);
                 cx += widths[i];
             }
+        }
+        if (logoBox != null)
+        {
+            Line(fx1, ty0, fx1, ty1, Attr("title_block"));
+            AddLogoPicture(doc, ids, logo, logoBox, Attr(OfficeLogo.Role));
+            cellRows.Add(new JObject { ["name"] = "logo", ["width"] = Math.Round(logoBox.CellMm, 2) });
         }
         var titleBox = PaperBox(doc, new[] { frameId });
         titleBox["cells"] = cellRows;
@@ -955,6 +967,43 @@ public partial class RhinoMCPFunctions
 
         footer["free_labels"] = FreePageText(doc, page.MainViewport);
         return ids;
+    }
+
+    /// <summary>
+    /// The logo on the layout, as Rhino shows and prints the page: a picture frame
+    /// in page space with the bitmap embedded. Its paper box rides on it for the PDF,
+    /// which draws the stored file itself.
+    /// </summary>
+    private static void AddLogoPicture(RhinoDoc doc, JArray ids, OfficeLogo.Picture logo, TitleBlock.LogoBox box, ObjectAttributes attr)
+    {
+        try
+        {
+            var bytes = logo.Jpeg ?? Convert.FromBase64String(doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.Key));
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "forsk-logo-" + doc.RuntimeSerialNumber.ToString(CultureInfo.InvariantCulture) + (logo.Jpeg != null ? ".jpg" : ".png"));
+            System.IO.File.WriteAllBytes(path, bytes);
+            var plane = new Plane(new Point3d(MmToPage(doc, box.X0), MmToPage(doc, box.Y0), 0), Vector3d.XAxis, Vector3d.YAxis);
+            var id = doc.Objects.AddPictureFrame(plane, path, false,
+                MmToPage(doc, box.X1 - box.X0), MmToPage(doc, box.Y1 - box.Y0), true, true);
+            if (id == Guid.Empty) return;
+            // The frame lands in model space: its surface and textured material go to the page instead.
+            var frame = doc.Objects.FindId(id);
+            var geometry = frame?.Geometry?.Duplicate();
+            attr.SetUserString(OfficeLogo.BoxKey, OfficeLogo.FormatBox(box.X0, box.Y0, box.X1, box.Y1));
+            if (frame != null)
+            {
+                attr.MaterialIndex = frame.Attributes.MaterialIndex;
+                attr.MaterialSource = frame.Attributes.MaterialSource;
+            }
+            doc.Objects.Delete(id, true);
+            if (geometry == null) return;
+            var placed = doc.Objects.Add(geometry, attr);
+            if (placed != Guid.Empty) ids.Add(placed.ToString());
+        }
+        catch (Exception ex)
+        {
+            RhinoApp.WriteLine("Forsk logo skipped: " + ex.Message);
+        }
     }
 
     private static Guid Keep(JArray ids, Guid id)

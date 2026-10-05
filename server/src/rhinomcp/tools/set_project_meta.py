@@ -25,6 +25,8 @@ def set_project_meta(
     date: Optional[str] = None,
     revision: Optional[str] = None,
     scale_label: Optional[str] = None,
+    logo_path: Optional[str] = None,
+    logo: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Store the project info on the document: project, project number, client,
@@ -33,6 +35,9 @@ def set_project_meta(
     Every title block, the PDF metadata, the takeoff CSV header and the IFC
     read these. Omitted keys are left unchanged. An empty string clears that
     key. date falls back to today and scale_label to 1:100 when unset.
+
+    logo_path is a PNG or JPEG file: the office logo, kept in the 3dm and
+    printed at the right end of every title block. logo="" removes it.
 
     Returns:
     Dictionary with every key above.
@@ -48,6 +53,8 @@ def set_project_meta(
             ("date", date),
             ("revision", revision),
             ("scale_label", scale_label),
+            ("logo_path", logo_path),
+            ("logo", logo),
         ):
             text = _text(value, key)
             if text is not None:
@@ -65,7 +72,8 @@ def set_project_meta(
             "date": result.get("date", ""),
             "revision": result.get("revision", ""),
             "scale_label": result.get("scale_label", "1:100"),
-            "message": "Stored project info.",
+            "logo": result.get("logo", ""),
+            "message": result.get("message") or "Stored project info.",
         }
     except Exception as e:
         logger.error(f"Error in set_project_meta: {str(e)}")
