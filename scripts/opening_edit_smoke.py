@@ -499,12 +499,13 @@ def check_opening_types(
     shot_fixed = attrs_of(send_command(sock, "get_object_info", {"id": added_id}))
     shot_wall = attrs_of(send_command(sock, "get_object_info", {"id": host_id}))
     shot_top_center = center(send_command(sock, "get_object_info", {"id": moved_id}).get("bounding_box"))
-    door_on_window = send_raw(sock, "set_opening_type", {"id": moved_id, "type": "door.sliding"})
-    print(f"    door on window status={door_on_window.get('status')} {door_on_window.get('message')}")
-    if door_on_window.get("status") != "error":
-        failures.append(f"door on window status={door_on_window.get('status')}")
-    if "That is a window" not in str(door_on_window.get("message") or ""):
-        failures.append(f"door on window message={door_on_window.get('message')!r}")
+    # A door type on a window is a real change since windows to doors, so the miss is an unknown type.
+    unknown = send_raw(sock, "set_opening_type", {"id": moved_id, "type": "window.round"})
+    print(f"    unknown type status={unknown.get('status')} {unknown.get('message')}")
+    if unknown.get("status") != "error":
+        failures.append(f"unknown type status={unknown.get('status')}")
+    if str(unknown.get("message") or "") != "Unknown opening type.":
+        failures.append(f"unknown type message={unknown.get('message')!r}")
     flip_fixed = send_raw(sock, "set_opening_type", {"id": added_id, "swing": "flip"})
     print(f"    flip fixed status={flip_fixed.get('status')} {flip_fixed.get('message')}")
     if flip_fixed.get("status") != "error":
@@ -963,7 +964,7 @@ def main() -> int:
             if page.get("north_arrow") is not True:
                 failures.append(f"{label} north arrow missing")
             tag = str(page.get("room_tag_text") or "")
-            if "≈" not in tag or "m²" not in tag:
+            if "~" not in tag or "m²" not in tag:
                 failures.append(f"{label} room tag={tag!r}")
             if (page.get("roof_outline") or 0) < 1:
                 failures.append(f"{label} roof={page.get('roof_outline')}")
