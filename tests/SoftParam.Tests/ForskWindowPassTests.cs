@@ -4,7 +4,8 @@ using Xunit;
 namespace SoftParam.Tests;
 
 /// <summary>
-/// The chat is a normal form owned by Rhino's window. Hovering the viewport
+/// The chat is a normal form owned by the active document's Rhino window,
+/// and follows it when File > New or Open replaces that window. Hovering the viewport
 /// does not select or light a receipt, and hovering the chat does not take the
 /// keyboard. A click still selects, the slot chips still fire, and Tab is still
 /// the only way a button gets a ring.
@@ -18,6 +19,10 @@ public class ForskWindowPassTests
     [InlineData("ForskWindow.cs", "MainWindowForDocument(doc)")]
     [InlineData("ForskWindow.cs", "RhinoEtoApp.MainWindow")]
     [InlineData("ForskWindow.cs", "void OwnTo(RhinoDoc doc)")]
+    [InlineData("ForskWindow.cs", "serial == _ownerDoc")]
+    [InlineData("ForskWindow.cs", "Owner = null;")]
+    [InlineData("ForskWindow.cs", "static void FollowSoon()")]
+    [InlineData("ForskWindow.cs", "open.OwnTo(doc);")]
     [InlineData("ForskWindow.cs", "HandToRhino()")]
     [InlineData("ForskWindow.cs", "FocusComposer()")]
     [InlineData("ForskWindow.cs", "RhinoDoc.SelectObjects +=")]
@@ -30,6 +35,7 @@ public class ForskWindowPassTests
 
     [Theory]
     [InlineData("ForskWindow.cs", "FloatingForm")]
+    [InlineData("ForskWindow.cs", "if (Owner != null) return;")]
     [InlineData("ForskWindow.cs", "MakeKeyWindow")]
     [InlineData("ForskWindow.cs", "ForskHover")]
     [InlineData("ForskWindow.cs", "ForskViewHover")]

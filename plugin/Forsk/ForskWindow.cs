@@ -51,6 +51,7 @@ namespace RhinoMCPPlugin.Forsk
         bool _ready;
         FileFacts _facts;
         uint _factsDoc;
+        uint _ownerDoc;
 
         public static void Open(RhinoDoc doc)
         {
@@ -280,6 +281,23 @@ namespace RhinoMCPPlugin.Forsk
             MarkDirty();
         }
 
+        /// <summary>
+        /// An open chat moves to the active document's window a turn later, once
+        /// that window exists, and shows again. Show does not take the keyboard.
+        /// </summary>
+        static void FollowSoon()
+        {
+            if (_open == null) return;
+            Application.Instance.AsyncInvoke(() =>
+            {
+                var open = _open;
+                var doc = RhinoDoc.ActiveDoc;
+                if (open == null || doc == null) return;
+                open.OwnTo(doc);
+                open.Show();
+            });
+        }
+
         static void HookDocs()
         {
             if (_docsHooked) return;
@@ -289,6 +307,7 @@ namespace RhinoMCPPlugin.Forsk
                 Tracker.ActiveDocumentChanged();
                 MarkDirty();
                 _open?.Render();
+                FollowSoon();
             };
             RhinoDoc.EndOpenDocument += (s, e) =>
             {
@@ -300,6 +319,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (thread.Items.Count > 0) thread.Add("line", ForskText.Get("line.reopened"));
                 MarkDirty();
                 _open?.Render();
+                FollowSoon();
             };
             RhinoDoc.EndSaveDocument += (s, e) =>
             {
@@ -378,19 +398,25 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// The document's Rhino window owns the chat, so the chat stays above it.
-        /// When that window is missing, the app window does. Set once: a later
-        /// change would reparent the window. A floating panel with no owner
-        /// hides as soon as another app is clicked.
+        /// The active document's Rhino window owns the chat, so the chat stays
+        /// above it. A floating panel with no owner hides as soon as another app
+        /// is clicked. The chat is an AppKit child of its owner and leaves with
+        /// it: File > New closes the old document's window, so the chat follows
+        /// the active document. When the document has no window yet, the app
+        /// window owns it until the next call.
         /// </summary>
         void OwnTo(RhinoDoc doc)
         {
-            if (Owner != null) return;
+            var serial = doc?.RuntimeSerialNumber ?? 0;
+            if (Owner != null && serial != 0 && serial == _ownerDoc) return;
             try
             {
                 var owner = doc != null ? RhinoEtoApp.MainWindowForDocument(doc) : null;
+                _ownerDoc = owner != null ? serial : 0;
                 if (owner == null) owner = RhinoEtoApp.MainWindow;
-                if (owner == null) return;
+                if (owner == null || ReferenceEquals(owner, Owner)) return;
+                // Leave the old window first: it may be closing.
+                Owner = null;
                 Owner = owner;
             }
             catch (Exception e)
