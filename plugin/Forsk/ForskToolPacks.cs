@@ -63,7 +63,9 @@ namespace RhinoMCPPlugin.Forsk
             "room_push_pull",
             "add_stair",
             "edit_stair",
-            "delete_stair"
+            "delete_stair",
+            "rooms_set_type",
+            "rooms_colors"
         };
 
         static readonly string[] SheetsPack =
@@ -109,7 +111,7 @@ namespace RhinoMCPPlugin.Forsk
         static readonly string[] TakeoffPack = { TakeoffTool, "export_csv" };
 
         /// <summary>The figures. rooms_detect when the file has no rooms yet.</summary>
-        static readonly string[] AreaPack = { "area_stats", "rooms_detect" };
+        static readonly string[] AreaPack = { "area_stats", "rooms_detect", "rooms_set_type", "rooms_colors" };
 
         /// <summary>A picked file can be a DXF, so the plan import carries dxf_import too.</summary>
         static readonly string[] ImportPack = { ImportTool, ScaleTool, ForskDxf.Tool };
@@ -437,8 +439,27 @@ namespace RhinoMCPPlugin.Forsk
                     "Make rooms / find rooms: closed regions between the Forsk walls, closed at doors and split by space_divider, drawn on A-ROOM, then room markers. Outlines already on A-ROOM win. Reports rooms, total area, and regions left open with the reason.",
                     new JObject()),
                 Fn("area_stats",
-                    "Area statistics: net room area per floor, per use and for the whole model, the same figures as the plan tags and the Room schedule (Romliste). BRA and BTA per floor from the outer wall outline and its thickness, or the reason one is left out. Read only. No rooms: rooms_detect.",
+                    "Area statistics: net room area per floor, per use and for the whole model, the same figures as the plan tags and the Room schedule (Romliste). A room with a type is grouped under that English name (Living, Kitchen, …). Unassigned keeps the name map. BRA and BTA per floor from the outer wall outline and its thickness, or the reason one is left out. Read only. No rooms: rooms_detect.",
                     new JObject()),
+                Fn("rooms_set_type",
+                    "Set one room's type and mark the source user, so a later guess cannot replace it. room_type is living, kitchen, dining, bedroom, bathroom, wc, hall, storage, laundry, technical, office, garage, balcony, stair, or unassigned. id is a GUID, forsk id (rd-01), or the room name. Omit id to use the selected room. One room only.",
+                    new JObject
+                    {
+                        ["id"] = Str("Room GUID, forsk id (rd-01), or room name. Omit to use the selection."),
+                        ["room_type"] = new JObject
+                        {
+                            ["type"] = "string",
+                            ["enum"] = new JArray(RoomTypes.All.ToArray()),
+                            ["description"] = "The room type key."
+                        }
+                    },
+                    "room_type"),
+                Fn("rooms_colors",
+                    "Perspective floors coloured by room type. On by default. Off returns the perspective view to flat white. Plans and elevations stay line drawings either way. Omit on to read the toggle.",
+                    new JObject
+                    {
+                        ["on"] = Bool("true colours perspective floors by type. Omit to read the current toggle.")
+                    }),
                 Fn("mark_as_existing",
                     "Move the selection onto X-EXIST and stamp forsk:kind=existing. Empty selection is refused.",
                     new JObject()),

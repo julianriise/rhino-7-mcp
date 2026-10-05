@@ -91,6 +91,8 @@ public partial class RhinoMCPFunctions
         var suspect = new List<RoomDetect.Label>();
         var labels = RoomLabels(doc, suspect);
         var names = found.Rooms.Select(room => RoomDetect.Name(labels, room.Ring)).ToArray();
+        var doors = OpeningBoxes(doc, false);
+        var windows = OpeningBoxes(doc, true);
 
         var roomRings = new List<string>(found.Rooms.Count);
         foreach (var room in found.Rooms) roomRings.Add(RoomCurves.RingKey(room.Ring));
@@ -137,7 +139,7 @@ public partial class RhinoMCPFunctions
                 kept = doc.Objects.FindId(added);
             }
             if (kept == null) continue;
-            NoteRoom(doc, kept, found.Rooms, roomIds, names, labels, UserDrawn(inventory, kept.Id.ToString()), ids, tags, ref area);
+            NoteRoom(doc, kept, found.Rooms, roomIds, names, labels, doors, windows, UserDrawn(inventory, kept.Id.ToString()), ids, tags, ref area);
             stamped.Add(kept.Id.ToString());
         }
         // A curve the user drew that the walls did not take stays, named, and its marker copy is already gone.
@@ -147,7 +149,7 @@ public partial class RhinoMCPFunctions
             var drawn = FindRoomCurve(doc, curve.Id);
             if (drawn == null) continue;
             if (drawn.IsLocked) doc.Objects.Unlock(drawn.Id, false);
-            NoteRoom(doc, drawn, found.Rooms, roomIds, names, labels, true, ids, tags, ref area);
+            NoteRoom(doc, drawn, found.Rooms, roomIds, names, labels, doors, windows, true, ids, tags, ref area);
         }
 
         // Detected rooms first, in the order they were found, then the outlines drawn by hand.
@@ -161,7 +163,9 @@ public partial class RhinoMCPFunctions
                 ["area_m2"] = Math.Round(tag.Area / 1000000.0, 2, MidpointRounding.AwayFromZero),
                 ["x"] = tag.At.X,
                 ["y"] = tag.At.Y,
-                ["source"] = tag.Detected ? DetectedRoomSource : "drawn"
+                ["source"] = tag.Detected ? DetectedRoomSource : "drawn",
+                ["room_type"] = tag.RoomType ?? RoomTypes.Unassigned,
+                ["room_type_source"] = tag.RoomTypeSource ?? ""
             });
         }
         // A region the walls do not close has no room: no marker, no plate, no daylight cells.
@@ -316,9 +320,10 @@ public partial class RhinoMCPFunctions
     }
 
     static void NoteRoom(RhinoDoc doc, RhinoObject curve, List<RoomDetect.Room> rooms, string[] roomIds, string[] names,
-        List<RoomDetect.Label> labels, bool userDrawn, JArray ids, List<RoomDetect.Tag> tags, ref double area)
+        List<RoomDetect.Label> labels, List<RoomDetect.Box> doors, List<RoomDetect.Box> windows, bool userDrawn,
+        JArray ids, List<RoomDetect.Tag> tags, ref double area)
     {
-        var tag = StampRoomMarker(doc, curve, rooms, roomIds, names, labels, userDrawn);
+        var tag = StampRoomMarker(doc, curve, rooms, roomIds, names, labels, doors, windows, userDrawn);
         if (tag != null) tags.Add(tag);
         area += tag?.Area ?? ParseMm(curve.Attributes.GetUserString("forsk:area")) ?? 0;
         ids.Add(curve.Id.ToString());
@@ -369,7 +374,8 @@ public partial class RhinoMCPFunctions
     /// with no outline to read.
     /// </summary>
     private static RoomDetect.Tag StampRoomMarker(RhinoDoc doc, RhinoObject marker, List<RoomDetect.Room> rooms,
-        string[] roomIds, string[] names, List<RoomDetect.Label> labels, bool userDrawn)
+        string[] roomIds, string[] names, List<RoomDetect.Label> labels, List<RoomDetect.Box> doors,
+        List<RoomDetect.Box> windows, bool userDrawn)
     {
         if (!TryRoomPolygon(marker, out var polygon)) return null;
         var outline = PlanPoints(polygon);
@@ -379,6 +385,9 @@ public partial class RhinoMCPFunctions
         var attr = marker.Attributes.Duplicate();
         attr.SetUserString(RoomNameKey, tag.Name);
         attr.SetUserString(RoomAtKey, RoomDetect.StampAt(outline, tag.At));
+        var decision = WriteRoomType(attr, outline, tag.Area, tag.Name, doors, windows);
+        tag.RoomType = decision.Type;
+        tag.RoomTypeSource = decision.Source;
         // The user's curve keeps its name and tag point. It does not become generated, so clear_generated leaves it.
         if (tag.Detected && !userDrawn)
         {
@@ -389,6 +398,40 @@ public partial class RhinoMCPFunctions
         }
         BakePace.Modify(doc, marker.Id, attr, true);
         return tag;
+    }
+
+    /// <summary>Door boxes, or window boxes. Windows are not doors: they do not close a gap.</summary>
+    static List<RoomDetect.Box> OpeningBoxes(RhinoDoc doc, bool windows)
+    {
+        var boxes = new List<RoomDetect.Box>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj)) continue;
+            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            var isWindow = string.Equals(obj.Attributes.GetUserString("forsk:opening_kind"), "window", StringComparison.OrdinalIgnoreCase);
+            if (isWindow != windows) continue;
+            var box = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            if (!box.IsValid) continue;
+            boxes.Add(new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y));
+        }
+        return boxes;
+    }
+
+    /// <summary>
+    /// Writes forsk:room_type from the name inside the room, else a guess.
+    /// A stored user or label type is kept. Returns the decision that was written.
+    /// </summary>
+    static RoomTypes.Decision WriteRoomType(ObjectAttributes attr, IList<RoomDetect.Pt> ring, double areaMm2, string name,
+        IList<RoomDetect.Box> doors, IList<RoomDetect.Box> windows)
+    {
+        var decision = RoomTypes.Choose(
+            attr.GetUserString(RoomTypes.Key),
+            attr.GetUserString(RoomTypes.SourceKey),
+            name,
+            RoomTypes.Measure(ring, areaMm2, doors, windows));
+        attr.SetUserString(RoomTypes.Key, decision.Type);
+        attr.SetUserString(RoomTypes.SourceKey, string.IsNullOrEmpty(decision.Source) ? null : decision.Source);
+        return decision;
     }
 
     private static PolylineCurve RoomOutline(List<RoomDetect.Pt> ring, double z)

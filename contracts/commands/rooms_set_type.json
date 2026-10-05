@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rooms_set_type.json",
+  "title": "RoomsSetType Command",
+  "description": "Set one room's type and mark the source user, so a later guess cannot replace it. id omitted uses the current selection, which must be exactly one room. Does not add geometry.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Room GUID, forsk id (rd-01), or room name. Omit to use the current selection."
+    },
+    "room_type": {
+      "type": "string",
+      "enum": [
+        "unassigned", "living", "kitchen", "dining", "bedroom", "bathroom", "wc", "hall",
+        "storage", "laundry", "technical", "office", "garage", "balcony", "stair"
+      ],
+      "description": "The room type key."
+    }
+  },
+  "required": ["room_type"],
+  "additionalProperties": false
+}

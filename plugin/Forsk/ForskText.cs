@@ -391,6 +391,8 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.openings_from_layer"] = "Openings",
             ["tool.rooms_from_layer"] = "Rooms",
             ["tool.rooms_detect"] = "Rooms",
+            ["tool.rooms_set_type"] = "Room type",
+            ["tool.rooms_colors"] = "Room colours",
             ["tool.mark_as_existing"] = "Existing house",
             ["tool.plan_import"] = "Plan",
             ["tool.plan_scale"] = "Scale",

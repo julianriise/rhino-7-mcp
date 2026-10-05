@@ -20,7 +20,9 @@
           "area_m2": { "type": "number" },
           "x": { "type": "number", "description": "The tag point, clear of walls standing in the room. Stamped on the marker as forsk:room_at; the plan tag sits there." },
           "y": { "type": "number" },
-          "source": { "type": "string", "enum": ["detected", "drawn"], "description": "detected from the walls, or an outline drawn by hand on A-ROOM" }
+          "source": { "type": "string", "enum": ["detected", "drawn"], "description": "detected from the walls, or an outline drawn by hand on A-ROOM" },
+          "room_type": { "type": "string", "description": "forsk:room_type. Missing on an older result reads as unassigned." },
+          "room_type_source": { "type": "string", "description": "label, guessed, user, or empty when unassigned and unset." }
         },
         "required": ["id", "name", "area_m2", "x", "y", "source"],
         "additionalProperties": false

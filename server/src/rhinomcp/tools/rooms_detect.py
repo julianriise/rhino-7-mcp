@@ -22,9 +22,11 @@ def rooms_detect(ctx: Context) -> Dict[str, Any]:
     stamps, so a sheet's tags are the rooms listed here, drawn ones included.
 
     Returns:
-    Dictionary with ids (markers), rooms (id, name, area_m2, x, y, source:
-    detected or drawn), count, detected, area_m2, open (reason, x, y),
-    warnings, and message.
+    Dictionary with ids (markers), rooms (id, name, area_m2, x, y, source
+    detected or drawn, room_type, room_type_source), count, detected,
+    area_m2, open (reason, x, y), warnings, and message. room_type is
+    unassigned when the file has none. A label inside the room sets it;
+    otherwise a first guess may, and that source is guessed.
     """
     try:
         result = get_rhino_connection().send_command("rooms_detect", {})

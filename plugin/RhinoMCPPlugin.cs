@@ -27,12 +27,14 @@ namespace RhinoMCPPlugin
             Functions.ForskWhiteHost.Start();
             Functions.ForskChromeHost.Start();
             Functions.ForskWallHatchHost.Start();
+            Functions.RoomTypeColorHost.Start();
             ForskSupportHttp.RetryOnStartup();
             return LoadReturnCode.Success;
         }
 
         protected override void OnShutdown()
         {
+            Functions.RoomTypeColorHost.Stop();
             Functions.ForskWallHatchHost.Stop();
             Functions.ForskChromeHost.Stop();
             Functions.ForskWhiteHost.Stop();
