@@ -231,7 +231,7 @@ public class FileClassifierTests
     {
         var marker = Row.Room(name: "Stue");
         var f = FileClassifier.Read(Docs.Of(Row.Wall(), Row.Floor(), Row.Window(), marker, Row.Plate(marker, selected: true)));
-        Assert.Equal(new[] { "Print PDF", "Daylight for this room", "Section through this room" }, Bar(f));
+        Assert.Equal(new[] { "Print PDF", "Redraw area", "Daylight for this room" }, Bar(f));
     }
 
     [Fact]
@@ -250,10 +250,10 @@ public class FileClassifierTests
     }
 
     [Fact]
-    public void ASelectedRoom_ShowsBothRoomActions_PrintStaysSlot1()
+    public void ASelectedRoom_SuggestsRedrawArea_PrintStaysSlot1()
     {
         var bar = ForskRegistry.Bar(Docs.Facts("house, room selected"));
-        Assert.Equal(new[] { "file.print", "daylight.room", "section.room" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "room.redraw", "daylight.room" }, bar.Slots.Select(a => a.Id));
     }
 
     [Theory]

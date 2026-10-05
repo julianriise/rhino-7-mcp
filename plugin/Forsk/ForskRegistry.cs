@@ -294,6 +294,8 @@ namespace RhinoMCPPlugin.Forsk
             // Two or more walls: Move, then Add detail (Add a door is a one-wall act).
             if (f.Picked == Picked.Wall && f.PickedCount >= 2) yield return Find("detail.add");
             if (f.Picked == Picked.Opening) yield return Find("opening.type");
+            // AI detection often gets a room's outline wrong: Redraw area is the first suggestion for one room.
+            if (f.Picked == Picked.Room && f.PickedCount == 1) yield return Find("room.redraw");
             if (f.Picked == Picked.Room) yield return Find("daylight.room");
             if (f.Picked == Picked.Room) yield return Find("section.room");
             if (f.Picked == Picked.Room) yield return Find("room.push_pull");
