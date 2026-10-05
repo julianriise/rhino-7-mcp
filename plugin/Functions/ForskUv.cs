@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -20,18 +21,38 @@ public static class ForskUv
         public string Stderr;
     }
 
-    /// <summary>tools/name: FORSK_HOME, else the forsk checkout beside rhino-7-mcp. Null when neither has it.</summary>
-    public static string ToolDir(string name)
+    /// <summary>The release package's folder beside the plugin assembly: prompts, tools and the daylight tracer.</summary>
+    public static string Bundled()
+    {
+        var dir = Path.GetDirectoryName(typeof(ForskUv).Assembly.Location);
+        return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "forsk");
+    }
+
+    /// <summary>
+    /// Where Forsk's own files are looked for, in order: the folder the
+    /// variable names, the package beside the plugin, then the developer's
+    /// checkout ~/Documents/hobby/forsk.
+    /// </summary>
+    public static IEnumerable<string> Roots()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var root in new[] { Environment.GetEnvironmentVariable("FORSK_HOME"), Path.Combine(home, "Documents", "hobby", "forsk") })
+        foreach (var root in new[] { Environment.GetEnvironmentVariable("FORSK_HOME"), Bundled(), Path.Combine(home, "Documents", "hobby", "forsk") })
+            if (!string.IsNullOrWhiteSpace(root)) yield return root;
+    }
+
+    /// <summary>tools/name under the first of Roots that has it. Null when none has it.</summary>
+    public static string ToolDir(string name)
+    {
+        foreach (var root in Roots())
         {
-            if (string.IsNullOrWhiteSpace(root)) continue;
             var dir = Path.Combine(root, "tools", name);
             if (File.Exists(Path.Combine(dir, "pyproject.toml"))) return dir;
         }
         return null;
     }
+
+    /// <summary>uv's arguments to run a module with numpy in a throwaway environment: the daylight tracer without a venv.</summary>
+    public static string RunModuleArgs(string module) => "run --no-project --quiet --with numpy python -m " + module;
 
     /// <summary>uv: UV when set, else PATH, else where its installers put it. Rhino's PATH has no Homebrew.</summary>
     public static string Uv()

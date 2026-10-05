@@ -298,11 +298,8 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
 
         public static string FindRoot()
         {
-            var env = Environment.GetEnvironmentVariable("FORSK_HOME");
-            if (IsForskRoot(env)) return env;
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var guess = Path.Combine(home, "Documents", "hobby", "forsk");
-            if (IsForskRoot(guess)) return guess;
+            foreach (var root in ForskUv.Roots())
+                if (IsForskRoot(root)) return root;
             return null;
         }
 

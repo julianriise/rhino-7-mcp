@@ -1,13 +1,19 @@
-name: rhinomcp
-version: 0.3.1
+name: forsk
+version: 3.0.0
 authors:
-  - Jingcheng Chen
-description: Rhino integration through the Model Context Protocol
+  - Julian Riise
+description: >
+  Forsk turns a floor plan into a 3D model and a full drawing set in Rhino 7
+  for Mac, from one chat window. Generate walls, doors, windows and rooms
+  from 2D curves, a DXF or a PDF (AI detection), then print a numbered A3
+  set with plans, facades, sections, areas and schedules to PDF and DWG/DXF.
+url: 'https://forsk.app'
 keywords:
-  - rhinomcp
-  - mcp
-  - rhino
+  - architecture
+  - floorplan
+  - drawings
+  - documentation
+  - residential
+  - bim
   - ai
-  - prompt
-  - modelcontextprotocol
-url: 'https://github.com/jingcheng-chen/rhinomcp'
+icon: icon.png

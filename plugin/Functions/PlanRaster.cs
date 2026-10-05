@@ -113,12 +113,12 @@ public static class PlanRaster
         }
         dir = ToolDir();
         if (dir == null)
-            throw new Failure("reading a scan or image needs the forsk checkout's tools/cubicasa",
-                "Set FORSK_HOME to the forsk checkout.");
+            throw new Failure("reading a scan or image needs Forsk's tools/cubicasa, which is missing",
+                "Reinstall Forsk from the Package Manager, or set FORSK_HOME to the forsk checkout.");
         exe = ForskUv.Uv();
         if (exe == null)
             throw new Failure("reading a scan or image needs uv (docs.astral.sh/uv) to run tools/cubicasa",
-                "Install uv, or set UV to its path.");
+                "Install uv: in Terminal, curl -LsSf https://astral.sh/uv/install.sh | sh, then reopen Rhino.");
         prefix = ForskUv.RunArgs(dir, "cubicasa-plan") + " ";
     }
 }

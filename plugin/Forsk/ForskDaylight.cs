@@ -193,11 +193,17 @@ namespace RhinoMCPPlugin.Forsk
         static JObject Trace(JObject input)
         {
             var src = ServerSource();
+            // A checkout's server venv, else uv with numpy (the release package has no venv).
             var python = Path.Combine(src, "..", ".venv", "bin", "python");
+            var exe = python;
+            var args = "-m forsk_daylight";
             if (!File.Exists(python))
-                throw new InvalidOperationException("Daylight needs the server venv at " + Path.GetFullPath(python) + ". See INSTALL.md.");
+            {
+                exe = ForskUv.Uv() ?? throw new InvalidOperationException(NeedsUv);
+                args = ForskUv.RunModuleArgs("forsk_daylight");
+            }
 
-            var start = new ProcessStartInfo(python, "-m forsk_daylight")
+            var start = new ProcessStartInfo(exe, args)
             {
                 WorkingDirectory = src,
                 UseShellExecute = false,
@@ -227,18 +233,24 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>rhino-7-mcp/server/src: RHINO_MCP_HOME, else the sibling of the Forsk checkout.</summary>
+        const string NeedsUv = "Daylight needs uv. In Terminal: curl -LsSf https://astral.sh/uv/install.sh | sh, then quit and reopen Rhino.";
+
+        /// <summary>The tracer's folder: RHINO_MCP_HOME's server/src, the package's daylight folder, else the checkout's server/src.</summary>
         static string ServerSource()
         {
             var env = Environment.GetEnvironmentVariable("RHINO_MCP_HOME");
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            foreach (var root in new[] { env, Path.Combine(home, "Documents", "hobby", "rhino-7-mcp") })
+            var bundled = ForskUv.Bundled();
+            foreach (var src in new[]
             {
-                if (string.IsNullOrWhiteSpace(root)) continue;
-                var src = Path.Combine(root, "server", "src");
-                if (File.Exists(Path.Combine(src, "forsk_daylight.py"))) return src;
+                string.IsNullOrWhiteSpace(env) ? null : Path.Combine(env, "server", "src"),
+                bundled == null ? null : Path.Combine(bundled, "daylight"),
+                Path.Combine(home, "Documents", "hobby", "rhino-7-mcp", "server", "src")
+            })
+            {
+                if (src != null && File.Exists(Path.Combine(src, "forsk_daylight.py"))) return src;
             }
-            throw new InvalidOperationException("Daylight needs the rhino-7-mcp checkout. Set RHINO_MCP_HOME to it.");
+            throw new InvalidOperationException("Daylight's tracer is missing. Reinstall Forsk from the Package Manager.");
         }
 
         static string LastLine(string text)

@@ -139,3 +139,13 @@ uv run --python 3.12 --with pytest --with jsonschema --with referencing \
 Grasshopper tools, `execute_*` code, Layout/PDF, multi-sheet. Layer convention
 for tilbygg work (`A-WALL`, `A-OPEN`, `A-STRU`, `A-ANNO`, `X-EXIST`) comes after
 the smoke is green.
+
+## Release package (Food4Rhino / Package Manager)
+
+`./scripts/package_release.sh` builds Release and writes
+`dist/release/forsk-<version>-rh7_0-mac.yak` and `Forsk-<version>.macrhi`. The
+package carries Forsk's prompts, the AI detection tools and the daylight
+tracer in a `forsk/` folder beside the plugin, so it needs no checkout. The
+plugin looks there after `FORSK_HOME` and before `~/Documents/hobby/forsk`.
+Daylight and AI detection run through `uv`; chat reads `FORSK_GROK_API_KEY` or
+`~/.forsk/grok.env`.

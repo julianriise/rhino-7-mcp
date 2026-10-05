@@ -73,11 +73,11 @@ public static class PlanPdf
         var dir = ExtractorDir();
         if (dir == null)
             throw new InvalidOperationException(
-                "Importing a PDF needs the forsk checkout's tools/pdf_vector. Set FORSK_HOME to the forsk checkout.");
+                "Importing a PDF needs Forsk's tools/pdf_vector, which is missing. Reinstall Forsk from the Package Manager, or set FORSK_HOME to the forsk checkout.");
         var uv = ForskUv.Uv();
         if (uv == null)
             throw new InvalidOperationException(
-                "Importing a PDF needs uv (docs.astral.sh/uv) to run tools/pdf_vector. Install uv, or set UV to its path.");
+                "Importing a PDF needs uv (docs.astral.sh/uv) to run tools/pdf_vector. In Terminal: curl -LsSf https://astral.sh/uv/install.sh | sh, then reopen Rhino.");
 
         var ran = ForskUv.Run(uv, ForskUv.RunArgs(dir, "pdf-vector") + " " + ForskUv.Quote(pdf) + " " + args, dir, "The PDF extractor", TimeoutMs);
         if (ran.Code != 0)
