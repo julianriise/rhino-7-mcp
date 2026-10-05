@@ -223,7 +223,7 @@ public static class OpeningTypes
     /// <summary>
     /// Apply a type, hand, or swing edit. Null fields stay. flip toggles.
     /// A type of the other kind turns a window into a door or a door into a
-    /// window (AI imports read doors as windows). A key the resulting type
+    /// window (AI detection reads doors as windows). A key the resulting type
     /// does not use is refused before a record is returned.
     /// </summary>
     public static bool TryApply(

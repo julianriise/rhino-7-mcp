@@ -15,7 +15,7 @@ def add_room_area(
     id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Draw a room's area by its corners. AI imports miss rooms, so the user
+    Draw a room's area by its corners. AI detection misses rooms, so the user
     gives the wall corners around the room in order. They become one closed
     outline on A-ROOM at the floor's height; rooms are detected again, the
     new room is named from the labels inside and gets a plate.

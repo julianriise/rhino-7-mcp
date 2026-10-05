@@ -13,7 +13,7 @@ using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Room areas drawn by hand (AI imports miss rooms): the clicked corners
+/// Room areas drawn by hand (AI detection misses rooms): the clicked corners
 /// become a closed outline on A-ROOM at the floor's height, which rooms_detect
 /// takes as the user's word for that region. With replace, the selected
 /// room's outline goes first. A new wall across a drawn room cuts that

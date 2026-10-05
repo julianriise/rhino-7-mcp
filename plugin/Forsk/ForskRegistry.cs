@@ -185,7 +185,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("daylight.rooms", Runs.Run, "group.rooms", f => f.HasWalls && !f.HasRooms && f.Map == MapState.None),
             new ForskAction("rooms.list", Runs.Card, "group.rooms", f => f.HasRooms),
             new ForskAction("area.stats", Runs.Run, "group.rooms", f => f.HasRooms),
-            // AI imports miss rooms: click a room's corners to draw its area, or redraw the picked room.
+            // AI detection misses rooms: click a room's corners to draw its area, or redraw the picked room.
             new ForskAction("room.draw", Runs.Run, "group.rooms", f => f.HasWalls),
             new ForskAction("room.redraw", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),

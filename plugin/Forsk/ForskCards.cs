@@ -82,7 +82,7 @@ namespace RhinoMCPPlugin.Forsk
             string question;
             if (f.Picked == Picked.Opening && f.PickedOpeningKind != null)
             {
-                // The picked kind's types first, then the other kind's: AI imports read doors as windows.
+                // The picked kind's types first, then the other kind's: AI detection reads doors as windows.
                 kinds.Add(f.PickedOpeningKind);
                 kinds.Add(f.PickedOpeningKind == "door" ? "window" : "door");
                 question = ForskText.Get("opening.type.ask");

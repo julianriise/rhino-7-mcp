@@ -7,7 +7,7 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Room areas drawn by hand, and drawn areas a new wall splits, as plain
-/// points. AI imports miss rooms, so the user clicks a room's corners; a
+/// points. AI detection misses rooms, so the user clicks a room's corners; a
 /// wall drawn across a drawn room cuts that room into the rooms it makes.
 /// No RhinoCommon, so it tests headless.
 /// </summary>
