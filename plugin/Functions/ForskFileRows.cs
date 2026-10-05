@@ -180,19 +180,27 @@ public partial class RhinoMCPFunctions
     internal static int MarkMapAfterEdit(RhinoDoc doc, MapEdit edit)
     {
         if (doc == null || edit == MapEdit.None) return 0;
-        var marked = 0;
-        foreach (var mesh in AnalysisOverlays(doc))
+        UnlockAnalysis(doc);
+        try
         {
-            var visible = !mesh.IsHidden;
-            var stale = mesh.Attributes.GetUserString(DaylightStaleKey) == "1";
-            DaylightMap.AfterEdit(edit, ref visible, ref stale);
-            var attr = mesh.Attributes.Duplicate();
-            attr.SetUserString(DaylightStaleKey, stale ? "1" : null);
-            doc.Objects.ModifyAttributes(mesh.Id, attr, true);
-            if (!visible && !mesh.IsHidden) doc.Objects.Hide(mesh.Id, false);
-            marked++;
+            var marked = 0;
+            foreach (var mesh in AnalysisOverlays(doc))
+            {
+                var visible = !mesh.IsHidden;
+                var stale = mesh.Attributes.GetUserString(DaylightStaleKey) == "1";
+                DaylightMap.AfterEdit(edit, ref visible, ref stale);
+                var attr = mesh.Attributes.Duplicate();
+                attr.SetUserString(DaylightStaleKey, stale ? "1" : null);
+                doc.Objects.ModifyAttributes(mesh.Id, attr, true);
+                if (!visible && !mesh.IsHidden) doc.Objects.Hide(mesh.Id, false);
+                marked++;
+            }
+            return marked;
         }
-        return marked;
+        finally
+        {
+            LockAnalysis(doc);
+        }
     }
 
     /// <summary>At Print: the model the sheets were drawn from, so the classifier can tell when they are older.</summary>

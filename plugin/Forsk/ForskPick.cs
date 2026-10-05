@@ -49,13 +49,22 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
+        /// A selected row that drives the pick line, the suggestion bar and the
+        /// selection key. The daylight mesh is visible and stays out of all three.
+        /// </summary>
+        public static bool DrivesSelection(ChipRow row) =>
+            row != null && row.Selected
+            && !string.Equals(row.Kind, "analysis", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
         /// The selected rows as things. A plate whose marker is also picked is
         /// that room. A frame, leaf, glass, block, or group is its opening marker.
+        /// The daylight mesh is not a thing.
         /// </summary>
         public static List<ChipRow> Things(IEnumerable<ChipRow> rows)
         {
             var all = (rows ?? Enumerable.Empty<ChipRow>()).Where(r => r != null).ToList();
-            var picked = all.Where(r => r.Selected).ToList();
+            var picked = all.Where(DrivesSelection).ToList();
             var parts = all.ConvertAll(ToPart);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var things = new List<ChipRow>();

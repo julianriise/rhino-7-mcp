@@ -276,6 +276,63 @@ public class FileClassifierTests
     }
 
     [Fact]
+    public void ASelectedDaylightMap_DoesNotDriveThePickOrTheBar()
+    {
+        var map = Row.Map();
+        var rows = new[] { Row.Wall(), Row.Floor(), Row.Room(), Row.Window(), map };
+        var clear = FileClassifier.Read(Docs.Of(rows));
+        map.Selected = true;
+        var alone = FileClassifier.Read(Docs.Of(rows));
+        Assert.Equal(Picked.None, alone.Picked);
+        Assert.Empty(alone.Selected);
+        Assert.Equal("", alone.SelectionKey);
+        Assert.Equal(clear.SelectionKey, alone.SelectionKey);
+        Assert.Equal(ForskRegistry.Bar(clear).Slots.Select(a => a.Id), ForskRegistry.Bar(alone).Slots.Select(a => a.Id));
+        Assert.Equal(ForskPick.Line(clear.Selected, false), ForskPick.Line(alone.Selected, false));
+        Assert.Equal(MapState.Shown, alone.Map);
+        Assert.Equal("daylight.hide", ForskRegistry.DaylightAction(alone).Id);
+
+        var wall = Row.Wall(selected: true, run: "the north wall", toward: "north");
+        var beside = Row.Map();
+        var withWall = new[] { wall, Row.Floor(), Row.Room(), Row.Window(), beside };
+        var wallOnly = FileClassifier.Read(Docs.Of(withWall));
+        beside.Selected = true;
+        var both = FileClassifier.Read(Docs.Of(withWall));
+        Assert.Equal(Picked.Wall, both.Picked);
+        Assert.Equal(new[] { wall.Id }, both.Selected.Select(r => r.Id).ToArray());
+        Assert.Equal(wallOnly.SelectionKey, both.SelectionKey);
+        Assert.DoesNotContain(beside.Id, both.SelectionKey);
+        Assert.Equal(ForskRegistry.Bar(wallOnly).Slots.Select(a => a.Id), ForskRegistry.Bar(both).Slots.Select(a => a.Id));
+    }
+
+    [Fact]
+    public void TheDaylightMesh_IsLocked_AndUnlockedOnlyToReplaceIt()
+    {
+        var paint = Source("Functions", "Daylight.cs");
+        var marked = Source("Functions", "ForskFileRows.cs");
+        Assert.Contains("UnlockAnalysis(", paint);
+        Assert.Contains("LockAnalysis(", paint);
+        Assert.Contains("doc.Objects.Unlock(", paint);
+        Assert.Contains("doc.Objects.Lock(", paint);
+        Assert.Contains("candidate.IsLocked = locked", paint);
+        Assert.Contains("UnlockAnalysis(", marked);
+        Assert.Contains("LockAnalysis(", marked);
+        Assert.Contains("UnlockAnalysis(", Source("Functions", "ClearGenerated.cs"));
+        Assert.Contains("DrivesSelection", Source("Forsk", "ForskPick.cs"));
+        Assert.Contains("ForskPick.DrivesSelection", Source("Forsk", "ForskFile.cs"));
+    }
+
+    static string Source(string folder, string file)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", folder, file);
+            if (File.Exists(path)) return File.ReadAllText(path);
+        }
+        throw new DirectoryNotFoundException("plugin/" + folder + "/" + file);
+    }
+
+    [Fact]
     public void TheStatusLine_SaysListenerDownAndANonDefaultInk()
     {
         Assert.Equal("Bridge off · ink: grey", ForskRegistry.Status(Docs.Facts("bridge down, grey ink")));

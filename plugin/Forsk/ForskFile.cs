@@ -252,7 +252,7 @@ namespace RhinoMCPPlugin.Forsk
             facts.DetailNames = new Dictionary<string, string>(input.DetailNames ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
             facts.DetailSheets = new List<string>(input.DetailSheets ?? new List<string>());
             ReadSelection(rows, facts);
-            facts.SelectionKey = string.Join(",", rows.Where(r => r != null && r.Selected).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
+            facts.SelectionKey = string.Join(",", rows.Where(ForskPick.DrivesSelection).Select(r => r.Id ?? "").OrderBy(id => id, StringComparer.Ordinal));
             facts.ModelKey = ModelKey(rows);
             return facts;
         }

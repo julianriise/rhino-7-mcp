@@ -164,55 +164,64 @@ public partial class RhinoMCPFunctions
         if (colors.Count != vertices.Count)
             throw new ArgumentException("colors must have one entry per vertex.");
 
-        var deleted = DeleteAnalysisOverlay(doc);
-        var layer = EnsureLayer(doc, AnalysisLayerName, Color.FromArgb(16, 118, 128));
-        KeepLayerOffPrint(doc, layer);
-        var mode = AnalysisDisplayMode();
-        var box = BoundingBox.Empty;
-
-        var id = Guid.Empty;
-        var vertexCount = 0;
-        if (faces.Count > 0)
+        // The mesh is locked, so a replace unlocks the layer and the old mesh first.
+        UnlockAnalysis(doc);
+        try
         {
-            var mesh = new Mesh();
-            for (var i = 0; i < vertices.Count; i++)
+            var deleted = DeleteAnalysisOverlay(doc);
+            var layer = EnsureLayer(doc, AnalysisLayerName, Color.FromArgb(16, 118, 128));
+            KeepLayerOffPrint(doc, layer);
+            var mode = AnalysisDisplayMode();
+            var box = BoundingBox.Empty;
+
+            var id = Guid.Empty;
+            var vertexCount = 0;
+            if (faces.Count > 0)
             {
-                var v = (JArray)vertices[i];
-                mesh.Vertices.Add(v[0].ToObject<double>(), v[1].ToObject<double>(), z);
-                mesh.VertexColors.Add(RgbOf(colors[i]));
+                var mesh = new Mesh();
+                for (var i = 0; i < vertices.Count; i++)
+                {
+                    var v = (JArray)vertices[i];
+                    mesh.Vertices.Add(v[0].ToObject<double>(), v[1].ToObject<double>(), z);
+                    mesh.VertexColors.Add(RgbOf(colors[i]));
+                }
+                foreach (var token in faces)
+                {
+                    var f = (JArray)token;
+                    if (f.Count == 3)
+                        mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>());
+                    else
+                        mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>(), f[3].ToObject<int>());
+                }
+                mesh.Normals.ComputeNormals();
+                vertexCount = mesh.Vertices.Count;
+                id = doc.Objects.AddMesh(mesh, AnalysisAttributes(layer, "mesh", "daylight", mode));
+                if (id == Guid.Empty)
+                    throw new InvalidOperationException("Could not add the daylight mesh.");
+                box.Union(mesh.GetBoundingBox(true));
             }
-            foreach (var token in faces)
+
+            var bbox = box.IsValid
+                ? new JArray(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
+                : new JArray();
+            var wiresOff = mode != null && !mode.DisplayAttributes.MeshSpecificAttributes.ShowMeshWires;
+            return new JObject
             {
-                var f = (JArray)token;
-                if (f.Count == 3)
-                    mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>());
-                else
-                    mesh.Faces.AddFace(f[0].ToObject<int>(), f[1].ToObject<int>(), f[2].ToObject<int>(), f[3].ToObject<int>());
-            }
-            mesh.Normals.ComputeNormals();
-            vertexCount = mesh.Vertices.Count;
-            id = doc.Objects.AddMesh(mesh, AnalysisAttributes(layer, "mesh", "daylight", mode));
-            if (id == Guid.Empty)
-                throw new InvalidOperationException("Could not add the daylight mesh.");
-            box.Union(mesh.GetBoundingBox(true));
+                ["id"] = id == Guid.Empty ? "" : id.ToString(),
+                ["faces"] = faces.Count,
+                ["vertices"] = vertexCount,
+                ["wires"] = wiresOff ? "off" : "on",
+                ["layer"] = AnalysisLayerName,
+                ["deleted"] = deleted,
+                ["bbox"] = bbox,
+                ["message"] = $"Painted {faces.Count} daylight faces on {AnalysisLayerName}."
+            };
         }
-
-        doc.Views.Redraw();
-        var bbox = box.IsValid
-            ? new JArray(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
-            : new JArray();
-        var wiresOff = mode != null && !mode.DisplayAttributes.MeshSpecificAttributes.ShowMeshWires;
-        return new JObject
+        finally
         {
-            ["id"] = id == Guid.Empty ? "" : id.ToString(),
-            ["faces"] = faces.Count,
-            ["vertices"] = vertexCount,
-            ["wires"] = wiresOff ? "off" : "on",
-            ["layer"] = AnalysisLayerName,
-            ["deleted"] = deleted,
-            ["bbox"] = bbox,
-            ["message"] = $"Painted {faces.Count} daylight faces on {AnalysisLayerName}."
-        };
+            LockAnalysis(doc);
+            if (doc != null) doc.Views.Redraw();
+        }
     }
 
     private const string AnalysisDisplayName = "Forsk Analysis";
@@ -260,55 +269,71 @@ public partial class RhinoMCPFunctions
     /// </summary>
     public static JObject SetAnalysisVisible(RhinoDoc doc, bool visible)
     {
-        if (visible)
+        UnlockAnalysis(doc);
+        try
         {
-            foreach (var candidate in doc.Layers)
-            {
-                if (candidate == null || candidate.IsDeleted) continue;
-                if (!candidate.Name.Equals(AnalysisLayerName, StringComparison.OrdinalIgnoreCase)) continue;
-                if (candidate.IsVisible) break;
-                candidate.IsVisible = true;
-                doc.Layers.Modify(candidate, candidate.Index, true);
-                break;
-            }
-        }
-
-        var meshes = AnalysisOverlays(doc);
-        var changed = 0;
-        foreach (var obj in meshes)
-        {
-            var id = obj.Id;
             if (visible)
             {
-                if (obj.IsHidden && doc.Objects.Show(id, false)) changed++;
+                foreach (var candidate in doc.Layers)
+                {
+                    if (candidate == null || candidate.IsDeleted) continue;
+                    if (!candidate.Name.Equals(AnalysisLayerName, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (candidate.IsVisible) break;
+                    candidate.IsVisible = true;
+                    doc.Layers.Modify(candidate, candidate.Index, true);
+                    break;
+                }
             }
-            else if (!obj.IsHidden && doc.Objects.Hide(id, false)) changed++;
+
+            var meshes = AnalysisOverlays(doc);
+            var changed = 0;
+            foreach (var obj in meshes)
+            {
+                var id = obj.Id;
+                if (visible)
+                {
+                    if (obj.IsHidden && doc.Objects.Show(id, false)) changed++;
+                }
+                else if (!obj.IsHidden && doc.Objects.Hide(id, false)) changed++;
+            }
+            var kept = AnalysisOverlays(doc).Count;
+            var verb = visible ? "Showed" : "Hid";
+            return new JObject
+            {
+                ["count"] = meshes.Count,
+                ["visible"] = visible,
+                ["changed"] = changed,
+                ["remaining"] = kept,
+                ["message"] = $"{verb} {meshes.Count} daylight mesh(es) on {AnalysisLayerName}. Kept {kept}."
+            };
         }
-        doc.Views.Redraw();
-        var kept = AnalysisOverlays(doc).Count;
-        var verb = visible ? "Showed" : "Hid";
-        return new JObject
+        finally
         {
-            ["count"] = meshes.Count,
-            ["visible"] = visible,
-            ["changed"] = changed,
-            ["remaining"] = kept,
-            ["message"] = $"{verb} {meshes.Count} daylight mesh(es) on {AnalysisLayerName}. Kept {kept}."
-        };
+            LockAnalysis(doc);
+            if (doc != null) doc.Views.Redraw();
+        }
     }
 
     [McpCommand("daylight_clear")]
     public JObject DaylightClear(JObject parameters)
     {
         var doc = RhinoDoc.ActiveDoc;
-        var deleted = DeleteAnalysisOverlay(doc);
-        doc.Views.Redraw();
-        return new JObject
+        UnlockAnalysis(doc);
+        try
         {
-            ["count"] = deleted,
-            ["remaining"] = AnalysisOverlays(doc).Count,
-            ["message"] = $"Cleared {deleted} daylight overlay(s) from {AnalysisLayerName}."
-        };
+            var deleted = DeleteAnalysisOverlay(doc);
+            return new JObject
+            {
+                ["count"] = deleted,
+                ["remaining"] = AnalysisOverlays(doc).Count,
+                ["message"] = $"Cleared {deleted} daylight overlay(s) from {AnalysisLayerName}."
+            };
+        }
+        finally
+        {
+            LockAnalysis(doc);
+            if (doc != null) doc.Views.Redraw();
+        }
     }
 
     private static List<RhinoObject> AnalysisOverlays(RhinoDoc doc)
@@ -331,6 +356,42 @@ public partial class RhinoMCPFunctions
             if (doc.Objects.Delete(obj.Id, true)) count++;
         }
         return count;
+    }
+
+    /// <summary>
+    /// The daylight mesh stays visible and is not a pick target. The layer and
+    /// each mesh stay locked. Unlock the layer first, then the meshes, before
+    /// a replace, a hide, or an attribute edit. An object reports locked when
+    /// either it or its layer is.
+    /// </summary>
+    private static void UnlockAnalysis(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        SetAnalysisLayerLocked(doc, false);
+        foreach (var obj in AnalysisOverlays(doc))
+            if (obj != null && obj.IsLocked) doc.Objects.Unlock(obj.Id, false);
+    }
+
+    /// <summary>Lock each daylight mesh, then the layer, so a click falls through to the room or the wall.</summary>
+    private static void LockAnalysis(RhinoDoc doc)
+    {
+        if (doc == null) return;
+        foreach (var obj in AnalysisOverlays(doc))
+            if (obj != null && !obj.IsLocked) doc.Objects.Lock(obj.Id, false);
+        SetAnalysisLayerLocked(doc, true);
+    }
+
+    private static void SetAnalysisLayerLocked(RhinoDoc doc, bool locked)
+    {
+        foreach (var candidate in doc.Layers)
+        {
+            if (candidate == null || candidate.IsDeleted) continue;
+            if (!candidate.Name.Equals(AnalysisLayerName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (candidate.IsLocked == locked) return;
+            candidate.IsLocked = locked;
+            doc.Layers.Modify(candidate, candidate.Index, true);
+            return;
+        }
     }
 
     /// <summary>

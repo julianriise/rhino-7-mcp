@@ -65,18 +65,28 @@ public partial class RhinoMCPFunctions
         }
         else
         {
-            foreach (var id in matched)
+            // The daylight mesh is locked. A rebuild that lists analysis has to unlock it to delete it.
+            var clearsMap = kindSet.Contains("analysis");
+            if (clearsMap) UnlockAnalysis(doc);
+            try
             {
-                var obj = doc.Objects.FindId(id);
-                var gone = string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)
-                    ? DeleteOpeningMarker(doc, id)
-                    : doc.Objects.Delete(id, true);
-                if (gone)
-                    deleted.Add(id.ToString());
+                foreach (var id in matched)
+                {
+                    var obj = doc.Objects.FindId(id);
+                    var gone = string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)
+                        ? DeleteOpeningMarker(doc, id)
+                        : doc.Objects.Delete(id, true);
+                    if (gone)
+                        deleted.Add(id.ToString());
+                }
+                if (deleted.Count > 0)
+                    BakePace.Redraw(doc);
+                PurgeOpeningBlockDefinitions(doc);
             }
-            if (deleted.Count > 0)
-                BakePace.Redraw(doc);
-            PurgeOpeningBlockDefinitions(doc);
+            finally
+            {
+                if (clearsMap) LockAnalysis(doc);
+            }
         }
 
         return new JObject

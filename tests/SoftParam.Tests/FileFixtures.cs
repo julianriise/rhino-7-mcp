@@ -44,8 +44,8 @@ static class Row
     public static ChipRow Plate(ChipRow marker, bool selected = false) =>
         new ChipRow { Id = Id(), Generated = true, Kind = "room_plate", Layer = "A-ROOM::Plate", Visible = true, Selected = selected, Solid = true, Closed = true, Stamp = marker.Name + "-plate", Name = marker.Name, Area = marker.Area, Marker = marker.Id };
 
-    public static ChipRow Map(bool visible = true, bool stale = false) =>
-        new ChipRow { Id = Id(), Generated = true, Kind = "analysis", Layer = "A-ANALYSE", Visible = visible, Stale = stale };
+    public static ChipRow Map(bool visible = true, bool stale = false, bool selected = false) =>
+        new ChipRow { Id = Id(), Generated = true, Kind = "analysis", Layer = "A-ANALYSE", Visible = visible, Stale = stale, Selected = selected };
 
     public static ChipRow PlanCurve(string layer = "wall", bool selected = false) =>
         new ChipRow { Id = Id(), Layer = layer, Curve = true, Closed = true, Visible = true, Selected = selected };
