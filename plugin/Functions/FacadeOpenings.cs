@@ -98,17 +98,7 @@ public partial class RhinoMCPFunctions
                 {
                     foreach (var item in group)
                         RemoveOpeningPieces(doc, item.Record.MarkerId, undo.Removed);
-                    var rebuilt = RebuildHostWall(new JObject
-                    {
-                        ["id"] = group[0].HostId.ToString()
-                    });
-                    undo.Committed = true;
-                    var rebuiltId = rebuilt?["host_id"]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
-                        undo.HostAfter = parsed;
-                    else
-                        undo.HostAfter = group[0].HostId;
-                    undo.NewBlocks = GuidList(rebuilt?["block_ids"] as JArray);
+                    RebuildUnder(undo);
                 }
                 catch
                 {
@@ -120,12 +110,7 @@ public partial class RhinoMCPFunctions
         }
         catch
         {
-            for (var i = commits.Count - 1; i >= 0; i--)
-            {
-                if (!commits[i].Committed) continue;
-                try { RollbackCommittedHost(doc, commits[i]); }
-                catch (Exception) { }
-            }
+            RollbackCommitted(doc, commits);
             throw;
         }
 
@@ -387,17 +372,7 @@ public partial class RhinoMCPFunctions
                         if (item.Edit.KindChanged) WriteOpeningKind(doc, item);
                         WriteOpeningStyle(doc, item.Record.MarkerId, item.Edit.After);
                     }
-                    var rebuilt = RebuildHostWall(new JObject
-                    {
-                        ["id"] = group[0].HostId.ToString()
-                    });
-                    undo.Committed = true;
-                    var rebuiltId = rebuilt?["host_id"]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(rebuiltId) && Guid.TryParse(rebuiltId, out var parsed))
-                        undo.HostAfter = parsed;
-                    else
-                        undo.HostAfter = group[0].HostId;
-                    undo.NewBlocks = GuidList(rebuilt?["block_ids"] as JArray);
+                    RebuildUnder(undo);
                 }
                 catch
                 {
@@ -409,12 +384,7 @@ public partial class RhinoMCPFunctions
         }
         catch
         {
-            for (var i = commits.Count - 1; i >= 0; i--)
-            {
-                if (!commits[i].Committed) continue;
-                try { RollbackCommittedHost(doc, commits[i]); }
-                catch (Exception) { }
-            }
+            RollbackCommitted(doc, commits);
             throw;
         }
 
@@ -1712,6 +1682,30 @@ public partial class RhinoMCPFunctions
             if (piece?.Object == null) continue;
             if (doc.Objects.FindId(piece.Object.Id) != null) continue;
             try { doc.Objects.Undelete(piece.Object); }
+            catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// The undo's host rebuilt from its path. The undo then holds the new host
+    /// and opening blocks, so a rollback can take them out again.
+    /// </summary>
+    private JObject RebuildUnder(HostUndo undo)
+    {
+        var result = RebuildHostWall(new JObject { ["id"] = undo.HostBefore.ToString() });
+        undo.Committed = true;
+        undo.HostAfter = Guid.TryParse(result?["host_id"]?.ToString(), out var after) ? after : undo.HostBefore;
+        undo.NewBlocks = GuidList(result?["block_ids"] as JArray);
+        return result;
+    }
+
+    /// <summary>Every rebuilt host put back, the last first. A host whose own step failed was put back there.</summary>
+    private void RollbackCommitted(RhinoDoc doc, List<HostUndo> commits)
+    {
+        for (var i = commits.Count - 1; i >= 0; i--)
+        {
+            if (!commits[i].Committed) continue;
+            try { RollbackCommittedHost(doc, commits[i]); }
             catch (Exception) { }
         }
     }

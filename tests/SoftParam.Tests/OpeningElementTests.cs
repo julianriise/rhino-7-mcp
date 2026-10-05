@@ -79,7 +79,10 @@ public class OpeningElementTests
         var swap = Slice(facade, "JObject SetOpeningType", "private HostUndo SnapshotWholeHost");
         Assert.Contains("CommitOpeningThenRebuild", move, StringComparison.Ordinal);
         Assert.Contains("CommitOpeningThenRebuild", resize, StringComparison.Ordinal);
-        Assert.Contains("RebuildHostWall", swap, StringComparison.Ordinal);
+        Assert.Contains("RebuildUnder", swap, StringComparison.Ordinal);
+        var under = Slice(facade, "JObject RebuildUnder", "void RollbackCommitted(");
+        Assert.Contains("RebuildHostWall", under, StringComparison.Ordinal);
+        Assert.DoesNotContain("BeginUndoRecord", under, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginUndoRecord", move, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginUndoRecord", resize, StringComparison.Ordinal);
         Assert.DoesNotContain("BeginUndoRecord", swap, StringComparison.Ordinal);

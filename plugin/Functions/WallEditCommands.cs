@@ -108,10 +108,7 @@ public partial class RhinoMCPFunctions
             }
             foreach (var undo in undos)
             {
-                var result = RebuildHostWall(new JObject { ["id"] = undo.HostBefore.ToString() });
-                undo.Committed = true;
-                undo.HostAfter = Guid.TryParse(result?["host_id"]?.ToString(), out var after) ? after : undo.HostBefore;
-                undo.NewBlocks = GuidList(result?["block_ids"] as JArray);
+                var result = RebuildUnder(undo);
                 rebuiltIds[undo.HostBefore] = undo.HostAfter;
                 if (undo.HostBefore == named) rebuilt = result;
             }
@@ -218,10 +215,7 @@ public partial class RhinoMCPFunctions
                     continue;
                 }
                 WriteWallPath(doc, undo.HostBefore, WallEdit.Path(record.Value));
-                var result = RebuildHostWall(new JObject { ["id"] = undo.HostBefore.ToString() });
-                undo.Committed = true;
-                undo.HostAfter = Guid.TryParse(result?["host_id"]?.ToString(), out var after) ? after : undo.HostBefore;
-                undo.NewBlocks = GuidList(result?["block_ids"] as JArray);
+                var result = RebuildUnder(undo);
                 rebuiltIds[undo.HostBefore] = undo.HostAfter;
                 if (undo.HostBefore == named) rebuilt = result;
             }
