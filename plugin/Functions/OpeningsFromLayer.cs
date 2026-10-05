@@ -98,6 +98,9 @@ public partial class RhinoMCPFunctions
         var markerIds = new JArray();
         var blockIds = new JArray();
         var cutCount = 0;
+        // Speed pass: where an opening's time goes, one print-log line per call.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long booleanMs = 0, blockMs = 0, stampMs = 0;
 
         foreach (var foot in footprints)
         {
@@ -129,6 +132,7 @@ public partial class RhinoMCPFunctions
                     if (!BboxesOverlapXY(wallBox, cutterBox)) continue;
 
                     Brep[] results = null;
+                    var lap = clock.ElapsedMilliseconds;
                     try
                     {
                         results = Brep.CreateBooleanDifference(
@@ -147,6 +151,10 @@ public partial class RhinoMCPFunctions
                         continue;
                     }
 
+                    finally
+                    {
+                        booleanMs += clock.ElapsedMilliseconds - lap;
+                    }
                     if (results == null || results.Length == 0)
                         continue;
 
@@ -234,6 +242,7 @@ public partial class RhinoMCPFunctions
                             hostForskId);
                         if (markerId != Guid.Empty)
                         {
+                            var blockLap = clock.ElapsedMilliseconds;
                             markerIds.Add(markerId.ToString());
                             StampImportedSwing(doc, markerId, foot, hostId, tol);
                             var blockId = AddOpeningBlock(
@@ -253,6 +262,8 @@ public partial class RhinoMCPFunctions
                                 hostForskId);
                             if (blockId != Guid.Empty)
                                 blockIds.Add(blockId.ToString());
+                            var stampLap = clock.ElapsedMilliseconds;
+                            blockMs += stampLap - blockLap;
                             if (hostSolid != null)
                             {
                                 StampOpeningOnHost(
@@ -264,6 +275,7 @@ public partial class RhinoMCPFunctions
                                     null,
                                     tol);
                             }
+                            stampMs += clock.ElapsedMilliseconds - stampLap;
                             markerIndex++;
                         }
                     }
@@ -287,9 +299,19 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        var purgeLap = clock.ElapsedMilliseconds;
         PurgeOpeningBlockDefinitions(doc);
         if (!BakePace.HoldsRedraw)
             doc.Views.Redraw();
+        try
+        {
+            System.IO.File.AppendAllText(PrintLogPath, DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+                + " openings " + openingKind + " " + footprints.Count + " in " + clock.ElapsedMilliseconds + " ms (boolean " + booleanMs
+                + ", marker+block " + blockMs + ", stamp " + stampMs + ", purge " + (clock.ElapsedMilliseconds - purgeLap) + ")\n");
+        }
+        catch (Exception)
+        {
+        }
 
         var wallIds = new JArray(walls.Select(w => w.Id.ToString()));
         return new JObject

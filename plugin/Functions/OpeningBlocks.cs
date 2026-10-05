@@ -225,9 +225,20 @@ public partial class RhinoMCPFunctions
             kindTag, width, sill, head, thickness, pad, built.TypeId, built.Swing);
         if (key.HeightMm <= 0 || key.WidthMm <= 0 || key.FrameMm <= 0) return Guid.Empty;
         var canonical = new Plane(Point3d.Origin, Vector3d.XAxis, Vector3d.YAxis);
-        var parts = BuildOpeningBlockParts(
-            canonical, 1, 1, key.WidthMm, key.FrameMm, key.SillMm, key.SillMm + key.HeightMm, key.PadMm, built, tol);
-        if (parts.Count == 0) return Guid.Empty;
+        // Speed pass: a window's parts take about 90 ms to build, and a shared
+        // definition already holds them, so only a new size builds geometry.
+        List<OpeningPart> parts;
+        string partNames;
+        var shared = FindOpeningDefinition(doc, key);
+        if (shared < 0 || !TryDefinitionPartNames(doc, shared, out partNames))
+        {
+            parts = BuildOpeningBlockParts(
+                canonical, 1, 1, key.WidthMm, key.FrameMm, key.SillMm, key.SillMm + key.HeightMm, key.PadMm, built, tol);
+            if (parts.Count == 0) return Guid.Empty;
+            partNames = FormatOpeningParts(parts);
+        }
+        else
+            parts = new List<OpeningPart>();
 
         var layer = EnsureOpeningBlockLayer(doc);
         var name = string.IsNullOrWhiteSpace(markerName) ? "opening-block" : markerName + "-block";
@@ -252,7 +263,7 @@ public partial class RhinoMCPFunctions
             MarkerId = markerId.ToString()
         });
         StampOpeningStyle(attr, style);
-        attr.SetUserString("forsk:parts", FormatOpeningParts(parts));
+        attr.SetUserString("forsk:parts", partNames);
 
         var mirror = OpeningTypes.HandSign(style.Hand, xLeft) < 0;
         var placed = OpeningBlockShare.Placement.On(
@@ -906,6 +917,26 @@ public partial class RhinoMCPFunctions
         var have = attr.GetUserString(key);
         if (string.IsNullOrEmpty(value)) return string.IsNullOrEmpty(have);
         return string.Equals(have, value, StringComparison.Ordinal);
+    }
+
+    /// <summary>A shared definition's part names, as FormatOpeningParts writes them from its members.</summary>
+    private static bool TryDefinitionPartNames(RhinoDoc doc, int defIndex, out string names)
+    {
+        names = null;
+        RhinoObject[] members = null;
+        try { members = doc.InstanceDefinitions[defIndex]?.GetObjects(); }
+        catch (Exception) { members = null; }
+        if (members == null || members.Length == 0) return false;
+        var set = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var member in members)
+        {
+            var part = member?.Attributes?.GetUserString("forsk:part");
+            if (string.IsNullOrEmpty(part)) part = member?.Attributes?.Name;
+            if (!string.IsNullOrEmpty(part)) set.Add(part);
+        }
+        if (set.Count == 0) return false;
+        names = string.Join(",", set);
+        return true;
     }
 
     private static string FormatOpeningParts(List<OpeningPart> parts)
