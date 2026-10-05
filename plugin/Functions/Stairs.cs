@@ -203,11 +203,11 @@ public static class Stairs
 
         var scaleMm = Math.Max(1, scale);
         var dot = Math.Min(0.75 * scaleMm, Math.Min(f.Going, h) / 3.0);
-        marks.Add(new Mark { Shape = "dot", Part = "walk", U0 = dot, V0 = 0, Radius = dot });
+        // The circle's centre is the walking line's start. The stroke begins at the far edge so it does not cross the fill.
+        marks.Add(new Mark { Shape = "dot", Part = "walk", U0 = 0, V0 = 0, Radius = dot });
         Split("walk", 0, k > 0 ? breakC : f.Run);
-        // Split drew the walk from 0; start it at the dot's edge instead.
         var walk = marks.FindIndex(m => m.Part == "walk" && m.Shape == "line");
-        if (walk >= 0) marks[walk].U0 = 2 * dot;
+        if (walk >= 0) marks[walk].U0 = dot;
         var arrow = Math.Min(2.5 * scaleMm, Math.Min(f.Going, h));
         Line("arrow", f.Run, 0, f.Run - arrow, arrow * 0.4, false);
         Line("arrow", f.Run, 0, f.Run - arrow, -arrow * 0.4, false);

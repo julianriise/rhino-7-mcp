@@ -146,7 +146,12 @@ public class StairsTests
         // Both sides go dashed past the break; the walking line too.
         Assert.Equal(2, marks.Count(m => m.Part == "outline" && m.V0 == m.V1 && m.Dashed));
         Assert.Single(marks, m => m.Part == "walk" && m.Shape == "line" && m.Dashed);
-        Assert.Single(marks, m => m.Shape == "dot");
+        var dot = Assert.Single(marks, m => m.Shape == "dot");
+        Assert.Equal(0, dot.U0);
+        Assert.Equal(0, dot.V0);
+        var walk = marks.First(m => m.Part == "walk" && m.Shape == "line" && !m.Dashed);
+        Assert.Equal(dot.Radius, walk.U0);
+        Assert.Equal(0, walk.V0);
         Assert.Equal(2, marks.Count(m => m.Part == "arrow"));
         var label = Assert.Single(marks, m => m.Shape == "text");
         Assert.Equal("UP 16 × 180/260", label.Text);
