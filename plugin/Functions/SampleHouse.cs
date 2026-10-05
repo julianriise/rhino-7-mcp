@@ -14,6 +14,13 @@ namespace RhinoMCPPlugin.Functions;
 /// </summary>
 public static class SampleHouse
 {
+    /// <summary>
+    /// The file takes the house when it holds nothing but Forsk's own plan cut: one
+    /// forsk:plan_cut value per object in the file (null for an object without it).
+    /// </summary>
+    public static bool FileIsEmpty(IEnumerable<string> planCutTags)
+        => planCutTags.All(tag => tag == ForskPlanCut.TagValue);
+
     public const double WidthMm = 14400;
     public const double DepthMm = 8200;
     public const double WallMm = 200;

@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
@@ -11,13 +12,16 @@ public partial class RhinoMCPFunctions
 {
     /// <summary>
     /// Draws the sample house on wall, door, window and label. Refuses a file
-    /// that already has objects. An empty file that is not millimetres becomes
+    /// that already has objects other than Forsk's plan cut. An empty file that is not millimetres becomes
     /// millimetres, so Generate 3D can run. Does not change the display mode.
     /// </summary>
     public static string OpenSampleHouse(RhinoDoc doc)
     {
         if (doc == null) return "Sample house · no document.";
-        if (doc.Objects.Count > 0) return "Sample house · the file already has objects.";
+        var everything = new ObjectEnumeratorSettings { HiddenObjects = true, LockedObjects = true, IncludeLights = true };
+        if (!SampleHouse.FileIsEmpty(doc.Objects.GetObjectList(everything)
+                .Select(o => o.Attributes.GetUserString(ForskPlanCut.TagKey))))
+            return "Sample house · the file already has objects.";
         var undo = 0u;
         try
         {

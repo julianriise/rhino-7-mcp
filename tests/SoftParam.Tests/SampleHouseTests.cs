@@ -73,6 +73,16 @@ public class SampleHouseTests
     }
 
     [Fact]
+    public void TheSample_TakesAFileHoldingOnlyThePlanCut()
+    {
+        // A new file holds Forsk's hidden plan cut; that is not the user's geometry.
+        Assert.True(SampleHouse.FileIsEmpty(new string[0]));
+        Assert.True(SampleHouse.FileIsEmpty(new[] { ForskPlanCut.TagValue }));
+        Assert.False(SampleHouse.FileIsEmpty(new[] { ForskPlanCut.TagValue, null }));
+        Assert.False(SampleHouse.FileIsEmpty(new string[] { null }));
+    }
+
+    [Fact]
     public void AnEmptyFile_OffersTheSample_AndTheThreeLines_UntilItIsOff()
     {
         var bar = ForskRegistry.Bar(Docs.Facts("empty"));

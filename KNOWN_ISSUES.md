@@ -126,11 +126,6 @@ black facades. The model viewport stays clay. Log ink must be greater than 0.
 
 ## Open (noted 2026-10-05)
 
-- **Open sample house refuses on a new empty file**: "Sample house · the file
-  already has objects." `SampleHouseDraw.cs` checks `doc.Objects.Count > 0`,
-  which counts Forsk's own hidden, locked Top plan cut (`forsk:plan_cut` on
-  Forsk Cut). Same cause as the empty-file classifier fix in `69ba63e`. Fix:
-  skip the plan cut in that check.
 - **Room detection may miss doors on A-OPEN**: `RoomsDetect.OpeningBoxes`
   reads markers through `EnumerateDocObjects`, which skips a layer that is
   off, and A-OPEN is off by default. Office smoke still passes; unverified.
