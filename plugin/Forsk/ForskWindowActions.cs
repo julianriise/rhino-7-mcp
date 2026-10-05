@@ -259,6 +259,11 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.draw":
                     DrawPick(thread, label, "wall.draw", "prompt.wall", "add_wall", ForskDrawWall.RunOnUi);
                     return;
+                case "room.draw":
+                case "room.redraw":
+                    var redraw = action.Id == "room.redraw";
+                    DrawPick(thread, label, action.Id, "prompt.area", "add_room_area", own => ForskDrawArea.RunOnUi(own, redraw));
+                    return;
                 case "exist.mark":
                     Job(thread, action.Id, label, sink => sink.Tool("mark_as_existing", new JObject()));
                     return;

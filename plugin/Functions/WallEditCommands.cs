@@ -418,14 +418,17 @@ public partial class RhinoMCPFunctions
             var sourceLayer = host.Attributes?.GetUserString("forsk:source_layer");
             JObject rebuilt;
             string followed;
+            List<RoomCurveUndo> split = null;
             try
             {
                 WriteWallPath(doc, host.Id, WallEdit.Path(added.Rings));
                 rebuilt = RebuildHostWall(new JObject { ["id"] = host.Id.ToString() });
-                followed = FollowNeighbours(doc, sourceLayer, records[added.Joined], added.Rings);
+                split = SplitDrawnRooms(doc, added.From, added.To, thickness, tol);
+                followed = FollowNeighbours(doc, sourceLayer, records[added.Joined], added.Rings) + RoomAreaPlan.SplitClause(split.Count);
             }
             catch (Exception ex)
             {
+                RestoreDrawnRooms(doc, split);
                 RollbackCommittedHost(doc, undo);
                 throw new InvalidOperationException("Wall not added. " + ex.Message, ex);
             }
@@ -474,12 +477,15 @@ public partial class RhinoMCPFunctions
             if (id == Guid.Empty)
                 throw new InvalidOperationException("Wall not added. Rhino did not take the solid.");
             string followed;
+            List<RoomCurveUndo> split = null;
             try
             {
-                followed = FollowNeighbours(doc, null, added.Rings, added.Rings);
+                split = SplitDrawnRooms(doc, added.From, added.To, thickness, tol);
+                followed = FollowNeighbours(doc, null, added.Rings, added.Rings) + RoomAreaPlan.SplitClause(split.Count);
             }
             catch (Exception ex)
             {
+                RestoreDrawnRooms(doc, split);
                 if (doc.Objects.FindId(id) != null)
                     doc.Objects.Delete(id, true);
                 throw new InvalidOperationException("Wall not added. " + ex.Message, ex);

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_room_area.json",
+  "title": "AddRoomArea Command",
+  "description": "Draw a room's area by its corners (AI imports miss rooms): the points become one closed outline on A-ROOM at the floor's height, counterclockwise, a corner given twice counted once. rooms_detect then takes it as the user's word for that region, names it from the labels inside and gives it a plate. With replace, the room given by id, or the one selected, is replaced by the new outline and keeps a type the user set. Refused, with nothing changed: under three corners, under 1 m², or an outline that crosses itself. A shown daylight map is marked out of date.",
+  "type": "object",
+  "properties": {
+    "points": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "description": "The room's corners [x, y] in mm, in order around the room."
+    },
+    "replace": {
+      "type": "boolean",
+      "description": "Replace a room with this outline: the room given by id, else the one selected."
+    },
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "With replace: the room GUID to replace. Omit to use the one selected room."
+    }
+  },
+  "required": ["points"],
+  "additionalProperties": false
+}

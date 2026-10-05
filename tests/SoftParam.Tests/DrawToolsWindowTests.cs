@@ -40,6 +40,23 @@ public class DrawToolsWindowTests
         Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts(file)).Actions, a => a.Id == "stair.draw");
     }
 
+    /// <summary>AI imports miss rooms: Draw area is on the card once there are walls; Redraw area needs one picked room.</summary>
+    [Fact]
+    public void DrawArea_NeedsWalls_AndRedrawArea_NeedsOnePickedRoom()
+    {
+        var house = ForskRegistry.Card(Docs.Facts("house")).Actions;
+        var draw = house.Single(a => a.Id == "room.draw");
+        Assert.Equal("Draw area", draw.Label);
+        Assert.Equal(Runs.Run, draw.Runs);
+        Assert.DoesNotContain(house, a => a.Id == "room.redraw");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("plan curves")).Actions, a => a.Id == "room.draw");
+
+        var picked = ForskRegistry.Card(Docs.Facts("house, room selected")).Actions.Single(a => a.Id == "room.redraw");
+        Assert.Equal("Redraw area", picked.Label);
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("room.draw"));
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("room.redraw"));
+    }
+
     [Fact]
     public void TheDrawTools_DoNotMoveTheBar()
     {

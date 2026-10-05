@@ -276,6 +276,8 @@ def test_new_commands():
         ("commands/add_wall.json", {"from": [5000, 200], "to": [5000, 3800]}),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500}),
         ("commands/room_push_pull.json", {"id": GUID, "side": "east", "distance_mm": 300, "way": "in"}),
+        ("commands/add_room_area.json", {"points": [[0, 0], [4000, 0], [4000, 3000]]}),
+        ("commands/add_room_area.json", {"points": [[0, 0], [4000, 0], [4000, 3000], [0, 3000]], "replace": True, "id": GUID}),
         ("commands/split_walls.json", {}),
         ("commands/split_walls.json", {"id": GUID}),
         ("commands/add_wall.json", {"from": [2000, 6000], "to": [6000, 6000], "thickness": 100, "height": 2400}),
@@ -1383,6 +1385,9 @@ def test_invalid_examples():
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "way": "up"}, "room_push_pull way is out or in"),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 0}, "room_push_pull distance above 0"),
         ("commands/room_push_pull.json", {"side": "north", "distance_mm": 500, "at": [0, 0]}, "room_push_pull unknown field"),
+        ("commands/add_room_area.json", {"points": [[0, 0], [4000, 0]]}, "add_room_area needs three corners"),
+        ("commands/add_room_area.json", {"points": [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0]]}, "add_room_area corners are [x, y]"),
+        ("commands/add_room_area.json", {"points": [[0, 0], [4000, 0], [4000, 3000]], "z": 0}, "add_room_area unknown field"),
         (
             "responses/move_wall_result.json",
             {"host_id": "x", "toward": "north", "distance_mm": 500, "faces_before": [0, 1], "faces_after": [0, 1],

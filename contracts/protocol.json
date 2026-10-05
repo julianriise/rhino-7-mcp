@@ -70,6 +70,7 @@
             "edit_stair",
             "delete_stair",
             "room_push_pull",
+            "add_room_area",
             "rebuild_host_wall",
             "clear_generated",
             "daylight_scene",

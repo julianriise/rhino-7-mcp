@@ -2918,6 +2918,43 @@ class TestAreaStatsTool:
         mock_get_conn.assert_not_called()
 
 
+class TestAddRoomAreaTool:
+    """The area tool: corners pass through as [x, y] floats; replace carries the room id."""
+
+    @patch("rhinomcp.tools.add_room_area.get_rhino_connection")
+    def test_corners_and_replace_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.add_room_area import add_room_area
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "name": "Bedroom",
+            "area_m2": 12.0,
+            "corners": 4,
+            "ok": True,
+            "message": "Added Bedroom, 12.0 m².",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = add_room_area(ctx=None, points=[[0, 0], [4000, 0], [4000, 3000], [0, 3000]])
+        mock_conn.send_command.assert_called_once_with(
+            "add_room_area", {"points": [[0.0, 0.0], [4000.0, 0.0], [4000.0, 3000.0], [0.0, 3000.0]]}
+        )
+        assert result["success"] is True
+        assert result["name"] == "Bedroom"
+
+        mock_conn.send_command.reset_mock()
+        add_room_area(ctx=None, points=[[0, 0], [4000, 0], [4000, 3000]], replace=True, id="abc")
+        args = mock_conn.send_command.call_args[0][1]
+        assert args["replace"] is True and args["id"] == "abc"
+
+    def test_two_corners_are_refused_before_the_wire(self):
+        from rhinomcp.tools.add_room_area import add_room_area
+
+        result = add_room_area(ctx=None, points=[[0, 0], [4000, 0]])
+        assert result["success"] is False
+
+
 class TestRoomPushPullTool:
     """F2 J5: one side of a room moves; the wire carries side, distance, way and id."""
 
