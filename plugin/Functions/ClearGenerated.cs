@@ -65,9 +65,12 @@ public partial class RhinoMCPFunctions
         }
         else
         {
-            // The daylight mesh is locked. A rebuild that lists analysis has to unlock it to delete it.
+            // The daylight mesh and the floor slabs are locked. A rebuild that
+            // lists them has to unlock them to delete them, then lock what remains.
             var clearsMap = kindSet.Contains("analysis");
+            var clearsFloors = kindSet.Contains("floor");
             if (clearsMap) UnlockAnalysis(doc);
+            if (clearsFloors) UnlockFloors(doc);
             try
             {
                 foreach (var id in matched)
@@ -86,6 +89,7 @@ public partial class RhinoMCPFunctions
             finally
             {
                 if (clearsMap) LockAnalysis(doc);
+                if (clearsFloors) LockFloors(doc);
             }
         }
 

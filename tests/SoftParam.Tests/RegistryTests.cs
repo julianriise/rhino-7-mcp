@@ -94,7 +94,8 @@ public class RegistryTests
         var fileLevel = new[]
         {
             "edit.undo", "section.add", "file.generate", "file.check", "file.draw", "daylight.again",
-            "daylight.hide", "daylight.show", "daylight.run", "daylight.window", "daylight.rooms"
+            "daylight.hide", "daylight.show", "daylight.run", "daylight.window", "daylight.rooms",
+            "plan.show", "plan.hide"
         };
         Assert.DoesNotContain(ForskRegistry.Bar(f).Context, a => fileLevel.Contains(a.Id));
     }

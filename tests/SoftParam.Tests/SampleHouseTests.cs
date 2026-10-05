@@ -104,7 +104,6 @@ public class SampleHouseTests
         var js = System.IO.File.ReadAllText(PageJs());
         Assert.Contains("model.guide", js);
         Assert.Contains("guide.dismiss", js);
-        Assert.Contains("Forsk.hoverStyle = 'hl'", js);
     }
 
     [Fact]

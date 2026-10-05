@@ -90,6 +90,10 @@ namespace RhinoMCPPlugin.Forsk
         public bool OfferArea;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
+        /// <summary>Full paths of the 2D layers Generate 3D hid, one per line.</summary>
+        public string PlanLayers;
+        /// <summary>Those layers are currently hidden.</summary>
+        public bool PlanHidden;
         /// <summary>The stored details (forsk/details JSON), or null.</summary>
         public string Details;
         /// <summary>Each stored detail's name by id ("North wall", "Door D01"), read from the model. One whose element is gone has none.</summary>
@@ -165,6 +169,10 @@ namespace RhinoMCPPlugin.Forsk
         public bool OfferArea;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
+        /// <summary>Generate 3D remembered 2D layers.</summary>
+        public bool PlanRecall;
+        /// <summary>Those layers are hidden. The bar offers Show 2D.</summary>
+        public bool PlanHidden;
         public bool Millimetres = true;
     }
 
@@ -197,6 +205,8 @@ namespace RhinoMCPPlugin.Forsk
                 JustPrinted = input.JustPrinted,
                 OfferArea = input.OfferArea,
                 GuideOff = input.GuideOff,
+                PlanRecall = global::RhinoMCPPlugin.Functions.PlanLayers.Stored(input.PlanLayers).Count > 0,
+                PlanHidden = input.PlanHidden,
                 Millimetres = input.Millimetres
             };
             var wallsRead = true;

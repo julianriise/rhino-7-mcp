@@ -159,6 +159,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("file.draw", Runs.Run, "group.import", f => !f.HasWalls),
             new ForskAction("file.generate", Runs.Run, "group.model", f => f.HasPlanCurves && !f.HasGenerated),
             new ForskAction("file.rebuild", Runs.Run, "group.model", f => f.HasGenerated),
+            new ForskAction("plan.show", Runs.Run, "group.model", f => f.PlanHidden),
+            new ForskAction("plan.hide", Runs.Run, "group.model", f => f.PlanRecall && !f.PlanHidden),
             new ForskAction("wall.split", Runs.Run, "group.model", f => f.WholeWalls),
             new ForskAction("wall.move", Runs.Prefill, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
@@ -276,6 +278,8 @@ namespace RhinoMCPPlugin.Forsk
             // Walls with doors and windows: Add detail is the one thing for them all.
             if (f.Picked == Picked.Other) yield return Find("detail.add");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
+            if (f.Picked == Picked.None && f.PlanHidden) yield return Find("plan.show");
+            else if (f.Picked == Picked.None && f.PlanRecall && !f.PlanHidden) yield return Find("plan.hide");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");
             if (f.Picked == Picked.Stair) yield return Find("stair.edit");
             if (f.Picked == Picked.Stair) yield return Find("stair.delete");

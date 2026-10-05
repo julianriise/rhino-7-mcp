@@ -47,6 +47,11 @@ internal static class RoomTypeColorHost
         Invalidate();
     }
 
+    /// <summary>
+    /// Drops the cached meshes. The cache otherwise keys only on the document
+    /// serial, and a quiet attribute write during Generate 3D does not make
+    /// the next redraw rebuild it. rooms_set_type and the end of the bake call this.
+    /// </summary>
     internal static void Invalidate()
     {
         _conduit?.Drop();

@@ -83,6 +83,8 @@
     <Compile Include="..\..\plugin\Forsk\FirstRun.cs" Link="FirstRun.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskRegistry.cs" Link="ForskRegistry.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReceipt.cs" Link="ForskReceipt.cs" />
+    <Compile Include="..\..\plugin\Forsk\BakeReply.cs" Link="BakeReply.cs" />
+    <Compile Include="..\..\plugin\Functions\PlanLayers.cs" Link="PlanLayers.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskPrefill.cs" Link="ForskPrefill.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskCards.cs" Link="ForskCards.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskRole.cs" Link="ForskRole.cs" />
