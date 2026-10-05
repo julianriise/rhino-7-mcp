@@ -134,6 +134,7 @@ public class IfcExportTests
         var space = db.OfType<IfcSpace>().Single();
         Assert.Equal("rd-01", space.Name);
         Assert.Equal("Garage", space.LongName);
+        Assert.Equal("unassigned", space.ObjectType);
         var area = (space.FindQuantity("NetFloorArea") as IfcQuantityArea)?.AreaValue ?? 0;
         Assert.InRange(area, 27.36 * 0.99, 27.36 * 1.01);
     }

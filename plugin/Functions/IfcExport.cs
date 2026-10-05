@@ -75,6 +75,8 @@ public static class IfcExport
         public double AreaM2;
         public double Base;
         public double Height;
+        /// <summary>forsk:room_type. Missing is unassigned. Written as IfcSpace.ObjectType.</summary>
+        public string RoomType;
     }
 
     /// <summary>R5: a straight stair as built: its foot on the centre line, its climb and its flight.</summary>
@@ -173,7 +175,11 @@ public static class IfcExport
             if (room?.Ring == null || room.Ring.Count < 3 || room.Height <= 0) continue;
             var placement = new IfcLocalPlacement(storey.ObjectPlacement, new IfcAxis2Placement3D(new IfcCartesianPoint(db, 0, 0, room.Base - z0)));
             var body = Extrusion(db, new List<List<Pt>> { room.Ring }, room.Height);
-            var space = new IfcSpace(storey, room.Id ?? "", placement, body) { LongName = room.Name ?? "" };
+            var space = new IfcSpace(storey, room.Id ?? "", placement, body)
+            {
+                LongName = room.Name ?? "",
+                ObjectType = RoomTypes.Read(room.RoomType)
+            };
             new IfcRelDefinesByProperties(space, new IfcElementQuantity("Qto_SpaceBaseQuantities", new IfcQuantityArea(db, "NetFloorArea", room.AreaM2)));
         }
         return db;

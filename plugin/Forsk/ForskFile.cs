@@ -261,9 +261,10 @@ namespace RhinoMCPPlugin.Forsk
         static string RoomLine(ChipRow row)
         {
             var name = string.IsNullOrWhiteSpace(row.Name) ? "Room" : row.Name.Trim();
-            if (!double.TryParse(row.Area, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mm2) || mm2 <= 0)
-                return name;
-            return name + " · " + (mm2 / 1e6).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " m²";
+            var line = name;
+            if (double.TryParse(row.Area, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mm2) && mm2 > 0)
+                line = name + " · " + (mm2 / 1e6).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " m²";
+            return line + global::RhinoMCPPlugin.Functions.RoomTypes.LineSuffix(row.RoomType);
         }
 
         /// <summary>Every row's id, layer and edit stamp, sorted and hashed: it changes when the model does.</summary>

@@ -119,7 +119,7 @@ public class TakeoffCsvTests
     [Fact]
     public void TheTableHeader_IsExact()
     {
-        Assert.Equal("Kind,Id,Name,Type,Level,Wall,Length (m),Perimeter (m),Area (m²),Height (mm),Thickness (mm),Width (mm),Sill (mm),Risers,Riser (mm),Going (mm)",
+        Assert.Equal("Kind,Id,Name,Type,Level,Wall,Length (m),Perimeter (m),Area (m²),Height (mm),Thickness (mm),Width (mm),Sill (mm),Risers,Riser (mm),Going (mm),room_type",
             Table(Csv())[0]);
     }
 
@@ -140,6 +140,20 @@ public class TakeoffCsvTests
         Assert.Equal("22.40", room["Perimeter (m)"]);
         Assert.Equal("0", room["Level"]);
         Assert.Equal("", room["Thickness (mm)"]);
+        Assert.Equal("unassigned", room["room_type"]);
+        Assert.Equal("", Fields(Table(Csv()).First(l => l.StartsWith("Wall,")))["room_type"]);
+    }
+
+    [Fact]
+    public void AStoredRoomType_IsTheRoomTypeColumn()
+    {
+        var rooms = Rooms();
+        rooms.Rooms.Single(r => r.Id == "rd-01").RoomType = RoomTypes.Garage;
+        var csv = TakeoffCsv.Write(ProjectInfoTests.Read(ProjectInfoTests.Smoke), rooms.Rooms,
+            Takeoff.Runs(Walls(), Openings(), Tol), Openings(), StairList(), Exported);
+        Assert.Equal("garage", Fields(Table(csv).Single(l => l.StartsWith("Room,rd-01,")))["room_type"]);
+        Assert.Contains("Room,rd-02,\"Bod, \"\"lille\"\"\",,0,", csv);
+        Assert.EndsWith(",unassigned\r\n", Table(csv).Single(l => l.StartsWith("Room,rd-02,")) + "\r\n");
     }
 
     [Fact]
