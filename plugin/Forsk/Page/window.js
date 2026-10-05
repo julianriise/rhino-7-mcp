@@ -397,9 +397,145 @@
   /* The pinned form already drawn, so a later render does not rebuild it or steal the caret. */
   var pinKey = '';
   var pinNewest = '';
+  /* The overlay thumb fades after a scroll unless the pointer is on the list or the thumb is held. */
+  var threadThumbTimer = 0;
+  var threadThumbHover = false;
+  var threadThumbDrag = false;
+  /* Render restores scrollTop. Those events must not flash the thumb. */
+  var threadThumbQuiet = false;
+
+  function syncThreadThumb() {
+    var thread = document.getElementById('thread');
+    var bar = document.getElementById('thread-bar');
+    var thumb = document.getElementById('thread-thumb');
+    if (!thread || !bar || !thumb) return;
+    var view = thread.clientHeight;
+    var content = thread.scrollHeight;
+    var scroll = thread.scrollTop;
+    if (!Forsk.scrollThumb(view, content, scroll)) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    var geom = Forsk.scrollThumb(view, content, scroll, bar.clientHeight);
+    if (!geom) {
+      bar.hidden = true;
+      return;
+    }
+    thumb.style.height = geom.h + 'px';
+    thumb.style.top = geom.y + 'px';
+  }
+
+  function revealThreadThumb() {
+    var frame = document.getElementById('thread-frame');
+    if (!frame || !frame.classList) return;
+    var bar = document.getElementById('thread-bar');
+    if (!bar || bar.hidden) {
+      frame.classList.remove('thumb-on');
+      return;
+    }
+    frame.classList.add('thumb-on');
+    if (threadThumbTimer) root.clearTimeout(threadThumbTimer);
+    threadThumbTimer = 0;
+    if (threadThumbHover || threadThumbDrag) return;
+    threadThumbTimer = root.setTimeout(function () {
+      threadThumbTimer = 0;
+      if (threadThumbHover || threadThumbDrag) return;
+      var box = document.getElementById('thread-frame');
+      if (box && box.classList) box.classList.remove('thumb-on');
+    }, 700);
+  }
+
+  function bindThreadThumb(threadEl) {
+    var frame = document.getElementById('thread-frame');
+    var bar = document.getElementById('thread-bar');
+    var thumb = document.getElementById('thread-thumb');
+    if (!frame || !bar || !thumb) return;
+    frame.addEventListener('mouseenter', function () {
+      threadThumbHover = true;
+      revealThreadThumb();
+    });
+    frame.addEventListener('mouseleave', function () {
+      threadThumbHover = false;
+      revealThreadThumb();
+    });
+    thumb.addEventListener('wheel', function (e) {
+      var dy = e.deltaY || 0;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= threadEl.clientHeight || 0;
+      threadEl.scrollTop += dy;
+      e.preventDefault();
+    });
+    thumb.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      var view = threadEl.clientHeight;
+      var content = threadEl.scrollHeight;
+      var track = bar.clientHeight;
+      var origin = Forsk.scrollThumb(view, content, threadEl.scrollTop, track);
+      if (!origin) return;
+      var startY = e.clientY;
+      var startTop = origin.y;
+      threadThumbDrag = true;
+      thumb.classList.add('drag');
+      revealThreadThumb();
+      function move(ev) {
+        threadEl.scrollTop = Forsk.scrollForThumb(view, content, startTop + (ev.clientY - startY), track);
+      }
+      function up() {
+        threadThumbDrag = false;
+        thumb.classList.remove('drag');
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        revealThreadThumb();
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  }
 
   Forsk.nearEnd = function (scrollHeight, scrollTop, clientHeight) {
     return scrollHeight - scrollTop - clientHeight < 40;
+  };
+
+  /*
+   * Overlay thumb for the message list. view and content are the scroller's
+   * client and scroll heights, scroll is scrollTop, track is the indicator
+   * height (the view, when omitted). The thumb is at least min pixels and
+   * never taller than the track. y is 0 at the top and track-h at the end.
+   * Null when the list fits, so nothing is drawn and the width stays put.
+   */
+  Forsk.scrollThumb = function (view, content, scroll, track, min) {
+    view = +view;
+    content = +content;
+    scroll = +scroll;
+    if (!(track > 0)) track = view;
+    if (!(min > 0)) min = 24;
+    if (!(view > 0) || !(track > 0) || !(content > view + 0.5)) return null;
+    var maxScroll = content - view;
+    if (!(scroll > 0)) scroll = 0;
+    if (scroll > maxScroll) scroll = maxScroll;
+    var h = track * view / content;
+    if (h < min) h = min;
+    if (h > track) h = track;
+    var travel = track - h;
+    var y = maxScroll > 0 && travel > 0 ? scroll / maxScroll * travel : 0;
+    return { h: h, y: y };
+  };
+
+  /* scrollTop that puts the thumb at y. The inverse of scrollThumb. */
+  Forsk.scrollForThumb = function (view, content, y, track, min) {
+    var fitted = Forsk.scrollThumb(view, content, 0, track, min);
+    if (!fitted) return 0;
+    view = +view;
+    content = +content;
+    if (!(track > 0)) track = view;
+    var travel = track - fitted.h;
+    if (!(travel > 0) || !(content > view)) return 0;
+    var top = +y;
+    if (!(top > 0)) top = 0;
+    if (top > travel) top = travel;
+    return top / travel * (content - view);
   };
 
   /*
@@ -1062,23 +1198,35 @@
     var follow = followLatest || Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
     followLatest = follow;
     var keep = thread.scrollTop;
+    var seen = keep;
+    var placed = keep;
     var forms = openForms();
-    var skip = {};
-    forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
-    while (thread.firstChild) thread.removeChild(thread.firstChild);
-    (model.thread || []).forEach(function (entry) {
-      if (entry.id && skip[entry.id]) return;
-      thread.appendChild(item(entry));
-    });
-    if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
-    if (follow) thread.scrollTop = thread.scrollHeight;
-    else thread.scrollTop = keep;
-    var placed = thread.scrollTop;
+    threadThumbQuiet = true;
+    try {
+      var skip = {};
+      forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
+      while (thread.firstChild) thread.removeChild(thread.firstChild);
+      (model.thread || []).forEach(function (entry) {
+        if (entry.id && skip[entry.id]) return;
+        thread.appendChild(item(entry));
+      });
+      if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
+      if (follow) thread.scrollTop = thread.scrollHeight;
+      else thread.scrollTop = keep;
+      placed = thread.scrollTop;
+      syncThreadThumb();
+      if (placed !== seen) revealThreadThumb();
+    } finally {
+      threadThumbQuiet = false;
+    }
     // The write above lands about 15px short. Layout has finished on the next turn.
     if (follow) root.setTimeout(function () {
       if (Math.abs(thread.scrollTop - placed) > 2) return;
+      var seenLate = thread.scrollTop;
       thread.scrollTop = thread.scrollHeight;
       followLatest = true;
+      syncThreadThumb();
+      if (thread.scrollTop !== seenLate) revealThreadThumb();
     }, 0);
     else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
     renderPin(forms);
@@ -1247,18 +1395,25 @@
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
     // One thread per file. There is no separate history list, so this scrolls that thread.
     var threadEl = document.getElementById('thread');
+    bindThreadThumb(threadEl);
     threadEl.addEventListener('scroll', function () {
       followLatest = Forsk.nearEnd(threadEl.scrollHeight, threadEl.scrollTop, threadEl.clientHeight);
+      if (threadThumbQuiet) return;
+      syncThreadThumb();
+      revealThreadThumb();
     });
     // Shrinking the panel does not fire a scroll. A reader who was on the newest line still is.
     root.addEventListener('resize', function () {
       fitSlots();
+      syncThreadThumb();
       if (!followLatest) return;
       threadEl.scrollTop = threadEl.scrollHeight;
     });
     document.getElementById('history').addEventListener('click', function () {
       followLatest = false;
       threadEl.scrollTop = 0;
+      syncThreadThumb();
+      revealThreadThumb();
     });
     var pill = document.getElementById('role-pill');
     var more = document.getElementById('more');
