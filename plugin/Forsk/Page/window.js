@@ -2,7 +2,7 @@
  * The Forsk window's page. C# owns the view model and pushes it with
  * Forsk.render; the page draws it and posts actions back over the page
  * channel. The page keeps nothing it cannot rebuild from the model.
- * keyAction, handleKey, hoverAction and makeSender touch no DOM, so they test headless.
+ * keyAction, handleKey and makeSender touch no DOM, so they test headless.
  */
 (function (root) {
   'use strict';
@@ -54,18 +54,6 @@
     }
     send(action);
     return action;
-  };
-
-  /*
-   * Hover takes the keyboard, and leaving gives it back. Nothing moves while
-   * a field that already has text is being typed in, or while a button is
-   * down. enabled false is the ForskHoverFocus setting, default on.
-   */
-  Forsk.hoverAction = function (state) {
-    state = state || {};
-    if (state.enabled === false || state.dragging || state.typing) return null;
-    if (state.edge !== 'enter' && state.edge !== 'leave') return null;
-    return { kind: 'hover', edge: state.edge };
   };
 
   /*
@@ -1257,36 +1245,6 @@
     renderSettings(model);
     renderSheet(model.help);
     applyPrefill(model.prefill);
-    showHover();
-  };
-
-  /*
-   * The viewport's hover, answered here: C# sends the thread items that name
-   * the element under the pointer (ids, empty to clear). The ids stay, so a
-   * render that redraws the thread lights the same rows again.
-   */
-  Forsk.hoverStyle = 'hl';
-
-  var hovered = [];
-
-  function showHover(reveal) {
-    var thread = document.getElementById('thread');
-    if (!thread) return;
-    var lit = thread.querySelectorAll('.' + Forsk.hoverStyle);
-    for (var i = 0; i < lit.length; i++) lit[i].classList.remove(Forsk.hoverStyle);
-    var first = null;
-    for (var j = 0; j < hovered.length; j++) {
-      var row = thread.querySelector('[data-item="' + String(hovered[j]).replace(/[^A-Za-z0-9_-]/g, '') + '"]');
-      if (!row) continue;
-      row.classList.add(Forsk.hoverStyle);
-      if (!first) first = row;
-    }
-    if (reveal && first && first.scrollIntoView) first.scrollIntoView({ block: 'nearest' });
-  }
-
-  Forsk.hover = function (ids) {
-    hovered = ids || [];
-    showHover(true);
   };
 
   Forsk.focus = function () {
@@ -1457,44 +1415,9 @@
       if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
       closeMenus(false);
     });
-    var hoverDown = false;
-    function hoverTyping() {
-      var node = document.activeElement;
-      if (!node) return false;
-      if (node.tagName === 'SELECT') return true;
-      if (node.tagName !== 'INPUT' && node.tagName !== 'TEXTAREA') return false;
-      var type = String(node.type || '').toLowerCase();
-      if (type === 'checkbox' || type === 'radio' || type === 'button' || type === 'submit') return false;
-      return String(node.value || '').length > 0;
-    }
-    function postHover(edge, e) {
-      var state = {
-        edge: edge,
-        enabled: !model || model.hoverFocus !== false,
-        typing: hoverTyping(),
-        dragging: hoverDown || !!(e && e.buttons)
-      };
-      var action = Forsk.hoverAction(state);
-      if (!action) {
-        // The button is still down. C# gives the keyboard back when the drag ends outside.
-        if (edge === 'leave' && state.dragging && !state.typing && state.enabled !== false)
-          sender.send({ kind: 'hover', edge: 'leave', dragging: true });
-        return;
-      }
-      if (action.edge === 'enter') Forsk.focus();
-      sender.send(action);
-    }
-    document.documentElement.addEventListener('mouseenter', function (e) {
-      if (!e.buttons) hoverDown = false;
-      postHover('enter', e);
-    });
-    document.documentElement.addEventListener('mouseleave', function (e) { postHover('leave', e); });
     document.addEventListener('pointerdown', function () {
-      hoverDown = true;
       document.documentElement.removeAttribute('data-kbd');
     });
-    document.addEventListener('pointerup', function () { hoverDown = false; });
-    document.addEventListener('pointercancel', function () { hoverDown = false; });
     var nav = document.getElementById('bar');
     nav.addEventListener('mouseenter', function () { barHovered = true; });
     nav.addEventListener('mouseleave', function () {
