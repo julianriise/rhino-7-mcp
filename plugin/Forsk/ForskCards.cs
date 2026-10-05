@@ -251,6 +251,57 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
+        /// Choose logo on the Project info card: the picked file (an SVG already
+        /// a PNG at path) is shown on the card, which stays open. Save keeps it.
+        /// </summary>
+        public static void HoldLogo(JObject card, string name, string path, byte[] picture)
+        {
+            var data = LogoData(card);
+            data.Remove("logo_remove");
+            data["logo_path"] = path;
+            data["logo_name"] = name;
+            var preview = OfficeLogo.PreviewUrl(picture);
+            if (preview != null) card["image"] = preview;
+            else card.Remove("image");
+            card["note"] = "Logo: " + name + " · click Save to keep it.";
+        }
+
+        /// <summary>Remove logo: held like a pick, so Save removes it and Cancel keeps it.</summary>
+        public static void HoldLogoRemoval(JObject card)
+        {
+            var data = LogoData(card);
+            data.Remove("logo_path");
+            data.Remove("logo_name");
+            data["logo_remove"] = true;
+            card.Remove("image");
+            card["note"] = "The logo is removed when you click Save.";
+        }
+
+        /// <summary>The held logo change as set_project_meta arguments. Nothing held adds nothing.</summary>
+        public static void LogoMeta(JObject card, JObject meta)
+        {
+            var data = card["data"] as JObject;
+            var path = data?["logo_path"]?.ToString();
+            if (!string.IsNullOrEmpty(path))
+            {
+                meta["logo_path"] = path;
+                meta["logo_name"] = data["logo_name"]?.ToString() ?? "";
+            }
+            else if (data?["logo_remove"]?.Value<bool>() == true)
+                meta["logo"] = "";
+        }
+
+        static JObject LogoData(JObject card)
+        {
+            if (!(card["data"] is JObject data))
+            {
+                data = new JObject();
+                card["data"] = data;
+            }
+            return data;
+        }
+
+        /// <summary>
         /// ⋯ → Project info: the seven ProjectInfo fields, Save and Cancel. With
         /// pending (file.print, print.one, export.dwg, export.dxf, export.csv)
         /// it is the ask-once card before that action: Save and print (or

@@ -26,6 +26,7 @@ def set_project_meta(
     revision: Optional[str] = None,
     scale_label: Optional[str] = None,
     logo_path: Optional[str] = None,
+    logo_name: Optional[str] = None,
     logo: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -36,8 +37,10 @@ def set_project_meta(
     read these. Omitted keys are left unchanged. An empty string clears that
     key. date falls back to today and scale_label to 1:100 when unset.
 
-    logo_path is a PNG or JPEG file: the office logo, kept in the 3dm and
-    printed at the right end of every title block. logo="" removes it.
+    logo_path is a PNG, JPEG or SVG file: the office logo, kept in the 3dm and
+    printed at the right end of every title block. An SVG is kept as the PNG it
+    prints as. logo_name names it when logo_path is a converted copy.
+    logo="" removes it.
 
     Returns:
     Dictionary with every key above.
@@ -54,6 +57,7 @@ def set_project_meta(
             ("revision", revision),
             ("scale_label", scale_label),
             ("logo_path", logo_path),
+            ("logo_name", logo_name),
             ("logo", logo),
         ):
             text = _text(value, key)

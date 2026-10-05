@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -10,10 +11,11 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// v3: the office's logo, picked once in Project info and printed at the right
 /// end of every title block. The file keeps the picked PNG or JPEG itself
-/// (document strings, section forsk), so the logo travels with the 3dm. This
-/// reads the two formats without System.Drawing: a PNG is inflated into RGB
-/// and alpha, a JPEG is kept as it is for the PDF's DCTDecode. Pure, so it
-/// tests headless.
+/// (document strings, section forsk), so the logo travels with the 3dm. An SVG
+/// is turned into a PNG when it is picked (Prepare), so the layout, the PDF and
+/// the DWG/DXF print one picture. This reads the two formats without
+/// System.Drawing: a PNG is inflated into RGB and alpha, a JPEG is kept as it
+/// is for the PDF's DCTDecode. Pure apart from QuickLook, so it tests headless.
 /// </summary>
 public static class OfficeLogo
 {
@@ -23,8 +25,13 @@ public static class OfficeLogo
     public const string Role = "title_logo";
     public const string BoxKey = "forsk:logo_box";
     public const int MaxBytes = 2 * 1024 * 1024;
-    public const string Unreadable = "That logo could not be read. Pick a PNG or JPEG.";
-    public const string TooLarge = "That logo is over 2 MB. Pick a smaller PNG or JPEG.";
+    public const string Unreadable = "That logo could not be read. Pick a PNG, JPEG or SVG.";
+    public const string TooLarge = "That logo is over 2 MB. Pick a smaller PNG, JPEG or SVG.";
+    public const string SvgFailed = "That SVG could not be turned into a picture. Export it as PNG and pick that.";
+    /// <summary>The longest side of the PNG an SVG becomes: about 500 dpi across the widest logo cell.</summary>
+    public const int SvgPixels = 1200;
+    /// <summary>The largest logo the Project info card previews inline.</summary>
+    public const int PreviewMaxBytes = 512 * 1024;
 
     public sealed class Picture
     {
@@ -69,6 +76,101 @@ public static class OfficeLogo
         }
         if (picture == null || picture.Width <= 0 || picture.Height <= 0) error = Unreadable;
         return error == null ? picture : null;
+    }
+
+    /// <summary>An SVG file's bytes: text whose first tag is an svg element, after any prolog.</summary>
+    public static bool IsSvg(byte[] data)
+    {
+        if (data == null || data.Length < 5) return false;
+        var head = System.Text.Encoding.UTF8.GetString(data, 0, Math.Min(data.Length, 4096)).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+        if (!head.StartsWith("<", StringComparison.Ordinal)) return false;
+        var svg = head.IndexOf("<svg", StringComparison.OrdinalIgnoreCase);
+        var html = head.IndexOf("<html", StringComparison.OrdinalIgnoreCase);
+        return svg >= 0 && (html < 0 || svg < html);
+    }
+
+    /// <summary>
+    /// The bytes to keep for a picked file: a PNG or JPEG as it is, an SVG as
+    /// the PNG rasterize makes of it. Null with the reason when it cannot be used.
+    /// </summary>
+    public static byte[] Prepare(byte[] data, Func<byte[], byte[]> rasterize, out string error)
+    {
+        if (IsSvg(data))
+        {
+            if (data.Length > MaxBytes)
+            {
+                error = TooLarge;
+                return null;
+            }
+            byte[] png;
+            try { png = rasterize(data); }
+            catch (Exception) { png = null; }
+            if (png == null || Read(png, out _) == null)
+            {
+                error = SvgFailed;
+                return null;
+            }
+            error = null;
+            return png;
+        }
+        return Read(data, out error) == null ? null : data;
+    }
+
+    /// <summary>
+    /// An SVG as a PNG through macOS QuickLook (qlmanage), which draws SVG with
+    /// WebKit. Null when it is not there or makes nothing.
+    /// </summary>
+    public static byte[] RasterizeWithQuickLook(byte[] svg)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "forsk-logo-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var source = Path.Combine(folder, "logo.svg");
+            File.WriteAllBytes(source, svg);
+            var start = new ProcessStartInfo("/usr/bin/qlmanage", QuickLookArguments(source, folder))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using (var process = Process.Start(start))
+            {
+                if (process == null) return null;
+                process.StandardOutput.ReadToEnd();
+                if (!process.WaitForExit(20000))
+                {
+                    try { process.Kill(); } catch (Exception) { }
+                    return null;
+                }
+            }
+            var output = QuickLookOutput(source, folder);
+            return File.Exists(output) ? File.ReadAllBytes(output) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch (Exception) { }
+        }
+    }
+
+    public static string QuickLookArguments(string svgPath, string outFolder) =>
+        "-t -s " + SvgPixels.ToString(CultureInfo.InvariantCulture) + " -o \"" + outFolder + "\" \"" + svgPath + "\"";
+
+    /// <summary>Where qlmanage -t writes its thumbnail: the file's own name plus .png.</summary>
+    public static string QuickLookOutput(string svgPath, string outFolder) =>
+        Path.Combine(outFolder, Path.GetFileName(svgPath) + ".png");
+
+    /// <summary>A data URL the card shows the picked logo from, or null when it is too big to inline.</summary>
+    public static string PreviewUrl(byte[] data)
+    {
+        if (data == null || data.Length == 0 || data.Length > PreviewMaxBytes) return null;
+        var mime = data.Length > 1 && data[0] == 0xFF && data[1] == 0xD8 ? "image/jpeg" : "image/png";
+        return "data:" + mime + ";base64," + Convert.ToBase64String(data);
     }
 
     /// <summary>The stored logo: the document string as written by Encode.</summary>

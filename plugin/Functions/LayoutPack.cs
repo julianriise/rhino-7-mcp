@@ -170,7 +170,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// logo_path: a PNG or JPEG read and kept in the file; logo "": the logo removed.
+    /// logo_path: a PNG, JPEG or SVG (kept as the PNG it prints as) read and kept
+    /// in the file, named logo_name when given; logo "": the logo removed.
     /// Null when neither was asked. A file that cannot be read stores nothing and says why.
     /// </summary>
     private static string StoreLogo(RhinoDoc doc, JObject parameters)
@@ -181,9 +182,11 @@ public partial class RhinoMCPFunctions
             byte[] bytes;
             try { bytes = System.IO.File.ReadAllBytes(path.Trim()); }
             catch (Exception) { throw new InvalidOperationException(OfficeLogo.Unreadable); }
-            if (OfficeLogo.Read(bytes, out var error) == null)
+            bytes = OfficeLogo.Prepare(bytes, OfficeLogo.RasterizeWithQuickLook, out var error);
+            if (bytes == null)
                 throw new InvalidOperationException(error);
-            var name = System.IO.Path.GetFileName(path.Trim());
+            var given = parameters["logo_name"]?.ToString();
+            var name = string.IsNullOrWhiteSpace(given) ? System.IO.Path.GetFileName(path.Trim()) : given.Trim();
             doc.Strings.SetString(ProjectInfo.Section, OfficeLogo.Key, OfficeLogo.Encode(bytes));
             doc.Strings.SetString(ProjectInfo.Section, OfficeLogo.NameKey, name);
             return "Logo saved · " + name + ". It prints at the right end of every title block.";

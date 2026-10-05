@@ -92,8 +92,10 @@ public class PageChromeTests
         Assert.DoesNotContain("will-change", html);
         Assert.Contains("cloneNode", script);
         Assert.Contains("Forsk.faceStamp", script);
-        Assert.DoesNotContain("el('img'", script);
-        Assert.DoesNotContain(".src", script);
+        // The one picture in the page is the logo the Project info card previews, never a face.
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(script, @"el\('img'"));
+        Assert.Contains("el('img', 'logo-preview')", script);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(script, @"\.src\b"));
 
         var engine = PageScript.Load();
         Assert.Equal("planner-1-mask", engine.Evaluate("Forsk.faceStamp('planner', 1).mask").ToString());

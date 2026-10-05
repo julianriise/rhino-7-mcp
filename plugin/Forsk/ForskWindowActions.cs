@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -354,7 +355,17 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 }
             }
+            // Choose logo and Remove logo keep the Project info card open with the change shown. Save keeps it.
+            if (kind == "meta.title" && (pillId == "logo" || pillId == "logo_remove") && card["state"]?.ToString() == "open")
+            {
+                KeepTyped(card, values);
+                if (pillId == "logo_remove") ForskCards.HoldLogoRemoval(card);
+                else HoldPickedLogo(card);
+                Render();
+                return;
+            }
             var pill = thread.Answer(cardId, pillId);
+            card.Remove("image");
             if (pill == null)
             {
                 Render();
@@ -410,22 +421,9 @@ namespace RhinoMCPPlugin.Forsk
                         field["value"] = typed;
                         meta[key] = typed.Trim();
                     }
-                    // The logo pills save what was typed as well, then choose or remove the logo.
-                    var logoPill = pill.Id == "logo" || pill.Id == "logo_remove";
-                    if (pill.Id == "logo")
-                    {
-                        var logoPath = PickLogo();
-                        if (logoPath == null)
-                        {
-                            Models.Persist(thread);
-                            Render();
-                            break;
-                        }
-                        meta["logo_path"] = logoPath;
-                    }
-                    else if (pill.Id == "logo_remove")
-                        meta["logo"] = "";
-                    var save = pill.Id == "save" || logoPill;
+                    var save = pill.Id == "save";
+                    if (save) ForskCards.LogoMeta(card, meta);
+                    var logoPill = meta["logo_path"] != null || meta["logo"] != null;
                     if (save)
                     {
                         // Today shown in the field is the print day, not a date the user typed.
@@ -1050,12 +1048,38 @@ namespace RhinoMCPPlugin.Forsk
         /// The import dialog, parented to this window. A PDF with more than one
         /// page asks which on a card in the thread; then plan_import or dxf_import.
         /// </summary>
-        /// <summary>The logo's file dialog, parented to this window. Null when cancelled.</summary>
-        string PickLogo()
+        /// <summary>
+        /// The logo's file dialog, parented to this window. A usable file is
+        /// held on the card (an SVG as the PNG it prints as); one that is not
+        /// says why on the card. Cancel changes nothing.
+        /// </summary>
+        void HoldPickedLogo(JObject card)
         {
-            var dialog = new Eto.Forms.OpenFileDialog { Title = "Office logo for the title block: a PNG or JPEG" };
-            dialog.Filters.Add(new Eto.Forms.FileFilter("PNG or JPEG", ".png", ".jpg", ".jpeg"));
-            return dialog.ShowDialog(this) == Eto.Forms.DialogResult.Ok ? dialog.FileName : null;
+            var dialog = new Eto.Forms.OpenFileDialog { Title = "Office logo for the title block: a PNG, JPEG or SVG" };
+            dialog.Filters.Add(new Eto.Forms.FileFilter("PNG, JPEG or SVG", ".png", ".jpg", ".jpeg", ".svg"));
+            if (dialog.ShowDialog(this) != Eto.Forms.DialogResult.Ok) return;
+            var path = dialog.FileName;
+            byte[] bytes = null, picture;
+            string error;
+            try
+            {
+                bytes = File.ReadAllBytes(path);
+                picture = OfficeLogo.Prepare(bytes, OfficeLogo.RasterizeWithQuickLook, out error);
+            }
+            catch (Exception) { picture = null; error = OfficeLogo.Unreadable; }
+            if (picture == null)
+            {
+                card["note"] = error;
+                return;
+            }
+            // The card carries a path, so an SVG's PNG goes to a temp file that Save reads.
+            var held = path;
+            if (picture != bytes)
+            {
+                held = Path.Combine(Path.GetTempPath(), "forsk-logo-" + Guid.NewGuid().ToString("N") + ".png");
+                File.WriteAllBytes(held, picture);
+            }
+            ForskCards.HoldLogo(card, Path.GetFileName(path), held, picture);
         }
 
         void Import(DocThread thread, ForskAction action)

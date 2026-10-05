@@ -13,7 +13,8 @@
     "date": { "type": "string", "description": "The date the title blocks print. Unset prints the day of the Print." },
     "revision": { "type": "string", "description": "Revision letter or number, such as B. Unset drops the Rev. cell." },
     "scale_label": { "type": "string", "default": "1:100", "description": "Stored scale text. The detail scale on a layout still comes from layout_pack." },
-    "logo_path": { "type": "string", "description": "A PNG or JPEG file: the office logo, kept in the 3dm and printed at the right end of every title block. A file that cannot be read stores nothing and says why." },
+    "logo_path": { "type": "string", "description": "A PNG, JPEG or SVG file: the office logo, kept in the 3dm and printed at the right end of every title block. An SVG is kept as the PNG it prints as, in the layout, the PDF and DWG/DXF. A file that cannot be read stores nothing and says why." },
+    "logo_name": { "type": "string", "description": "The name the logo is kept under, when logo_path is a converted copy. Defaults to logo_path's file name." },
     "logo": { "type": "string", "enum": [""], "description": "An empty string removes the logo." }
   },
   "additionalProperties": false

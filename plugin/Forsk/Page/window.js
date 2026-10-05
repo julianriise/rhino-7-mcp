@@ -713,6 +713,12 @@
       });
       return v;
     }
+    if (item.image) {
+      var picture = el('img', 'logo-preview');
+      picture.src = item.image;
+      picture.alt = item.note || '';
+      box.appendChild(picture);
+    }
     var pills = el('div', 'pills');
     (item.pills || []).forEach(function (p, index) {
       pills.appendChild(pill(p.label, index === 0, function () {
@@ -1191,7 +1197,7 @@
 
   function formKey(forms) {
     return forms.map(function (item) {
-      return (item.id || '') + '|' + (item.question || '') + '|' + (item.note || '') + '|'
+      return (item.id || '') + '|' + (item.question || '') + '|' + (item.note || '') + '|' + (item.image || '') + '|'
         + JSON.stringify(item.fields || []) + '|' + JSON.stringify(item.pills || []) + '|' + JSON.stringify(item.rows || []);
     }).join('\n');
   }
