@@ -151,6 +151,7 @@ namespace RhinoMCPPlugin.Forsk
 
         public static readonly IReadOnlyList<ForskAction> All = new List<ForskAction>
         {
+            new ForskAction("file.sample", Runs.Run, "group.import", f => f.Kind == FileKind.Empty),
             new ForskAction("file.import", Runs.Run, "group.import", f => !f.HasWalls),
             new ForskAction("file.use_curves", Runs.Run, "group.import", f => f.Kind == FileKind.Foreign),
             new ForskAction("file.scale", Runs.Run, "group.import", f => f.HasUnderlay && !f.ScaleSet),
@@ -294,6 +295,7 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Wall) yield return Find("opening.add_door");
             if (slot1.Id == "file.scale" && f.HasPlanCurves) yield return Find("file.generate");
             if (f.ReviewStored && !f.HasWalls) yield return Find("file.check");
+            if (f.Kind == FileKind.Empty) yield return Find("file.sample");
             if (!f.HasWalls) yield return Find("file.draw");
             if (f.Picked == Picked.Loose) yield return Find("exist.mark");
         }

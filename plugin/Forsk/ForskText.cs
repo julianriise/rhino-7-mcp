@@ -30,6 +30,7 @@ namespace RhinoMCPPlugin.Forsk
             ["file.print.stale"] = "Sheets are older than the model.",
             ["file.print.map"] = "The sheet leaves the map off.",
             ["file.check"] = "Check the plan",
+            ["file.sample"] = "Open sample house",
             ["file.draw"] = "Trace walls",
             ["help.card"] = "What can I do here?",
             ["daylight.rooms"] = "Make rooms",

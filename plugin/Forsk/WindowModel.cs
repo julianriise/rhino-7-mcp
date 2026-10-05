@@ -327,6 +327,7 @@ namespace RhinoMCPPlugin.Forsk
             model["settings"] = Settings(facts);
             model["attention"] = Attention(facts);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
+            if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide();
             return model;
         }
 

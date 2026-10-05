@@ -20,7 +20,7 @@ public static class SheetLang
 /// <summary>
 /// v3 P3: the sheet's title block. One flat row of cells along the footer
 /// band, each a caption over its value. English is the default: Drawing,
-/// Drawing no., Scale, Format, Date, Rev., Project no., Project, Client,
+/// Sheet no., Scale, Format, Date, Rev., Project no., Project, Client,
 /// Address, Architect. Pass norwegian for Tegning, Tegningsnr., Målestokk,
 /// Format, Dato, Rev., Prosjektnr., Prosjekt, Byggherre, Adresse, Arkitekt.
 /// The project's captions are ProjectInfo's. A cell's key is English either way and
@@ -75,7 +75,7 @@ public static class TitleBlock
             cells.Add(new Cell { Key = key, Caption = caption, Value = text, Mm = mm });
         }
         Add("drawing", SheetLang.Pick(norwegian, "Drawing", "Tegning"), fields.Drawing, HeadMm);
-        Add("number", SheetLang.Pick(norwegian, "Drawing no.", "Tegningsnr."), fields.Number, HeadMm);
+        Add("number", SheetLang.Pick(norwegian, "Sheet no.", "Tegningsnr."), fields.Number, HeadMm);
         Add("scale", SheetLang.Pick(norwegian, "Scale", "Målestokk"), fields.Scale, ValueMm);
         Add("sheet", "Format", fields.Format, ValueMm);
         void Info(string key, string value) => Add(key, ProjectInfo.Caption(key, norwegian), value, ValueMm);

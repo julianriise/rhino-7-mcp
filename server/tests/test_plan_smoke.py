@@ -147,7 +147,7 @@ def test_footer_reads_the_title_block_by_its_english_keys():
     # that is not set has no cell at all.
     cells = [
         {"name": "drawing", "caption": "Drawing", "text": "Ground floor plan"},
-        {"name": "number", "caption": "Drawing no.", "text": "A-20-001"},
+        {"name": "number", "caption": "Sheet no.", "text": "A-20-001"},
         {"name": "scale", "caption": "Scale", "text": "1:50"},
         {"name": "sheet", "caption": "Format", "text": "A3"},
         {"name": "date", "caption": "Date", "text": "2026-10-03"},

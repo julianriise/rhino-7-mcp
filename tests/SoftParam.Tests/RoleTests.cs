@@ -233,6 +233,7 @@ public class RoleTests
     [Theory]
     [InlineData("file.generate", ForskRole.Modeller)]
     [InlineData("file.rebuild", ForskRole.Modeller)]
+    [InlineData("file.sample", ForskRole.Planner)]
     [InlineData("file.draw", ForskRole.Planner)]
     [InlineData("file.import", ForskRole.Planner)]
     [InlineData("rooms.list", ForskRole.Planner)]

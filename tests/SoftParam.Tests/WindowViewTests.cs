@@ -23,7 +23,7 @@ public class WindowViewTests
         var thread = (JArray)view["thread"]!;
         Assert.Single(thread);
         Assert.Equal("This file is empty.", thread[0]["text"]!.ToString());
-        Assert.Equal(new[] { "file.import", "file.draw" }, Slots(view));
+        Assert.Equal(new[] { "file.import", "file.sample", "file.draw" }, Slots(view));
         Assert.Equal("\u22ef", view["bar"]!["help"]!["label"]!.ToString());
         Assert.Equal("", view["status"]!.ToString());
     }

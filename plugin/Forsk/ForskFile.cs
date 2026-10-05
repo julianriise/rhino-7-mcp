@@ -88,6 +88,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool JustPrinted;
         /// <summary>The last action was Generate 3D or area statistics, and nothing changed since.</summary>
         public bool OfferArea;
+        /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
+        public bool GuideOff;
         /// <summary>The stored details (forsk/details JSON), or null.</summary>
         public string Details;
         /// <summary>Each stored detail's name by id ("North wall", "Door D01"), read from the model. One whose element is gone has none.</summary>
@@ -161,6 +163,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool JustPrinted;
         /// <summary>Generate 3D or area statistics just ran: the bar offers Area summary.</summary>
         public bool OfferArea;
+        /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
+        public bool GuideOff;
         public bool Millimetres = true;
     }
 
@@ -192,6 +196,7 @@ namespace RhinoMCPPlugin.Forsk
                 UndoNewest = input.UndoNewest,
                 JustPrinted = input.JustPrinted,
                 OfferArea = input.OfferArea,
+                GuideOff = input.GuideOff,
                 Millimetres = input.Millimetres
             };
             var wallsRead = true;

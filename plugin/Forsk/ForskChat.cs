@@ -1297,8 +1297,10 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             string csv = null;
             if (view == null)
                 csv = WriteCsv(Path.Combine(Path.GetDirectoryName(written) ?? "", TakeoffCsv.FileName(Path.GetFileNameWithoutExtension(written))));
-            return ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank,
+            var line = ForskReceipt.PrintLine(sheets, scale, written, StoredMeta("revision"), packed?["bumped"]?.ToString(), blank,
                 detailScales, packed?["details_dropped"]?.Value<int>() ?? 0, csv);
+            FirstRunGate.Note(line);
+            return line;
         }
 
         /// <summary>export_csv at path: "" when written, else why not. A failed CSV never fails the Print or the export.</summary>

@@ -72,8 +72,8 @@ public partial class RhinoMCPFunctions
     private static PlanStats _lastPlanStats;
     private static bool _lastPlanStatsSet;
 
-    private const double A3WidthMm = 420.0;
-    private const double A3HeightMm = 297.0;
+    private const double A3WidthMm = PrintTemplate.WidthMm;
+    private const double A3HeightMm = PrintTemplate.HeightMm;
     private const double LayoutMarginMm = 10.0;
     // Space under the detail: the footer band plus a 5 mm gap.
     private const double FooterReserveMm = 23.0;
@@ -168,7 +168,8 @@ public partial class RhinoMCPFunctions
         ApplyDocumentPrintInk(doc);
 
         var paper = parameters?["paper"]?.ToString();
-        if (string.IsNullOrWhiteSpace(paper)) paper = "A3";
+        if (string.IsNullOrWhiteSpace(paper))
+            paper = PrintTemplate.Paper(doc.Strings.GetValue(LayoutMetaSection, PrintTemplate.Key));
         if (!paper.Trim().Equals("A3", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(UnknownPaperMessage);
 

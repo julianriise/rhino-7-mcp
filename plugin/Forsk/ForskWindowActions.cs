@@ -98,6 +98,13 @@ namespace RhinoMCPPlugin.Forsk
                 CopyDebugReport(RhinoDoc.ActiveDoc);
                 return;
             }
+            if (id == FirstRun.DismissId)
+            {
+                FirstRunGate.Dismiss();
+                MarkDirty();
+                Render();
+                return;
+            }
             var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
             var action = ForskRegistry.Find(id);
@@ -183,6 +190,9 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 case "detail.add":
                     Job(thread, action.Id, label, sink => sink.Tool("details", new JObject { ["action"] = "add" }));
+                    return;
+                case "file.sample":
+                    OpenSample(thread, action, doc);
                     return;
                 case "file.draw":
                     Draw(thread, action, doc);
@@ -1091,6 +1101,32 @@ namespace RhinoMCPPlugin.Forsk
             MarkDirty();
             Render();
             TakeKeyboard();
+        }
+
+        /// <summary>The sample house, drawn in the empty file. Generate 3D is the next step, not this one.</summary>
+        void OpenSample(DocThread thread, ForskAction action, RhinoDoc doc)
+        {
+            thread.Add("user", action.Label);
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
+            string line;
+            ForskCalls.Enter();
+            try
+            {
+                line = RhinoMCPFunctions.OpenSampleHouse(doc);
+            }
+            catch (Exception e)
+            {
+                line = "Sample house · error · " + e.Message;
+            }
+            finally
+            {
+                ForskCalls.Exit();
+            }
+            thread.Add("line", line);
+            thread.EndReply();
+            Models.Persist(thread);
+            MarkDirty();
+            Render();
         }
 
         /// <summary>The wall layer made current, created when missing, then Rhino's Polyline in the view.</summary>

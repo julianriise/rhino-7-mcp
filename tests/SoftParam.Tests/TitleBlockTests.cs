@@ -30,7 +30,7 @@ public class TitleBlockTests
         var cells = TitleBlock.Cells(Office("B"));
         Assert.Equal(new[] { "drawing", "number", "scale", "sheet", "date", "revision", "project", "client", "address" },
             cells.Select(c => c.Key).ToArray());
-        Assert.Equal(new[] { "Drawing", "Drawing no.", "Scale", "Format", "Date", "Rev.", "Project", "Client", "Address" },
+        Assert.Equal(new[] { "Drawing", "Sheet no.", "Scale", "Format", "Date", "Rev.", "Project", "Client", "Address" },
             cells.Select(c => c.Caption).ToArray());
     }
 
@@ -68,7 +68,7 @@ public class TitleBlockTests
         var cells = TitleBlock.Cells(Smoke());
         Assert.Equal(new[] { "drawing", "number", "scale", "sheet", "date", "revision", "project_no", "project", "client", "address", "architect" },
             cells.Select(c => c.Key).ToArray());
-        Assert.Equal(new[] { "Drawing", "Drawing no.", "Scale", "Format", "Date", "Rev.", "Project no.", "Project", "Client", "Address", "Architect" },
+        Assert.Equal(new[] { "Drawing", "Sheet no.", "Scale", "Format", "Date", "Rev.", "Project no.", "Project", "Client", "Address", "Architect" },
             cells.Select(c => c.Caption).ToArray());
         Assert.Equal(new[] { "Tegning", "Tegningsnr.", "Målestokk", "Format", "Dato", "Rev.", "Prosjektnr.", "Prosjekt", "Byggherre", "Adresse", "Arkitekt" },
             TitleBlock.Cells(Smoke(), true).Select(c => c.Caption).ToArray());

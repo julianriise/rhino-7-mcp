@@ -181,6 +181,6 @@ public class ForskCoreTests
         var model = WindowView.Build(thread, Docs.Facts("empty"));
         Assert.Equal("This file is empty.", model["thread"]![0]!["text"]!.ToString());
         Assert.Empty(thread.Items);
-        Assert.Equal(new[] { "Import a plan", "Trace walls" }, ((JArray)model["bar"]!["slots"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "Import a plan", "Open sample house", "Trace walls" }, ((JArray)model["bar"]!["slots"]!).Select(s => s["label"]!.ToString()));
     }
 }

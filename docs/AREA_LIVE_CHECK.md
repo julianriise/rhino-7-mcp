@@ -6,10 +6,10 @@ Rhino was not opened for these slices. They are local commits on `grok` and are 
 
 - "how big is the flat?", "areal per etasje", and "BRA?" each get a short answer under the purple Analyser mark.
 - The line is the net once, then BRA and BTA when the walls give them, then the largest few uses. One floor does not get its own line. No wall-thickness note. No room list, and no second sentence that repeats the net. Areas are m² to one decimal. No coordinates and no ids.
-- The card under that line lists every room. A click on Area statistics still shows this answer.
+- The card under that line is Area summary: each floor's net, then BRA and BTA when the walls give them, then each use, then the total. The note is "Estimate. Not measured to NS 3940." A click on Area statistics still shows the short answer.
 - A file with no rooms offers Make rooms. The line is "No rooms. Make rooms finds them from the walls."
 - Move a wall, then ask again. The net area, and BRA and BTA where they are shown, change with the model.
-- Area statistics is on the help card when the file has rooms. It is not on the bar. Print stays the first bar slot.
+- Area summary is the next chip after Generate 3D or area statistics, when the file has rooms and nothing is picked. It is also on the help card. Print stays the first bar slot.
 - A failure is a mark other than Analyser, a second line that repeats the net, or a BRA/BTA figure when the walls cannot give one.
 
 ## Sheets

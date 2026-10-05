@@ -1197,6 +1197,18 @@
     });
   }
 
+  function guideBlock(spec) {
+    var box = el('div', 'guide');
+    var lines = spec.lines || [];
+    for (var i = 0; i < lines.length; i++) box.appendChild(el('p', null, lines[i]));
+    var dismiss = el('button', 'guide-x', 'Dismiss');
+    dismiss.addEventListener('click', function () {
+      sender.send({ kind: 'action', id: spec.dismiss || 'guide.dismiss' });
+    });
+    box.appendChild(dismiss);
+    return box;
+  }
+
   Forsk.render = function (next) {
     model = next || {};
     var thread = document.getElementById('thread');
@@ -1214,6 +1226,7 @@
       var skip = {};
       forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
       while (thread.firstChild) thread.removeChild(thread.firstChild);
+      if (model.guide && model.guide.lines && model.guide.lines.length) thread.appendChild(guideBlock(model.guide));
       (model.thread || []).forEach(function (entry) {
         if (entry.id && skip[entry.id]) return;
         thread.appendChild(item(entry));

@@ -70,6 +70,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.use_curves":
                 case "file.scale":
                 case "file.check":
+                case "file.sample":
                 case "file.draw":
                 case "rooms.list":
                     return ForskRole.Planner;

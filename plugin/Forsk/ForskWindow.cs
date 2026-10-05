@@ -198,6 +198,7 @@ namespace RhinoMCPPlugin.Forsk
             input.JustPrinted = Tracker.Was("file.print", doc.RuntimeSerialNumber);
             input.OfferArea = Tracker.Was("file.generate", doc.RuntimeSerialNumber)
                 || Tracker.Was("area.stats", doc.RuntimeSerialNumber);
+            input.GuideOff = FirstRunGate.Off();
             return FileClassifier.Read(input);
         }
 
