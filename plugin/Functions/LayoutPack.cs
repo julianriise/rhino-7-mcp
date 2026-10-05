@@ -87,8 +87,6 @@ public partial class RhinoMCPFunctions
     private const double PdfDpi = 150.0;
     private const string PrintLogPath = "/tmp/forsk-print.log";
 
-    private static readonly string[] LayoutShowLayerNames = { "A-WALL", "A-FLOR", "A-ROOF" };
-
     private static bool TryGetLayoutView(string view, out LayoutViewSpec spec)
     {
         spec = default;

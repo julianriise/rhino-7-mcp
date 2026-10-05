@@ -1172,25 +1172,6 @@ public partial class RhinoMCPFunctions
         return best;
     }
 
-    private WallSegment PickSegmentNearest(List<WallSegment> segs, Point3d worldPt)
-    {
-        WallSegment best = null;
-        var bestDist = double.PositiveInfinity;
-        var p = new Point3d(worldPt.X, worldPt.Y, 0);
-        foreach (var s in segs)
-        {
-            var line = new Line(s.Start, s.End);
-            var closest = line.ClosestPoint(p, false);
-            var d = closest.DistanceTo(p);
-            if (d < bestDist)
-            {
-                bestDist = d;
-                best = s;
-            }
-        }
-        return best;
-    }
-
     private Placement PlaceOnHost(WallSolid host, OpeningSpec spec)
     {
         var tol = Math.Max(RhinoDoc.ActiveDoc.ModelAbsoluteTolerance, 1e-6);

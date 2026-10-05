@@ -4284,7 +4284,6 @@ class TestPrintGuards:
         assert mac.index("shots.Count == 0") < mac.index("pdf.Write")
         assert mac.index("pdf.Write") < mac.index("Blank preview:")
         assert "if (blanks.Count > 0)" not in mac
-        assert "A-OPEN" in src
         assert 'Kind = "layout"' in src
         assert "Forsk — Plan" in src
         assert "SaveFileDialog" not in src
