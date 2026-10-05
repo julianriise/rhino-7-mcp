@@ -572,56 +572,12 @@ public partial class RhinoMCPFunctions
         foreach (var chain in chains)
             chain.Origin = new Pt(chain.Origin.X + shift.X, chain.Origin.Y + shift.Y);
         var walls = rings.Select(r => new List<List<Pt>> { r.Select(p => new Pt(p.X + shift.X, p.Y + shift.Y)).ToList() }).ToList();
-        var widths = new Dictionary<string, double>(StringComparer.Ordinal);
-        Func<string, double> measure = text =>
-        {
-            if (!widths.TryGetValue(text, out var paper))
-                widths[text] = paper = ModelTextWidth(doc, text, PlanDims.TextMm * scale) / scale;
-            return paper;
-        };
         var taken = new List<PlanDims.Obstacle>();
-        foreach (var chain in PlanDims.LayoutFixed(chains, scale, taken, walls, measure))
+        // Ticks keep the plan's weight: annotation does not scale.
+        foreach (var chain in BakeFixedChains(doc, layer, chains, scale, baseProfile.Silhouette, taken, walls, stamp.Extra,
+                     pattern, tol, ref box, ref index, ref count, ref added))
         {
-            if (!chain.Placed)
-            {
-                notes.Add(d.Title + ": " + chain.Kind + " not placed");
-                continue;
-            }
-            var stamps = new Dictionary<string, string>(stamp.Extra)
-            {
-                ["forsk:dim_chain"] = chain.Id,
-                ["forsk:dim_kind"] = chain.Kind
-            };
-            var dimStamp = new SymbolStamp { Extra = stamps };
-            foreach (var line in chain.Lines)
-            {
-                using (var curve = new LineCurve(DrawingPoint(line.A), DrawingPoint(line.B)))
-                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
-                        "dimension", "line", null, null, ref box, ref index, ref count, dimStamp);
-            }
-            // Ticks keep the plan's weight: annotation does not scale.
-            foreach (var tick in chain.Ticks)
-            {
-                using (var curve = new LineCurve(DrawingPoint(tick.A), DrawingPoint(tick.B)))
-                    added += AddStroke(doc, layer, curve, baseProfile.Silhouette, scale, false, pattern, tol,
-                        "dimension", "tick", null, null, ref box, ref index, ref count, dimStamp);
-            }
-            foreach (var label in chain.Texts)
-            {
-                var values = new Dictionary<string, string>(stamps)
-                {
-                    ["forsk:dim_value"] = label.Value.ToString(CultureInfo.InvariantCulture),
-                    ["forsk:dim_total"] = chain.Total.ToString(CultureInfo.InvariantCulture)
-                };
-                if (AddDimensionText(doc, layer, label, scale, values, ref box, ref index, ref count)) added++;
-                if (!label.Underline) continue;
-                // Not to scale (ISO 129-1): a line under the value.
-                var reading = new Vector3d(label.Reading.X, label.Reading.Y, 0);
-                var under = DrawingPoint(label.Centre) - new Vector3d(-reading.Y, reading.X, 0) * (label.Height / 2.0 + PlanDims.TextPadMm * scale / 2.0);
-                using (var curve = new LineCurve(under - reading * (label.Width / 2.0), under + reading * (label.Width / 2.0)))
-                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
-                        "dimension", "underline", null, null, ref box, ref index, ref count, dimStamp);
-            }
+            if (!chain.Placed) notes.Add(d.Title + ": " + chain.Kind + " not placed");
         }
         foreach (var level in DetailDims.Levels(d.Facts, d))
             added += BakeDetailLevel(doc, layer, level, shift, scale, pattern, tol, ref box, ref index, ref count, stamp);

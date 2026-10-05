@@ -15,9 +15,11 @@ namespace RhinoMCPPlugin.Functions;
 /// Over them this draws a heavy ground line, the only cut-weight stroke,
 /// across the facade and 1 m past each side, and thin level marks right of
 /// the facade: the ground, ±0 at the ground floor's top, eaves and ridge.
-/// The heights come from Sections.ModelHeights, the rule the section sheet
-/// prints, so a facade and a section never disagree. No elevation dims and
-/// no opening chevrons (F5.0 SHOULD, later).
+/// Left of the facade a height chain runs up through the floors, the sills
+/// and heads of the openings it shows, the wall top, eaves and ridge, with
+/// the overall height in a second row. The heights come from
+/// Sections.ModelHeights, the rule the section sheet prints, so a facade
+/// and a section never disagree. No opening chevrons (F5.0 SHOULD, later).
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -28,10 +30,12 @@ public partial class RhinoMCPFunctions
         public JArray Levels = new JArray();
         /// <summary>Level marks Rhino would not write (their text failed).</summary>
         public int LevelsDropped;
+        /// <summary>The height chain's stops left of the facade: {kind, z, value}.</summary>
+        public JArray Heights = new JArray();
     }
 
     private FacadeStats BakeFacadeMarks(
-        RhinoDoc doc, Layer layer, int scale, string view, Transform worldToHld, Vector3d delta,
+        RhinoDoc doc, Layer layer, int scale, string view, Vector3d look, Transform worldToHld, Vector3d delta,
         IList<RhinoObject> sources, double tol, ref BoundingBox box, ref int index, ref int count)
     {
         var stats = new FacadeStats();
@@ -59,7 +63,8 @@ public partial class RhinoMCPFunctions
         }
         var floors = PlanRooms(doc).Where(r => r.Ring != null && r.Ring.Count > 0).Select(r => r.Ring[0].Z);
         // The same heights the section sheet prints (TryBakeSectionLinework).
-        var heights = Sections.ModelHeights(HeightSolids(sources), floors, roof);
+        var solids = HeightSolids(sources);
+        var heights = Sections.ModelHeights(solids, floors, roof);
 
         var left = box.Min.X;
         var right = box.Max.X;
@@ -107,6 +112,14 @@ public partial class RhinoMCPFunctions
                 ["text"] = mark.Level.Text
             });
         }
+
+        // Left of the facade: the floors, the sills and heads it shows, the wall top, eaves and ridge.
+        var building = new RoomDetect.Box(clay.Min.X, clay.Min.Y, clay.Max.X, clay.Max.Y);
+        var plan = new RoomDetect.Pt(look.X, look.Y);
+        var stops = Sections.HeightStops(heights, solids, OpeningHeights(sources, b => Sections.SeenOnFacade(b, plan, building)));
+        var added = 0;
+        stats.Heights = BakeHeights(doc, levelLayer, stops, left, SheetY, view, scale, stamp, pattern, tol,
+            ref box, ref index, ref count, ref added);
         return stats;
     }
 
@@ -120,14 +133,15 @@ public partial class RhinoMCPFunctions
         return bbox.IsValid ? bbox.GetCorners() : new Point3d[0];
     }
 
-    /// <summary>A facade page's record: the ground and the level marks it printed.</summary>
+    /// <summary>A facade page's record: the ground, the level marks and the height chain's stops it printed.</summary>
     private static JObject FacadePageRecord(FacadeStats stats)
     {
         return new JObject
         {
             ["ground_z"] = stats?.GroundZ.HasValue == true ? new JValue(Math.Round(stats.GroundZ.Value, 3)) : JValue.CreateNull(),
             ["levels"] = stats?.Levels ?? new JArray(),
-            ["levels_dropped"] = stats?.LevelsDropped ?? 0
+            ["levels_dropped"] = stats?.LevelsDropped ?? 0,
+            ["heights"] = stats?.Heights ?? new JArray()
         };
     }
 }

@@ -258,6 +258,13 @@ def run_step(send: Send, label: str, room: str, pdf: str, failures: list, panel:
                 level_ok = False
                 reasons.append(f"{letter} {kind} levels {got_z} expected {sorted(round(z, 1) for z in zs)}")
 
+        # The height chain left of the section: from the lowest floor up to the highest wall's top.
+        heights = [(set(str(h.get("kind") or "").split(",")), float(h.get("z") or 0)) for h in record.get("heights") or []]
+        wall_top = max((bx[5] for w in walls if (bx := _box(w))), default=None)
+        for kind, z in (("floor", tops[0] if tops else None), ("top", wall_top)):
+            if z is not None and not any(kind in kinds and abs(at - z) <= TOL for kinds, at in heights):
+                reasons.append(f"{letter} heights lack {kind} at {z:g}: {record.get('heights')}")
+
         # Free height in each room the line runs through.
         frees = {}
         for row in rows:

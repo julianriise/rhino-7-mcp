@@ -1838,7 +1838,8 @@ public partial class RhinoMCPFunctions
                 {
                     planRuled = TryBakeSectionLinework(
                         doc, layer, strokeScale, section, spec.View, worldToHld, delta, visible, fillGroups,
-                        cutUz, roofUz, HeightSolids(sources), tolerance, ref box, ref index, ref count, sectionStats);
+                        cutUz, roofUz, HeightSolids(sources), OpeningHeights(sources, b => Sections.CutCrosses(section, b)),
+                        tolerance, ref box, ref index, ref count, sectionStats);
                 }
                 catch (Exception ex)
                 {
@@ -1940,7 +1941,7 @@ public partial class RhinoMCPFunctions
             {
                 try
                 {
-                    result.Facade = BakeFacadeMarks(doc, layer, strokeScale, spec.View, worldToHld, delta, sources, tolerance,
+                    result.Facade = BakeFacadeMarks(doc, layer, strokeScale, spec.View, spec.Look, worldToHld, delta, sources, tolerance,
                         ref box, ref index, ref count);
                 }
                 catch (Exception ex)

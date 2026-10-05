@@ -271,13 +271,16 @@ public partial class RhinoMCPFunctions
         public double? GroundZ;
         public JArray Levels = new JArray();
         public JArray FreeHeights = new JArray();
+        /// <summary>The height chain's stops left of the section: {kind, z, value}.</summary>
+        public JArray Heights = new JArray();
         public JArray CutWalls = new JArray();
         public JObject Poche = new JObject();
     }
 
     /// <summary>
     /// A section page's record: the line, what was cut (the walls, and the
-    /// poché per solid), the ground, the levels and the free heights. The
+    /// poché per solid), the ground, the levels, the height chain's stops and
+    /// the free heights. The
     /// cut rule is on_cut_loop: an edge on a cut loop is cut (see Sections).
     /// </summary>
     private static JObject SectionPageRecord(RhinoDoc doc, string view, GreyscaleDrawing drawn)
@@ -296,13 +299,15 @@ public partial class RhinoMCPFunctions
             ["poche"] = stats.Poche,
             ["ground_z"] = stats.GroundZ.HasValue ? new JValue(Math.Round(stats.GroundZ.Value, 3)) : JValue.CreateNull(),
             ["levels"] = stats.Levels,
+            ["heights"] = stats.Heights,
             ["free_heights"] = stats.FreeHeights
         };
     }
 
     /// <summary>
     /// The section's heavy cut outlines and thin lines beyond, the ground
-    /// line, the level marks and each crossed room's free height. Cut is an
+    /// line, the level marks, the height chain and each crossed room's free
+    /// height. Cut is an
     /// HLD edge on a cut loop (Sections.IsCut); the loops themselves are the
     /// heavy line over the poché. Returns false when nothing was drawn so the
     /// caller keeps the plain curves.
@@ -311,7 +316,7 @@ public partial class RhinoMCPFunctions
         RhinoDoc doc, Layer layer, int scale, Sections.Def def, string view,
         Transform worldToHld, Vector3d delta, List<WeightedCurve> visible, List<List<Curve>> fillGroups,
         List<List<RoomDetect.Pt>> cutUz, List<List<RoomDetect.Pt>> roofUz, IList<Sections.Solid> solids,
-        double tol, ref BoundingBox box, ref int index, ref int count, SectionStats stats)
+        IList<(double Sill, double Head)> openings, double tol, ref BoundingBox box, ref int index, ref int count, SectionStats stats)
     {
         if (doc == null || layer == null || scale < 1 || def == null) return false;
         var pattern = SolidPatternIndex(doc);
@@ -402,6 +407,10 @@ public partial class RhinoMCPFunctions
             }
         }
 
+        // Left of the section: the floors, the sills and heads it cuts, the wall top, eaves and ridge.
+        stats.Heights = BakeHeights(doc, layer, Sections.HeightStops(heights, solids, openings), left, SheetY, view, scale,
+            stamp.Extra, pattern, tol, ref box, ref index, ref count, ref added);
+
         foreach (var (room, u, floorZ) in crossed)
         {
             var free = Sections.FreeHeight(cutUz, u, floorZ, 1.0);
@@ -454,6 +463,45 @@ public partial class RhinoMCPFunctions
             solids.Add(new Sections.Solid { Kind = GetForskKind(obj) ?? "", MinZ = bbox.Min.Z, MaxZ = bbox.Max.Z });
         }
         return solids;
+    }
+
+    /// <summary>
+    /// The sills and heads (absolute Z) of the openings among the sources
+    /// whose plan box keep accepts: forsk:sill and forsk:head, else the
+    /// box's bottom and top.
+    /// </summary>
+    private static List<(double Sill, double Head)> OpeningHeights(IList<RhinoObject> sources, Func<RoomDetect.Box, bool> keep)
+    {
+        var list = new List<(double Sill, double Head)>();
+        foreach (var obj in sources ?? new List<RhinoObject>())
+        {
+            if (!string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase)) continue;
+            var bbox = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
+            if (!bbox.IsValid || !keep(new RoomDetect.Box(bbox.Min.X, bbox.Min.Y, bbox.Max.X, bbox.Max.Y))) continue;
+            var sill = ParseMm(obj.Attributes.GetUserString("forsk:sill")) ?? bbox.Min.Z;
+            var head = ParseMm(obj.Attributes.GetUserString("forsk:head")) ?? bbox.Max.Z;
+            if (head > sill) list.Add((sill, head));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// The height chains of a facade or a section (Sections.HeightChains)
+    /// up from x, the drawing's left edge, as dimensions stamped with stamp.
+    /// Returns the stops of row 1 as {kind, z, value}; empty when it found
+    /// no room.
+    /// </summary>
+    private JArray BakeHeights(
+        RhinoDoc doc, Layer layer, List<Sections.HeightStop> stops, double x, Func<double, double> sheetY, string id, int scale,
+        IDictionary<string, string> stamp, int pattern, double tol, ref BoundingBox box, ref int index, ref int count, ref int added)
+    {
+        var record = new JArray();
+        var laid = BakeFixedChains(doc, layer, Sections.HeightChains(stops, x, sheetY, id), scale, PenSilhouette,
+            new List<PlanDims.Obstacle>(), null, stamp, pattern, tol, ref box, ref index, ref count, ref added);
+        if (!laid.Any(c => c.Placed && c.Kind == "height")) return record;
+        foreach (var stop in stops)
+            record.Add(new JObject { ["kind"] = stop.Kind, ["z"] = Math.Round(stop.Z, 3), ["value"] = stop.Value });
+        return record;
     }
 
     private static Point3d Sheet(RoomDetect.Pt p) => new Point3d(p.X, p.Y, 0);

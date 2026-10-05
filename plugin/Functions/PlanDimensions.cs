@@ -129,6 +129,68 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
+    /// Chains fixed by the model (a detail's, a facade's or a section's
+    /// heights) laid out by PlanDims.LayoutFixed around taken, and baked:
+    /// thin dimension lines, ticks at tickPen, values as 1:1 text, a line
+    /// under a value that is not to scale. Every piece carries stamp plus its
+    /// chain and kind. What it placed joins taken. Returns every chain as
+    /// laid out; one that found no room is not Placed and not drawn.
+    /// </summary>
+    private List<PlanDims.Chain> BakeFixedChains(
+        RhinoDoc doc, Layer layer, IEnumerable<PlanDims.FixedChain> chains, int scale, PrintPen tickPen,
+        List<PlanDims.Obstacle> taken, List<List<List<RoomDetect.Pt>>> walls, IDictionary<string, string> stamp,
+        int pattern, double tol, ref BoundingBox box, ref int index, ref int count, ref int added)
+    {
+        var widths = new Dictionary<string, double>(StringComparer.Ordinal);
+        Func<string, double> measure = text =>
+        {
+            if (!widths.TryGetValue(text, out var paper))
+                widths[text] = paper = ModelTextWidth(doc, text, PlanDims.TextMm * scale) / scale;
+            return paper;
+        };
+        var laid = PlanDims.LayoutFixed(chains, scale, taken, walls, measure);
+        foreach (var chain in laid)
+        {
+            if (!chain.Placed) continue;
+            var stamps = new Dictionary<string, string>(stamp ?? new Dictionary<string, string>())
+            {
+                ["forsk:dim_chain"] = chain.Id,
+                ["forsk:dim_kind"] = chain.Kind
+            };
+            var dimStamp = new SymbolStamp { Extra = stamps };
+            foreach (var line in chain.Lines)
+            {
+                using (var curve = new LineCurve(DrawingPoint(line.A), DrawingPoint(line.B)))
+                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
+                        "dimension", "line", null, null, ref box, ref index, ref count, dimStamp);
+            }
+            foreach (var tick in chain.Ticks)
+            {
+                using (var curve = new LineCurve(DrawingPoint(tick.A), DrawingPoint(tick.B)))
+                    added += AddStroke(doc, layer, curve, tickPen, scale, false, pattern, tol,
+                        "dimension", "tick", null, null, ref box, ref index, ref count, dimStamp);
+            }
+            foreach (var label in chain.Texts)
+            {
+                var values = new Dictionary<string, string>(stamps)
+                {
+                    ["forsk:dim_value"] = label.Value.ToString(CultureInfo.InvariantCulture),
+                    ["forsk:dim_total"] = chain.Total.ToString(CultureInfo.InvariantCulture)
+                };
+                if (AddDimensionText(doc, layer, label, scale, values, ref box, ref index, ref count)) added++;
+                if (!label.Underline) continue;
+                // Not to scale (ISO 129-1): a line under the value.
+                var reading = new Vector3d(label.Reading.X, label.Reading.Y, 0);
+                var under = DrawingPoint(label.Centre) - new Vector3d(-reading.Y, reading.X, 0) * (label.Height / 2.0 + PlanDims.TextPadMm * scale / 2.0);
+                using (var curve = new LineCurve(under - reading * (label.Width / 2.0), under + reading * (label.Width / 2.0)))
+                    added += AddStroke(doc, layer, curve, PenThin, scale, false, pattern, tol,
+                        "dimension", "underline", null, null, ref box, ref index, ref count, dimStamp);
+            }
+        }
+        return laid;
+    }
+
+    /// <summary>
     /// The building's outer wall faces in drawing mm: the outline of each
     /// cluster of walls that touch (WallJoins), from their paths (the
     /// footprint before openings are cut), except one inside another's.

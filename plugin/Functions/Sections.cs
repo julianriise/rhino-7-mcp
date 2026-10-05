@@ -775,4 +775,127 @@ public static class Sections
         }
         return marks;
     }
+
+    // ---- Height dimensions on a facade and a section ----
+
+    /// <summary>
+    /// One stop of a height chain. Kind is ground, floor, sill, head, top
+    /// (the wall top), eaves or ridge, or several joined by commas when they
+    /// are one height. Value is whole mm above ±0, as the level marks count.
+    /// </summary>
+    public sealed class HeightStop
+    {
+        public string Kind;
+        public double Z;
+        public int Value;
+    }
+
+    /// <summary>Kinds at one height are listed in this order.</summary>
+    static readonly string[] StopOrder = { "ground", "floor", "sill", "head", "top", "eaves", "ridge" };
+
+    /// <summary>
+    /// The stops of a height chain, lowest first: the ground and the floors
+    /// and the eaves and ridge the level marks print (one rule, ModelHeights),
+    /// each opening's sill and head, and the wall top (the highest wall).
+    /// A sill on a floor is a door's and is the floor. Stops within
+    /// SameLevelMm are one.
+    /// </summary>
+    public static List<HeightStop> HeightStops(Heights heights, IEnumerable<Solid> solids, IEnumerable<(double Sill, double Head)> openings)
+    {
+        var levels = heights?.Levels ?? new List<Level>();
+        var candidates = new List<(string Kind, double Z)>();
+        foreach (var level in levels)
+            foreach (var kind in level.Kind.Split(','))
+                candidates.Add((kind == "gesims" ? "eaves" : kind == "mone" ? "ridge" : kind, level.Z));
+        var floors = candidates.Where(c => c.Kind == "ground" || c.Kind == "floor").Select(c => c.Z).ToList();
+        foreach (var (sill, head) in openings ?? new (double, double)[0])
+        {
+            if (!floors.Any(z => Math.Abs(z - sill) <= SameLevelMm)) candidates.Add(("sill", sill));
+            candidates.Add(("head", head));
+        }
+        var walls = (solids ?? new Solid[0]).Where(s => s != null && string.Equals(s.Kind, "wall", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (walls.Count > 0) candidates.Add(("top", walls.Max(w => w.MaxZ)));
+
+        // ±0 is the lowest floor, as in Levels.
+        var floorZs = candidates.Where(c => c.Kind == "floor").Select(c => c.Z).ToList();
+        var zero = floorZs.Count > 0 ? floorZs.Min() : 0.0;
+        var stops = new List<HeightStop>();
+        foreach (var (kind, z) in candidates.OrderBy(c => c.Z).ThenBy(c => Array.IndexOf(StopOrder, c.Kind)))
+        {
+            var last = stops.Count > 0 ? stops[stops.Count - 1] : null;
+            if (last != null && z - last.Z <= SameLevelMm)
+            {
+                if (!last.Kind.Split(',').Contains(kind)) last.Kind += "," + kind;
+                continue;
+            }
+            stops.Add(new HeightStop { Kind = kind, Z = z, Value = (int)Math.Round(z - zero, MidpointRounding.AwayFromZero) });
+        }
+        return stops;
+    }
+
+    /// <summary>
+    /// A height chain up the sheet from x, the drawing's left edge, drawn out
+    /// to the left (the level marks stand right): row 1 every stop, row 2 the
+    /// overall from the lowest to the highest when row 1 has more than two.
+    /// ys maps a height to sheet Y. The values are whole mm of the model.
+    /// </summary>
+    public static List<PlanDims.FixedChain> HeightChains(IList<HeightStop> stops, double x, Func<double, double> ys, string id)
+    {
+        var chains = new List<PlanDims.FixedChain>();
+        if (stops == null || stops.Count < 2 || ys == null) return chains;
+        chains.Add(HeightChain("height", id, stops, x, ys, 1));
+        if (stops.Count > 2)
+            chains.Add(HeightChain("height_overall", id, new[] { stops[0], stops[stops.Count - 1] }, x, ys, 2));
+        return chains;
+    }
+
+    static PlanDims.FixedChain HeightChain(string kind, string id, IList<HeightStop> stops, double x, Func<double, double> ys, int row)
+    {
+        var chain = new PlanDims.FixedChain
+        {
+            Kind = kind,
+            Id = id + "." + kind,
+            Origin = new Pt(x, 0),
+            Dir = new Pt(0, 1),
+            Out = new Pt(-1, 0),
+            Row = row,
+            Values = new List<int>()
+        };
+        for (var i = 0; i < stops.Count; i++)
+        {
+            chain.Stops.Add(ys(stops[i].Z));
+            chain.StopIds.Add(stops[i].Kind);
+            if (i > 0) chain.Values.Add(stops[i].Value - stops[i - 1].Value);
+        }
+        return chain;
+    }
+
+    /// <summary>
+    /// An opening a facade shows: in a wall across the look (its plan box is
+    /// wider across the look than deep along it) and in the half of the
+    /// building nearer the viewer. look is the facade's look in plan.
+    /// </summary>
+    public static bool SeenOnFacade(Box opening, Pt look, Box building)
+    {
+        var w = opening.MaxX - opening.MinX;
+        var h = opening.MaxY - opening.MinY;
+        var across = Math.Abs(look.Y) * w + Math.Abs(look.X) * h;
+        var deep = Math.Abs(look.X) * w + Math.Abs(look.Y) * h;
+        if (across <= deep) return false;
+        double Depth(Box b) => 0.5 * (b.MinX + b.MaxX) * look.X + 0.5 * (b.MinY + b.MaxY) * look.Y;
+        return Depth(opening) < Depth(building);
+    }
+
+    /// <summary>An opening a section cuts: its plan box lies on both sides of the cut line.</summary>
+    public static bool CutCrosses(Def def, Box opening)
+    {
+        if (def == null) return false;
+        var d = Direction(def);
+        var sides = new[]
+        {
+            new Pt(opening.MinX, opening.MinY), new Pt(opening.MaxX, opening.MinY),
+            new Pt(opening.MaxX, opening.MaxY), new Pt(opening.MinX, opening.MaxY)
+        }.Select(p => (p.Y - def.A.Y) * d.X - (p.X - def.A.X) * d.Y).ToList();
+        return sides.Min() < 0 && sides.Max() > 0;
+    }
 }

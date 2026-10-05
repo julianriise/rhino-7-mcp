@@ -21,6 +21,8 @@ WALLS = {
 }
 LINES = {"A": ([0, 2000], [8000, 2000], "long"), "B": ([4000, 4000], [4000, 0], "cross")}
 CUT = {"A": ["w-west", "w-east"], "B": ["w-south", "w-north"]}
+# The height chain's stops left of each section: the floor, and the wall top where the flat roof's top is too.
+HEIGHTS = [{"kind": "floor", "z": 0, "value": 0}, {"kind": "top,eaves,ridge", "z": 3000, "value": 3000}]
 
 
 def row(role=None, box=((0, 0, 0), (1, 1, 0)), kind="drawing", **attrs):
@@ -82,7 +84,8 @@ def fake_rhino(model=None):
             for letter in "AB":
                 pages.append({
                     "view": f"section_{letter.lower()}", "page": f"Forsk — Section {letter}", "scale": 50,
-                    "view_title": f"Section {letter}–{letter}", "section": {"cut_walls": CUT[letter]},
+                    "view_title": f"Section {letter}–{letter}",
+                    "section": {"cut_walls": CUT[letter], "heights": model.get("heights", HEIGHTS)},
                 })
             return {"pages": pages, "message": "Laid out 3 page(s)."}
         if cmd == "get_objects":
@@ -192,6 +195,12 @@ def test_a_missing_floor_level_fails():
     sections = {letter: [r for r in section_rows(letter) if r["attributes"].get("forsk:level_kind") != "floor"] for letter in "AB"}
     failures, _ = run({"sections": sections})
     assert any("A floor levels [] expected [0.0]" in f for f in failures)
+
+
+def test_a_height_chain_without_the_wall_top_fails():
+    failures, _ = run({"heights": HEIGHTS[:1]})
+    assert any(f.startswith("garage sections: A heights lack top at 3000") for f in failures)
+    assert not any("heights lack floor" in f for f in failures)
 
 
 def test_a_cut_wall_without_poche_fails():

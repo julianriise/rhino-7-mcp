@@ -1240,6 +1240,14 @@ def main() -> int:
             failures.append(f"facade number {facade.get('number')}")
         if ground is None:
             failures.append("facade ground line missing")
+        # The height chain left of the facade: the floor, the high window's sill and head, the wall top.
+        heights = (facade.get("facade") or {}).get("heights") or []
+        wall_top = float((send_command(sock, "get_object_info", {"id": host_id}).get("attributes") or {}).get("forsk:height") or 3000)
+        stops = [(set(str(h.get("kind") or "").split(",")), float(h.get("z") or 0)) for h in heights]
+        print("    facade heights " + ", ".join(f"{h.get('kind')} {h.get('value')}" for h in heights))
+        for kind, z in (("floor", None), ("sill", 1300.0), ("head", 2100.0), ("top", wall_top)):
+            if not any(kind in kinds and (z is None or abs(at - z) <= 1.0) for kinds, at in stops):
+                failures.append(f"facade heights lack {kind}" + ("" if z is None else f" at {z:g}"))
         if takeoff.get("number") != "A-00-050":
             failures.append(f"takeoff number {takeoff.get('number')}")
         set_pdf = send_command(sock, "export_pdf", {"path": "/tmp/forsk-f5-garage-set.pdf"})

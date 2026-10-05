@@ -277,7 +277,7 @@ public class DetailCalloutTests
     public void TheDetailBake_PlacesItsMarksAfterItsDimensions_AgainstEveryStroke()
     {
         var source = File.ReadAllText(Path.Combine(FunctionsDir(), "DetailBake.cs"));
-        var dims = source.IndexOf("PlanDims.LayoutFixed(chains, scale, taken, walls, measure)", StringComparison.Ordinal);
+        var dims = source.IndexOf("BakeFixedChains(doc, layer, chains, scale, baseProfile.Silhouette, taken, walls,", StringComparison.Ordinal);
         var marks = source.IndexOf("DetailCallout.PlaceMarks(d, plan, shift, scale, taken, walls, PaperTextWidth(doc, scale), stroked)", StringComparison.Ordinal);
         Assert.True(dims > 0 && marks > dims, "the marks are placed against the laid dimensions and the strokes");
         foreach (var role in new[] { "\"beyond\"", "\"cut\"", "\"break_line\"" })
