@@ -30,6 +30,8 @@ internal static class ForskTechnicalHost
     static readonly EventHandler Idle = (_, __) => OnIdle();
 
     static readonly HashSet<Guid> PlanHidden = new HashSet<Guid>();
+    /// <summary>The layer count PlanHidden was applied at: a layer made later (A-OPEN by the first Generate 3D) is hidden too.</summary>
+    static int _planLayers = -1;
     static readonly ForskTechnicalLinework EmptyLines = new ForskTechnicalLinework(new ForskTechnical.Stroke[0]);
 
     static ForskTechnicalConduit _conduit;
@@ -58,6 +60,8 @@ internal static class ForskTechnicalHost
         RhinoDoc.ModifyObjectAttributes += Modified;
         RhinoDoc.UserStringChanged += StringChanged;
         RhinoApp.Idle += Idle;
+        RhinoDoc.BeginSaveDocument += BeforeSave;
+        RhinoDoc.EndSaveDocument += AfterSave;
         _conduit = new ForskTechnicalConduit { Enabled = true };
     }
 
@@ -73,6 +77,8 @@ internal static class ForskTechnicalHost
         RhinoDoc.ModifyObjectAttributes -= Modified;
         RhinoDoc.UserStringChanged -= StringChanged;
         RhinoApp.Idle -= Idle;
+        RhinoDoc.BeginSaveDocument -= BeforeSave;
+        RhinoDoc.EndSaveDocument -= AfterSave;
         RestorePlanLayers(_bound);
         Cache.Reset();
         ForgetDrawn();
@@ -381,7 +387,7 @@ internal static class ForskTechnicalHost
                 want.Add(viewport.Id);
             }
         }
-        if (want.SetEquals(PlanHidden)) return false;
+        if (want.SetEquals(PlanHidden) && doc.Layers.Count == _planLayers) return false;
         var changed = false;
         var layers = new List<Layer>(doc.Layers.Count);
         foreach (var layer in doc.Layers) layers.Add(layer);
@@ -391,7 +397,7 @@ internal static class ForskTechnicalHost
             var touched = false;
             foreach (var id in want)
             {
-                if (PlanHidden.Contains(id) || !layer.PerViewportIsVisible(id)) continue;
+                if (!layer.PerViewportIsVisible(id)) continue;
                 layer.SetPerViewportVisible(id, false);
                 touched = true;
             }
@@ -407,7 +413,32 @@ internal static class ForskTechnicalHost
         }
         PlanHidden.Clear();
         foreach (var id in want) PlanHidden.Add(id);
+        _planLayers = doc.Layers.Count;
         return changed;
+    }
+
+    /// <summary>
+    /// The file keeps A-OPEN and A-STAIR shown: Rhino without Forsk draws no symbols,
+    /// so a plan saved hidden would have no doors, windows or stairs.
+    /// </summary>
+    static void BeforeSave(object sender, DocumentSaveEventArgs e)
+    {
+        try { RestorePlanLayers(e?.Document); }
+        catch (Exception ex) { Report(ex.Message); }
+    }
+
+    /// <summary>Hide them again for this session, and leave the just-saved file unmodified.</summary>
+    static void AfterSave(object sender, DocumentSaveEventArgs e)
+    {
+        var doc = e?.Document;
+        if (doc == null) return;
+        try
+        {
+            var modified = doc.Modified;
+            if (SyncPlanLayers(doc)) doc.Views.Redraw();
+            if (!modified) doc.Modified = false;
+        }
+        catch (Exception ex) { Report(ex.Message); }
     }
 
     static void RestorePlanLayers(RhinoDoc doc)
@@ -424,6 +455,7 @@ internal static class ForskTechnicalHost
             }
         }
         PlanHidden.Clear();
+        _planLayers = -1;
     }
 
     static void RememberPlan()
