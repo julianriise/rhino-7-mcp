@@ -151,6 +151,12 @@ public class PageKeyboardTests
         Assert.Equal("true", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'description', long:true}]}))"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'open', fields:[{key:'front', check:true, value:'1'}]}))"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'answered', answer:'Cancel', fields:[{key:'project'}]}))"));
+        Assert.Equal("Project info saved · Test house, 2026-07",
+            Eval("Forsk.cardLine({state:'answered', question:'Project info for the title blocks.', answer:'Save', receipt:'Project info saved · Test house, 2026-07'})"));
+        Assert.Equal("Which door type? · Sliding door",
+            Eval("Forsk.cardLine({state:'answered', question:'Which door type?', answer:'Sliding door'})"));
+        Assert.Equal("Stair sizes. The steps stay equal: their count follows the height.",
+            Eval("Forsk.cardLine({state:'stale', question:'Stair sizes. The steps stay equal: their count follows the height.', answer:'Save'})"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'open', pills:[{id:'save'},{id:'cancel'}]}))"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'receipt', ok:true, text:'Printed'}))"));
         Assert.Equal("true", Eval("String(Forsk.cardCancels({thread:[{id:'m4', pills:[{id:'save'},{id:'cancel'}]}]}, 'm4'))"));

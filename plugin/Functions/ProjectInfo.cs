@@ -101,11 +101,78 @@ public static class ProjectInfo
         return string.IsNullOrWhiteSpace(record?[Project]);
     }
 
-    /// <summary>The title block's date: a stored date wins, empty is the print day.</summary>
+    /// <summary>The title block's date: a stored date wins, as written. Empty is the print day, yyyy-MM-dd.</summary>
     public static string SheetDate(Record record, DateTime today)
     {
         var stored = record?[Date];
         return string.IsNullOrEmpty(stored) ? today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : stored;
+    }
+
+    /// <summary>
+    /// The architect on a file that has none: a saved Forsk value, else the
+    /// Rhino account or licence owner, else the Mac's full name. The first
+    /// one that is set. Rev. is a different field and is not a name.
+    /// </summary>
+    public static string PickArchitect(string saved, string rhinoName, string macFullName)
+    {
+        foreach (var name in new[] { saved, rhinoName, macFullName })
+        {
+            var text = (name ?? "").Trim();
+            if (text.Length > 0) return text;
+        }
+        return "";
+    }
+
+    /// <summary>The one line <c>id -F</c> prints. Empty when it printed nothing.</summary>
+    public static string MacFullName(string idF)
+    {
+        if (string.IsNullOrWhiteSpace(idF)) return "";
+        var line = idF.Trim();
+        var cut = line.IndexOfAny(new[] { '\r', '\n' });
+        if (cut >= 0) line = line.Substring(0, cut).Trim();
+        return line;
+    }
+
+    /// <summary>
+    /// The name the title block prints when the file has none. A stored
+    /// architect wins. The date is left unset, so each Print uses that day
+    /// until a typed date is stored. Rev. is left as it is.
+    /// </summary>
+    public static Record WithDefaults(Record record, string architect)
+    {
+        record = record ?? new Record();
+        if (record[Architect].Length == 0)
+        {
+            var name = (architect ?? "").Trim();
+            if (name.Length > 0) record[Architect] = name;
+        }
+        return record;
+    }
+
+    /// <summary>
+    /// The date to write on the file. A date the user typed is kept, including
+    /// one already stored that happens to be today. The print-day prefill,
+    /// submitted while nothing was stored, is not a fixed date: store nothing
+    /// so the next Print uses that day. An empty field stores nothing. Rev.
+    /// is a different field and is not touched here.
+    /// </summary>
+    public static string DateToStore(string submitted, string previouslyStored, DateTime today)
+    {
+        var typed = (submitted ?? "").Trim();
+        var previous = (previouslyStored ?? "").Trim();
+        if (typed.Length == 0) return "";
+        if (previous.Length == 0 && typed == SheetDate(new Record(), today)) return "";
+        return typed;
+    }
+
+    /// <summary>The answered Project info card: "Project info saved · Test house, 2026-07".</summary>
+    public static string SavedLine(Record record)
+    {
+        record = record ?? new Record();
+        var bits = new List<string>();
+        if (record[Project].Length > 0) bits.Add(record[Project]);
+        if (record[ProjectNo].Length > 0) bits.Add(record[ProjectNo]);
+        return bits.Count == 0 ? "Project info saved" : "Project info saved · " + string.Join(", ", bits);
     }
 
     /// <summary>

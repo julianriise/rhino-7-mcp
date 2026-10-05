@@ -74,6 +74,62 @@ public class ProjectInfoTests
         var today = new DateTime(2026, 10, 5);
         Assert.Equal("2026-10-04", ProjectInfo.SheetDate(Read(Smoke), today));
         Assert.Equal("2026-10-05", ProjectInfo.SheetDate(Read(new() { ["project"] = "Garage" }), today));
+        // A typed date is kept as written. Rev. is a different field.
+        Assert.Equal("5 Oct 2026", ProjectInfo.SheetDate(Read(new() { ["date"] = "5 Oct 2026", ["revision"] = "B" }), today));
+    }
+
+    [Fact]
+    public void TheArchitect_IsTheSavedName_ElseRhino_ElseTheMacFullName()
+    {
+        Assert.Equal("Riise Arkitekter", ProjectInfo.PickArchitect("Riise Arkitekter", "Julian Riise", "Julian Riise"));
+        Assert.Equal("Julian Riise", ProjectInfo.PickArchitect("  ", "Julian Riise", "Other"));
+        Assert.Equal("Julian Riise", ProjectInfo.PickArchitect(null, "  ", "Julian Riise"));
+        Assert.Equal("", ProjectInfo.PickArchitect(null, "", "  "));
+        Assert.Equal("Julian Riise", ProjectInfo.MacFullName("Julian Riise\n"));
+        Assert.Equal("", ProjectInfo.MacFullName("  \n"));
+    }
+
+    [Fact]
+    public void AnEmptyArchitect_TakesTheDefault_AndAnEmptyDateStaysThePrintDay()
+    {
+        var today = new DateTime(2026, 10, 5);
+        var filled = ProjectInfo.WithDefaults(Read(new() { ["project"] = "Garage" }), "Julian Riise");
+        Assert.Equal("Julian Riise", filled["architect"]);
+        Assert.Equal("", filled["date"]);
+        Assert.Equal("2026-10-05", ProjectInfo.SheetDate(filled, today));
+        Assert.Equal("Holmen Ark", ProjectInfo.WithDefaults(Read(new() { ["architect"] = "Holmen Ark" }), "Julian Riise")["architect"]);
+        Assert.Equal("B", ProjectInfo.WithDefaults(Read(new() { ["revision"] = "B" }), "Julian Riise")["revision"]);
+    }
+
+    /// <summary>
+    /// The card shows today. Saving that prefill does not lock it, so the next
+    /// Print moves on. A date the user typed, including one that matches today
+    /// after it was already stored, is kept. Clearing the field goes back to the print day.
+    /// </summary>
+    [Fact]
+    public void ATypedDate_IsKept_AndThePrintDayPrefill_IsNot()
+    {
+        var today = new DateTime(2026, 10, 5);
+        Assert.Equal("", ProjectInfo.DateToStore("2026-10-05", "", today));
+        Assert.Equal("", ProjectInfo.DateToStore("  2026-10-05 ", null, today));
+        Assert.Equal("2020-01-01", ProjectInfo.DateToStore("2020-01-01", "", today));
+        Assert.Equal("5 Oct 2026", ProjectInfo.DateToStore("5 Oct 2026", "", today));
+        Assert.Equal("2026-10-05", ProjectInfo.DateToStore("2026-10-05", "2026-10-05", today));
+        Assert.Equal("2026-10-06", ProjectInfo.DateToStore("2026-10-06", "2020-01-01", today));
+        Assert.Equal("", ProjectInfo.DateToStore("  ", "2020-01-01", today));
+    }
+
+    [Fact]
+    public void TheSavedLine_NamesTheProjectAndItsNumber()
+    {
+        Assert.Equal("Project info saved · Test house, 2026-07", ProjectInfo.SavedLine(Read(new()
+        {
+            ["project"] = "Test house",
+            ["project_no"] = "2026-07",
+            ["date"] = "2026-10-05"
+        })));
+        Assert.Equal("Project info saved · Test house", ProjectInfo.SavedLine(Read(new() { ["project"] = "Test house" })));
+        Assert.Equal("Project info saved", ProjectInfo.SavedLine(Read(new())));
     }
 
     [Fact]
@@ -147,6 +203,28 @@ public class ProjectInfoTests
         var pack = Source("Functions/LayoutPack.cs");
         Assert.DoesNotContain("MaybeStoreMeta(doc, parameters, \"client\")", pack);
         Assert.DoesNotContain("[\"meta.client\"]", Source("Forsk/ForskText.cs"));
+    }
+
+    /// <summary>The sheet reads the default name, and a saved form does not post the pill a second time.</summary>
+    [Fact]
+    public void TheSheet_UsesTheDefaultArchitect_AndASavedForm_DoesNotRepeatThePill()
+    {
+        var plugin = PluginDir();
+        string Source(string path) => File.ReadAllText(Path.Combine(plugin, path));
+        var more = Source("Functions/LayoutPackMore.cs");
+        Assert.Contains("ProjectInfo.WithDefaults", more);
+        Assert.Contains("ForskPrint.FirmArchitect()", more);
+        var chat = Source("Forsk/ForskChat.cs");
+        Assert.Contains("ProjectInfo.PickArchitect", chat);
+        Assert.Contains("RhinoApp.LoggedInUserName", chat);
+        Assert.Contains("RhinoApp.LicenseUserName", chat);
+        Assert.Contains("Arguments = \"-F\"", chat);
+        Assert.DoesNotContain("Environment.UserName", chat);
+        var actions = Source("Forsk/ForskWindowActions.cs");
+        Assert.Contains("ProjectInfo.DateToStore", actions);
+        Assert.Contains("ForskCards.FormReceipt", actions);
+        Assert.Contains("noteUser: receipt == null", actions);
+        Assert.Contains("Forsk.cardLine", Source("Forsk/Page/window.js"));
     }
 
     internal static string PluginDir()

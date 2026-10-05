@@ -179,8 +179,9 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
     [Fact]
     public void TheTitleBlock_ShowsEnglishHints_AndTreatsTheNorwegianSeedsAsEmpty()
     {
-        var empty = ForskCards.For("meta.title", Docs.Facts("empty"))!;
-        Assert.Equal(new[] { "", "", "", "", "", "", "" }, empty.Fields!.Select(f => f.Value));
+        var today = new DateTime(2026, 10, 5);
+        var empty = ForskCards.For("meta.title", Docs.Facts("empty"), today)!;
+        Assert.Equal(new[] { "", "", "", "", "", "2026-10-05", "" }, empty.Fields!.Select(f => f.Value));
         Assert.Equal(new[] { "Project name", null, "Client", "Address", null, null, null }, empty.Fields!.Select(f => f.Placeholder));
 
         var seeded = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.Meta = new Dictionary<string, string>
@@ -189,11 +190,49 @@ Assert.Equal("Project name", card.Fields![0].Placeholder);
             ["client"] = "Klient",
             ["address"] = "Adresse"
         }));
-        var card = ForskCards.For("meta.title", seeded)!;
-        Assert.Equal(new[] { "", "", "", "", "", "", "" }, card.Fields!.Select(f => f.Value));
+        var card = ForskCards.For("meta.title", seeded, today)!;
+        Assert.Equal(new[] { "", "", "", "", "", "2026-10-05", "" }, card.Fields!.Select(f => f.Value));
         Assert.Equal("Project name", card.Fields![0].Placeholder);
         Assert.Equal("Client", card.Fields![2].Placeholder);
         Assert.Equal("Address", card.Fields![3].Placeholder);
+        Assert.Null(card.Fields!.Single(f => f.Key == "date").Placeholder);
+    }
+
+    [Fact]
+    public void TheCard_ShowsTheNameAndToday_AsValues()
+    {
+        var today = new DateTime(2026, 10, 5);
+        var card = ForskCards.AskInfoFirst(House(new(), "Julian Riise"), "file.print", today: today)!;
+        var architect = card.Fields!.Single(f => f.Key == "architect");
+        var date = card.Fields!.Single(f => f.Key == "date");
+        Assert.Equal("Julian Riise", architect.Value);
+        Assert.Null(architect.Placeholder);
+        Assert.Equal("2026-10-05", date.Value);
+        Assert.Null(date.Placeholder);
+        Assert.Equal("Project name", card.Fields!.Single(f => f.Key == "project").Placeholder);
+        Assert.Equal("", card.Fields!.Single(f => f.Key == "project").Value);
+
+        var stored = ForskCards.For("meta.title", House(new() { ["date"] = "2020-01-01" }, "Julian Riise"), today)!;
+        Assert.Equal("2020-01-01", stored.Fields!.Single(f => f.Key == "date").Value);
+    }
+
+    [Fact]
+    public void ASavedForm_CollapsesToOneReceipt_WithoutTheSavePill()
+    {
+        var info = new JObject { ["project"] = "Test house", ["project_no"] = "2026-07", ["architect"] = "Julian Riise", ["date"] = "2026-10-05" };
+        Assert.Equal("Project info saved · Test house, 2026-07", ForskCards.FormReceipt("meta.title", "save", info));
+        Assert.Equal("Project info skipped", ForskCards.FormReceipt("meta.title", "skip", info));
+        Assert.Null(ForskCards.FormReceipt("opening.type", "save", info));
+
+        var stair = new JObject { ["width"] = "1000", ["riser_max"] = "180", ["going"] = "270" };
+        Assert.Equal("Stair sizes saved · 1000 × 180 × 270", ForskCards.FormReceipt("stair.edit", "save", stair));
+        Assert.Equal("Stair flipped", ForskCards.FormReceipt("stair.edit", "flip", stair));
+
+        var sheets = new JObject { ["scale"] = "1:200", ["plan"] = "1" };
+        Assert.Equal("Sheets saved · 1:200", ForskCards.FormReceipt("print.pages", "save", sheets));
+        Assert.Equal("Sheets saved · 1:200", ForskCards.FormReceipt("print.pages", "print", sheets));
+        Assert.Equal("Sheet set reset", ForskCards.FormReceipt("print.pages", "reset", sheets));
+        Assert.Equal("Export IFC", ForskCards.FormReceipt("print.pages", "export_ifc", sheets));
     }
 
     [Fact]

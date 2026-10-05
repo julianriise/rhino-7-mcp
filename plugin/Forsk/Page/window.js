@@ -230,6 +230,18 @@
     return false;
   };
 
+  /*
+   * An answered card's one line. A form stores its receipt ("Project info
+   * saved · Test house, 2026-07") and that is the whole line: the pill is
+   * not repeated. A choice card stays "question · answer". No DOM.
+   */
+  Forsk.cardLine = function (item) {
+    if (!item) return '';
+    if (item.state === 'answered' && item.receipt) return item.receipt;
+    if (item.state === 'answered') return (item.question || '') + ' · ' + (item.answer || '');
+    return item.question || '';
+  };
+
   /* True when that card has a Cancel pill. Esc uses it. No DOM. */
   Forsk.cardCancels = function (model, id) {
     if (!id || !model || !model.thread) return false;
@@ -479,7 +491,7 @@
   function card(item, opts) {
     if (item.state !== 'open') {
       var done = el('div', 'card ' + (item.state === 'stale' ? 'stale' : 'done'));
-      done.textContent = item.state === 'answered' ? item.question + ' · ' + (item.answer || '') : item.question;
+      done.textContent = Forsk.cardLine(item);
       return done;
     }
     var box = el('div', 'card');

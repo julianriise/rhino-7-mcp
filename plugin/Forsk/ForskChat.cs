@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -1526,11 +1528,82 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return AbsolutePdf(dialog.FileName, dialog.Directory);
         }
 
-        /// <summary>The architect saved on this Mac, which prefills an empty Architect on the Project info card.</summary>
+        /// <summary>
+        /// The architect for an empty field and for a title block with none stored.
+        /// A saved Forsk value, else the Rhino account or the licence owner, else
+        /// the Mac's full name (<c>id -F</c>, not the short account). The first
+        /// one found is saved, and the next file uses it.
+        /// </summary>
         public static string FirmArchitect()
+        {
+            var saved = ArchitectSetting();
+            if (!string.IsNullOrWhiteSpace(saved)) return saved.Trim();
+            var rhino = RhinoPerson();
+            var mac = string.IsNullOrWhiteSpace(rhino) ? MacFullName() : "";
+            var name = ProjectInfo.PickArchitect(null, rhino, mac);
+            if (!string.IsNullOrWhiteSpace(name)) SaveFirmArchitect(name);
+            return name ?? "";
+        }
+
+        static string ArchitectSetting()
         {
             try { return global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.GetString(ProjectInfo.ArchitectSetting, "") ?? ""; }
             catch (Exception) { return ""; }
+        }
+
+        /// <summary>The Rhino account's display name, else the licence owner's. Empty when Rhino has neither.</summary>
+        static string RhinoPerson()
+        {
+            string Read(Func<string> get)
+            {
+                try { return get() ?? ""; }
+                catch (Exception) { return ""; }
+            }
+            var account = Read(() => RhinoApp.LoggedInUserName).Trim();
+            if (account.Length > 0) return account;
+            return Read(() => RhinoApp.LicenseUserName).Trim();
+        }
+
+        static string _macFullName;
+
+        /// <summary>The Mac's full name from <c>id -F</c>. Cached: it does not change while Rhino is open.</summary>
+        static string MacFullName()
+        {
+            if (_macFullName != null) return _macFullName;
+            _macFullName = ProjectInfo.MacFullName(ReadIdFullName());
+            return _macFullName;
+        }
+
+        static string ReadIdFullName()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "";
+            try
+            {
+                var start = new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/id",
+                    Arguments = "-F",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (var process = Process.Start(start))
+                {
+                    if (process == null) return "";
+                    var text = process.StandardOutput.ReadToEnd();
+                    if (!process.WaitForExit(1500))
+                    {
+                        try { process.Kill(); }
+                        catch (Exception) { }
+                        return "";
+                    }
+                    return text;
+                }
+            }
+            catch (Exception)
+            {
+                return "";
+            }
         }
 
         /// <summary>Each Save of the Project info card keeps its architect for the next file. Empty keeps the last one.</summary>

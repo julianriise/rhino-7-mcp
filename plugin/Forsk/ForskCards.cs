@@ -49,14 +49,14 @@ namespace RhinoMCPPlugin.Forsk
         public const int MaxPages = 24;
 
         /// <summary>The card a registry card action opens, or null for help, the bridge, and an action that is not a card.</summary>
-        public static CardSpec For(string actionId, FileFacts f)
+        public static CardSpec For(string actionId, FileFacts f, DateTime? today = null)
         {
             switch (actionId)
             {
                 case "opening.type": return SwapType(f);
                 case "file.check": return Review(f);
                 case "ink.set": return Ink(f);
-                case "meta.title": return TitleBlock(f);
+                case "meta.title": return TitleBlock(f, today: today);
                 case "print.one": return PrintOne(f);
                 case "print.pages": return Pages(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
@@ -237,11 +237,13 @@ namespace RhinoMCPPlugin.Forsk
         /// pending (file.print, print.one, export.dwg, export.dxf, export.csv)
         /// it is the ask-once card before that action: Save and print (or
         /// export), Print without, Cancel; Data carries the action and its
-        /// sheet so the answer runs it. An empty Architect takes the firm saved
-        /// on this Mac.
+        /// sheet so the answer runs it. An empty Architect takes the name saved
+        /// for this Mac. An empty Date shows today, and saving that prefill
+        /// does not lock it.
         /// </summary>
-        public static CardSpec TitleBlock(FileFacts f, string pending = null, string view = null)
+        public static CardSpec TitleBlock(FileFacts f, string pending = null, string view = null, DateTime? today = null)
         {
+            var day = today ?? DateTime.Now;
             var exports = pending != null && pending.StartsWith("export.", StringComparison.Ordinal);
             var card = new CardSpec
             {
@@ -263,14 +265,12 @@ namespace RhinoMCPPlugin.Forsk
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             foreach (var key in ProjectInfo.Keys)
             {
-                string value = null;
-                f?.Meta?.TryGetValue(key, out value);
-if (string.IsNullOrWhiteSpace(value) && key == ProjectInfo.Architect) value = f?.FirmArchitect;
+                var shown = ShownMeta(f, key, day);
                 card.Fields.Add(new CardField
                 {
                     Key = key,
                     Label = ProjectInfo.Caption(key),
-                    Value = MetaValue(key, value),
+                    Value = shown,
                     Placeholder = MetaPlaceholder(key)
                 });
             }
@@ -278,7 +278,57 @@ if (string.IsNullOrWhiteSpace(value) && key == ProjectInfo.Architect) value = f?
         }
 
         /// <summary>
-/// A stored Norwegian seed is the old empty hint, not a saved name.
+        /// What the field shows. A stored value wins. An empty Architect takes
+        /// the name saved for this Mac. An empty Date takes today, as a value,
+        /// so the field is not a blank asking to be typed. Client and address
+        /// stay empty, with their hint, until someone types them.
+        /// </summary>
+        static string ShownMeta(FileFacts f, string key, DateTime today)
+        {
+            string value = null;
+            f?.Meta?.TryGetValue(key, out value);
+            value = MetaValue(key, value);
+            if (value.Length > 0) return value;
+            if (key == ProjectInfo.Architect) return (f?.FirmArchitect ?? "").Trim();
+            if (key == ProjectInfo.Date) return ProjectInfo.SheetDate(null, today);
+            return "";
+        }
+
+        /// <summary>
+        /// The one line an answered form card shows, instead of "question · Save"
+        /// plus a second line that says Save. Null for a card that is not one of
+        /// these forms: its pill stays the answer.
+        /// </summary>
+        public static string FormReceipt(string kind, string pillId, JObject values)
+        {
+            string Value(string key) => (values?[key]?.ToString() ?? "").Trim();
+            switch (kind)
+            {
+                case "meta.title":
+                    if (pillId == "skip") return "Project info skipped";
+                    if (pillId != "save") return null;
+                    var record = new ProjectInfo.Record();
+                    foreach (var key in ProjectInfo.Keys) record[key] = Value(key);
+                    return ProjectInfo.SavedLine(record);
+                case "stair.edit":
+                    if (pillId == "flip") return "Stair flipped";
+                    if (pillId != "save") return null;
+                    var sizes = new[] { Value("width"), Value("riser_max"), Value("going") }.Where(s => s.Length > 0).ToList();
+                    return sizes.Count == 0 ? "Stair sizes saved" : "Stair sizes saved · " + string.Join(" × ", sizes);
+                case "print.pages":
+                    if (pillId == "reset") return "Sheet set reset";
+                    if (pillId == "export_ifc") return "Export IFC";
+                    if (pillId == "export_csv") return "Export CSV";
+                    if (pillId != "save" && pillId != "print" && pillId != "export") return null;
+                    var scale = Value("scale");
+                    return scale.Length == 0 ? "Sheets saved" : "Sheets saved · " + scale;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// A stored Norwegian seed is the old empty hint, not a saved name.
         /// The field stays blank and the English hint shows.
         /// </summary>
         static string MetaValue(string key, string value)
@@ -314,13 +364,13 @@ if (string.IsNullOrWhiteSpace(value) && key == ProjectInfo.Architect) value = f?
         /// The Project info card to answer before pending runs, or null to run
         /// it now: once a project name is stored, or once the file was asked.
         /// </summary>
-        public static CardSpec AskInfoFirst(FileFacts f, string pending, string view = null)
+        public static CardSpec AskInfoFirst(FileFacts f, string pending, string view = null, DateTime? today = null)
         {
             if (f == null || !InfoMissing(f)) return null;
             string asked = null;
             f.Meta?.TryGetValue(ProjectInfo.AskedKey, out asked);
             if (!string.IsNullOrWhiteSpace(asked)) return null;
-            return TitleBlock(f, pending, view);
+            return TitleBlock(f, pending, view, today);
         }
 
         /// <summary>No project name is stored: the gear's dot and the ask-once card.</summary>

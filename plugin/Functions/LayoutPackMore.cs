@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using RhinoMCPPlugin.Forsk;
 using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.FileIO;
@@ -258,7 +259,9 @@ public partial class RhinoMCPFunctions
 
     private static ProjectInfo.Record ReadProjectInfo(RhinoDoc doc)
     {
-        return ProjectInfo.Read(key => doc.Strings.GetValue(ProjectInfo.Section, key));
+        var record = ProjectInfo.Read(key => doc.Strings.GetValue(ProjectInfo.Section, key));
+        // The title block, the PDF, the CSV and the IFC share this. A stored name wins; the date stays empty until typed.
+        return ProjectInfo.WithDefaults(record, ForskPrint.FirmArchitect());
     }
 
     private static string MetaOr(RhinoDoc doc, string key, string fallback)

@@ -342,6 +342,9 @@ namespace RhinoMCPPlugin.Forsk
                 Render();
                 return;
             }
+            // A form's receipt is the whole answered line. The pill is not also posted as its own "Save".
+            var receipt = ForskCards.FormReceipt(kind, pill.Id, values);
+            if (receipt != null) card["receipt"] = receipt;
             switch (kind)
             {
                 case "scale":
@@ -373,11 +376,17 @@ namespace RhinoMCPPlugin.Forsk
                         meta[key] = typed.Trim();
                     }
                     var save = pill.Id == "save";
-                    if (save) ForskPrint.SaveFirmArchitect(meta[ProjectInfo.Architect]?.ToString());
+                    if (save)
+                    {
+                        // Today shown in the field is the print day, not a date the user typed.
+                        var previousDate = doc?.Strings.GetValue(ProjectInfo.Section, ProjectInfo.Date);
+                        meta[ProjectInfo.Date] = ProjectInfo.DateToStore(meta[ProjectInfo.Date]?.ToString(), previousDate, DateTime.Now);
+                        ForskPrint.SaveFirmArchitect(meta[ProjectInfo.Architect]?.ToString());
+                    }
                     var pending = card["data"]?["pending"]?.ToString();
                     if (string.IsNullOrEmpty(pending))
                     {
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta), userText: pill.Label);
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_project_meta", meta, quiet: true), userText: receipt ?? pill.Label, noteUser: receipt == null);
                         break;
                     }
                     // Asked once: either pill, then the action the card stood in front of.
@@ -386,9 +395,9 @@ namespace RhinoMCPPlugin.Forsk
                     var pendingId = PendingJobId(pending);
                     Job(thread, pendingId, ForskText.Label(pendingId), sink =>
                     {
-                        if (save) sink.Tool("set_project_meta", meta);
+                        if (save) sink.Tool("set_project_meta", meta, quiet: true);
                         RunPending(sink, pending, pendingView);
-                    }, userText: pill.Label);
+                    }, userText: receipt ?? pill.Label, noteUser: receipt == null);
                     break;
                 case "print.one":
                     Print(thread, pill.Label, pill.Id);
@@ -396,24 +405,24 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.pages":
                     var pagesArgs = ForskCards.PagesArgs(pill.Id, values, order);
                     if (pill.Id == "export_ifc")
-                        Export(thread, pill.Label, "ifc");
+                        Export(thread, receipt ?? pill.Label, "ifc", noteUser: receipt == null);
                     else if (pill.Id == "export_csv")
-                        Export(thread, pill.Label, "csv");
+                        Export(thread, receipt ?? pill.Label, "csv", noteUser: receipt == null);
                     else if (pill.Id == "export")
                         Job(thread, "export.dwg", ForskText.Label("export.dwg"), sink =>
                         {
                             sink.Tool("print_pages", pagesArgs);
                             sink.Line(ForskPrint.Export(sink.Step, this, "dwg"));
-                        }, userText: pill.Label);
+                        }, userText: receipt ?? pill.Label, noteUser: receipt == null);
                     else if (pill.Id == "print")
                         Job(thread, kind, ForskText.Label(kind), sink =>
                         {
                             sink.Tool("print_pages", pagesArgs);
                             sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
                             sink.Line(ForskPrint.Run(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this, null));
-                        }, userText: pill.Label);
+                        }, userText: receipt ?? pill.Label, noteUser: receipt == null);
                     else
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_pages", pagesArgs), userText: pill.Label);
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_pages", pagesArgs), userText: receipt ?? pill.Label, noteUser: receipt == null);
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
@@ -440,9 +449,9 @@ namespace RhinoMCPPlugin.Forsk
                         if (!string.IsNullOrEmpty(key) && values?[key] != null) field["value"] = values[key].ToString();
                     }
                     if (stairArgs == null)
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line(ForskText.Get("stair.same")), userText: pill.Label);
+                        card["receipt"] = ForskText.Get("stair.same");
                     else
-                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("edit_stair", stairArgs), userText: pill.Label);
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("edit_stair", stairArgs), userText: receipt ?? pill.Label, noteUser: receipt == null);
                     break;
                 case "section.remove":
                     var sectionArgs = pill.Id == "all" ? new JObject() : new JObject { ["letter"] = pill.Id };
@@ -789,14 +798,17 @@ namespace RhinoMCPPlugin.Forsk
             /// <summary>
             /// One tool, on the UI thread, and its structured receipt.
             /// words replaces the receipt text. On a failure it is one chat line instead.
+            /// quiet skips the receipt when the tool succeeded: the card already says what was saved.
             /// </summary>
-            public JObject Tool(string name, JObject args, Func<JObject, string> words = null)
+            public JObject Tool(string name, JObject args, Func<JObject, string> words = null, bool quiet = false)
             {
                 JObject envelope = null;
                 RhinoApp.InvokeOnUiThread(new Action(() => envelope = ForskTools.ExecuteAllowed(name, args)));
                 envelope = envelope ?? ForskTools.Fail("No result");
+                var ok = string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
+                if (quiet && ok) return envelope;
                 var text = words?.Invoke(envelope);
-                var failed = words != null && !string.Equals(envelope["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase);
+                var failed = words != null && !ok;
                 Post(() =>
                 {
                     if (failed)
@@ -925,12 +937,12 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>R3: the set as files, one per sheet. The folder dialog is parented to this window.</summary>
-        void Export(DocThread thread, string userText, string format, string mark = null)
+        void Export(DocThread thread, string userText, string format, string mark = null, bool noteUser = true)
         {
             var pending = "export." + format;
             var id = PendingJobId(pending);
             if (format != "ifc" && AskInfoFirst(thread, pending, null, userText, mark)) return;
-            Job(thread, id, ForskText.Label(id), sink => RunPending(sink, pending, null), userText: userText, mark: mark);
+            Job(thread, id, ForskText.Label(id), sink => RunPending(sink, pending, null), userText: userText, mark: mark, noteUser: noteUser);
         }
 
         /// <summary>The registry id a pending action runs under: DXF is the DWG pill's.</summary>
