@@ -15,15 +15,18 @@ using RhinoMCPPlugin.Functions;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// The Forsk window: a floating WebKit page with no owner, above Rhino's
-    /// windows and hidden when Rhino is not the active app. The page posts
-    /// actions over the page channel (HTTP on 127.0.0.1, see PageChannel) and
-    /// C# answers with Forsk.render. One window serves every open file; the
-    /// thread is per document, keyed by RuntimeSerialNumber, and kept on disk
-    /// by file path. The bar is the registry's read of the file, recomputed on
-    /// idle after a document event marks it dirty. Log: /tmp/forsk-web.log.
+    /// The Forsk window: a WebKit page owned by the Rhino window for the
+    /// document. A normal form stays on screen when another app is active and
+    /// sits at a normal window level, so it does not cover that app. The owner
+    /// keeps it above Rhino. Showing it does not take the keyboard; clicking
+    /// the page does. The page posts actions over the page channel (HTTP on
+    /// 127.0.0.1, see PageChannel) and C# answers with Forsk.render. One window
+    /// serves every open file; the thread is per document, keyed by
+    /// RuntimeSerialNumber, and kept on disk by file path. The bar is the
+    /// registry's read of the file, recomputed on idle after a document event
+    /// marks it dirty. Log: /tmp/forsk-web.log.
     /// </summary>
-    sealed partial class ForskWindow : FloatingForm
+    sealed partial class ForskWindow : Form
     {
         const string LogPath = "/tmp/forsk-web.log";
         /// <summary>Above this, the page could not repaint during a job: the shimmer was frozen.</summary>
@@ -45,11 +48,7 @@ namespace RhinoMCPPlugin.Forsk
         readonly WebView _web;
         readonly PageChannel _channel;
         readonly UITimer _boundsTimer;
-        readonly ForskHoverLink _link = new ForskHoverLink();
-        readonly ForskViewHover _viewHover;
         bool _ready;
-        /// <summary>A leave arrived with the button down. Idle hands focus back once the drag ends outside.</summary>
-        bool _hoverLeave;
         FileFacts _facts;
         uint _factsDoc;
 
@@ -64,6 +63,7 @@ namespace RhinoMCPPlugin.Forsk
                     if (ReferenceEquals(_open, s)) _open = null;
                 };
             }
+            _open.OwnTo(doc);
             _open.Place();
             _open.Show();
             Log("shown · " + _open.NativeClass());
@@ -74,6 +74,11 @@ namespace RhinoMCPPlugin.Forsk
         ForskWindow()
         {
             Title = "Forsk";
+            // A floating panel hides when the app deactivates. A normal form does not,
+            // and Topmost would paint it over other apps. Show leaves the keyboard
+            // where it is; the composer takes it only when this window is opened.
+            Topmost = false;
+            ShowActivated = false;
             Resizable = true;
             Padding = new Padding(0);
             MinimumSize = new Size((int)WindowBounds.MinWidth, (int)WindowBounds.MinHeight);
@@ -83,7 +88,6 @@ namespace RhinoMCPPlugin.Forsk
             _channel = new PageChannel(message => Application.Instance.AsyncInvoke(() => OnAction(message)));
             _channel.Note = Log;
             _channel.Start();
-            _viewHover = new ForskViewHover(HoverOn, ViewHovered) { Enabled = true };
             _web.DocumentLoaded += (s, e) => Log("page document loaded · " + (_web.Url == null ? "no url" : _web.Url.ToString()));
             _boundsTimer = new UITimer { Interval = 0.5 };
             _boundsTimer.Elapsed += (s, e) =>
@@ -97,7 +101,6 @@ namespace RhinoMCPPlugin.Forsk
             {
                 _boundsTimer.Stop();
                 SaveBounds();
-                _viewHover.Stop();
                 _channel.Dispose();
                 Log("closed");
             };
@@ -162,9 +165,6 @@ namespace RhinoMCPPlugin.Forsk
                     case "role":
                         PickRole(message["role"]?.ToString());
                         return;
-                    case "hover":
-                        OnHover(message["edge"]?.ToString(), message["typing"]?.Value<bool>() ?? false, message["dragging"]?.Value<bool>() ?? false);
-                        return;
                 }
             }
             catch (Exception e)
@@ -224,11 +224,9 @@ namespace RhinoMCPPlugin.Forsk
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
                 model = WindowView.Build(thread, Facts(doc), _helpOpen);
-            model["hoverFocus"] = HoverOn();
             var count = model["thread"] is JArray items ? items.Count : 0;
             Log("render · " + count + " items");
             Script("Forsk.render", model);
-            ShowHover(_link.Rebuild(thread?.Items));
             if (thread != null) thread.Prefill = null;
         }
 
@@ -331,7 +329,6 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Poll(force: false);
                 var open = _open;
-                open?.FinishHover();
                 if (open == null || !_dirty || open._busy) return;
                 open.Render();
             };
@@ -377,128 +374,25 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>Plugin setting ForskHoverFocus. Missing settings, and a missing key, are on.</summary>
-        static bool HoverOn()
-        {
-            try
-            {
-                var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
-                if (settings == null) return true;
-                return settings.GetBool(ForskHover.SettingKey, true);
-            }
-            catch (Exception e)
-            {
-                Log("hover setting " + e.Message);
-                return true;
-            }
-        }
-
         /// <summary>
-        /// The pointer entered or left the page. Enter makes this window key and
-        /// focuses the composer. Leave gives the keyboard back to Rhino, unless
-        /// the pointer is still over this window (its title bar).
+        /// The document's Rhino window owns the chat, so the chat stays above it.
+        /// When that window is missing, the app window does. Set once: a later
+        /// change would reparent the window. A floating panel with no owner
+        /// hides as soon as another app is clicked.
         /// </summary>
-        void OnHover(string edge, bool typing, bool dragging)
+        void OwnTo(RhinoDoc doc)
         {
-            if (edge == "enter") ClearViewHover();
-            if (Mouse.Buttons != MouseButtons.None) dragging = true;
-            var decision = ForskHover.Decide(HoverOn(), edge, typing, dragging);
-            if (decision == ForskHover.None)
-            {
-                _hoverLeave = edge == "leave" && dragging && !typing;
-                return;
-            }
-            _hoverLeave = false;
-            if (decision == ForskHover.Chat)
-            {
-                MakeChatKey();
-                return;
-            }
-            if (PointerInside())
-            {
-                Log("hover leave · still over the window");
-                return;
-            }
-            Log("hover leave · rhino");
-            HandToRhino();
-        }
-
-        /// <summary>The drag that left the page has ended. Outside, Rhino takes the keyboard; inside, the chat does.</summary>
-        void FinishHover()
-        {
-            if (!_hoverLeave || Mouse.Buttons != MouseButtons.None) return;
-            _hoverLeave = false;
-            if (PointerInside())
-            {
-                MakeChatKey();
-                return;
-            }
-            Log("hover leave · rhino");
-            HandToRhino();
-        }
-
-        /// <summary>Makes the Eto window the key window, then the web view, then the composer.</summary>
-        void MakeChatKey()
-        {
+            if (Owner != null) return;
             try
             {
-                MakeKey(ControlObject);
-                Focus();
-                _web.Focus();
-                if (_ready) RunScript("Forsk.focus()", "focus");
-                Log("hover enter · chat");
+                var owner = doc != null ? RhinoEtoApp.MainWindowForDocument(doc) : null;
+                if (owner == null) owner = RhinoEtoApp.MainWindow;
+                if (owner == null) return;
+                Owner = owner;
             }
             catch (Exception e)
             {
-                Log("hover focus " + e.Message);
-            }
-        }
-
-        static bool _keyMissing;
-
-        /// <summary>AppKit's makeKeyWindow, so a hover keys the panel without a click. False when this build has no such method.</summary>
-        static bool MakeKey(object native)
-        {
-            if (native == null) return false;
-            try
-            {
-                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
-                for (var type = native.GetType(); type != null; type = type.BaseType)
-                {
-                    var method = type.GetMethod("MakeKeyWindow", flags, null, Type.EmptyTypes, null);
-                    if (method == null || method.DeclaringType != type) continue;
-                    method.Invoke(native, null);
-                    return true;
-                }
-            }
-            catch (Exception e)
-            {
-                if (_keyMissing) return false;
-                _keyMissing = true;
-                Log("hover key · " + e.GetBaseException().Message + "; Focus() is the fallback");
-                return false;
-            }
-            if (!_keyMissing)
-            {
-                _keyMissing = true;
-                Log("hover key · MakeKeyWindow is not on this window; Focus() is the fallback");
-            }
-            return false;
-        }
-
-        /// <summary>The pointer is inside the window frame, title bar included.</summary>
-        bool PointerInside()
-        {
-            try
-            {
-                var p = Mouse.Position;
-                return p.X >= Location.X && p.Y >= Location.Y
-                    && p.X < Location.X + Size.Width && p.Y < Location.Y + Size.Height;
-            }
-            catch (Exception e)
-            {
-                Log("hover pointer " + e.Message);
-                return false;
+                Log("owner " + e.Message);
             }
         }
 

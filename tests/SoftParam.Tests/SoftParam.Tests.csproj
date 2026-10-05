@@ -85,8 +85,6 @@
     <Compile Include="..\..\plugin\Forsk\ForskRole.cs" Link="ForskRole.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskToolPacks.cs" Link="ForskToolPacks.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskDebug.cs" Link="ForskDebug.cs" />
-    <Compile Include="..\..\plugin\Forsk\ForskHover.cs" Link="ForskHover.cs" />
-    <Compile Include="..\..\plugin\Forsk\ForskHoverLink.cs" Link="ForskHoverLink.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReports.cs" Link="ForskReports.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskSupport.cs" Link="ForskSupport.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReplyEmail.cs" Link="ForskReplyEmail.cs" />

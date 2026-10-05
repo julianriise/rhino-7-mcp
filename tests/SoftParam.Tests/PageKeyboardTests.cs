@@ -185,30 +185,13 @@ public class PageKeyboardTests
         Assert.All(sent, kind => Assert.Contains(kind, new[] { "send", "slot", "help", "card.close" }));
     }
 
-    [Theory]
-    [InlineData("enter", false, false, true, "enter")]
-    [InlineData("leave", false, false, true, "leave")]
-    [InlineData("enter", true, false, true, null)]
-    [InlineData("leave", true, false, true, null)]
-    [InlineData("enter", false, true, true, null)]
-    [InlineData("leave", false, true, true, null)]
-    [InlineData("enter", false, false, false, null)]
-    [InlineData("leave", false, false, false, null)]
-    public void Hover_TakesTheChat_AndGivesItBack_UnlessTypingDraggingOrOff(string edge, bool typing, bool dragging, bool enabled, string expected)
+    [Fact]
+    public void ThePage_DoesNotMoveTheKeyboardWhenThePointerEnters()
     {
         var engine = PageScript.Load();
-        var js = "JSON.stringify(Forsk.hoverAction({ edge: " + PageScript.Quote(edge)
-            + ", typing: " + (typing ? "true" : "false")
-            + ", dragging: " + (dragging ? "true" : "false")
-            + ", enabled: " + (enabled ? "true" : "false") + " }))";
-        var raw = engine.Evaluate(js).AsString();
-        if (expected == null)
-        {
-            Assert.Equal("null", raw);
-            return;
-        }
-        var action = JObject.Parse(raw);
-        Assert.Equal("hover", action["kind"]!.ToString());
-        Assert.Equal(expected, action["edge"]!.ToString());
+        Assert.Equal("undefined", engine.Evaluate("typeof Forsk.hoverAction").AsString());
+        Assert.Equal("undefined", engine.Evaluate("typeof Forsk.hover").AsString());
+        Assert.Equal("function", engine.Evaluate("typeof Forsk.keyAction").AsString());
+        Assert.Equal("function", engine.Evaluate("typeof Forsk.focus").AsString());
     }
 }
