@@ -661,9 +661,7 @@ public static class PlanImport
             Host = best
         };
         if (kind == "door" && opening.Swings) Swing(placed, opening, u);
-        if (wall.Diagonal)
-            placed.Note = "on a diagonal wall: the bake cuts along X or Y only, so it will not cut square to this wall";
-        else if (placed.Width <= placed.Depth)
+        if (placed.Width <= placed.Depth)
             placed.Note = "narrower than its wall is thick: check its width after the bake";
         else if (opening.Kind != "window" && opening.Kind != "door")
             placed.Note = "a passage with no door drawn: imported as a door";

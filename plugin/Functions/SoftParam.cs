@@ -306,14 +306,11 @@ public partial class RhinoMCPFunctions
             // Record the clamped placement when the opening fits the segment.
             try
             {
-                var spec = new OpeningSpec
-                {
-                    Width = LongerXySide(new BoundingBox(center, center))
-                };
+                var spec = new OpeningSpec();
                 var marker = doc.Objects.FindId(markerId);
                 var width = ParseMm(marker?.Attributes?.GetUserString("forsk:width"));
                 if (width.HasValue && width.Value > 0) spec.Width = width.Value;
-                else if (fallback != null) spec.Width = LongerXySide(fallback.Foot.Bbox);
+                else if (fallback?.Foot?.Rect != null) spec.Width = fallback.Foot.Rect.Width;
                 if (spec.Width > 0)
                 {
                     var placed = PlaceOpeningOnPath(segs, spec, offset);
@@ -865,9 +862,9 @@ public partial class RhinoMCPFunctions
 
     private static double FootDistance(List<WallSegment> segs, Placement placement)
     {
-        if (placement?.Foot == null || !placement.Foot.Bbox.IsValid)
+        if (placement?.Foot?.Rect == null)
             return double.PositiveInfinity;
-        var center = placement.Foot.Bbox.Center;
+        var center = placement.Foot.Center;
         if (!TryNearestPlan(segs, center, double.PositiveInfinity, out _, out _, out var distance))
             return double.PositiveInfinity;
         return distance;
@@ -1155,12 +1152,13 @@ public partial class RhinoMCPFunctions
 
     private static string FormatFoot(Placement placement)
     {
-        if (placement?.Foot == null || !placement.Foot.Bbox.IsValid) return "none";
-        var box = placement.Foot.Bbox;
-        return box.Min.X.ToString("F0", CultureInfo.InvariantCulture) + ","
-            + box.Min.Y.ToString("F0", CultureInfo.InvariantCulture) + " "
-            + box.Max.X.ToString("F0", CultureInfo.InvariantCulture) + ","
-            + box.Max.Y.ToString("F0", CultureInfo.InvariantCulture);
+        var rect = placement?.Foot?.Rect;
+        if (rect == null) return "none";
+        rect.WorldBox(0.5 * rect.Width, 0.5 * rect.Depth, out var minX, out var minY, out var maxX, out var maxY);
+        return minX.ToString("F0", CultureInfo.InvariantCulture) + ","
+            + minY.ToString("F0", CultureInfo.InvariantCulture) + " "
+            + maxX.ToString("F0", CultureInfo.InvariantCulture) + ","
+            + maxY.ToString("F0", CultureInfo.InvariantCulture);
     }
 
     private static string Fmt(double value)

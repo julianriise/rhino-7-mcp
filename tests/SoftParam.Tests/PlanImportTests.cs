@@ -219,13 +219,14 @@ public class PlanImportTests
     }
 
     [Fact]
-    public void OpeningOnADiagonalWall_IsFlagged()
+    public void OpeningOnADiagonalWall_IsNotFlagged()
     {
+        // The bake cuts square to a diagonal wall: nothing to review.
         var plan = PlanOf(W(0, 0, 3000, 3000));
         plan.Openings.Add(Opening("window", 1000, 1000, 2000, 2000));
         var result = PlanImport.Clean(plan);
         Assert.Equal(0, Assert.Single(result.Openings).Host);
-        Assert.Contains("on a diagonal wall", Assert.Single(result.Review, row => row.StartsWith("window")));
+        Assert.DoesNotContain(result.Review, row => row.StartsWith("window"));
     }
 
     /// <summary>A 5000 x 4000 room on centrelines, each corner drawn a little short or just touching.</summary>

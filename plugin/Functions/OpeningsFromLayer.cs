@@ -254,7 +254,7 @@ public partial class RhinoMCPFunctions
                                 foot,
                                 sill,
                                 head,
-                                LongerXySide(foot.Bbox),
+                                foot.Rect.Width,
                                 pad,
                                 sourceLayer.Name,
                                 hostBrep,
@@ -271,7 +271,7 @@ public partial class RhinoMCPFunctions
                                     hostSolid,
                                     markerId,
                                     blockId,
-                                    foot.Bbox.Center,
+                                    foot.Center,
                                     null,
                                     tol);
                             }
@@ -340,8 +340,11 @@ public partial class RhinoMCPFunctions
     private sealed class OpeningFootprint
     {
         public string SourceId;
-        public BoundingBox Bbox;
-        public Curve Curve;
+        /// <summary>Centre, direction along the wall, width along it and depth across.</summary>
+        public OpeningFoot Rect;
+
+        public Point3d Center => new Point3d(Rect.X, Rect.Y, 0);
+        public Vector3d Dir => new Vector3d(Rect.DirX, Rect.DirY, 0);
     }
 
     private static string ResolveOpeningKind(string layerKey)
@@ -418,7 +421,7 @@ public partial class RhinoMCPFunctions
         string sourceLayerName,
         string hostForskId = null)
     {
-        var width = LongerXySide(foot.Bbox);
+        var width = foot.Rect.Width;
         var markerBrep = BuildOpeningMarkerBox(foot, sill, head, 50.0);
         if (markerBrep == null || !markerBrep.IsValid)
             return Guid.Empty;
@@ -488,56 +491,34 @@ public partial class RhinoMCPFunctions
         BakePace.Commit(marker);
     }
 
-    private static double LongerXySide(BoundingBox bbox)
-    {
-        if (!bbox.IsValid) return 0;
-        var dx = bbox.Max.X - bbox.Min.X;
-        var dy = bbox.Max.Y - bbox.Min.Y;
-        return Math.Max(dx, dy);
-    }
-
     private static Brep BuildOpeningMarkerBox(
         OpeningFootprint foot,
         double sill,
         double head,
         double minSelectDepth)
     {
-        var bbox = foot.Bbox;
-        if (!bbox.IsValid) return null;
+        if (foot?.Rect == null) return null;
+        foot.Rect.MarkerHalves(minSelectDepth, out var halfAlong, out var halfAcross);
+        return FootprintBox(foot, halfAlong, halfAcross, sill, head, 1e-9);
+    }
 
-        var minX = bbox.Min.X;
-        var maxX = bbox.Max.X;
-        var minY = bbox.Min.Y;
-        var maxY = bbox.Max.Y;
-        var dx = maxX - minX;
-        var dy = maxY - minY;
-        var cx = 0.5 * (minX + maxX);
-        var cy = 0.5 * (minY + maxY);
-
-        if (dx >= dy)
-        {
-            if (dy < minSelectDepth)
-            {
-                minY = cy - minSelectDepth * 0.5;
-                maxY = cy + minSelectDepth * 0.5;
-            }
-        }
-        else
-        {
-            if (dx < minSelectDepth)
-            {
-                minX = cx - minSelectDepth * 0.5;
-                maxX = cx + minSelectDepth * 0.5;
-            }
-        }
-
-        if (maxX - minX < 1e-9 || maxY - minY < 1e-9 || head - sill < 1e-9)
+    /// <summary>A box on the footprint's own plane: along the wall, across it, sill to head.</summary>
+    private static Brep FootprintBox(
+        OpeningFootprint foot,
+        double halfAlong,
+        double halfAcross,
+        double sill,
+        double head,
+        double tol)
+    {
+        if (2 * halfAlong < tol || 2 * halfAcross < tol || head - sill < tol)
             return null;
-
+        var dir = foot.Dir;
+        var plane = new Plane(foot.Center, dir, new Vector3d(-dir.Y, dir.X, 0));
         var box = new Box(
-            Plane.WorldXY,
-            new Interval(minX, maxX),
-            new Interval(minY, maxY),
+            plane,
+            new Interval(-halfAlong, halfAlong),
+            new Interval(-halfAcross, halfAcross),
             new Interval(sill, head));
         return Brep.CreateFromBox(box);
     }
@@ -598,8 +579,8 @@ public partial class RhinoMCPFunctions
 
     private List<OpeningFootprint> CollectOpeningFootprints(RhinoDoc doc, Layer sourceLayer, double tol)
     {
-        var curves = new List<OpeningFootprint>();
-        var instances = new List<OpeningFootprint>();
+        var curves = new List<(BoundingBox Box, OpeningFootprint Foot)>();
+        var instances = new List<(BoundingBox Box, OpeningFootprint Foot)>();
 
         foreach (var obj in ObjectsOnLayer(doc, sourceLayer.Name))
         {
@@ -608,11 +589,11 @@ public partial class RhinoMCPFunctions
             {
                 var bbox = inst.Geometry.GetBoundingBox(true);
                 if (!bbox.IsValid) continue;
-                instances.Add(new OpeningFootprint
+                instances.Add((bbox, new OpeningFootprint
                 {
                     SourceId = obj.Id.ToString(),
-                    Bbox = bbox
-                });
+                    Rect = BoxFoot(bbox)
+                }));
                 continue;
             }
 
@@ -630,21 +611,44 @@ public partial class RhinoMCPFunctions
                 if (!flat.IsClosed) continue;
                 var bbox = flat.GetBoundingBox(true);
                 if (!bbox.IsValid) continue;
-                curves.Add(new OpeningFootprint
+                curves.Add((bbox, new OpeningFootprint
                 {
                     SourceId = obj.Id.ToString(),
-                    Bbox = bbox,
-                    Curve = flat
-                });
+                    Rect = OutlineFoot(flat, bbox, tol)
+                }));
             }
         }
 
         // Prefer closed plan gaps (door rectangles) over swing-arc blocks.
         var chosen = curves.Count > 0 ? curves : instances;
         return chosen
-            .OrderBy(f => f.Bbox.Min.X)
-            .ThenBy(f => f.Bbox.Min.Y)
+            .OrderBy(f => f.Box.Min.X)
+            .ThenBy(f => f.Box.Min.Y)
+            .Select(f => f.Foot)
             .ToList();
+    }
+
+    /// <summary>
+    /// A drawn outline: a polyline's longest edge runs along the wall, so a
+    /// door rectangle on a 45° wall cuts square to it. Anything with an arc
+    /// reads as its world box.
+    /// </summary>
+    private static OpeningFoot OutlineFoot(Curve flat, BoundingBox bbox, double tol)
+    {
+        if (flat.TryGetPolyline(out _))
+        {
+            var edges = new List<OpeningFoot.Edge>();
+            foreach (var line in ExplodeLineSegments(flat, tol))
+                edges.Add(new OpeningFoot.Edge(line.From.X, line.From.Y, line.To.X, line.To.Y));
+            if (OpeningFoot.TryFromEdges(edges, out var foot))
+                return foot;
+        }
+        return BoxFoot(bbox);
+    }
+
+    private static OpeningFoot BoxFoot(BoundingBox bbox)
+    {
+        return OpeningFoot.FromBox(bbox.Min.X, bbox.Min.Y, bbox.Max.X, bbox.Max.Y);
     }
 
     private Brep BuildOpeningCutter(
@@ -655,46 +659,9 @@ public partial class RhinoMCPFunctions
         double minDepth,
         double tol)
     {
-        var bbox = foot.Bbox;
-        var minX = bbox.Min.X;
-        var maxX = bbox.Max.X;
-        var minY = bbox.Min.Y;
-        var maxY = bbox.Max.Y;
-        var dx = maxX - minX;
-        var dy = maxY - minY;
-        var cx = 0.5 * (minX + maxX);
-        var cy = 0.5 * (minY + maxY);
-
-        if (dx >= dy)
-        {
-            if (dy < minDepth)
-            {
-                minY = cy - minDepth * 0.5;
-                maxY = cy + minDepth * 0.5;
-            }
-            minX -= pad;
-            maxX += pad;
-        }
-        else
-        {
-            if (dx < minDepth)
-            {
-                minX = cx - minDepth * 0.5;
-                maxX = cx + minDepth * 0.5;
-            }
-            minY -= pad;
-            maxY += pad;
-        }
-
-        if (maxX - minX < tol || maxY - minY < tol || head - sill < tol)
-            return null;
-
-        var box = new Box(
-            Plane.WorldXY,
-            new Interval(minX, maxX),
-            new Interval(minY, maxY),
-            new Interval(sill, head));
-        return Brep.CreateFromBox(box);
+        if (foot?.Rect == null) return null;
+        foot.Rect.CutterHalves(pad, minDepth, out var halfAlong, out var halfAcross);
+        return FootprintBox(foot, halfAlong, halfAcross, sill, head, tol);
     }
 
     private static bool BboxesOverlapXY(BoundingBox a, BoundingBox b)

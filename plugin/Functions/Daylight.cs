@@ -111,7 +111,7 @@ public partial class RhinoMCPFunctions
                 ["id"] = marker.Attributes.Name ?? marker.Id.ToString(),
                 ["host_id"] = host ?? "",
                 ["kind"] = marker.Attributes.GetUserString("forsk:opening_kind") ?? "",
-                ["width"] = width ?? Math.Max(box.Max.X - box.Min.X, box.Max.Y - box.Min.Y),
+                ["width"] = width ?? MarkerFoot(marker.Geometry, box).Width,
                 ["center"] = new JArray(box.Center.X, box.Center.Y),
                 ["sill"] = ParseMm(marker.Attributes.GetUserString("forsk:sill")) ?? box.Min.Z,
                 ["head"] = ParseMm(marker.Attributes.GetUserString("forsk:head")) ?? box.Max.Z

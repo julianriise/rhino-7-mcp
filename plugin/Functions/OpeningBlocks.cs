@@ -355,7 +355,7 @@ public partial class RhinoMCPFunctions
                     marker.Name,
                     host.Id,
                     KindToTag(rec.Kind),
-                    new OpeningFootprint { Bbox = rec.MarkerBbox },
+                    FootprintFromMarker(rec),
                     rec.Sill,
                     rec.Head,
                     rec.Width,
@@ -1522,9 +1522,7 @@ public partial class RhinoMCPFunctions
         out Vector3d thickDir,
         out double thickness)
     {
-        var bb = foot.Bbox;
-        center = bb.IsValid ? bb.Center : Point3d.Origin;
-        center.Z = 0;
+        center = foot.Rect != null ? foot.Center : Point3d.Origin;
         widthDir = Vector3d.XAxis;
         thickDir = Vector3d.YAxis;
         thickness = 200;
@@ -1543,7 +1541,8 @@ public partial class RhinoMCPFunctions
             return true;
         }
 
-        if (!TryFootprintWidthDir(foot, tol, out widthDir))
+        widthDir = foot.Rect != null ? foot.Dir : Vector3d.XAxis;
+        if (!widthDir.Unitize())
             widthDir = Vector3d.XAxis;
         thickDir = new Vector3d(-widthDir.Y, widthDir.X, 0);
         if (!thickDir.Unitize()) thickDir = Vector3d.YAxis;
@@ -1559,44 +1558,13 @@ public partial class RhinoMCPFunctions
             return true;
         }
 
-        if (bb.IsValid)
+        if (foot.Rect != null)
         {
-            var thin = Math.Min(bb.Max.X - bb.Min.X, bb.Max.Y - bb.Min.Y);
+            var thin = Math.Min(foot.Rect.Width, foot.Rect.Depth);
             if (thin >= 80 && thin <= 600)
                 thickness = thin;
         }
         return thickness >= 40;
-    }
-
-    private static bool TryFootprintWidthDir(OpeningFootprint foot, double tol, out Vector3d dir)
-    {
-        dir = Vector3d.XAxis;
-        if (foot == null) return false;
-        var bb = foot.Bbox;
-        if (foot.Curve != null)
-        {
-            var best = 0.0;
-            Line? longest = null;
-            foreach (var line in ExplodeLineSegments(foot.Curve, tol))
-            {
-                var len = line.From.DistanceTo(line.To);
-                if (len <= best) continue;
-                best = len;
-                longest = line;
-            }
-            if (longest.HasValue && best > 1)
-            {
-                dir = longest.Value.To - longest.Value.From;
-                dir.Z = 0;
-                if (dir.Unitize()) return true;
-            }
-        }
-
-        if (!bb.IsValid) return false;
-        var dx = bb.Max.X - bb.Min.X;
-        var dy = bb.Max.Y - bb.Min.Y;
-        dir = dx >= dy ? Vector3d.XAxis : Vector3d.YAxis;
-        return true;
     }
 
     private static bool TryMeasureWallThickness(

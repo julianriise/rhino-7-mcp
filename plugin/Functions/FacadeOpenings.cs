@@ -33,6 +33,8 @@ public partial class RhinoMCPFunctions
         public double Head;
         public double Width;
         public BoundingBox MarkerBbox;
+        /// <summary>The marker's own rectangle in plan: turned with its wall, not its world box.</summary>
+        public OpeningFoot MarkerFoot;
         /// <summary>forsk:mark (D02, V01, W01). Empty before Print.</summary>
         public string Mark;
     }
@@ -809,7 +811,8 @@ public partial class RhinoMCPFunctions
 
         var sill = TryParseUserDouble(obj, "forsk:sill") ?? bbox.Min.Z;
         var head = TryParseUserDouble(obj, "forsk:head") ?? bbox.Max.Z;
-        var width = TryParseUserDouble(obj, "forsk:width") ?? LongerXySide(bbox);
+        var foot = MarkerFoot(obj.Geometry, bbox);
+        var width = TryParseUserDouble(obj, "forsk:width") ?? foot.Width;
         if (width <= 0)
             throw new ArgumentException("width must be positive.");
         if (head <= sill)
@@ -824,6 +827,7 @@ public partial class RhinoMCPFunctions
             Head = head,
             Width = width,
             MarkerBbox = bbox,
+            MarkerFoot = foot,
             Mark = obj.Attributes.GetUserString(Schedules.MarkKey) ?? ""
         };
     }
@@ -1185,15 +1189,33 @@ public partial class RhinoMCPFunctions
 
     private static OpeningFootprint FootprintFromMarker(OpeningRecord rec)
     {
-        var b = rec.MarkerBbox;
-        var xy = new BoundingBox(
-            new Point3d(b.Min.X, b.Min.Y, 0),
-            new Point3d(b.Max.X, b.Max.Y, 0));
         return new OpeningFootprint
         {
             SourceId = rec.MarkerId.ToString(),
-            Bbox = xy
+            Rect = rec.MarkerFoot
         };
+    }
+
+    /// <summary>
+    /// A marker box's rectangle: its longest level edge runs along the wall.
+    /// A marker with no level edge reads as its world box.
+    /// </summary>
+    private static OpeningFoot MarkerFoot(GeometryBase geometry, BoundingBox bbox)
+    {
+        var edges = new List<OpeningFoot.Edge>();
+        if (geometry is Brep brep)
+        {
+            foreach (var edge in brep.Edges)
+            {
+                var a = edge.PointAtStart;
+                var b = edge.PointAtEnd;
+                if (Math.Abs(a.Z - b.Z) > 1e-6 || !edge.IsLinear()) continue;
+                edges.Add(new OpeningFoot.Edge(a.X, a.Y, b.X, b.Y));
+            }
+        }
+        if (OpeningFoot.TryFromEdges(edges, out var foot))
+            return foot.Canonical();
+        return OpeningFoot.FromBox(bbox.Min.X, bbox.Min.Y, bbox.Max.X, bbox.Max.Y);
     }
 
     private static Placement FootprintAtT(WallSegment seg, OpeningSpec spec, double t)
@@ -1206,22 +1228,6 @@ public partial class RhinoMCPFunctions
             seg.Start.X, seg.Start.Y, seg.Tangent.X, seg.Tangent.Y,
             seg.Inward.X, seg.Inward.Y, seg.Length, t, seg.Thickness, seg.Centerline,
             out var x, out var y);
-        var center = new Point3d(x, y, 0);
-        var halfW = spec.Width * 0.5;
-        var halfThin = FacadeConst.DummyThin * 0.5;
-        BoundingBox bbox;
-        if (Math.Abs(seg.Tangent.X) >= Math.Abs(seg.Tangent.Y))
-        {
-            bbox = new BoundingBox(
-                new Point3d(center.X - halfW, center.Y - halfThin, 0),
-                new Point3d(center.X + halfW, center.Y + halfThin, 0));
-        }
-        else
-        {
-            bbox = new BoundingBox(
-                new Point3d(center.X - halfThin, center.Y - halfW, 0),
-                new Point3d(center.X + halfThin, center.Y + halfW, 0));
-        }
         return new Placement
         {
             Segment = seg,
@@ -1229,7 +1235,8 @@ public partial class RhinoMCPFunctions
             Foot = new OpeningFootprint
             {
                 SourceId = "placed",
-                Bbox = bbox
+                Rect = OpeningFoot.Along(
+                    x, y, seg.Tangent.X, seg.Tangent.Y, spec.Width, FacadeConst.DummyThin)
             }
         };
     }
