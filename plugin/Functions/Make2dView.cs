@@ -441,7 +441,6 @@ public partial class RhinoMCPFunctions
         Dictionary<Guid, List<RhinoObject>> members = null)
     {
         note = null;
-        var solids = new Dictionary<Guid, Brep>();
         var tolerance = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
         var walls = new List<RhinoObject>();
         var records = new List<List<List<RoomDetect.Pt>>>();
@@ -455,6 +454,53 @@ public partial class RhinoMCPFunctions
             walls.Add(obj);
             records.Add(rings);
         }
+        // Speed pass: a Print draws every view at two scales and Export draws them again,
+        // each from the same walls. The unions are kept for the walls as they are now.
+        var key = WallClusterKey(doc, walls, tolerance);
+        if (_wallClusters != null && _wallClusters.Key == key)
+        {
+            note = _wallClusters.Note;
+            if (members != null)
+                foreach (var pair in _wallClusters.Members) members[pair.Key] = pair.Value;
+            return _wallClusters.Solids;
+        }
+        var built = new Dictionary<Guid, List<RhinoObject>>();
+        var solids = BuildWallClusters(walls, records, tolerance, out note, built);
+        if (members != null)
+            foreach (var pair in built) members[pair.Key] = pair.Value;
+        _wallClusters = new WallClusterCache { Key = key, Solids = solids, Note = note, Members = built };
+        return solids;
+    }
+
+    private sealed class WallClusterCache
+    {
+        public string Key;
+        public Dictionary<Guid, Brep> Solids;
+        public string Note;
+        public Dictionary<Guid, List<RhinoObject>> Members;
+    }
+
+    static WallClusterCache _wallClusters;
+
+    /// <summary>
+    /// The document and each wall as it is now. Rhino gives a changed object (geometry or
+    /// attributes) a new runtime serial number, so any edit to a wall changes the key.
+    /// </summary>
+    private static string WallClusterKey(RhinoDoc doc, List<RhinoObject> walls, double tolerance)
+    {
+        var parts = walls.Select(w => w.Id.ToString("N") + ":" + w.RuntimeSerialNumber.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .OrderBy(p => p, StringComparer.Ordinal);
+        return doc.RuntimeSerialNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + "|" + tolerance.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+            + "|" + string.Join(",", parts);
+    }
+
+    private static Dictionary<Guid, Brep> BuildWallClusters(
+        List<RhinoObject> walls, List<List<List<RoomDetect.Pt>>> records, double tolerance, out string note,
+        Dictionary<Guid, List<RhinoObject>> members)
+    {
+        note = null;
+        var solids = new Dictionary<Guid, Brep>();
         var failed = 0;
         foreach (var cluster in WallJoins.Clusters(records, Math.Max(tolerance, 1.0)))
         {
@@ -1363,6 +1409,70 @@ public partial class RhinoMCPFunctions
     private GreyscaleDrawing BakeGreyscaleDrawing(
         RhinoDoc doc, string view, bool includeExisting, Plane? clip, int strokeScale)
     {
+        // Speed pass: one print-log line per drawing bake, so a slow Print shows which drawing and how often.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        _bakeLaps = clock;
+        _lapSources = _lapHld = 0;
+        var drawn = DrawGreyscale(doc, view, includeExisting, clip, strokeScale);
+        _bakeLaps = null;
+        try
+        {
+            System.IO.File.AppendAllText(PrintLogPath, DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+                + " bake " + view + " 1:" + strokeScale + " " + clock.ElapsedMilliseconds + " ms (sources " + _lapSources + ", hld " + _lapHld + ") curves " + drawn.Count + "\n");
+        }
+        catch (Exception)
+        {
+        }
+        return drawn;
+    }
+
+    private sealed class HldCacheEntry
+    {
+        public string Key;
+        public List<WeightedCurve> Visible;
+        public Transform WorldToHld;
+        public bool HaveWorldToHld;
+    }
+
+    /// <summary>The last hidden-line pass per view, as WeightedCurve copies the bake duplicates again.</summary>
+    static readonly Dictionary<string, HldCacheEntry> _hldCache = new Dictionary<string, HldCacheEntry>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What the hidden-line pass reads: the document, the print profile (pens), the cut and
+    /// each source as it is now (a changed object gets a new runtime serial number).
+    /// </summary>
+    /// <summary>A block's members as they are now: a type swap edits the definition, not the instance.</summary>
+    private static string BlockSerials(RhinoObject obj, int depth)
+    {
+        if (!(obj is InstanceObject iref) || depth > 6) return "";
+        var members = iref.InstanceDefinition?.GetObjects();
+        if (members == null) return "";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return "[" + string.Join(" ", members.Where(m => m != null)
+            .Select(m => m.RuntimeSerialNumber.ToString(inv) + BlockSerials(m, depth + 1))) + "]";
+    }
+
+    private static string HldKey(RhinoDoc doc, string view, Plane? clip, IList<RhinoObject> sources)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = sources.Where(o => o != null)
+            .Select(o => o.Id.ToString("N") + ":" + o.RuntimeSerialNumber.ToString(inv) + BlockSerials(o, 0))
+            .OrderBy(p => p, StringComparer.Ordinal);
+        var cut = clip.HasValue
+            ? clip.Value.Origin.ToString() + "/" + clip.Value.Normal.ToString()
+            : "-";
+        return doc.RuntimeSerialNumber.ToString(inv) + "|" + view + "|" + cut
+            + "|" + (doc.Strings.GetValue(PrintProfiles.MetaSection, PrintProfiles.MetaKey) ?? "")
+            + "|" + doc.ModelAbsoluteTolerance.ToString("R", inv)
+            + "|" + string.Join(",", parts);
+    }
+
+    static System.Diagnostics.Stopwatch _bakeLaps;
+    static long _lapSources, _lapHld;
+
+    private GreyscaleDrawing DrawGreyscale(
+        RhinoDoc doc, string view, bool includeExisting, Plane? clip, int strokeScale)
+    {
         var result = new GreyscaleDrawing
         {
             View = view ?? "",
@@ -1416,6 +1526,7 @@ public partial class RhinoMCPFunctions
             return result;
         }
 
+        if (_bakeLaps != null) _lapSources = _bakeLaps.ElapsedMilliseconds;
         var visible = new List<WeightedCurve>();
         string fail = null;
         HiddenLineDrawing hld = null;
@@ -1423,128 +1534,152 @@ public partial class RhinoMCPFunctions
         var worldToHld = Transform.Identity;
         var haveWorldToHld = false;
         var tolerance = doc.ModelAbsoluteTolerance > 0 ? doc.ModelAbsoluteTolerance : 0.01;
-        try
+        // Speed pass: the hidden-line pass does not depend on the sheet's scale, so a view drawn
+        // again (the scale step, the PDF's plan, Export) reuses it while its sources are unchanged.
+        var hldKey = HldKey(doc, spec.View, clip, sources);
+        if (_hldCache.TryGetValue(spec.View, out var hit) && hit.Key == hldKey)
         {
-            var draw = geometries;
-            var kinds = drawKinds;
-            if (clip.HasValue)
+            foreach (var item in hit.Visible)
+                visible.Add(new WeightedCurve { Curve = item.Curve?.DuplicateCurve(), Weight = item.Weight, Color = item.Color, Role = item.Role });
+            worldToHld = hit.WorldToHld;
+            haveWorldToHld = hit.HaveWorldToHld;
+            foreach (var geom in geometries)
+                geom?.Dispose();
+        }
+        else
+        {
+            try
             {
-                // Document clipping keeps the side the normal points at.
-                // HLD keeps the opposite side, so flip before the cut
-                // (https://discourse.mcneel.com/t/hiddenlinedrawing-clipping-planes-are-ignored-in-make2d-calculation-c/215626).
-                // Rhino 7.34 net48 has AddGeometry and AddClippingPlane only.
-                // AddGeometryAndPlanes(geom, xform, tag, occluding, planeList) is not
-                // on this RhinoCommon. AddClippingPlane alone drops solids that cross
-                // the plane and the plan is the floor outline. Trim each solid on
-                // the flipped plane and draw the kept half. The cut edge is the section.
-                var hldPlane = clip.Value;
-                hldPlane.Flip();
-                sectioned = new List<GeometryBase>();
-                var sectionedKinds = new List<string>();
-                for (var i = 0; i < geometries.Count; i++)
+                var draw = geometries;
+                var kinds = drawKinds;
+                if (clip.HasValue)
                 {
-                    var kind = i < drawKinds.Count ? drawKinds[i] : "";
-                    foreach (var piece in KeepSectionSide(geometries[i], hldPlane, tolerance))
+                    // Document clipping keeps the side the normal points at.
+                    // HLD keeps the opposite side, so flip before the cut
+                    // (https://discourse.mcneel.com/t/hiddenlinedrawing-clipping-planes-are-ignored-in-make2d-calculation-c/215626).
+                    // Rhino 7.34 net48 has AddGeometry and AddClippingPlane only.
+                    // AddGeometryAndPlanes(geom, xform, tag, occluding, planeList) is not
+                    // on this RhinoCommon. AddClippingPlane alone drops solids that cross
+                    // the plane and the plan is the floor outline. Trim each solid on
+                    // the flipped plane and draw the kept half. The cut edge is the section.
+                    var hldPlane = clip.Value;
+                    hldPlane.Flip();
+                    sectioned = new List<GeometryBase>();
+                    var sectionedKinds = new List<string>();
+                    for (var i = 0; i < geometries.Count; i++)
                     {
-                        sectioned.Add(piece);
-                        sectionedKinds.Add(kind);
+                        var kind = i < drawKinds.Count ? drawKinds[i] : "";
+                        foreach (var piece in KeepSectionSide(geometries[i], hldPlane, tolerance))
+                        {
+                            sectioned.Add(piece);
+                            sectionedKinds.Add(kind);
+                        }
                     }
+                    draw = sectioned;
+                    kinds = sectionedKinds;
                 }
-                draw = sectioned;
-                kinds = sectionedKinds;
-            }
 
-            var bbox = BoundingBox.Empty;
-            foreach (var geom in draw)
-                bbox.Union(geom.GetBoundingBox(true));
-            if (!bbox.IsValid)
-            {
-                fail = "Hidden line drawing failed.";
-            }
-            else
-            {
-                var hldParams = new HiddenLineDrawingParameters
-                {
-                    AbsoluteTolerance = tolerance,
-                    Flatten = true,
-                    IncludeHiddenCurves = false,
-                    IncludeTangentEdges = false,
-                    IncludeTangentSeams = false
-                };
-                var viewport = BuildParallelViewport(bbox, spec.Look, spec.Up);
-                if (viewport == null || !viewport.IsValidCamera || !viewport.IsValidFrustum)
+                var bbox = BoundingBox.Empty;
+                foreach (var geom in draw)
+                    bbox.Union(geom.GetBoundingBox(true));
+                if (!bbox.IsValid)
                 {
                     fail = "Hidden line drawing failed.";
                 }
                 else
                 {
-                    hldParams.SetViewport(viewport);
-                    for (var i = 0; i < draw.Count; i++)
+                    var hldParams = new HiddenLineDrawingParameters
                     {
-                        var tag = i < kinds.Count && kinds[i].Length > 0 ? (object)kinds[i] : null;
-                        hldParams.AddGeometry(draw[i], Transform.Identity, tag);
-                    }
-                    hld = HiddenLineDrawing.Compute(hldParams, true);
-                    if (hld == null)
+                        AbsoluteTolerance = tolerance,
+                        Flatten = true,
+                        IncludeHiddenCurves = false,
+                        IncludeTangentEdges = false,
+                        IncludeTangentSeams = false
+                    };
+                    var viewport = BuildParallelViewport(bbox, spec.Look, spec.Up);
+                    if (viewport == null || !viewport.IsValidCamera || !viewport.IsValidFrustum)
+                    {
                         fail = "Hidden line drawing failed.";
-                    else if (hld.Segments != null)
+                    }
+                    else
                     {
-                        var toDrawing = hld.WorldToHiddenLine;
-                        if (toDrawing.IsValid)
+                        hldParams.SetViewport(viewport);
+                        for (var i = 0; i < draw.Count; i++)
                         {
-                            worldToHld = toDrawing;
-                            haveWorldToHld = true;
+                            var tag = i < kinds.Count && kinds[i].Length > 0 ? (object)kinds[i] : null;
+                            hldParams.AddGeometry(draw[i], Transform.Identity, tag);
                         }
-                        foreach (var seg in hld.Segments)
+                        hld = HiddenLineDrawing.Compute(hldParams, true);
+                        if (hld == null)
+                            fail = "Hidden line drawing failed.";
+                        else if (hld.Segments != null)
                         {
-                            if (!KeepGreyscaleSegment(seg)) continue;
-                            var dup = seg.CurveGeometry?.DuplicateCurve();
-                            if (dup == null) continue;
-                            // A facade: openings stay thin even when IsSceneSilhouette.
-                            // Plan and section keep the silhouette pen on a scene silhouette or a section cut.
-                            string role = null;
-                            PrintPen pen;
-                            if (section == null && !plan)
+                            var toDrawing = hld.WorldToHiddenLine;
+                            if (toDrawing.IsValid)
                             {
-                                var kind = seg.ParentCurve?.SourceObject?.Tag as string;
-                                role = FacadeLines.LayerFor(kind, seg.IsSceneSilhouette);
-                                pen = FacadeLines.Pen(role, PrintProfiles.Active);
+                                worldToHld = toDrawing;
+                                haveWorldToHld = true;
                             }
-                            else
+                            foreach (var seg in hld.Segments)
                             {
-                                var sectionCut = IsSectionCut(seg);
-                                pen = seg.IsSceneSilhouette || sectionCut
-                                    ? PrintProfiles.Active.Silhouette
-                                    : PrintProfiles.Active.Beyond;
+                                if (!KeepGreyscaleSegment(seg)) continue;
+                                var dup = seg.CurveGeometry?.DuplicateCurve();
+                                if (dup == null) continue;
+                                // A facade: openings stay thin even when IsSceneSilhouette.
+                                // Plan and section keep the silhouette pen on a scene silhouette or a section cut.
+                                string role = null;
+                                PrintPen pen;
+                                if (section == null && !plan)
+                                {
+                                    var kind = seg.ParentCurve?.SourceObject?.Tag as string;
+                                    role = FacadeLines.LayerFor(kind, seg.IsSceneSilhouette);
+                                    pen = FacadeLines.Pen(role, PrintProfiles.Active);
+                                }
+                                else
+                                {
+                                    var sectionCut = IsSectionCut(seg);
+                                    pen = seg.IsSceneSilhouette || sectionCut
+                                        ? PrintProfiles.Active.Silhouette
+                                        : PrintProfiles.Active.Beyond;
+                                }
+                                visible.Add(new WeightedCurve
+                                {
+                                    Curve = dup,
+                                    Weight = pen.Mm,
+                                    Color = pen.Color,
+                                    Role = role
+                                });
                             }
-                            visible.Add(new WeightedCurve
-                            {
-                                Curve = dup,
-                                Weight = pen.Mm,
-                                Color = pen.Color,
-                                Role = role
-                            });
                         }
                     }
                 }
             }
-        }
-        catch (Exception)
-        {
-            fail = "Hidden line drawing failed.";
-        }
-        finally
-        {
-            hld?.Dispose();
-            foreach (var geom in geometries)
-                geom?.Dispose();
-            if (sectioned != null)
+            catch (Exception)
             {
-                foreach (var geom in sectioned)
-                    geom?.Dispose();
+                fail = "Hidden line drawing failed.";
             }
+            finally
+            {
+                hld?.Dispose();
+                foreach (var geom in geometries)
+                    geom?.Dispose();
+                if (sectioned != null)
+                {
+                    foreach (var geom in sectioned)
+                        geom?.Dispose();
+                }
+            }
+            if (fail == null && visible.Count > 0)
+                _hldCache[spec.View] = new HldCacheEntry
+                {
+                    Key = hldKey,
+                    Visible = visible.Select(v => new WeightedCurve { Curve = v.Curve?.DuplicateCurve(), Weight = v.Weight, Color = v.Color, Role = v.Role }).ToList(),
+                    WorldToHld = worldToHld,
+                    HaveWorldToHld = haveWorldToHld
+                };
         }
 
+        if (_bakeLaps != null) _lapHld = _bakeLaps.ElapsedMilliseconds;
         if (fail != null || visible.Count == 0)
         {
             foreach (var item in visible)
