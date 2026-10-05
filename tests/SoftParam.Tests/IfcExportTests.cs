@@ -226,7 +226,7 @@ public class IfcStairTests
         var flight = Assert.Single(read.OfType<IfcStairFlight>());
         Assert.Equal(IfcStairFlightTypeEnum.STRAIGHT, flight.PredefinedType);
         Assert.Equal(16, flight.NumberOfRiser);
-        Assert.Equal(15, flight.NumberOfTreads);
+        Assert.Equal(16, flight.NumberOfTreads);
         Assert.Equal(171.875, flight.RiserHeight, 6);
         Assert.Equal(260, flight.TreadLength, 6);
         Assert.Same(stair, flight.Decomposes?.RelatingObject);

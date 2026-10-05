@@ -9,8 +9,9 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// v3 R5: a straight stair, pure. The flight climbs a total rise in n equal
 /// risers, n = ceil(rise / riser max), so the last riser lands exactly on the
-/// upper floor. Treads = n − 1 (the top step is the upper floor) and the run
-/// is (n − 1) × going. The 3D body is one closed sawtooth from the floor up,
+/// upper floor. Treads = n: the last tread is that floor, and the run is
+/// n × going, one tread longer than a flight that stops on the step below.
+/// The 3D body is one closed sawtooth from the floor up,
 /// the plan symbol is the Nordic one: outline and step lines, a walking line
 /// from a start dot to an arrow, a diagonal break where the climb passes the
 /// plan cut, the steps above it dashed, and "UP" with "n × riser/going".
@@ -72,7 +73,8 @@ public static class Stairs
         public double Going;
         public double Width;
         public double RiserMax;
-        public int Treads => Risers - 1;
+        /// <summary>One per riser. The last sits on the upper floor, so the last riser lands on the wall height and the run is one going longer.</summary>
+        public int Treads => Risers;
         public double Run => Treads * Going;
         /// <summary>2R + G, mm.</summary>
         public double Rule => 2 * Riser + Going;
@@ -124,8 +126,8 @@ public static class Stairs
     /// <summary>
     /// The side profile as a closed loop in (u along the climb, z up): from the
     /// foot up each riser and along each tread, then straight down the back to
-    /// the floor. The top riser is the upper floor's edge, so the body stops at
-    /// the last tread.
+    /// the floor. The last tread is at the full rise, so the last riser lands
+    /// on the upper floor.
     /// </summary>
     public static List<Pt> Profile(Flight f)
     {

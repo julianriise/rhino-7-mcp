@@ -13,7 +13,7 @@
     "width": { "type": "number" },
     "rise": { "type": "number" },
     "rise_auto": { "type": "boolean" },
-    "run": { "type": "number", "description": "(risers - 1) x going." },
+    "run": { "type": "number", "description": "risers x going." },
     "rule": { "type": "number", "description": "2R + G." },
     "comfort": { "type": "string", "description": "Empty within the guidance, else one clause such as steep: 2R+G = 668." },
     "message": { "type": "string" }

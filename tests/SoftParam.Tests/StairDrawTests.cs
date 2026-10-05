@@ -179,24 +179,25 @@ public class StairDrawTests
     [Fact]
     public void Plan_TheRiserCountFollowsTheHeight_TheDrawnRunSetsTheGoing()
     {
-        // 3400 / 180 = 18.9 -> 19 risers, 18 treads.
+        // 3400 / 180 = 18.9 -> 19 risers and 19 treads. 5400 / 19 rounds to going 284.
         var draft = StairDraw.Plan(Setup(), Free(1000, 1000), new Pt(6400, 1000), false);
         Assert.True(draft.Valid, draft.Why);
         Assert.Equal(19, draft.Flight.Risers);
+        Assert.Equal(19, draft.Flight.Treads);
         Assert.Equal(3400.0 / 19, draft.Flight.Riser, 6);
-        Assert.Equal(300, draft.Flight.Going, 6);
-        Assert.Equal(5400, draft.Flight.Run, 6);
+        Assert.Equal(284, draft.Flight.Going, 6);
+        Assert.Equal(5396, draft.Flight.Run, 6);
         Assert.Equal(900, draft.Flight.Width, 6);
-        Assert.Equal("UP 19 × 179/300", draft.Label);
-        Assert.Equal("5400 mm · steep: 2R+G = 658", draft.Dimension);
+        Assert.Equal("UP 19 × 179/284", draft.Label);
+        Assert.Equal("5396 mm · steep: 2R+G = 642", draft.Dimension);
     }
 
     [Theory]
-    [InlineData(4680, 260)]
-    [InlineData(4690, 260)]
-    [InlineData(4540, 260)]
-    [InlineData(4500, 250)]
-    [InlineData(4000, 222)]
+    [InlineData(4940, 260)]
+    [InlineData(4950, 260)]
+    [InlineData(4788, 260)]
+    [InlineData(4750, 250)]
+    [InlineData(4000, 211)]
     public void Plan_TheGoingSnapsToTheDefault_WithinEightMillimetres_AndRoundsToTheMillimetre(double run, double going)
     {
         var draft = StairDraw.Plan(Setup(), Free(0, 0), new Pt(run, 0), true);
@@ -209,7 +210,7 @@ public class StairDrawTests
         var longRun = StairDraw.Plan(Setup(), Free(0, 0), new Pt(20000, 0), true);
         Assert.True(longRun.Held);
         Assert.Equal(600, longRun.Flight.Going, 6);
-        Assert.Equal(10800, longRun.Flight.Run, 6);
+        Assert.Equal(11400, longRun.Flight.Run, 6);
         var shortRun = StairDraw.Plan(Setup(), Free(0, 0), new Pt(500, 0), true);
         Assert.True(shortRun.Held);
         Assert.Equal(150, shortRun.Flight.Going, 6);
@@ -226,11 +227,11 @@ public class StairDrawTests
     [Fact]
     public void Plan_ATypedRun_IsExact_AndNeedsNoMouse()
     {
-        var draft = StairDraw.Plan(Setup(), Free(0, 0), new Pt(1, 0), true, 3600);
+        var draft = StairDraw.Plan(Setup(), Free(0, 0), new Pt(1, 0), true, 3800);
         Assert.True(draft.Valid, draft.Why);
         Assert.Equal(200, draft.Flight.Going, 6);
-        Assert.Equal(3600, draft.Flight.Run, 6);
-        Assert.Equal("3600 mm · shallow: 2R+G = 558", draft.Dimension);
+        Assert.Equal(3800, draft.Flight.Run, 6);
+        Assert.Equal("3800 mm · shallow: 2R+G = 558", draft.Dimension);
     }
 
     [Fact]
@@ -308,10 +309,10 @@ public class StairDrawTests
     [Fact]
     public void ADefaultDrawnStair_IsTheDefaultStair()
     {
-        var draft = StairDraw.Plan(Setup(), Free(1000, 2000), new Pt(5680, 2000), true);
+        var draft = StairDraw.Plan(Setup(), Free(1000, 2000), new Pt(5940, 2000), true);
         var call = StairDraw.ToolParams(draft);
         Assert.Equal(new JArray(1000, 2000), call["from"]);
-        Assert.Equal(new JArray(5680, 2000), call["to"]);
+        Assert.Equal(new JArray(5940, 2000), call["to"]);
         Assert.Equal(900, call["width"].Value<double>());
         Assert.Equal(260, call["going"].Value<double>());
         Assert.Null(call["against"]);
@@ -345,7 +346,7 @@ public class StairDrawTests
     [Fact]
     public void Symbol_IsThePlanSymbolTheSheetDraws_InPlanCoordinates()
     {
-        var draft = StairDraw.Plan(Setup(), Free(0, 0), new Pt(0, 4680), true);
+        var draft = StairDraw.Plan(Setup(), Free(0, 0), new Pt(0, 4940), true);
         Assert.Equal(new Pt(0, 1), new Pt(Math.Round(draft.Dir.X, 6), Math.Round(draft.Dir.Y, 6)));
         var pieces = StairDraw.Symbol(draft);
         var text = Assert.Single(pieces, p => p.Shape == "text");

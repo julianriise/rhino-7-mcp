@@ -17,8 +17,8 @@ public class StairsTests
         var f = Stairs.Plan(2880, 180, 260, 900);
         Assert.Equal(16, f.Risers);
         Assert.Equal(180, f.Riser);
-        Assert.Equal(15, f.Treads);
-        Assert.Equal(3900, f.Run);
+        Assert.Equal(16, f.Treads);
+        Assert.Equal(4160, f.Run);
         Assert.Equal(620, f.Rule);
         Assert.False(f.Steep);
         Assert.False(f.Shallow);
@@ -42,15 +42,15 @@ public class StairsTests
     public void WallHeightChange_ReplansCount_KeepsRisersEqual()
     {
         // The slab hangs below the walking surface, so the rise is the wall top.
-        // 3000 / 180 ceils to 17; 2400 / 180 ceils to 14. The last tread stays under that top.
+        // 3000 / 180 ceils to 17; 2400 / 180 ceils to 14. The last riser lands on that top.
         var before = Stairs.Plan(Stairs.AutoRise(new double[] { 3000, 3000, 2400 }, 3000), 180, 260, 900);
         Assert.Equal(3000, before.Rise);
         Assert.Equal(17, before.Risers);
-        Assert.Equal(16, before.Treads);
+        Assert.Equal(17, before.Treads);
+        Assert.Equal(17 * 260, before.Run);
         double top = 0;
         foreach (var p in Stairs.Profile(before)) if (p.Y > top) top = p.Y;
-        Assert.Equal(before.Rise - before.Riser, top, 6);
-        Assert.True(top < 3000);
+        Assert.Equal(before.Rise, top, 6);
         Assert.Equal(before.Rise, Stairs.StepTop(before, before.Risers));
         var after = Stairs.Plan(Stairs.AutoRise(new double[] { 2400, 2400, 3000 }, 3000), 180, 260, 900);
         Assert.Equal(2400, after.Rise);
@@ -116,9 +116,13 @@ public class StairsTests
         Assert.Equal(new Pt(0, 0), p[0]);
         Assert.Equal(new Pt(0, 180), p[1]);
         Assert.Equal(new Pt(260, 180), p[2]);
-        Assert.Equal(new Pt(3900, 15 * 180), p[^2]);
-        Assert.Equal(new Pt(3900, 0), p[^1]);
-        // Area: the treads' columns, 260 × (180 + 360 + … + 2700).
+        // The last riser is the vertical at the end of the tread below, up to the full rise, then one going of tread.
+        Assert.Equal(new Pt(15 * 260, 15 * 180), p[2 * 15]);
+        Assert.Equal(new Pt(15 * 260, 2880), p[2 * 16 - 1]);
+        Assert.Equal(new Pt(16 * 260, 2880), p[^2]);
+        Assert.Equal(new Pt(16 * 260, 0), p[^1]);
+        Assert.Equal(f.Rise, p.Max(pt => pt.Y));
+        // Area: the treads' columns, 260 × (180 + 360 + … + 2880).
         double area = 0;
         for (var i = 0; i < p.Count; i++)
         {
@@ -126,7 +130,7 @@ public class StairsTests
             var b = p[(i + 1) % p.Count];
             area += a.X * b.Y - b.X * a.Y;
         }
-        Assert.Equal(260.0 * 180 * (15 * 16 / 2), Math.Abs(area) / 2, 6);
+        Assert.Equal(260.0 * 180 * (16 * 17 / 2), Math.Abs(area) / 2, 6);
     }
 
     [Fact]
@@ -162,8 +166,8 @@ public class StairsTests
         Assert.Equal(100, Stairs.LabelHeight(f, 50));
         Assert.Equal(200, Stairs.LabelHeight(f, 100));
         Assert.Equal(360, Stairs.LabelHeight(f, 500));
-        // 16 step lines across: the first riser, 14 between, the top edge.
-        Assert.Equal(16, marks.Count(m => m.U0 == m.U1 && m.V0 == -450 && m.V1 == 450));
+        // 17 step lines across: the first riser, 15 between, the top edge.
+        Assert.Equal(17, marks.Count(m => m.U0 == m.U1 && m.V0 == -450 && m.V1 == 450));
     }
 
     [Fact]
@@ -212,7 +216,7 @@ public class StairsTests
         var spec = new Stairs.Spec { X = 0, Y = 0, Dx = 1, Dy = 0 };
         var f = Stairs.Plan(spec, 2880);
         var flipped = Stairs.Flipped(spec, f);
-        Assert.Equal(3900, flipped.X);
+        Assert.Equal(4160, flipped.X);
         Assert.Equal(-1, flipped.Dx);
         var a = Stairs.Footprint(spec, f).Select(p => (Math.Round(p.X), Math.Round(p.Y))).OrderBy(p => p).ToList();
         var b = Stairs.Footprint(flipped, f).Select(p => (Math.Round(p.X), Math.Round(p.Y))).OrderBy(p => p).ToList();

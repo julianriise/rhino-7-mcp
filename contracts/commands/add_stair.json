@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "add_stair.json",
   "title": "AddStair Command",
-  "description": "Add a straight stair: one closed sawtooth solid on A-STAIR with forsk:kind=stair and forsk:id S01, S02. Risers = ceil(rise / riser_max), all exactly equal, treads = risers - 1, run = treads x going. Place it with from and to (the foot of the first riser on the stair's centre line, then a point it climbs toward), or along_wall / wall_id (along that wall's room side, from the end nearer at), or give nothing (along the longest room wall that holds the run). rise omitted or \"auto\" is floor to floor (the walls' most common height plus the floor slab) and follows the walls when they are baked again. A size outside the comfort rule (2R+G 600-640, riser 180 or less, width 800 or more) still builds; the message says so.",
+  "description": "Add a straight stair: one closed sawtooth solid on A-STAIR with forsk:kind=stair and forsk:id S01, S02. Risers = ceil(rise / riser_max), all exactly equal, treads = risers, the last on the upper floor, run = risers x going. Place it with from and to (the foot of the first riser on the stair's centre line, then a point it climbs toward), or along_wall / wall_id (along that wall's room side, from the end nearer at), or give nothing (along the longest room wall that holds the run). rise omitted or \"auto\" is the walls' most common height (the floor slab hangs below the walking surface, so it is not added) and follows the walls when they are baked again. A size outside the comfort rule (2R+G 600-640, riser 180 or less, width 800 or more) still builds; the message says so.",
   "type": "object",
   "properties": {
     "from": {

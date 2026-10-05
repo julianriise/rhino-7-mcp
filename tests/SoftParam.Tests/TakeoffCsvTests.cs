@@ -219,7 +219,7 @@ public class TakeoffCsvTests
         Assert.Equal("16", stair["Risers"]);
         Assert.Equal("180", stair["Riser (mm)"]);
         Assert.Equal("260", stair["Going (mm)"]);
-        Assert.Equal("3.90", stair["Length (m)"]);
+        Assert.Equal("4.16", stair["Length (m)"]);
     }
 
     [Fact]

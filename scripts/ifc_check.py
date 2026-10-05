@@ -10,7 +10,7 @@ roof's slab, 1 space; the smoke draws no floor slab), exactly 1 roof and 1
 storey, and at least one door or window. With --expect stair, the garage's counts plus
 exactly one IfcStair. Every IfcStair aggregates an IfcStairFlight with two
 risers or more, a riser height, a tread length, and a shape whose height
-is NumberOfRisers - 1 times the riser height (the top step is the floor).
+is NumberOfRisers times the riser height (the last riser lands on the upper floor).
 
 Usage:
   python3 scripts/ifc_check.py /tmp/forsk-ifc-garage.ifc --expect garage
@@ -93,7 +93,7 @@ def stair_problems(model, shapes: bool = True) -> list[str]:
             continue
         if shapes:
             height = shape_height(model, flight)
-            want = (risers - 1) * riser
+            want = risers * riser
             if height is None:
                 problems.append(f"no shape for stair {stair.Tag}")
             elif abs(height - want) > 1.0:

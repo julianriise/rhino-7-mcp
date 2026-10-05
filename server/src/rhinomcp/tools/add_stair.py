@@ -46,9 +46,10 @@ def add_stair(
     Add a straight stair ("add a straight stair", "legg til en trapp", "add
     a stair along this wall"): one closed solid you can walk, a sawtooth body
     from the floor up, on layer A-STAIR. Risers = ceil(rise / riser_max), all
-    exactly equal so the last lands on the upper floor; treads = risers - 1;
-    run = treads x going. The plan sheet draws it with tread lines, a walking
-    line with an arrow, the break at the plan cut and the steps above dashed.
+    exactly equal so the last lands on the upper floor; treads = risers, the
+    last on that floor; run = risers x going. The plan sheet draws it with
+    tread lines, a walking line with an arrow, the break at the plan cut and
+    the steps above dashed.
 
     Placement, first that applies:
     - from_point and to_point: the foot of the first riser on the stair's
