@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rooms_colors.json",
+  "title": "RoomsColors Command",
+  "description": "Perspective floors coloured by room type. Omit on to read the toggle. Off leaves the perspective view flat white. Plans and elevations stay line drawings. Does not change the model.",
+  "type": "object",
+  "properties": {
+    "on": {
+      "type": "boolean",
+      "description": "true colours perspective floors by type. Omit to read the current toggle."
+    }
+  },
+  "additionalProperties": false
+}

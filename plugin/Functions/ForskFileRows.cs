@@ -58,6 +58,7 @@ public partial class RhinoMCPFunctions
                 Stamp = generated ? EditStamp(obj) : null,
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? obj.Name,
                 Area = obj.Attributes.GetUserString("forsk:area"),
+                RoomType = obj.Attributes.GetUserString(RoomTypes.Key),
                 PathReads = wallRings != null,
                 Runs = wallRings == null ? 0 : WallJoins.Runs(wallRings, Math.Max(doc.ModelAbsoluteTolerance, 1.0)).Count,
                 Marker = obj.Attributes.GetUserString("forsk:marker") ?? obj.Attributes.GetUserString("forsk:marker_id"),

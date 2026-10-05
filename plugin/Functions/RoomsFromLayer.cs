@@ -76,6 +76,10 @@ public partial class RhinoMCPFunctions
 
         var skipped = profiles.Skipped;
         var warnings = profiles.Warnings;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
+        var labels = RoomLabels(doc);
+        var doors = OpeningBoxes(doc, false);
+        var windows = OpeningBoxes(doc, true);
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(200, 180, 120));
         var ids = new JArray();
         var forskIds = new JArray();
@@ -103,14 +107,19 @@ public partial class RhinoMCPFunctions
                     LayerIndex = targetLayer.Index,
                     MaterialSource = ObjectMaterialSource.MaterialFromLayer
                 };
+                var area = CurveArea(curve);
                 StampForskTags(attr, new ForskStamp
                 {
                     Kind = "room",
                     Level = "0",
                     Id = forskId,
-                    Area = CurveArea(curve),
+                    Area = area,
                     SourceLayer = profiles.SourceLayer.Name
                 });
+                var flat = FlattenToWorldXY(curve, tol);
+                var pts = flat == null ? null : LoopPoints(flat, tol);
+                var plan = pts == null || pts.Count < 3 ? null : PlanPoints(pts);
+                WriteRoomType(attr, plan, area, plan == null ? "" : RoomDetect.Name(labels, plan), doors, windows);
                 curves.Add(marker);
                 attrs.Add(attr);
                 queuedIds.Add(forskId);

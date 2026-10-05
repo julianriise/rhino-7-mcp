@@ -258,6 +258,7 @@ Import a floor plan with plan_import: a PDF as pdf_path (page when the user name
 Defaults: walls 3000, floor thickness 400, roof 200, doors sill 0 head 2100 width 900, windows sill 900 head 2100 width 1200. Pass stated heights as tool params. If the user states none, use the defaults and say so once.
 
 Never bake from layer X-EXIST. Refuse: X-EXIST is existing underlay, not a bake source.
+A room's type is rooms_set_type: living, kitchen, dining, bedroom, bathroom, wc, hall, storage, laundry, technical, office, garage, balcony, stair, or unassigned. Omit id to use the selected room. rooms_colors turns perspective colour by type on or off. Plans and elevations stay line drawings.
 Never edit an opening on X-EXIST or forsk:kind=existing. Refuse: Existing underlay is not a Forsk host wall.
 Roof or openings before walls: Walls first. Call walls_from_layer before roof_flat_from_walls. Or the openings / add_opening line with the same shape.
 

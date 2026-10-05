@@ -60,7 +60,7 @@ public partial class RhinoMCPFunctions
             }
             var attr = new ObjectAttributes { Name = name, LayerIndex = layer.Index, MaterialSource = ObjectMaterialSource.MaterialFromLayer };
             StampForskTags(attr, new ForskStamp { Kind = RoomPlate.Kind, Level = marker.Attributes.GetUserString("forsk:level") ?? "0" });
-            foreach (var key in new[] { RoomIdKey, RoomNameKey, "forsk:area" })
+            foreach (var key in new[] { RoomIdKey, RoomNameKey, "forsk:area", RoomTypes.Key, RoomTypes.SourceKey })
             {
                 var value = marker.Attributes.GetUserString(key);
                 if (!string.IsNullOrEmpty(value)) attr.SetUserString(key, value);

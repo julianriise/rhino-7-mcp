@@ -1606,7 +1606,7 @@ KEEPS_VIEW = {
     # Delete, select, transform in place, or write attributes, layers or doc strings.
     "delete_object", "delete_layer", "clear_generated", "clear_drawings", "daylight_clear",
     "section_clear", "select_objects", "modify_object", "modify_objects",
-    "update_object_attributes", "mark_as_existing", "create_layer", "get_or_set_current_layer",
+    "update_object_attributes", "mark_as_existing", "rooms_set_type", "create_layer", "get_or_set_current_layer",
     "set_layer_material", "set_project_meta", "section_add", "print_profile",
     # Writes the forsk/details document string only.
     "details",

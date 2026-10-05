@@ -51,6 +51,8 @@
             "openings_from_layer",
             "rooms_from_layer",
             "rooms_detect",
+            "rooms_set_type",
+            "rooms_colors",
             "dxf_import",
             "plan_import",
             "plan_scale",

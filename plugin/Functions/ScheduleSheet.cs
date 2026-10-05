@@ -45,6 +45,8 @@ public partial class RhinoMCPFunctions
         public List<RoomDetect.Pt> Outline;
         public RoomDetect.Pt Inside;
         public string Untagged;
+        /// <summary>forsk:room_type. Empty when the marker has none.</summary>
+        public string RoomType;
 
         public bool Tagged
         {
@@ -68,7 +70,8 @@ public partial class RhinoMCPFunctions
             {
                 RoomId = roomId ?? "",
                 Who = !string.IsNullOrEmpty(roomId) ? roomId : obj.Name ?? obj.Id.ToString(),
-                Level = obj.Attributes?.GetUserString("forsk:level")
+                Level = obj.Attributes?.GetUserString("forsk:level"),
+                RoomType = obj.Attributes?.GetUserString(RoomTypes.Key)
             };
             rooms.Add(room);
             var area = ParseMm(obj.Attributes?.GetUserString("forsk:area"));
@@ -193,7 +196,8 @@ public partial class RhinoMCPFunctions
             {
                 Id = r.ScheduleId,
                 Name = r.Name,
-                AreaMm2 = r.Area
+                AreaMm2 = r.Area,
+                RoomType = r.RoomType
             }).ToList();
             tables.Add(Schedules.RoomTable(tagged));
         }

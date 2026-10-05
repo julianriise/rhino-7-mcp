@@ -134,6 +134,7 @@ public partial class RhinoMCPFunctions
             {
                 Id = roomId.Trim(),
                 Name = obj.Attributes.GetUserString("forsk:room_name") ?? "",
+                RoomType = obj.Attributes.GetUserString(RoomTypes.Key),
                 Ring = ring,
                 AreaM2 = area / 1e6,
                 Base = model.FloorTop,

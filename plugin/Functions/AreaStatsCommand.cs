@@ -44,7 +44,8 @@ public partial class RhinoMCPFunctions
                 Name = room.Name,
                 Level = room.Level,
                 AreaMm2 = room.Area,
-                PerimeterMm = RoomDetect.Perimeter(room.Outline)
+                PerimeterMm = RoomDetect.Perimeter(room.Outline),
+                RoomType = room.RoomType
             });
         }
         var result = AreaStats.Compute(rooms);
