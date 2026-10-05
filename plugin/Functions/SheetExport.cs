@@ -80,6 +80,9 @@ public partial class RhinoMCPFunctions
         string writer = null;
         string version = null;
         string failed = null;
+        // The office logo goes next to the sheets: a DWG image refers to its file.
+        var logo = OfficeLogo.Decode(doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.Key));
+        var logoPath = logo == null ? null : WriteLogoFile(doc, logo, full);
         foreach (var page in InSetOrder(doc, MatchingForskPages(doc, null)))
         {
             LeaveDetail(page);
@@ -89,14 +92,15 @@ public partial class RhinoMCPFunctions
             var name = SheetFlat.FileName(project, number, string.IsNullOrWhiteSpace(title) ? PageViewName(page) : title, format);
             var path = Path.Combine(full, name);
             var pieces = FlattenPage(doc, page, misc);
+            var logos = logoPath == null ? new List<SheetPdf.Image>() : LogoImages(doc, page, logo);
             try
             {
                 // The scripted write first. Once it writes nothing modern, the rest of the set skips it.
                 string wrote;
-                if (writer != WriterHeadless && WriteFromActiveDoc(doc, pieces, path)
+                if (writer != WriterHeadless && WriteFromActiveDoc(doc, pieces, path, logos, logoPath)
                     && SheetFlat.ModernAcad(wrote = FileAcadVersion(path)))
                     writer = WriterActiveDoc;
-                else if (WriteHeadless(doc, pieces, path))
+                else if (WriteHeadless(doc, pieces, path, logos, logoPath))
                 {
                     writer = WriterHeadless;
                     wrote = FileAcadVersion(path);
@@ -289,7 +293,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>The flat sheet in a document of its own, written by Rhino's exporter. False when no file came out.</summary>
-    private static bool WriteHeadless(RhinoDoc source, List<FlatPiece> pieces, string path)
+    private static bool WriteHeadless(RhinoDoc source, List<FlatPiece> pieces, string path,
+        List<SheetPdf.Image> logos = null, string logoPath = null)
     {
         try
         {
@@ -301,6 +306,7 @@ public partial class RhinoMCPFunctions
                 foreach (var def in SheetFlat.Layers)
                     layers[def.Name] = target.Layers.Add(ExportLayer(def));
                 AddPieces(source, target, pieces, layers, null, null);
+                AddLogoFrames(target, logos, logoPath, layers, null);
                 return WriteAndCheck(target, path);
             }
         }
@@ -315,7 +321,8 @@ public partial class RhinoMCPFunctions
     /// layers, written with only it selected, then deleted, with the user's
     /// selection put back. Layers this made are deleted again.
     /// </summary>
-    private static bool WriteFromActiveDoc(RhinoDoc doc, List<FlatPiece> pieces, string path)
+    private static bool WriteFromActiveDoc(RhinoDoc doc, List<FlatPiece> pieces, string path,
+        List<SheetPdf.Image> logos = null, string logoPath = null)
     {
         var picked = doc.Objects.GetSelectedObjects(false, false)?.Select(o => o.Id).ToList() ?? new List<Guid>();
         var made = new List<int>();
@@ -336,6 +343,7 @@ public partial class RhinoMCPFunctions
             }
             doc.Objects.UnselectAll(true);
             AddPieces(doc, doc, pieces, layers, added, madeStyles);
+            AddLogoFrames(doc, logos, logoPath, layers, added);
             doc.Objects.Select(added, true);
             if (File.Exists(path)) File.Delete(path);
             RhinoApp.RunScript(SheetFlat.ExportScript(path), false);
@@ -359,6 +367,46 @@ public partial class RhinoMCPFunctions
                 doc.Layers.Delete(index, true);
             doc.Objects.UnselectAll(true);
             if (picked.Count > 0) doc.Objects.Select(picked, true);
+        }
+    }
+
+    /// <summary>The logo's own file in the export folder, named for it; null when it cannot be written.</summary>
+    private static string WriteLogoFile(RhinoDoc doc, OfficeLogo.Picture logo, string folder)
+    {
+        try
+        {
+            var bytes = logo.Jpeg ?? Convert.FromBase64String(doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.Key));
+            var name = doc.Strings.GetValue(ProjectInfo.Section, OfficeLogo.NameKey);
+            var file = Path.GetFileNameWithoutExtension(string.IsNullOrWhiteSpace(name) ? "logo" : name) + (logo.Jpeg != null ? ".jpg" : ".png");
+            var path = Path.Combine(folder, file);
+            File.WriteAllBytes(path, bytes);
+            return path;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The logo as a picture frame at each paper box, on the title block's export layer.</summary>
+    private static void AddLogoFrames(RhinoDoc target, List<SheetPdf.Image> logos, string logoPath,
+        Dictionary<string, int> layers, List<Guid> added)
+    {
+        if (logos == null || logos.Count == 0 || string.IsNullOrEmpty(logoPath)) return;
+        layers.TryGetValue(SheetFlat.LayerFor("title_block"), out var layer);
+        foreach (var box in logos)
+        {
+            var plane = new Plane(new Point3d(box.X0, box.Y0, 0), Vector3d.XAxis, Vector3d.YAxis);
+            var id = target.Objects.AddPictureFrame(plane, logoPath, false, box.X1 - box.X0, box.Y1 - box.Y0, true, false);
+            if (id == Guid.Empty) continue;
+            var obj = target.Objects.FindId(id);
+            if (obj != null && layer >= 0)
+            {
+                var attr = obj.Attributes.Duplicate();
+                attr.LayerIndex = layer;
+                target.Objects.ModifyAttributes(id, attr, true);
+            }
+            added?.Add(id);
         }
     }
 
