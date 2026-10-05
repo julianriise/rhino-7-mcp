@@ -37,7 +37,11 @@ def set_opening_type(
     selection, including two or more openings. Do not guess the last
     opening created. "make this a sliding door", "top-hung window",
     "flip swing", and "change hand" use this tool. "make all windows
-    fixed" is type window.fixed with all true and no id.
+    fixed" is type window.fixed with all true and no id. A door type on
+    a window (or a window type on a door) changes its kind: "change these
+    windows to interior doors" is type door.hinged_single with no id. The
+    width and centre stay; a door stands on the floor, a window gets the
+    default sill and head.
     Refuses forsk:kind=existing or layer X-EXIST. A refused change leaves
     the document unchanged. The same type does not rebuild.
     clear_generated and a rebake reset types, because the DXF has no type.

@@ -33,20 +33,51 @@ public class OpeningTypeTests
     }
 
     [Fact]
-    public void KindMismatch_Refuses()
+    public void OtherKind_TurnsWindowIntoDoor_AndBack()
     {
-        var window = Read("window", "window.side_hung", "L", "in");
-        Assert.False(OpeningTypes.TryApply(window, "door.sliding", null, null, out var edit, out var why));
-        Assert.Null(edit);
-        Assert.Equal("That is a window. Pick fixed, side_hung, or top_hung.", why);
+        var window = Read("window", "window.side_hung", "R", "in");
+        Assert.True(OpeningTypes.TryApply(window, "door.hinged_single", null, null, out var edit, out var why));
+        Assert.Equal("", why);
+        Assert.True(edit.KindChanged);
+        Assert.True(edit.Changed);
+        Assert.Equal("door", edit.After.Kind);
+        Assert.Equal("door.hinged_single", edit.After.TypeId);
+        Assert.Equal("R", edit.After.Hand);
+        // A window's glass does not follow it into a door.
+        Assert.False(edit.After.Glazed);
+
+        var fixedWindow = Read("window", "window.fixed", null, null);
+        Assert.True(OpeningTypes.TryApply(fixedWindow, "door.sliding", null, null, out edit, out why));
+        Assert.Equal("door.sliding", edit.After.TypeId);
+        Assert.Equal("L", edit.After.Hand);
+        Assert.Null(edit.After.Swing);
 
         var door = Read("door", null, null, null);
-        Assert.False(OpeningTypes.TryApply(door, "window.fixed", null, null, out edit, out why));
-        Assert.Null(edit);
-        Assert.Equal("That is a door. Pick hinged_single, hinged_double, sliding, or pocket.", why);
+        Assert.True(OpeningTypes.TryApply(door, "window.fixed", null, null, out edit, out why));
+        Assert.True(edit.KindChanged);
+        Assert.Equal("window", edit.After.Kind);
+        Assert.True(edit.After.Glazed);
+
+        Assert.True(OpeningTypes.TryApply(door, "door.sliding", null, null, out edit, out why));
+        Assert.False(edit.KindChanged);
 
         Assert.False(OpeningTypes.TryApply(door, "door.portal", null, null, out edit, out why));
         Assert.Equal("Unknown opening type.", why);
+    }
+
+    [Fact]
+    public void KindChange_Receipt_NamesBothKinds()
+    {
+        var rows = new List<OpeningTypes.ReceiptRow>
+        {
+            new OpeningTypes.ReceiptRow { Kind = "door", FromKind = "window", ShortName = "hinged", TypeChanged = true },
+            new OpeningTypes.ReceiptRow { Kind = "door", FromKind = "window", ShortName = "hinged", TypeChanged = true }
+        };
+        Assert.Equal("Changed 2 windows to hinged doors.", OpeningTypes.Receipt(rows));
+        rows.RemoveAt(1);
+        Assert.Equal("Changed 1 window to hinged door.", OpeningTypes.Receipt(rows));
+        rows[0].FromKind = "door";
+        Assert.Equal("Changed 1 door to hinged.", OpeningTypes.Receipt(rows));
     }
 
     [Fact]

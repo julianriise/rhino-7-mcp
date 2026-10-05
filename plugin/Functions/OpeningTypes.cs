@@ -50,6 +50,8 @@ public static class OpeningTypes
         public bool TypeChanged;
         public bool HandChanged;
         public bool SwingChanged;
+        /// <summary>A window became a door or a door a window. The width stays; sill and head follow the new kind.</summary>
+        public bool KindChanged;
 
         public bool Changed
         {
@@ -60,6 +62,8 @@ public static class OpeningTypes
     public sealed class ReceiptRow
     {
         public string Kind;
+        /// <summary>The kind before the edit. Empty or equal to Kind when the kind stayed.</summary>
+        public string FromKind;
         public string ShortName;
         public bool TypeChanged;
         public bool HandChanged;
@@ -218,7 +222,9 @@ public static class OpeningTypes
 
     /// <summary>
     /// Apply a type, hand, or swing edit. Null fields stay. flip toggles.
-    /// A key the resulting type does not use is refused before a record is returned.
+    /// A type of the other kind turns a window into a door or a door into a
+    /// window (AI imports read doors as windows). A key the resulting type
+    /// does not use is refused before a record is returned.
     /// </summary>
     public static bool TryApply(
         Record current,
@@ -244,12 +250,8 @@ public static class OpeningTypes
                 error = "Unknown opening type.";
                 return false;
             }
-            if (!string.Equals(def.Kind, current.Kind, StringComparison.Ordinal))
-            {
-                error = KindMismatch(current.Kind);
-                return false;
-            }
         }
+        var kindChanged = !string.Equals(def.Kind, current.Kind, StringComparison.Ordinal);
 
         var hand = def.HasHand ? (string.IsNullOrEmpty(current.Hand) ? "L" : current.Hand) : null;
         var swing = def.HasSwing
@@ -286,12 +288,13 @@ public static class OpeningTypes
             }
         }
 
-        // A glazed door stays glazed through a type swap.
-        var after = Make(def, hand, swing, current.Glazed);
+        // A glazed door stays glazed through a type swap. A window's glass does not follow it into a door.
+        var after = Make(def, hand, swing, !kindChanged && current.Glazed);
         edit = new Edit
         {
             Before = current,
             After = after,
+            KindChanged = kindChanged,
             TypeChanged = !string.Equals(current.TypeId, after.TypeId, StringComparison.Ordinal),
             HandChanged = !string.Equals(current.Hand ?? "", after.Hand ?? "", StringComparison.Ordinal),
             SwingChanged = !string.Equals(current.Swing ?? "", after.Swing ?? "", StringComparison.Ordinal)
@@ -332,6 +335,11 @@ public static class OpeningTypes
     public static string ChangedLine(int count, string kind, string shortName)
     {
         return "Changed " + Count(count) + " " + Noun(kind, count) + " to " + shortName + ".";
+    }
+
+    public static string ChangedKindLine(int count, string fromKind, string kind, string shortName)
+    {
+        return "Changed " + Count(count) + " " + Noun(fromKind, count) + " to " + shortName + " " + Noun(kind, count) + ".";
     }
 
     public static string SwingLine(int count, string kind)
@@ -797,6 +805,7 @@ public static class OpeningTypes
             foreach (var bucket in buckets)
             {
                 if (string.Equals(bucket[0].Kind, row.Kind, StringComparison.Ordinal)
+                    && string.Equals(bucket[0].FromKind ?? "", row.FromKind ?? "", StringComparison.Ordinal)
                     && string.Equals(bucket[0].ShortName, row.ShortName, StringComparison.Ordinal))
                 {
                     found = bucket;
@@ -815,7 +824,10 @@ public static class OpeningTypes
         {
             var kind = bucket[0].Kind;
             var count = bucket.Count;
-            if (mode == "type")
+            var from = bucket[0].FromKind;
+            if (mode == "type" && !string.IsNullOrEmpty(from) && !string.Equals(from, kind, StringComparison.Ordinal))
+                lines.Add(ChangedKindLine(count, from, kind, bucket[0].ShortName));
+            else if (mode == "type")
                 lines.Add(ChangedLine(count, kind, bucket[0].ShortName));
             else if (mode == "swing")
                 lines.Add(SwingLine(count, kind));

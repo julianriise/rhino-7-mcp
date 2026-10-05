@@ -350,14 +350,16 @@ public partial class RhinoMCPFunctions
             var before = ReadOpeningStyle(marker, rec.Kind);
             if (!OpeningTypes.TryApply(before, typeRaw, handRaw, swingRaw, out var edit, out var error))
                 throw new ArgumentException(error);
-            ParkPocket(doc, rec.MarkerId, edit, string.IsNullOrWhiteSpace(handRaw));
             var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
-            edits.Add(new StyleEdit
+            var item = new StyleEdit
             {
                 Record = rec,
                 Edit = edit,
                 HostId = host.Id
-            });
+            };
+            if (edit.KindChanged) PlanKindChange(doc, host, item);
+            else ParkPocket(doc, rec.MarkerId, edit, string.IsNullOrWhiteSpace(handRaw));
+            edits.Add(item);
         }
         if (edits.Count == 0)
             throw new InvalidOperationException("Opening marker not found.");
@@ -381,7 +383,10 @@ public partial class RhinoMCPFunctions
                 try
                 {
                     foreach (var item in group)
+                    {
+                        if (item.Edit.KindChanged) WriteOpeningKind(doc, item);
                         WriteOpeningStyle(doc, item.Record.MarkerId, item.Edit.After);
+                    }
                     var rebuilt = RebuildHostWall(new JObject
                     {
                         ["id"] = group[0].HostId.ToString()
@@ -422,6 +427,57 @@ public partial class RhinoMCPFunctions
         public OpeningRecord Record;
         public OpeningTypes.Edit Edit;
         public Guid HostId;
+        /// <summary>Kind change only: the marker at the same width and centre, at the new kind's sill and head.</summary>
+        public Brep KindMarker;
+        public double Sill;
+        public double Head;
+    }
+
+    /// <summary>
+    /// A window turned door (or back) keeps its width and centre on the wall.
+    /// A door stands on the wall's base; a window gets the default sill and head above it.
+    /// </summary>
+    private void PlanKindChange(RhinoDoc doc, WallSolid host, StyleEdit item)
+    {
+        var rec = item.Record;
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1e-6);
+        var baseZ = host.Brep?.GetBoundingBox(true).Min.Z ?? 0.0;
+        var door = string.Equals(item.Edit.After.Kind, "door", StringComparison.Ordinal);
+        item.Sill = baseZ + (door ? ForskDefaults.DoorSill : ForskDefaults.WindowSill);
+        item.Head = baseZ + (door ? ForskDefaults.DoorHead : ForskDefaults.WindowHead);
+        var pathSegs = HostPathSegments(host, tol);
+        if (!TryOpeningOnPath(pathSegs, rec.MarkerBbox.Center, out var index, out var tNow))
+            throw new InvalidOperationException("Could not place an opening on the host path.");
+        var spec = new OpeningSpec
+        {
+            Kind = door ? OpeningKind.Door : OpeningKind.Window,
+            Width = rec.Width,
+            Sill = item.Sill,
+            Head = item.Head
+        };
+        var placement = FootprintAtT(pathSegs[index], spec, tNow);
+        item.KindMarker = BuildOpeningMarkerBox(
+            placement.Foot, item.Sill, item.Head, FacadeConst.MarkerSelectDepth);
+        if (item.KindMarker == null || !item.KindMarker.IsValid)
+            throw new InvalidOperationException("Could not cut opening.");
+    }
+
+    /// <summary>The new kind, size and name on the marker. The old mark goes so Print numbers it with its new kind.</summary>
+    private static void WriteOpeningKind(RhinoDoc doc, StyleEdit item)
+    {
+        var id = item.Record.MarkerId;
+        if (!ReplaceOpeningMarker(doc, id, item.KindMarker))
+            throw new InvalidOperationException("Opening marker not found.");
+        WriteOpeningSize(doc, id, item.Record.Width, item.Sill, item.Head);
+        var obj = doc.Objects.FindId(id);
+        if (obj?.Attributes == null) return;
+        var kind = item.Edit.After.Kind;
+        var prefix = kind == "window" ? "window-" : "door-";
+        obj.Attributes.Name = prefix + NextNameIndex(doc, prefix).ToString("D2", CultureInfo.InvariantCulture);
+        obj.Attributes.SetUserString("forsk:opening_kind", kind);
+        obj.Attributes.DeleteUserString(Schedules.MarkKey);
+        obj.Attributes.DeleteUserString(OpeningTypes.GlazedKey);
+        obj.CommitChanges();
     }
 
     /// <summary>"all" with a type: every generated, non-existing marker of that type's kind. The selection is not read.</summary>
@@ -557,6 +613,7 @@ public partial class RhinoMCPFunctions
             rows.Add(new OpeningTypes.ReceiptRow
             {
                 Kind = item.Edit.After.Kind,
+                FromKind = item.Edit.Before.Kind,
                 ShortName = item.Edit.After.Def.ShortName,
                 TypeChanged = item.Edit.TypeChanged,
                 HandChanged = item.Edit.HandChanged,
@@ -1435,6 +1492,10 @@ public partial class RhinoMCPFunctions
         public string OpeningType;
         public string Hand;
         public string Swing;
+        public string OpeningKind;
+        public string Mark;
+        public string Glazed;
+        public string Name;
     }
 
     private MarkerSnapshot CaptureMarker(RhinoDoc doc, Guid id)
@@ -1451,7 +1512,11 @@ public partial class RhinoMCPFunctions
             Offset = obj?.Attributes?.GetUserString("forsk:offset"),
             OpeningType = obj?.Attributes?.GetUserString(OpeningTypes.TypeKey),
             Hand = obj?.Attributes?.GetUserString(OpeningTypes.HandKey),
-            Swing = obj?.Attributes?.GetUserString(OpeningTypes.SwingKey)
+            Swing = obj?.Attributes?.GetUserString(OpeningTypes.SwingKey),
+            OpeningKind = obj?.Attributes?.GetUserString("forsk:opening_kind"),
+            Mark = obj?.Attributes?.GetUserString(Schedules.MarkKey),
+            Glazed = obj?.Attributes?.GetUserString(OpeningTypes.GlazedKey),
+            Name = obj?.Attributes?.Name
         };
     }
 
@@ -1475,6 +1540,10 @@ public partial class RhinoMCPFunctions
         obj.Attributes.SetUserString(OpeningTypes.TypeKey, snap.OpeningType);
         obj.Attributes.SetUserString(OpeningTypes.HandKey, snap.Hand);
         obj.Attributes.SetUserString(OpeningTypes.SwingKey, snap.Swing);
+        obj.Attributes.SetUserString("forsk:opening_kind", snap.OpeningKind);
+        obj.Attributes.SetUserString(Schedules.MarkKey, snap.Mark);
+        obj.Attributes.SetUserString(OpeningTypes.GlazedKey, snap.Glazed);
+        obj.Attributes.Name = snap.Name;
         obj.CommitChanges();
     }
 

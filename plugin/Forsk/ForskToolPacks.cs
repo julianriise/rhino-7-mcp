@@ -499,7 +499,7 @@ namespace RhinoMCPPlugin.Forsk
                         ["head"] = Num("Top Z in mm.")
                     }),
                 Fn("set_opening_type",
-                    "Set type, hand, or swing on the selected openings, then rebuild each host once. Pass at least one of type, hand, swing. Id omitted uses the selection, including two or more. all with a type changes every opening of that kind: make all windows fixed. Does not clear the model. Refuses X-EXIST. A refused change leaves the document unchanged.",
+                    "Set type, hand, or swing on the selected openings, then rebuild each host once. Pass at least one of type, hand, swing. Id omitted uses the selection, including two or more. all with a type changes every opening of that kind: make all windows fixed. A door type on selected windows turns them into doors (and a window type on doors into windows), keeping width and centre: change these windows to interior doors is type door.hinged_single, no id. Does not clear the model. Refuses X-EXIST. A refused change leaves the document unchanged.",
                     new JObject
                     {
                         ["id"] = Str("Opening marker or frame GUID. Omit to use the selection."),

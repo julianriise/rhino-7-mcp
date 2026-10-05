@@ -81,8 +81,10 @@ namespace RhinoMCPPlugin.Forsk
             string question;
             if (f.Picked == Picked.Opening && f.PickedOpeningKind != null)
             {
+                // The picked kind's types first, then the other kind's: AI imports read doors as windows.
                 kinds.Add(f.PickedOpeningKind);
-                question = ForskText.Format("opening.type.ask", "kind", ForskText.Get("word." + f.PickedOpeningKind));
+                kinds.Add(f.PickedOpeningKind == "door" ? "window" : "door");
+                question = ForskText.Get("opening.type.ask");
             }
             else if (f.Picked == Picked.None && (f.HasDoors || f.HasWindows))
             {
@@ -93,7 +95,7 @@ namespace RhinoMCPPlugin.Forsk
             else return null;
             var card = new CardSpec { Kind = "opening.type", Question = question, Depends = "selection" };
             if (f.Picked == Picked.None) card.Data = new JObject { ["all"] = true };
-            foreach (var type in OpeningTypes.All.Where(t => kinds.Contains(t.Kind)))
+            foreach (var type in kinds.SelectMany(k => OpeningTypes.All.Where(t => t.Kind == k)))
                 card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;

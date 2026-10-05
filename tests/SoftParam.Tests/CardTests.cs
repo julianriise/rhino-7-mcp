@@ -14,11 +14,11 @@ public class CardTests
     static string[] Choices(CardSpec card) => card.Pills.Where(p => p.Id != "cancel" && p.Id != "done").Select(p => p.Label).ToArray();
 
     [Fact]
-    public void SwapType_OnADoor_ListsFourTypes()
+    public void SwapType_OnADoor_ListsDoorTypes_ThenWindowTypes()
     {
         var card = ForskCards.For("opening.type", Docs.Facts("house, door selected"))!;
-        Assert.Equal(new[] { "Hinged door", "Double door", "Sliding door", "Pocket door" }, Choices(card));
-        Assert.Equal("Which door type?", card.Question);
+        Assert.Equal(new[] { "Hinged door", "Double door", "Sliding door", "Pocket door", "Fixed window", "Side-hung window", "Top-hung window" }, Choices(card));
+        Assert.Equal("Change to:", card.Question);
         Assert.Equal("selection", card.Depends);
         Assert.Null(card.Data);
         // Each type pill carries its plan-symbol icon; Cancel has none.
@@ -59,12 +59,13 @@ public class CardTests
     }
 
     [Fact]
-    public void SwapType_OnAWindow_ListsThreeTypes()
+    public void SwapType_OnWindows_ListsWindowTypes_ThenDoorTypes()
     {
         var facts = FileClassifier.Read(Docs.Of(Docs.House().Append(Row.Window(selected: true)).ToArray()));
         var card = ForskCards.For("opening.type", facts)!;
-        Assert.Equal(new[] { "Fixed window", "Side-hung window", "Top-hung window" }, Choices(card));
+        Assert.Equal(new[] { "Fixed window", "Side-hung window", "Top-hung window", "Hinged door", "Double door", "Sliding door", "Pocket door" }, Choices(card));
         Assert.Equal(new[] { "window.fixed", "window.side_hung", "window.top_hung" }, card.Pills.Take(3).Select(p => p.Id));
+        Assert.Equal("Change to:", card.Question);
     }
 
     [Fact]

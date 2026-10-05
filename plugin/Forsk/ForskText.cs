@@ -148,7 +148,7 @@ namespace RhinoMCPPlugin.Forsk
             ["area.summary.note"] = "Estimate. Not measured to NS 3940.",
 
             // One-time cards: the question, then the pills.
-            ["opening.type.ask"] = "Which {kind} type?",
+            ["opening.type.ask"] = "Change to:",
             ["stair.edit.ask"] = "Stair sizes. The steps stay equal: their count follows the height.",
             ["stair.width"] = "Width",
             ["stair.riser_max"] = "Step height, at most",
