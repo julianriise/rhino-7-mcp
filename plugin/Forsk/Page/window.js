@@ -393,102 +393,114 @@
   /* The pinned form already drawn, so a later render does not rebuild it or steal the caret. */
   var pinKey = '';
   var pinNewest = '';
-  /* The overlay thumb fades after a scroll unless the pointer is on the list or the thumb is held. */
-  var threadThumbTimer = 0;
-  var threadThumbHover = false;
-  var threadThumbDrag = false;
-  /* Render restores scrollTop. Those events must not flash the thumb. */
-  var threadThumbQuiet = false;
-
-  function syncThreadThumb() {
-    var thread = document.getElementById('thread');
-    var bar = document.getElementById('thread-bar');
-    var thumb = document.getElementById('thread-thumb');
-    if (!thread || !bar || !thumb) return;
-    var view = thread.clientHeight;
-    var content = thread.scrollHeight;
-    var scroll = thread.scrollTop;
-    if (!Forsk.scrollThumb(view, content, scroll)) {
-      bar.hidden = true;
-      return;
-    }
-    bar.hidden = false;
-    var geom = Forsk.scrollThumb(view, content, scroll, bar.clientHeight);
-    if (!geom) {
-      bar.hidden = true;
-      return;
-    }
-    thumb.style.height = geom.h + 'px';
-    thumb.style.top = geom.y + 'px';
-  }
-
-  function revealThreadThumb() {
-    var frame = document.getElementById('thread-frame');
-    if (!frame || !frame.classList) return;
-    var bar = document.getElementById('thread-bar');
-    if (!bar || bar.hidden) {
-      frame.classList.remove('thumb-on');
-      return;
-    }
-    frame.classList.add('thumb-on');
-    if (threadThumbTimer) root.clearTimeout(threadThumbTimer);
-    threadThumbTimer = 0;
-    if (threadThumbHover || threadThumbDrag) return;
-    threadThumbTimer = root.setTimeout(function () {
-      threadThumbTimer = 0;
-      if (threadThumbHover || threadThumbDrag) return;
-      var box = document.getElementById('thread-frame');
-      if (box && box.classList) box.classList.remove('thumb-on');
-    }, 700);
-  }
-
-  function bindThreadThumb(threadEl) {
-    var frame = document.getElementById('thread-frame');
-    var bar = document.getElementById('thread-bar');
-    var thumb = document.getElementById('thread-thumb');
-    if (!frame || !bar || !thumb) return;
-    frame.addEventListener('mouseenter', function () {
-      threadThumbHover = true;
-      revealThreadThumb();
-    });
-    frame.addEventListener('mouseleave', function () {
-      threadThumbHover = false;
-      revealThreadThumb();
-    });
-    thumb.addEventListener('wheel', function (e) {
-      var dy = e.deltaY || 0;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= threadEl.clientHeight || 0;
-      threadEl.scrollTop += dy;
-      e.preventDefault();
-    });
-    thumb.addEventListener('mousedown', function (e) {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      var view = threadEl.clientHeight;
-      var content = threadEl.scrollHeight;
-      var track = bar.clientHeight;
-      var origin = Forsk.scrollThumb(view, content, threadEl.scrollTop, track);
-      if (!origin) return;
-      var startY = e.clientY;
-      var startTop = origin.y;
-      threadThumbDrag = true;
-      thumb.classList.add('drag');
-      revealThreadThumb();
-      function move(ev) {
-        threadEl.scrollTop = Forsk.scrollForThumb(view, content, startTop + (ev.clientY - startY), track);
+  /*
+   * An overlay thumb over a scroller whose native bar is zero-width: the
+   * message list and the ⋯ sheet. It fades after a scroll unless the pointer
+   * is on the frame or the thumb is held. quiet: a render is restoring
+   * scrollTop, and those events must not flash the thumb.
+   */
+  function overlayThumb(frameId, viewId, barId, thumbId) {
+    var timer = 0;
+    var hover = false;
+    var drag = false;
+    var t = { quiet: false };
+    function get(id) { return document.getElementById(id); }
+    t.sync = function () {
+      var view = get(viewId);
+      var bar = get(barId);
+      var thumb = get(thumbId);
+      if (!view || !bar || !thumb) return;
+      if (!Forsk.scrollThumb(view.clientHeight, view.scrollHeight, view.scrollTop)) {
+        bar.hidden = true;
+        return;
       }
-      function up() {
-        threadThumbDrag = false;
-        thumb.classList.remove('drag');
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', up);
-        revealThreadThumb();
+      bar.hidden = false;
+      var geom = Forsk.scrollThumb(view.clientHeight, view.scrollHeight, view.scrollTop, bar.clientHeight);
+      if (!geom) {
+        bar.hidden = true;
+        return;
       }
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
-    });
+      thumb.style.height = geom.h + 'px';
+      thumb.style.top = geom.y + 'px';
+    };
+    t.reveal = function () {
+      var frame = get(frameId);
+      if (!frame || !frame.classList) return;
+      var bar = get(barId);
+      if (!bar || bar.hidden) {
+        frame.classList.remove('thumb-on');
+        return;
+      }
+      frame.classList.add('thumb-on');
+      if (timer) root.clearTimeout(timer);
+      timer = 0;
+      if (hover || drag) return;
+      timer = root.setTimeout(function () {
+        timer = 0;
+        if (hover || drag) return;
+        var box = get(frameId);
+        if (box && box.classList) box.classList.remove('thumb-on');
+      }, 700);
+    };
+    /* Listeners on the frame, bar and thumb. Call again after the frame's children are rebuilt. */
+    t.bind = function () {
+      var frame = get(frameId);
+      var view = get(viewId);
+      var bar = get(barId);
+      var thumb = get(thumbId);
+      if (!frame || !view || !bar || !thumb) return;
+      if (!frame.getAttribute('data-thumb')) {
+        frame.setAttribute('data-thumb', '1');
+        frame.addEventListener('mouseenter', function () {
+          hover = true;
+          t.reveal();
+        });
+        frame.addEventListener('mouseleave', function () {
+          hover = false;
+          t.reveal();
+        });
+      }
+      thumb.addEventListener('wheel', function (e) {
+        var dy = e.deltaY || 0;
+        if (e.deltaMode === 1) dy *= 16;
+        else if (e.deltaMode === 2) dy *= view.clientHeight || 0;
+        view.scrollTop += dy;
+        e.preventDefault();
+      });
+      thumb.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        var height = view.clientHeight;
+        var content = view.scrollHeight;
+        var track = bar.clientHeight;
+        var origin = Forsk.scrollThumb(height, content, view.scrollTop, track);
+        if (!origin) return;
+        var startY = e.clientY;
+        var startTop = origin.y;
+        drag = true;
+        thumb.classList.add('drag');
+        t.reveal();
+        function move(ev) {
+          view.scrollTop = Forsk.scrollForThumb(height, content, startTop + (ev.clientY - startY), track);
+        }
+        function up() {
+          drag = false;
+          thumb.classList.remove('drag');
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+          t.reveal();
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+    };
+    return t;
   }
+
+  var threadThumb = overlayThumb('thread-frame', 'thread', 'thread-bar', 'thread-thumb');
+  var sheetThumb = overlayThumb('sheet', 'sheet-body', 'sheet-bar', 'sheet-thumb');
+  function syncThreadThumb() { threadThumb.sync(); }
+  function revealThreadThumb() { threadThumb.reveal(); }
 
   Forsk.nearEnd = function (scrollHeight, scrollTop, clientHeight) {
     return scrollHeight - scrollTop - clientHeight < 40;
@@ -1117,20 +1129,45 @@
 
   function renderSheet(help) {
     var sheet = document.getElementById('sheet');
+    var body = document.getElementById('sheet-body');
+    var keep = body && help ? body.scrollTop : 0;
     while (sheet.firstChild) sheet.removeChild(sheet.firstChild);
     sheet.className = help ? 'sheet' : '';
     if (!help) return;
-    sheet.appendChild(el('h2', null, help.title || ''));
+    body = el('div');
+    body.id = 'sheet-body';
+    body.appendChild(el('h2', null, help.title || ''));
     (help.groups || []).forEach(function (group) {
-      sheet.appendChild(el('h3', null, group.title));
+      body.appendChild(el('h3', null, group.title));
       var pills = el('div', 'pills');
       group.actions.forEach(function (action) {
         pills.appendChild(pill(action.label, false, function () { sender.send({ kind: 'action', id: action.id, from: 'card' }); }));
       });
-      sheet.appendChild(pills);
+      body.appendChild(pills);
     });
-    (help.hints || []).forEach(function (hint) { sheet.appendChild(el('div', 'hint', hint)); });
+    (help.hints || []).forEach(function (hint) { body.appendChild(el('div', 'hint', hint)); });
+    var bar = el('div');
+    bar.id = 'sheet-bar';
+    bar.hidden = true;
+    bar.setAttribute('aria-hidden', 'true');
+    var thumb = el('div');
+    thumb.id = 'sheet-thumb';
+    bar.appendChild(thumb);
+    sheet.appendChild(body);
+    sheet.appendChild(bar);
+    body.scrollTop = keep;
+    body.addEventListener('scroll', function () {
+      sheetThumb.sync();
+      sheetThumb.reveal();
+    });
+    sheetThumb.bind();
+    sheetThumb.sync();
   }
+
+  /* A press outside the open ⋯ sheet closes it, as outside a menu. The ⋯ button and its menu toggle it themselves. */
+  Forsk.closesSheet = function (inSheet, onHelp, inSlotMenu) {
+    return !inSheet && !onHelp && !inSlotMenu;
+  };
 
   function applyPrefill(prefill) {
     if (!prefill || prefill.n <= lastPrefill) return;
@@ -1209,7 +1246,7 @@
     var seen = keep;
     var placed = keep;
     var forms = openForms();
-    threadThumbQuiet = true;
+    threadThumb.quiet = true;
     try {
       var skip = {};
       forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
@@ -1226,7 +1263,7 @@
       syncThreadThumb();
       if (placed !== seen) revealThreadThumb();
     } finally {
-      threadThumbQuiet = false;
+      threadThumb.quiet = false;
     }
     // The write above lands about 15px short. Layout has finished on the next turn.
     if (follow) root.setTimeout(function () {
@@ -1374,10 +1411,10 @@
     document.getElementById('add').addEventListener('click', function () { sender.send({ kind: 'action', id: 'file.import' }); });
     // One thread per file. There is no separate history list, so this scrolls that thread.
     var threadEl = document.getElementById('thread');
-    bindThreadThumb(threadEl);
+    threadThumb.bind();
     threadEl.addEventListener('scroll', function () {
       followLatest = Forsk.nearEnd(threadEl.scrollHeight, threadEl.scrollTop, threadEl.clientHeight);
-      if (threadThumbQuiet) return;
+      if (threadThumb.quiet) return;
       syncThreadThumb();
       revealThreadThumb();
     });
@@ -1411,6 +1448,8 @@
     });
     document.addEventListener('mousedown', function (e) {
       document.documentElement.removeAttribute('data-kbd');
+      if (model && model.help && Forsk.closesSheet(holds('sheet', e.target), holds('help', e.target), holds('slot-menu', e.target)))
+        sender.send({ kind: 'help' });
       if (!openMenuEl()) return;
       if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
       closeMenus(false);

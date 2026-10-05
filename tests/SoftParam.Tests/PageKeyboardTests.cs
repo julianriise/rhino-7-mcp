@@ -64,6 +64,17 @@ public class PageKeyboardTests
         Assert.Equal(slot, r["last"]!["slot"]!.Value<int>());
     }
 
+    /// <summary>A press outside the open ⋯ sheet closes it. Inside it, on ⋯ or in the ⋯ menu it stays.</summary>
+    [Fact]
+    public void APressOutsideTheSheet_ClosesIt()
+    {
+        var engine = PageScript.Load();
+        Assert.Equal("true", engine.Evaluate("String(Forsk.closesSheet(false, false, false))").ToString());
+        Assert.Equal("false", engine.Evaluate("String(Forsk.closesSheet(true, false, false))").ToString());
+        Assert.Equal("false", engine.Evaluate("String(Forsk.closesSheet(false, true, false))").ToString());
+        Assert.Equal("false", engine.Evaluate("String(Forsk.closesSheet(false, false, true))").ToString());
+    }
+
     [Theory]
     [InlineData("meta")]
     [InlineData("meta+shift")] // Slash is Shift+7 on a Norwegian keyboard.

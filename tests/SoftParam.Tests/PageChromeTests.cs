@@ -467,7 +467,12 @@ public class PageChromeTests
         Assert.Contains("aria-hidden=\"true\"", frame);
 
         Assert.Contains("padding: 8px 20px 12px", html);
-        Assert.Equal(1, html.Split("scrollbar-width: none").Length - 1);
+        // The message list and the ⋯ sheet hide the native bar; nothing else does.
+        Assert.Equal(2, html.Split("scrollbar-width: none").Length - 1);
+        var sheetAt = html.IndexOf("#sheet-body {", StringComparison.Ordinal);
+        var sheetCss = html.Substring(sheetAt, html.IndexOf('}', sheetAt) - sheetAt);
+        Assert.Contains("overflow-y: auto", sheetCss);
+        Assert.Contains("scrollbar-width: none", sheetCss);
         Assert.DoesNotContain("scrollbar-gutter", html);
         var native = html.Substring(html.IndexOf("#thread::-webkit-scrollbar", StringComparison.Ordinal), 80);
         Assert.Contains("width: 0", native);
@@ -497,6 +502,7 @@ public class PageChromeTests
         Assert.Contains("thread.scrollTop = thread.scrollHeight", script);
         Assert.Contains("thumb.addEventListener('mousedown'", script);
         Assert.Contains("thumb.addEventListener('wheel'", script);
+        Assert.Contains("overlayThumb('sheet', 'sheet-body', 'sheet-bar', 'sheet-thumb')", script);
         Assert.DoesNotContain("scrollerStyle", script);
         Assert.DoesNotContain("NSWindow", script);
 
