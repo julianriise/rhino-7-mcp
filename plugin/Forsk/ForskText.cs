@@ -141,7 +141,8 @@ namespace RhinoMCPPlugin.Forsk
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
-            ["area.stats"] = "Area statistics",
+            ["area.stats"] = "Area summary",
+            ["area.summary.note"] = "Estimate. Not measured to NS 3940.",
 
             // One-time cards: the question, then the pills.
             ["opening.type.ask"] = "Which {kind} type?",
@@ -190,8 +191,6 @@ namespace RhinoMCPPlugin.Forsk
             ["print.clear.ask"] = "Clear the Forsk layouts and their drawings? The model stays.",
             ["sheets.clear.ask"] = "Clear the sheet cache on S-PLAN and S-ELEV? Print does not use it.",
             ["rooms.list.ask"] = "Rooms in this file",
-            ["area.rooms.ask"] = "Rooms",
-            ["area.rooms.ask.nb"] = "Alle rom",
             ["section.remove.ask"] = "Which section goes?",
             ["section.remove.all"] = "All sections",
             ["pdf.page.ask"] = "{file} has {n} pages. Which is the plan?",

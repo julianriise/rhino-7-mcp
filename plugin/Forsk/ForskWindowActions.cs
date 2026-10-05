@@ -729,7 +729,7 @@ namespace RhinoMCPPlugin.Forsk
             if (review != null) thread.AddCard(review, facts);
             if (string.Equals(tool, "area_stats", StringComparison.Ordinal))
             {
-                var rooms = ForskCards.AreaRooms(envelope, LastUserIsNorwegian(thread));
+                var rooms = ForskCards.AreaSummary(envelope);
                 if (rooms != null) thread.AddCard(rooms, facts);
             }
             if (string.Equals(tool, ForskToolPacks.TakeoffTool, StringComparison.Ordinal))

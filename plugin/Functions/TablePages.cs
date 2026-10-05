@@ -268,9 +268,10 @@ public partial class RhinoMCPFunctions
         path = Path.GetFullPath(path.Trim());
         if (!path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) path += ".csv";
         var inputs = ReadTakeoffInputs(doc);
-        var rooms = ReadAreaStats(doc).Rooms;
+        var areas = ReadAreaStats(doc);
+        var rooms = areas.Rooms;
         var runs = Takeoff.Runs(inputs.Walls, inputs.Openings, inputs.Tol);
-        var text = TakeoffCsv.Write(ReadProjectInfo(doc), rooms, runs, inputs.Openings, inputs.Stairs, DateTime.Now);
+        var text = TakeoffCsv.Write(ReadProjectInfo(doc), rooms, runs, inputs.Openings, inputs.Stairs, DateTime.Now, areas.Gross);
         var folder = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
         File.WriteAllBytes(path, TakeoffCsv.Bytes(text));

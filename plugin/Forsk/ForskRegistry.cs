@@ -271,6 +271,7 @@ namespace RhinoMCPPlugin.Forsk
         static IEnumerable<ForskAction> Candidates(FileFacts f, ForskAction slot1)
         {
             if (f.JustPrinted && f.Picked == Picked.None) yield return Find("export.dwg");
+            if (f.OfferArea && f.HasRooms && f.Picked == Picked.None) yield return Find("area.stats");
             // Walls with doors and windows: Add detail is the one thing for them all.
             if (f.Picked == Picked.Other) yield return Find("detail.add");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");

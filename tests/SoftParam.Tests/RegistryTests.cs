@@ -291,6 +291,22 @@ public class RegistryTests
         Assert.DoesNotContain(ForskRegistry.Bar(picked).Context, a => a.Id == "export.dwg");
     }
 
+    /// <summary>After Generate 3D or area statistics, Area summary is the next chip. Print stays slot 1.</summary>
+    [Fact]
+    public void AreaSummary_IsTheNextChip_AfterGenerateOrAreas()
+    {
+        Assert.Equal("Area summary", ForskRegistry.Find("area.stats")!.Label);
+        var facts = FileClassifier.Read(Docs.Of(Docs.House()).With(d => d.OfferArea = true));
+        Assert.True(facts.OfferArea);
+        Assert.Equal("file.print", ForskRegistry.Bar(facts).Slot1.Id);
+        Assert.Equal("area.stats", ForskRegistry.Bar(facts).Context[0].Id);
+        Assert.DoesNotContain(ForskRegistry.Bar(Docs.Facts("house")).Context, a => a.Id == "area.stats");
+        var picked = FileClassifier.Read(Docs.Of(Docs.House(wallSelected: true)).With(d => d.OfferArea = true));
+        Assert.DoesNotContain(ForskRegistry.Bar(picked).Context, a => a.Id == "area.stats");
+        var empty = FileClassifier.Read(Docs.Of().With(d => d.OfferArea = true));
+        Assert.DoesNotContain(ForskRegistry.Bar(empty).Slots, a => a.Id == "area.stats");
+    }
+
     /// <summary>
     /// Add detail sits with the suggestions for one wall, door or window, and
     /// stays the bar's first pill for a mixed pick and the second for two walls.

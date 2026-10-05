@@ -104,6 +104,8 @@ public static class AreaStats
         public List<Group> Floors = new List<Group>();
         /// <summary>By use, largest area first.</summary>
         public List<Group> Uses = new List<Group>();
+        /// <summary>By forsk:room_type. Largest first, unassigned last. Key is the stored type.</summary>
+        public List<Group> Types = new List<Group>();
         /// <summary>Set by ApplyGross. Null until then, so a net-only summary stays as it was.</summary>
         public List<FloorGross> Gross;
         public double NetMm2;
@@ -189,6 +191,7 @@ public static class AreaStats
         result.Rooms.Sort(BySize);
         result.Floors = Groups(result.Rooms, line => line.Level, ByLevel);
         result.Uses = Groups(result.Rooms, line => line.Use, ByArea);
+        result.Types = TypeGroups(result.Rooms);
         result.Summary = Summarize(result);
         return result;
     }
@@ -210,6 +213,44 @@ public static class AreaStats
         }
         groups.Sort(order);
         return groups;
+    }
+
+    /// <summary>Room types by area, with unassigned last even when it is the largest.</summary>
+    static List<Group> TypeGroups(List<RoomLine> rooms)
+    {
+        var groups = Groups(rooms, line => RoomTypes.Read(line.RoomType), ByArea);
+        var open = groups.Find(g => g.Key == RoomTypes.Unassigned);
+        if (open == null || groups.Count < 2) return groups;
+        groups.Remove(open);
+        groups.Add(open);
+        return groups;
+    }
+
+    /// <summary>
+    /// The card: each floor's BRA and BTA, then each room type in English, unassigned last, then the total.
+    /// A floor without both figures shows its net. Every figure is an estimate. English, one decimal, a point.
+    /// </summary>
+    public static List<string> Breakdown(Result result)
+    {
+        var rows = new List<string>();
+        if (result == null || result.Rooms.Count == 0) return rows;
+        foreach (var floor in result.Floors)
+        {
+            var name = FloorName(floor.Key, false);
+            FloorGross gross = null;
+            if (result.Gross != null)
+                foreach (var item in result.Gross)
+                    if (item.Level == floor.Key) gross = item;
+            if (gross?.BraMm2 != null && gross.BtaMm2 != null)
+                rows.Add(name + " · BRA " + OpeningTypes.AreaText(gross.BraMm2.Value, false)
+                    + " · BTA " + OpeningTypes.AreaText(gross.BtaMm2.Value, false));
+            else
+                rows.Add(name + " · net " + OpeningTypes.AreaText(floor.AreaMm2, false));
+        }
+        foreach (var type in result.Types)
+            rows.Add(RoomTypes.English(type.Key) + " · " + OpeningTypes.AreaText(type.AreaMm2, false));
+        rows.Add("Total · " + OpeningTypes.AreaText(result.NetMm2, false));
+        return rows;
     }
 
     /// <summary>
@@ -491,6 +532,7 @@ public static class AreaStats
             ["floors"] = floors,
             ["uses"] = uses,
             ["rooms"] = rooms,
+            ["breakdown"] = new JArray(Breakdown(result)),
             ["more"] = 0,
             ["omitted"] = omitted
         };

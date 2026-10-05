@@ -580,7 +580,7 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskArea
     {
         public const string Bias = "Turn bias: Area. Call area_stats. "
-            + "The window prints that summary, and the room list on the card under it. "
+            + "The window prints that summary, and a card under it with BRA and BTA per floor, then each room type, then the total. "
             + "Do not repeat the net total, the floors, or the rooms. "
             + "No coordinates, no ids. Do not invent a figure. "
             + "No rooms: the summary offers rooms_detect, which finds them from the walls. "

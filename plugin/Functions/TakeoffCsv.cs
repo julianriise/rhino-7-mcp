@@ -32,9 +32,13 @@ public static class TakeoffCsv
         public Stairs.Flight Flight;
     }
 
-    /// <summary>The file's text. The caller writes Bytes(text): UTF-8 with its BOM.</summary>
+    /// <summary>
+    /// The file's text. The caller writes Bytes(text): UTF-8 with its BOM.
+    /// gross, when passed, appends BRA and BTA rows after the takeoff rows, in the same columns. One floor's rows are its totals.
+    /// More than one floor also appends a total row. Null leaves the table as it was.
+    /// </summary>
     public static string Write(ProjectInfo.Record info, IList<AreaStats.RoomLine> rooms, IList<Takeoff.Run> runs,
-        IList<Schedules.Opening> openings, IList<Stair> stairs, DateTime exported)
+        IList<Schedules.Opening> openings, IList<Stair> stairs, DateTime exported, IList<AreaStats.FloorGross> gross = null)
     {
         var text = new StringBuilder();
         void Line(IEnumerable<string> fields) => text.Append(string.Join(",", fields.Select(Quote))).Append("\r\n");
@@ -105,7 +109,45 @@ public static class TakeoffCsv
             Set(row, "Going (mm)", Whole(flight.Going));
             Line(row);
         }
+        AppendAreas(Line, Row, Set, gross);
         return text.ToString();
+    }
+
+    /// <summary>BRA and BTA after the takeoff rows. The header row is untouched.</summary>
+    static void AppendAreas(Action<IEnumerable<string>> line, Func<string, string[]> row, Action<string[], string, string> set, IList<AreaStats.FloorGross> gross)
+    {
+        if (gross == null) return;
+        double bra = 0, bta = 0;
+        var braFloors = 0;
+        var btaFloors = 0;
+        void Area(string name, string type, string level, double mm2)
+        {
+            var fields = row("Area");
+            set(fields, "Name", name);
+            set(fields, "Type", type);
+            if (!string.IsNullOrEmpty(level)) set(fields, "Level", level);
+            set(fields, "Area (m²)", Two(mm2 / 1e6));
+            line(fields);
+        }
+        foreach (var floor in gross)
+        {
+            if (floor == null) continue;
+            var level = string.IsNullOrWhiteSpace(floor.Level) ? "0" : floor.Level.Trim();
+            if (floor.BtaMm2 != null)
+            {
+                Area("Gross area (BTA)", "BTA", level, floor.BtaMm2.Value);
+                bta += floor.BtaMm2.Value;
+                btaFloors++;
+            }
+            if (floor.BraMm2 != null)
+            {
+                Area("Usable area (BRA)", "BRA", level, floor.BraMm2.Value);
+                bra += floor.BraMm2.Value;
+                braFloors++;
+            }
+        }
+        if (btaFloors > 1) Area("Total gross area (BTA)", "BTA", "", bta);
+        if (braFloors > 1) Area("Total usable area (BRA)", "BRA", "", bra);
     }
 
     /// <summary>The file's bytes: the UTF-8 BOM (EF BB BF), then the text.</summary>

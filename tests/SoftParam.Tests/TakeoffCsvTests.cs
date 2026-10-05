@@ -240,6 +240,49 @@ public class TakeoffCsvTests
     }
 
     [Fact]
+    public void Areas_AppendAfterTheRows_AndKeepTheHeaderAndBom()
+    {
+        var info = ProjectInfoTests.Read(ProjectInfoTests.Smoke);
+        var rooms = Rooms().Rooms;
+        var runs = Takeoff.Runs(Walls(), Openings(), Tol);
+        var openings = Openings();
+        var stairs = StairList();
+        var plain = TakeoffCsv.Write(info, rooms, runs, openings, stairs, Exported);
+        Assert.Equal(plain, TakeoffCsv.Write(info, rooms, runs, openings, stairs, Exported, null));
+        Assert.Equal(plain, TakeoffCsv.Write(info, rooms, runs, openings, stairs, Exported, new List<AreaStats.FloorGross>()));
+
+        string With(IList<AreaStats.FloorGross> gross) =>
+            TakeoffCsv.Write(info, rooms, runs, openings, stairs, Exported, gross);
+        var one = With(new List<AreaStats.FloorGross>
+        {
+            null,
+            new() { Level = " ", BtaMm2 = 80_000_000, BraMm2 = 73_000_000 }
+        });
+        Assert.Equal(Table(plain)[0], Table(one)[0]);
+        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, TakeoffCsv.Bytes(one).Take(3));
+        var before = Table(plain).Skip(1).Select(l => l.Split(',')[0]);
+        var kinds = Table(one).Skip(1).Select(l => l.Split(',')[0]).ToList();
+        Assert.Equal(before, kinds.TakeWhile(k => k != "Area"));
+        var areas = Table(one).Where(l => l.StartsWith("Area,")).Select(Fields).ToList();
+        Assert.Equal(new[] { "Gross area (BTA)", "Usable area (BRA)" }, areas.Select(a => a["Name"]));
+        Assert.Equal(new[] { "BTA", "BRA" }, areas.Select(a => a["Type"]));
+        Assert.Equal(new[] { "0", "0" }, areas.Select(a => a["Level"]));
+        Assert.Equal(new[] { "80.00", "73.00" }, areas.Select(a => a["Area (m²)"]));
+
+        var two = Table(With(new List<AreaStats.FloorGross>
+        {
+            new() { Level = "0", BtaMm2 = 80_000_000, BraMm2 = 73_000_000 },
+            new() { Level = "1", BtaMm2 = 20_000_000, BraMm2 = 18_000_000 }
+        })).Where(l => l.StartsWith("Area,")).Select(Fields).ToList();
+        Assert.Equal(new[] { "0", "0", "1", "1", "", "" }, two.Select(a => a["Level"]));
+        Assert.Equal(new[] { "BTA", "BRA", "BTA", "BRA", "BTA", "BRA" }, two.Select(a => a["Type"]));
+        Assert.Equal("Total gross area (BTA)", two[4]["Name"]);
+        Assert.Equal("100.00", two[4]["Area (m²)"]);
+        Assert.Equal("Total usable area (BRA)", two[5]["Name"]);
+        Assert.Equal("91.00", two[5]["Area (m²)"]);
+    }
+
+    [Fact]
     public void TheReceipt_CountsWhatWasWritten()
     {
         Assert.Equal("✓ Exported takeoff CSV · 6 rooms, 14 walls, 5 doors and windows, 1 stair · Garage Takeoff.csv",

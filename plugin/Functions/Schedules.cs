@@ -500,6 +500,13 @@ public static class Schedules
         Row("uses", SheetLang.Pick(norwegian, "Net area by use", "Netto per bruk"), "");
         foreach (var use in result.Uses)
             Row("use-" + use.Key, AreaStats.UseLabel(use.Key, norwegian), OpeningTypes.AreaText(use.AreaMm2, norwegian));
+        if (result.Types != null && result.Types.Count > 0)
+        {
+            Row("types", SheetLang.Pick(norwegian, "By room type", "Etter romtype"), "");
+            foreach (var type in result.Types)
+                Row("type-" + type.Key, RoomTypes.English(type.Key), OpeningTypes.AreaText(type.AreaMm2, norwegian));
+        }
+        Row("total", SheetLang.Pick(norwegian, "Total", "Sum"), OpeningTypes.AreaText(result.NetMm2, norwegian));
         var gap = missing.Count == 0 ? "" : " " + string.Join(", ", missing)
             + SheetLang.Pick(norwegian, ": gross area (BTA) and usable area (BRA) are missing.", ": BRA og BTA mangler.");
         table.Note = (norwegian ? AreaNoteNb : AreaNote) + gap;

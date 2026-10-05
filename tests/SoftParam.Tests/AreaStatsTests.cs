@@ -471,26 +471,26 @@ public class AreaStatsTests
 
         var oneFloor = AreaStats.Compute(new[]
         {
-            Room("a", "Open Office", "0", 20_000_000),
-            Room("b", "Rom", "0", 5_000_000)
+            Room("a", "Open Office", "0", 20_000_000, roomType: RoomTypes.Office),
+            Room("b", "Rom", "0", 5_000_000),
+            Room("c", "Sov", "0", 12_000_000, roomType: RoomTypes.Living)
         });
-        var card = ForskCards.AreaRooms(new JObject { ["status"] = "success", ["result"] = AreaStats.ToJson(oneFloor) });
-        Assert.Equal("Rooms", card.Question);
-        Assert.Equal(new[] { "Open Office 20,0 m²", "Rom 5,0 m²" }, card.Rows);
+        var card = ForskCards.AreaSummary(new JObject { ["status"] = "success", ["result"] = AreaStats.ToJson(oneFloor) });
+        Assert.Equal("Area summary", card.Question);
+        Assert.Equal("Estimate. Not measured to NS 3940.", card.Note);
+        Assert.Equal(new[]
+        {
+            "Ground floor · net 37.0 m²",
+            "Office · 20.0 m²",
+            "Living · 12.0 m²",
+            "Unassigned · 5.0 m²",
+            "Total · 37.0 m²"
+        }, card.Rows);
+        Assert.Equal(RoomTypes.Unassigned, oneFloor.Types.Last().Key);
         Assert.DoesNotContain("Open Office", oneFloor.Summary);
         Assert.DoesNotContain("Rom ", oneFloor.Summary);
-        Assert.Null(ForskCards.AreaRooms(null));
-        Assert.Null(ForskCards.AreaRooms(new JObject { ["status"] = "error" }));
-        ForskSpeech.Use("hvor stor er leiligheten");
-        try
-        {
-            Assert.Equal("Alle rom", ForskCards.AreaRooms(
-                new JObject { ["status"] = "success", ["result"] = AreaStats.ToJson(oneFloor) }, true).Question);
-        }
-        finally
-        {
-            ForskSpeech.Clear();
-        }
+        Assert.Null(ForskCards.AreaSummary(null));
+        Assert.Null(ForskCards.AreaSummary(new JObject { ["status"] = "error" }));
         Assert.Contains("U. etasje: 8,0 m²", named.Text);
         Assert.Contains("By use:", named.Text);
     }
@@ -520,8 +520,30 @@ public class AreaStatsTests
         Assert.DoesNotContain(bar.Slots, a => a.Id == "area.stats");
     }
 
-    static AreaStats.Room Room(string id, string name, string level, double areaMm2, string use = null)
+    [Fact]
+    public void Breakdown_IsBraBtaThenRoomTypes_WithUnassignedLast()
     {
-        return new AreaStats.Room { Id = id, Name = name, Level = level, AreaMm2 = areaMm2, Use = use };
+        var result = AreaStats.Compute(new[]
+        {
+            Room("a", "Rom", "0", 30_000_000),
+            Room("b", "Kjøkken", "0", 10_000_000, roomType: RoomTypes.Kitchen),
+            Room("c", "Sov", "1", 8_000_000, roomType: RoomTypes.Bedroom)
+        });
+        Assert.Equal(new[] { RoomTypes.Kitchen, RoomTypes.Bedroom, RoomTypes.Unassigned }, result.Types.Select(t => t.Key));
+        AreaStats.ApplyGross(result, new[] { Wall("0", 200, Rect(0, 0, 10000, 8000)) }, 1);
+        Assert.Equal(new[]
+        {
+            "Ground floor · BRA 73.0 m² · BTA 80.0 m²",
+            "1st floor · net 8.0 m²",
+            "Kitchen · 10.0 m²",
+            "Bedroom · 8.0 m²",
+            "Unassigned · 30.0 m²",
+            "Total · 48.0 m²"
+        }, AreaStats.Breakdown(result));
+    }
+
+    static AreaStats.Room Room(string id, string name, string level, double areaMm2, string use = null, string roomType = null)
+    {
+        return new AreaStats.Room { Id = id, Name = name, Level = level, AreaMm2 = areaMm2, Use = use, RoomType = roomType };
     }
 }

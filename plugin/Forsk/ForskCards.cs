@@ -526,36 +526,26 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// The rooms under an area answer, one row each. The chat line does not
-        /// list them. Null when the tool failed or there are no rooms.
+        /// BRA and BTA per floor, then each room type, then the total. English.
+        /// Null when the tool failed or there are no rooms. The chat line stays the short summary.
         /// </summary>
-        public static CardSpec AreaRooms(JObject envelope, bool nb = false)
+        public static CardSpec AreaSummary(JObject envelope)
         {
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
-            var result = envelope["result"] as JObject;
-            var rooms = result?["rooms"] as JArray;
-            if (rooms == null || rooms.Count == 0) return null;
-            var many = (result["floors"] as JArray)?.Count > 1;
-            var card = new CardSpec
+            var rows = (envelope?["result"]?["breakdown"] as JArray)?
+                .Select(row => row?.ToString())
+                .Where(row => !string.IsNullOrWhiteSpace(row))
+                .ToList();
+            if (rows == null || rows.Count == 0) return null;
+            return new CardSpec
             {
-                Kind = "area.rooms",
-                Question = ForskText.Get(nb ? "area.rooms.ask.nb" : "area.rooms.ask"),
-                Rows = new List<string>(),
+                Kind = "area.summary",
+                Question = ForskText.Get("area.stats"),
+                Rows = rows,
+                Note = ForskText.Get("area.summary.note"),
                 Depends = "model",
                 Pills = { new CardPill("done", ForskText.Get("word.done")) }
             };
-            foreach (var token in rooms)
-            {
-                var room = token as JObject;
-                var name = room?["name"]?.ToString();
-                var area = room?["area"]?.ToString();
-                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(area)) continue;
-                var level = room["level"]?.ToString();
-                card.Rows.Add(many && !string.IsNullOrWhiteSpace(level)
-                    ? name + ", " + level + ", " + area
-                    : name + " " + area);
-            }
-            return card.Rows.Count == 0 ? null : card;
         }
 
         /// <summary>The takeoff under its receipt: one row per line. Null when the tool failed or found nothing.</summary>

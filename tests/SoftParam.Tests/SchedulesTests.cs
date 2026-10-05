@@ -322,8 +322,12 @@ public class SchedulesTests
         Assert.Equal(new[] { "Ground floor", "" }, table.Rows[0]);
         Assert.Equal(new[] { "Net area", OpeningTypes.AreaText(result.Floors[0].AreaMm2, false) }, table.Rows[block.Count - 1]);
         Assert.Equal(new[] { "Net area by use", "" }, table.Rows[block.Count]);
-        var uses = table.Rows.Skip(block.Count + 1).ToList();
+        var after = table.Rows.Skip(block.Count + 1).ToList();
+        var typeAt = after.FindIndex(r => r[0] == "By room type");
+        var uses = typeAt < 0 ? after : after.Take(typeAt).ToList();
         Assert.Equal(result.Uses.Select(u => AreaStats.UseLabel(u.Key)), uses.Select(r => r[0]));
+        Assert.Equal("Unassigned", table.Rows[table.Rows.Count - 2][0]);
+        Assert.Equal(new[] { "Total", OpeningTypes.AreaText(result.NetMm2, false) }, table.Rows[table.Rows.Count - 1]);
         Assert.Equal(result.Uses.Select(u => OpeningTypes.AreaText(u.AreaMm2, false)), uses.Select(r => r[1]));
         var areas = result.Uses.Select(u => u.AreaMm2).ToList();
         Assert.Equal(areas.OrderByDescending(a => a), areas);
@@ -345,7 +349,7 @@ public class SchedulesTests
             new AreaStats.FloorGross { Level = "1", Note = "no wall outline on this floor" }
         };
         var table = Schedules.AreaTable(result);
-        Assert.Equal(new[] { "floor-0", "bta-0", "bra-0", "net-0", "floor-1", "net-1", "uses", "use-Stue", "use-Kontor" }, table.Ids);
+        Assert.Equal(new[] { "floor-0", "bta-0", "bra-0", "net-0", "floor-1", "net-1", "uses", "use-Stue", "use-Kontor", "types", "type-unassigned", "total" }, table.Ids);
         Assert.Equal(new[] { "Gross area (BTA)", "25.0 m²" }, table.Rows[1]);
         Assert.Equal(new[] { "Usable area (BRA)", "22.0 m²" }, table.Rows[2]);
         Assert.Equal(new[] { "Net area", "20.0 m²" }, table.Rows[3]);
