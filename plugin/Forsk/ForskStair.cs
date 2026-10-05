@@ -63,7 +63,7 @@ namespace RhinoMCPPlugin.Forsk
                 switch (first.Get())
                 {
                     case GetResult.Point:
-                        foot = StairDraw.SnapFoot(faces, ToPt(first.Point()), setup.Width, first.Reach, Shift());
+                        foot = StairDraw.SnapFoot(faces, ToPt(first.Point()), first.Reach, Shift());
                         break;
                     case GetResult.Option:
                         break;
@@ -74,8 +74,7 @@ namespace RhinoMCPPlugin.Forsk
             while (true)
             {
                 setup.Width = width.CurrentValue;
-                // The width may have changed after the foot: a stair against a wall stays flush.
-                foot = Refoot(foot, setup.Width);
+                // The foot stays on the face. Plan shifts it by half the current width when the climb runs along the face.
                 var way = new WayUp(foot, setup, width);
                 var result = way.Get();
                 double? typed = null;
@@ -86,21 +85,6 @@ namespace RhinoMCPPlugin.Forsk
                 if (draft.Valid) return draft;
                 RhinoApp.WriteLine(draft.Why);
             }
-        }
-
-        static StairDraw.FootHit Refoot(StairDraw.FootHit foot, double width)
-        {
-            if (foot.Face == null) return foot;
-            var d = WallDraw.Unit(foot.Face.A, foot.Face.B);
-            // The foot's distance from the face line was half the old width; keep its place along the face.
-            var along = (foot.Foot.X - foot.Face.A.X) * d.X + (foot.Foot.Y - foot.Face.A.Y) * d.Y;
-            return new StairDraw.FootHit
-            {
-                Face = foot.Face,
-                Foot = new Pt(
-                    WallDraw.Round(foot.Face.A.X + d.X * along + foot.Face.Free.X * width / 2.0),
-                    WallDraw.Round(foot.Face.A.Y + d.Y * along + foot.Face.Free.Y * width / 2.0))
-            };
         }
 
         static JObject Store(RhinoDoc doc, StairDraw.Draft draft, bool ownUndo)
@@ -159,7 +143,7 @@ namespace RhinoMCPPlugin.Forsk
             protected override void OnDynamicDraw(GetPointDrawEventArgs e)
             {
                 Reach = ReachAt(e.Viewport, e.CurrentPoint);
-                var hit = StairDraw.SnapFoot(_faces, ToPt(e.CurrentPoint), _setup.Width, Reach, Shift());
+                var hit = StairDraw.SnapFoot(_faces, ToPt(e.CurrentPoint), Reach, Shift());
                 e.Display.DrawPoint(ToPoint(hit.Foot), PointStyle.X, 6, Blue);
                 if (hit.Face != null)
                     e.Display.DrawLine(ToPoint(hit.Face.A), ToPoint(hit.Face.B), Blue, 3);

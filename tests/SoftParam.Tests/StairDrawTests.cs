@@ -55,39 +55,95 @@ public class StairDrawTests
     }
 
     [Fact]
-    public void Foot_NearAFace_SitsFlushAgainstIt_HalfTheWidthOut()
+    public void Foot_NearAFace_SitsOnTheFace_InnerAndOuter()
     {
-        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 900, Reach, false);
+        // South inner face is y = 100. The marker is the start, so it is on the face, not half a width into the room.
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
         Assert.NotNull(hit.Face);
-        Assert.Equal(new Pt(1500, 550), hit.Foot);
-        var wide = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 1200, Reach, false);
-        Assert.Equal(new Pt(1500, 700), wide.Foot);
+        Assert.Equal(new Pt(1500, 100), hit.Foot);
+        // Outer south face is y = -100. Same rule: on that face, on its free side of the wall.
+        var outer = StairDraw.SnapFoot(Faces(), new Pt(1500, -40), Reach, false);
+        Assert.Equal(new Pt(1500, -100), outer.Foot);
+        Assert.True(outer.Face.Free.Y < 0);
     }
 
     [Fact]
     public void Foot_NearACorner_LocksToTheFacesEnd()
     {
-        var hit = StairDraw.SnapFoot(Faces(), new Pt(160, 140), 900, Reach, false);
-        Assert.Equal(new Pt(100, 550), hit.Foot);
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(160, 140), Reach, false);
+        Assert.Equal(new Pt(100, 100), hit.Foot);
         // Nearer the east face than the south one: the stair stands against the east wall, at its south end.
-        var far = StairDraw.SnapFoot(Faces(), new Pt(3880, 160), 900, Reach, false);
-        Assert.Equal(new Pt(3450, 100), far.Foot);
+        var far = StairDraw.SnapFoot(Faces(), new Pt(3880, 160), Reach, false);
+        Assert.Equal(new Pt(3900, 100), far.Foot);
     }
 
     [Fact]
-    public void Foot_OnTheWallSide_StillComesOutOnTheFreeSide()
+    public void Foot_InsideTheWall_ComesOutOnTheRoomFace()
     {
-        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 40), 900, Reach, false);
-        Assert.Equal(new Pt(1500, 550), hit.Foot);
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 40), Reach, false);
+        Assert.Equal(new Pt(1500, 100), hit.Foot);
+        Assert.True(hit.Face.Free.Y > 0);
     }
 
     [Fact]
     public void Foot_OutOfReach_IsOnTheGrid_ShiftOnTheMillimetre()
     {
-        var free = StairDraw.SnapFoot(Faces(), new Pt(2003.4, 1498.7), 900, Reach, false);
+        var free = StairDraw.SnapFoot(Faces(), new Pt(2003.4, 1498.7), Reach, false);
         Assert.Null(free.Face);
         Assert.Equal(new Pt(2000, 1500), free.Foot);
-        Assert.Equal(new Pt(2003, 1499), StairDraw.SnapFoot(Faces(), new Pt(2003.4, 1498.7), 900, Reach, true).Foot);
+        Assert.Equal(new Pt(2003, 1499), StairDraw.SnapFoot(Faces(), new Pt(2003.4, 1498.7), Reach, true).Foot);
+    }
+
+    [Fact]
+    public void AlongTheFace_TheLongEdgeLiesOnIt_Once_OnTheFreeSide()
+    {
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
+        var draft = StairDraw.Plan(Setup(), hit, new Pt(4000, 120), false);
+        Assert.Equal("right", draft.Against);
+        // Centre is half of 900 off the face. The south edge, toward the wall, is the face itself.
+        Assert.Equal(550, draft.Foot.Y, 3);
+        Assert.Equal(100, draft.Footprint.Min(p => p.Y), 3);
+        Assert.Equal(1000, draft.Footprint.Max(p => p.Y), 3);
+    }
+
+    [Fact]
+    public void LeavingTheFace_TheStartEdgeLiesOnIt()
+    {
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
+        var draft = StairDraw.Plan(Setup(), hit, new Pt(1500, 2500), false);
+        Assert.Null(draft.Against);
+        Assert.Equal(100, draft.Foot.Y, 3);
+        // The first riser is the edge at the foot, across the width, on the face. No half-width gap.
+        var start = draft.Footprint.Where(p => Math.Abs(p.Y - draft.Foot.Y) < 1).ToList();
+        Assert.Equal(2, start.Count);
+        Assert.All(start, p => Assert.Equal(100, p.Y, 3));
+    }
+
+    [Fact]
+    public void ARotatedWall_SnapsTheSameWay_OnEitherFace()
+    {
+        var records = new List<List<List<Pt>>>();
+        var segment = Assert.Single(WallDraw.Plan(new List<Pt> { new Pt(0, 0), new Pt(2000, 2000) }, false, 200));
+        Assert.True(WallEdit.TryAdd(records, segment.From, segment.To, 200, Tol, out var added, out var why, outline: segment.Ring), why);
+        records.Add(added.Rings);
+        var faces = StairDraw.Faces(records);
+        foreach (var face in faces.Where(f => f.Length > 500))
+        {
+            var mid = Mid(face);
+            var raw = new Pt(mid.X + face.Free.X * 40, mid.Y + face.Free.Y * 40);
+            var hit = StairDraw.SnapFoot(faces, raw, Reach, false);
+            Assert.True(LineDist(hit.Foot, hit.Face) < 1, $"foot {hit.Foot.X},{hit.Foot.Y} off the face");
+            var len = Math.Max(hit.Face.Length, 1);
+            var along = new Pt((hit.Face.B.X - hit.Face.A.X) / len, (hit.Face.B.Y - hit.Face.A.Y) / len);
+            var beside = StairDraw.Plan(Setup(), hit, new Pt(hit.Foot.X + along.X * 1500, hit.Foot.Y + along.Y * 1500), false);
+            Assert.NotNull(beside.Against);
+            Assert.True(beside.Footprint.Min(p => LineDist(p, hit.Face)) < 1);
+            var away = StairDraw.Plan(Setup(), hit, new Pt(hit.Foot.X + hit.Face.Free.X * 2000, hit.Foot.Y + hit.Face.Free.Y * 2000), false);
+            Assert.Null(away.Against);
+            Assert.True(LineDist(away.Foot, hit.Face) < 1);
+            Assert.All(away.Footprint.Where(p => Math.Abs((p.X - away.Foot.X) * away.Dir.X + (p.Y - away.Foot.Y) * away.Dir.Y) < 1),
+                p => Assert.True(LineDist(p, hit.Face) < 1));
+        }
     }
 
     // ---- the way up ----
@@ -95,7 +151,7 @@ public class StairDrawTests
     [Fact]
     public void Direction_AlongTheFace_WithinTenDegrees_EitherWay()
     {
-        var face = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 900, Reach, false).Face;
+        var face = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false).Face;
         var foot = new Pt(1500, 550);
         var east = StairDraw.Direction(foot, new Pt(3000, 620), face, false, out var along);
         Assert.True(along);
@@ -108,7 +164,7 @@ public class StairDrawTests
     [Fact]
     public void Direction_AwayFromTheFace_TakesThe15DegreeStep_ShiftIsFree()
     {
-        var face = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 900, Reach, false).Face;
+        var face = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false).Face;
         var foot = new Pt(1500, 550);
         var raw = new Pt(foot.X + 1000 * Math.Cos(40 * Math.PI / 180), foot.Y + 1000 * Math.Sin(40 * Math.PI / 180));
         var snapped = StairDraw.Direction(foot, raw, face, false, out var along);
@@ -198,12 +254,12 @@ public class StairDrawTests
     [Fact]
     public void Against_IsTheSideTheWallIsOn_LookingUp()
     {
-        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 900, Reach, false);
-        var east = StairDraw.Plan(Setup(), hit, new Pt(3500, 560), false);
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
+        var east = StairDraw.Plan(Setup(), hit, new Pt(3500, 150), false);
         Assert.Equal("right", east.Against);
-        var west = StairDraw.Plan(Setup(), hit, new Pt(500, 560), false);
+        var west = StairDraw.Plan(Setup(), hit, new Pt(500, 150), false);
         Assert.Equal("left", west.Against);
-        var off = StairDraw.Plan(Setup(), hit, new Pt(1500 + 2000, 550 + 2000), false);
+        var off = StairDraw.Plan(Setup(), hit, new Pt(1500 + 2000, 100 + 2000), false);
         Assert.Null(off.Against);
     }
 
@@ -234,7 +290,7 @@ public class StairDrawTests
     [Fact]
     public void TheDrawnStair_WritesTheRecordAddStairWrites()
     {
-        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), 900, Reach, false);
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
         var draft = StairDraw.Plan(Setup(), hit, new Pt(6200, 560), false);
         Assert.True(draft.Valid, draft.Why);
         var call = StairDraw.ToolParams(draft);
@@ -314,6 +370,17 @@ public class StairDrawTests
     }
 
     static bool Near(Pt p, double x, double y) => Math.Abs(p.X - x) < 1e-6 && Math.Abs(p.Y - y) < 1e-6;
+
+    /// <summary>Distance from a point to the infinite line of a face.</summary>
+    static double LineDist(Pt p, StairDraw.Face f)
+    {
+        var len = Math.Max(f.Length, 1e-9);
+        var ux = (f.B.X - f.A.X) / len;
+        var uy = (f.B.Y - f.A.Y) / len;
+        var vx = p.X - f.A.X;
+        var vy = p.Y - f.A.Y;
+        return Math.Abs(vx * -uy + vy * ux);
+    }
 
     static Pt Mid(StairDraw.Face f) => new Pt((f.A.X + f.B.X) / 2, (f.A.Y + f.B.Y) / 2);
 

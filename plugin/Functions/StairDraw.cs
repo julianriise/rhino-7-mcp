@@ -10,7 +10,9 @@ namespace RhinoMCPPlugin.Functions;
 /// Draw stair, pure: the foot and the end the mouse shows become the straight
 /// stair add_stair makes. The rise is the floor to floor height, so the riser
 /// count is fixed (ceil(rise / 180)) and the drawn length sets the going. The
-/// foot snaps flush to a wall face, the climb to the face's direction, then to
+/// foot sits on a wall face. When the climb runs along that face the long edge
+/// is shifted flush onto it, on the free side; when the climb leaves the face
+/// the start edge stays on it. The climb snaps to the face's direction, then to
 /// 15 degree steps. The plan symbol is Stairs.PlanSymbol, the same marks the
 /// print draws. No RhinoCommon.
 /// </summary>
@@ -90,11 +92,12 @@ public static class StairDraw
     }
 
     /// <summary>
-    /// The foot. Near a wall face it sits flush against it, half the width
-    /// out from the face on the free side, and locks to the face's end when
-    /// that is within reach (a corner). Else the point on the 10 mm grid.
+    /// The foot. Near a wall face it sits on the face, and locks to the face's
+    /// end when that is within reach (a corner). Else the point on the 10 mm
+    /// grid. No half-width shift here: that belongs to the long edge, and only
+    /// once the climb is known to run along the face.
     /// </summary>
-    public static FootHit SnapFoot(IList<Face> faces, Pt raw, double width, double reach, bool shift)
+    public static FootHit SnapFoot(IList<Face> faces, Pt raw, double reach, bool shift)
     {
         Face best = null;
         var bestPoint = raw;
@@ -119,7 +122,7 @@ public static class StairDraw
         return new FootHit
         {
             Face = best,
-            Foot = new Pt(WallDraw.Round(bestPoint.X + best.Free.X * width / 2.0), WallDraw.Round(bestPoint.Y + best.Free.Y * width / 2.0))
+            Foot = new Pt(WallDraw.Round(bestPoint.X), WallDraw.Round(bestPoint.Y))
         };
     }
 
@@ -155,11 +158,20 @@ public static class StairDraw
     /// </summary>
     public static Draft Plan(Setup setup, FootHit foot, Pt raw, bool shift, double? typedRun = null)
     {
-        var draft = new Draft { Foot = foot.Foot };
-        var dir = Direction(foot.Foot, raw, foot.Face, shift, out var along);
-        draft.Dir = dir;
-        draft.Against = along ? Against(foot.Face, dir) : null;
-        var drawn = typedRun ?? Math.Max(0, (raw.X - foot.Foot.X) * dir.X + (raw.Y - foot.Foot.Y) * dir.Y);
+        var origin = foot.Foot;
+        var dir = Direction(origin, raw, foot.Face, shift, out var along);
+        // Along the face, the long edge is the one being placed: one half-width
+        // onto the free side puts that edge on the face. Leaving the face, the
+        // start edge is the one being placed, and the foot is already on it.
+        if (along && foot.Face != null)
+        {
+            var half = setup.Width / 2.0;
+            origin = new Pt(
+                WallDraw.Round(origin.X + foot.Face.Free.X * half),
+                WallDraw.Round(origin.Y + foot.Face.Free.Y * half));
+        }
+        var draft = new Draft { Foot = origin, Dir = dir, Against = along ? Against(foot.Face, dir) : null };
+        var drawn = typedRun ?? Math.Max(0, (raw.X - origin.X) * dir.X + (raw.Y - origin.Y) * dir.Y);
         Stairs.Flight flight;
         try
         {
@@ -176,8 +188,8 @@ public static class StairDraw
         draft.Flight = flight;
         draft.Spec = new Stairs.Spec
         {
-            X = foot.Foot.X,
-            Y = foot.Foot.Y,
+            X = origin.X,
+            Y = origin.Y,
             Dx = dir.X + 0.0,
             Dy = dir.Y + 0.0,
             Width = flight.Width,
