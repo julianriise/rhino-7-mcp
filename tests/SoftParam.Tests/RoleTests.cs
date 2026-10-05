@@ -207,6 +207,50 @@ public class RoleTests
         Assert.Null(thread.Items[2]["mark"]);
         Assert.Null(thread.Items[0]["mark"]);
         Assert.Null(thread.TurnMark);
+        Assert.Equal("Modeller", thread.Shown);
+        Assert.Null(thread.ToJson()["turn"]);
+        Assert.Equal("Modeller", thread.ToJson()["shown"]!.ToString());
+    }
+
+    [Fact]
+    public void ATurn_NamesItsRoleBeforeTheReply()
+    {
+        var thread = new DocThread { Serial = 1 };
+        thread.Add("user", "Generate 3D");
+        thread.BeginReply(ForskRoles.MarkForAction("file.generate"));
+        var running = thread.ToJson();
+        Assert.Equal("Modeller", running["turn"]!.ToString());
+        Assert.Equal("Modeller", running["shown"]!.ToString());
+        Assert.Null(running["busy"]);
+        thread.Busy = "Generating";
+        Assert.Equal("Modeller", thread.ToJson()["busy"]!["mark"]!.ToString());
+        thread.EndReply();
+        Assert.Null(thread.ToJson()["turn"]);
+        Assert.Equal("Modeller", thread.ToJson()["shown"]!.ToString());
+    }
+
+    /// <summary>OfAction is the one map from a click to the role on the header and the message.</summary>
+    [Theory]
+    [InlineData("file.generate", ForskRole.Modeller)]
+    [InlineData("file.rebuild", ForskRole.Modeller)]
+    [InlineData("file.draw", ForskRole.Planner)]
+    [InlineData("file.import", ForskRole.Planner)]
+    [InlineData("rooms.list", ForskRole.Planner)]
+    [InlineData("file.print", ForskRole.Plotter)]
+    [InlineData("print.one", ForskRole.Plotter)]
+    [InlineData("print.pages", ForskRole.Plotter)]
+    [InlineData("export.dwg", ForskRole.Plotter)]
+    [InlineData("export.ifc", ForskRole.Plotter)]
+    [InlineData("export.csv", ForskRole.Plotter)]
+    [InlineData("daylight.run", ForskRole.Analyser)]
+    [InlineData("daylight.rooms", ForskRole.Analyser)]
+    [InlineData("area.stats", ForskRole.Analyser)]
+    [InlineData("bridge.start", ForskRole.None)]
+    [InlineData("help.card", ForskRole.None)]
+    public void AnAction_MapsToOneRole(string id, ForskRole role)
+    {
+        Assert.Equal(role, ForskRoles.OfAction(id));
+        Assert.Equal(role == ForskRole.None ? null : ForskRoles.Label(role), ForskRoles.MarkForAction(id));
     }
 
     [Fact]

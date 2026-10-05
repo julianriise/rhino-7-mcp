@@ -138,24 +138,32 @@
   };
 
   /*
-   * The face in the header, the same role the chat shows. The turn running
-   * now wins (its busy line carries the role), then an override, then the
-   * latest answer whose mark is a role, and Planner when the thread has none.
+   * The face in the header, the same role the chat shows. The turn that just
+   * started wins, before a reply exists. Idle keeps that role (shown), so it
+   * does not snap back to an older message or to a pick. A thread with no
+   * remembered role uses its latest mark, then a pick, then Planner.
    * A mark that is not a role is skipped.
    */
   Forsk.shownRole = function (model) {
     model = model || {};
     var faces = { planner: 1, modeller: 1, plotter: 1, analyser: 1, support: 1, render: 1 };
     var marks = { Planner: 'planner', Modeller: 'modeller', Plotter: 'plotter', Analyser: 'analyser', Support: 'support', Render: 'render' };
-    var active = model.busy && marks[model.busy.mark];
+    function face(mark) {
+      if (!mark) return '';
+      if (marks[mark]) return marks[mark];
+      return faces[mark] ? mark : '';
+    }
+    var active = face(model.turn) || (model.busy && face(model.busy.mark));
     if (active) return active;
-    var value = model.role && model.role.value;
-    if (value && faces[value]) return value;
+    var kept = face(model.shown);
+    if (kept) return kept;
     var thread = model.thread || [];
     for (var i = thread.length - 1; i >= 0; i--) {
-      var id = marks[thread[i].mark];
+      var id = face(thread[i].mark);
       if (id) return id;
     }
+    var value = model.role && model.role.value;
+    if (value && faces[value]) return value;
     return 'planner';
   };
 

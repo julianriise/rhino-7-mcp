@@ -152,15 +152,16 @@ public class PageChromeTests
     }
 
     [Fact]
-    public void TheHeaderFace_IsTheOverride_ElseTheLastRole_ElsePlanner()
+    public void TheHeaderFace_MatchesTheTurn_ThenTheLastRole_ThenAPick()
     {
         var engine = PageScript.Load();
         string Eval(string js) => engine.Evaluate(js).ToString();
 
-        Assert.Equal("render", Eval("Forsk.shownRole({role:{value:'render'}, thread:[{mark:'Planner'}]})"));
-        Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'analyser'}, thread:[{mark:'Planner'}]})"));
+        // A message's role wins over a pick, so the header matches that avatar.
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'render'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'analyser'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Analyser'}]})"));
-        Assert.Equal("support", Eval("Forsk.shownRole({role:{value:'support'}, thread:[{mark:'Planner'}]})"));
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'support'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("support", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Analyser'},{mark:'Support'}]})"));
         Assert.Equal("select", Eval("Forsk.fieldKind({options:['Bug','Question','Feature request'], value:'Bug'})"));
         Assert.Equal("long", Eval("Forsk.fieldKind({long:true, value:'id like to report a bug'})"));
@@ -182,10 +183,18 @@ public class PageChromeTests
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[{mark:'Modeller'},{mark:'Daylight'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, thread:[]})"));
         // The turn running now: its role shows at once, before any reply, over the last answer and the override.
+        Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, turn:'Modeller', thread:[{mark:'Planner'}]})"));
+        Assert.Equal("plotter", Eval("Forsk.shownRole({role:{value:'auto'}, turn:'Plotter', thread:[]})"));
+        Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'modeller'}, turn:'Analyser'})"));
+        Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, turn:'Planner', shown:'Modeller', thread:[{mark:'Modeller'}]})"));
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step', text:'Generating', mark:'Modeller'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'planner'}, busy:{kind:'thinking', mark:'Modeller'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step', mark:'Daylight'}, thread:[{mark:'Planner'}]})"));
         Assert.Equal("planner", Eval("Forsk.shownRole({role:{value:'auto'}, busy:{kind:'step'}, thread:[{mark:'Planner'}]})"));
+        // Idle keeps the role the turn took. It does not snap back to the pick or to an older message.
+        Assert.Equal("modeller", Eval("Forsk.shownRole({role:{value:'planner'}, shown:'Modeller', thread:[{mark:'Planner'}]})"));
+        Assert.Equal("analyser", Eval("Forsk.shownRole({role:{value:'render'}, shown:'Analyser', thread:[]})"));
+        Assert.Equal("render", Eval("Forsk.shownRole({role:{value:'render'}, thread:[]})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'planner'}})"));
         Assert.Equal("auto \u00b7 office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm', role:{value:'auto'}})"));
         Assert.Equal("office_2D.3dm", Eval("Forsk.roleSubtitle({file:'office_2D.3dm'})"));

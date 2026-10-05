@@ -60,6 +60,8 @@ namespace RhinoMCPPlugin.Forsk
         public ForskRole Override;
         /// <summary>The running turn's role mark, shown on its thinking or step line.</summary>
         public string TurnMark;
+        /// <summary>The last role a turn took. Idle keeps it, so the header does not snap back.</summary>
+        public string Shown;
         string _replyMark;
         long _next;
 
@@ -68,6 +70,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             _replyMark = string.IsNullOrWhiteSpace(mark) ? null : mark;
             TurnMark = _replyMark;
+            if (_replyMark != null) Shown = _replyMark;
         }
 
         public void EndReply()
@@ -253,6 +256,9 @@ namespace RhinoMCPPlugin.Forsk
             if (Thinking) model["busy"] = new JObject { ["kind"] = "thinking", ["text"] = ForskText.Get("line.thinking") };
             else if (!string.IsNullOrEmpty(Busy)) model["busy"] = new JObject { ["kind"] = "step", ["text"] = Busy };
             if (model["busy"] is JObject busy && TurnMark != null) busy["mark"] = TurnMark;
+            // The header reads turn the moment the action starts, before a step line or a reply exists.
+            if (TurnMark != null) model["turn"] = TurnMark;
+            if (Shown != null) model["shown"] = Shown;
             if (Prefill != null) model["prefill"] = Prefill.DeepClone();
             return model;
         }

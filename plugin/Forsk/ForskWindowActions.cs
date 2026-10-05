@@ -1097,8 +1097,9 @@ namespace RhinoMCPPlugin.Forsk
         void Draw(DocThread thread, ForskAction action, RhinoDoc doc)
         {
             thread.Add("user", action.Label);
+            // Planner from the click. The header reads the turn before the polyline returns.
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
             thread.Add("line", ForskText.Get("prompt.draw"));
-            thread.EndReply();
             Render();
             ForskCalls.Enter();
             try
@@ -1120,6 +1121,7 @@ namespace RhinoMCPPlugin.Forsk
             finally
             {
                 _busy = false;
+                thread.EndReply();
             }
             Models.Persist(thread);
             MarkDirty();
