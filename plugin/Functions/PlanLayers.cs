@@ -4,49 +4,53 @@ using System.Collections.Generic;
 namespace RhinoMCPPlugin.Functions
 {
     /// <summary>
-    /// The flat drawing Generate 3D hides, and the list it stores so Show 2D
-    /// can bring the same layers back. A layer that holds the new model stays
-    /// visible: A-ROOM carries the room plates and markers. Nothing is deleted.
-    /// Pure: no Rhino.
+    /// Everything Generate 3D hides, and the list it stores so Show 2D can
+    /// bring the same layers back. After the bake only the model shows: a layer
+    /// that holds a Forsk object stays visible (A-ROOM carries the room plates
+    /// and markers), and so does its parent. A layer already off stays off and
+    /// is not stored, so Show 2D leaves it off. Nothing is deleted. Pure: no Rhino.
     /// </summary>
     public static class PlanLayers
     {
         public const string Section = "forsk";
         public const string Entry = "hidden_plan_layers";
 
-        /// <summary>Leaf names of the 2D layers the bake reads. A-ROOM is not here.</summary>
-        public static readonly string[] Names = { "wall", "door", "window", "room", "plan", "label", "space_divider" };
-
         public sealed class LayerInfo
         {
             public string Path;
-            public string Name;
             public bool Visible;
-            /// <summary>A generated wall, floor, roof, opening, room or plate is on this layer.</summary>
+            /// <summary>At least one object is on this layer.</summary>
+            public bool HasObjects;
+            /// <summary>A Forsk object (forsk:generated) is on this layer.</summary>
             public bool HoldsModel;
         }
 
-        /// <summary>Visible source layers that do not hold the model. These are the ones to hide.</summary>
+        /// <summary>Visible layers with objects and no Forsk object, and not the parent of a layer that has one.</summary>
         public static List<string> ToHide(IEnumerable<LayerInfo> layers)
         {
             var list = new List<string>();
             if (layers == null) return list;
+            var all = new List<LayerInfo>();
             foreach (var layer in layers)
+                if (layer != null && !string.IsNullOrWhiteSpace(layer.Path)) all.Add(layer);
+            foreach (var layer in all)
             {
-                if (layer == null || !layer.Visible || layer.HoldsModel) continue;
-                if (!IsSource(layer.Name) || string.IsNullOrWhiteSpace(layer.Path)) continue;
+                if (!layer.Visible || !layer.HasObjects || layer.HoldsModel) continue;
+                if (all.Exists(other => other.HoldsModel && IsParentOf(layer.Path, other.Path))) continue;
                 list.Add(layer.Path);
             }
             return list;
         }
 
-        public static bool IsSource(string name)
+        /// <summary>The stored paths, then the new ones not already stored: a second bake keeps the first one's list.</summary>
+        public static List<string> Merge(string stored, IEnumerable<string> hidden)
         {
-            var leaf = Leaf(name);
-            if (leaf.Length == 0) return false;
-            foreach (var source in Names)
-                if (leaf.Equals(source, StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
+            var list = Stored(stored);
+            if (hidden != null)
+                foreach (var path in hidden)
+                    if (!string.IsNullOrWhiteSpace(path) && !list.Exists(p => p.Equals(path.Trim(), StringComparison.OrdinalIgnoreCase)))
+                        list.Add(path.Trim());
+            return list;
         }
 
         /// <summary>One full path per line. Empty when nothing was hidden.</summary>
@@ -89,11 +93,9 @@ namespace RhinoMCPPlugin.Functions
             return any;
         }
 
-        static string Leaf(string name)
+        static bool IsParentOf(string parent, string child)
         {
-            var text = (name ?? "").Trim();
-            var cut = text.LastIndexOf("::", StringComparison.Ordinal);
-            return cut >= 0 ? text.Substring(cut + 2).Trim() : text;
+            return child.StartsWith(parent + "::", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

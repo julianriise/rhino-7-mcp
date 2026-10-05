@@ -72,25 +72,27 @@ public class Gen3dPassTests
     }
 
     [Fact]
-    public void HiddenLayers_AreTheVisibleSourceLayers_AndTheRecordToggles()
+    public void HiddenLayers_AreEveryVisibleLayerButTheModel_AndTheRecordToggles()
     {
         var hide = PlanLayers.ToHide(new[]
         {
-            new PlanLayers.LayerInfo { Path = "wall", Name = "wall", Visible = true },
-            new PlanLayers.LayerInfo { Path = "door", Name = "door", Visible = true },
-            new PlanLayers.LayerInfo { Path = "window", Name = "window", Visible = false },
-            new PlanLayers.LayerInfo { Path = "label", Name = "label", Visible = true },
-            new PlanLayers.LayerInfo { Path = "A-ROOM", Name = "A-ROOM", Visible = true },
-            new PlanLayers.LayerInfo { Path = "A-ROOM::Plate", Name = "Plate", Visible = true },
-            new PlanLayers.LayerInfo { Path = "A-WALL", Name = "A-WALL", Visible = true, HoldsModel = true },
-            new PlanLayers.LayerInfo { Path = "A-FLOR", Name = "A-FLOR", Visible = true, HoldsModel = true },
-            new PlanLayers.LayerInfo { Path = "room", Name = "room", Visible = true, HoldsModel = true },
-            new PlanLayers.LayerInfo { Path = "X-EXIST", Name = "X-EXIST", Visible = true }
+            new PlanLayers.LayerInfo { Path = "Default", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "wall", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "door", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "window", Visible = false, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "structural", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "furniture", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "empty", Visible = true },
+            new PlanLayers.LayerInfo { Path = "A-ROOM", Visible = true, HasObjects = true, HoldsModel = true },
+            new PlanLayers.LayerInfo { Path = "A-WALL", Visible = true, HasObjects = true, HoldsModel = true },
+            new PlanLayers.LayerInfo { Path = "Model", Visible = true, HasObjects = true },
+            new PlanLayers.LayerInfo { Path = "Model::A-FLOR", Visible = true, HasObjects = true, HoldsModel = true },
+            new PlanLayers.LayerInfo { Path = "X-PLAN", Visible = true, HasObjects = true }
         });
-        Assert.Equal(new[] { "wall", "door", "label" }, hide);
-        Assert.False(PlanLayers.IsSource("A-ROOM"));
-        Assert.False(PlanLayers.IsSource("A-WALL"));
-        Assert.True(PlanLayers.IsSource("space_divider"));
+        Assert.Equal(new[] { "Default", "wall", "door", "structural", "furniture", "X-PLAN" }, hide);
+
+        Assert.Equal(new[] { "wall", "door", "furniture" }, PlanLayers.Merge("wall\ndoor", new[] { "door", "furniture" }));
+        Assert.Equal(new[] { "furniture" }, PlanLayers.Merge("", new[] { "furniture" }));
 
         var stored = PlanLayers.Store(hide);
         Assert.Equal(hide, PlanLayers.Stored(stored));

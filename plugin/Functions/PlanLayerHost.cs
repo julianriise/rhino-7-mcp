@@ -7,28 +7,33 @@ using RhinoMCPPlugin.Forsk;
 namespace RhinoMCPPlugin.Functions
 {
     /// <summary>
-    /// Hides the flat drawing after Generate 3D and shows it again. The layer
-    /// paths are document user text, so the Show 2D chip knows which ones.
+    /// Hides everything but the model after Generate 3D and shows it again. The
+    /// layer paths are document user text, so the Show 2D chip knows which ones.
     /// Layer visibility changes inside the open undo record, so Undo restores them.
     /// </summary>
     public static class PlanLayerHost
     {
-        static readonly string[] ModelKinds =
-        {
-            "wall", "floor", "roof", "opening", "opening_marker", "room", "room_plate", "stair", "analysis"
-        };
-
-        /// <summary>Hide the visible source layers. True when those layers are now hidden.</summary>
+        /// <summary>Hide the visible layers that hold no Forsk object. True when the stored layers are now hidden.</summary>
         public static bool Hide(RhinoDoc doc)
         {
             if (doc == null) return false;
-            var chosen = PlanLayers.ToHide(Describe(doc));
+            var layers = Describe(doc);
+            var chosen = PlanLayers.ToHide(layers);
             if (chosen.Count > 0)
             {
+                // Rhino does not hide the current layer: the model's first layer becomes current.
+                var current = doc.Layers.CurrentLayer;
+                var currentPath = current == null ? null : PathOf(current);
+                var model = layers.Find(layer => layer.HoldsModel);
+                if (currentPath != null && model != null && chosen.Exists(path => path.Equals(currentPath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var next = Find(doc, model.Path);
+                    if (next != null) doc.Layers.SetCurrentLayerIndex(next.Index, true);
+                }
                 foreach (var path in chosen)
                     SetVisible(doc, path, false);
-                doc.Strings.SetString(PlanLayers.Section, PlanLayers.Entry, PlanLayers.Store(chosen));
-                return true;
+                var stored = doc.Strings.GetValue(PlanLayers.Section, PlanLayers.Entry);
+                doc.Strings.SetString(PlanLayers.Section, PlanLayers.Entry, PlanLayers.Store(PlanLayers.Merge(stored, chosen)));
             }
             return AreHidden(doc);
         }
@@ -66,44 +71,23 @@ namespace RhinoMCPPlugin.Functions
             foreach (var layer in doc.Layers)
             {
                 if (layer == null || layer.IsDeleted) continue;
+                RhinoObject[] found = null;
+                try { found = doc.Objects.FindByLayer(layer); }
+                catch (Exception) { found = null; }
                 list.Add(new PlanLayers.LayerInfo
                 {
-                    Path = string.IsNullOrEmpty(layer.FullPath) ? layer.Name : layer.FullPath,
-                    Name = layer.Name,
+                    Path = PathOf(layer),
                     Visible = layer.IsVisible,
-                    HoldsModel = HoldsModel(doc, layer)
+                    HasObjects = found != null && found.Length > 0,
+                    HoldsModel = found != null && Array.Exists(found, obj => obj?.Attributes?.GetUserString("forsk:generated") == "1")
                 });
             }
             return list;
         }
 
-        static bool HoldsModel(RhinoDoc doc, Layer layer)
+        static string PathOf(Layer layer)
         {
-            foreach (var obj in Enumerate(doc))
-            {
-                if (obj?.Attributes == null || obj.Attributes.LayerIndex != layer.Index) continue;
-                if (obj.Attributes.GetUserString("forsk:generated") != "1") continue;
-                var kind = obj.Attributes.GetUserString("forsk:kind") ?? "";
-                foreach (var model in ModelKinds)
-                    if (kind.Equals(model, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
-        }
-
-        static IEnumerable<RhinoObject> Enumerate(RhinoDoc doc)
-        {
-            var settings = new ObjectEnumeratorSettings
-            {
-                NormalObjects = true,
-                LockedObjects = true,
-                HiddenObjects = true,
-                ActiveObjects = true,
-                ReferenceObjects = false,
-                DeletedObjects = false,
-                IncludeLights = false,
-                IncludeGrips = false
-            };
-            return doc.Objects.GetObjectList(settings);
+            return string.IsNullOrEmpty(layer.FullPath) ? layer.Name : layer.FullPath;
         }
 
         static bool? Visible(RhinoDoc doc, string path)
@@ -126,7 +110,7 @@ namespace RhinoMCPPlugin.Functions
             foreach (var layer in doc.Layers)
             {
                 if (layer == null || layer.IsDeleted) continue;
-                var full = string.IsNullOrEmpty(layer.FullPath) ? layer.Name : layer.FullPath;
+                var full = PathOf(layer);
                 if (full.Equals(path, StringComparison.OrdinalIgnoreCase)) return layer;
                 if (layer.Name.Equals(path, StringComparison.OrdinalIgnoreCase)) return layer;
             }
