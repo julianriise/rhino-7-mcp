@@ -87,6 +87,7 @@
     <Compile Include="..\..\plugin\Functions\PlanLayers.cs" Link="PlanLayers.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskPrefill.cs" Link="ForskPrefill.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskCards.cs" Link="ForskCards.cs" />
+    <Compile Include="..\..\plugin\Forsk\DaylightQuality.cs" Link="DaylightQuality.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskRole.cs" Link="ForskRole.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskToolPacks.cs" Link="ForskToolPacks.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskDebug.cs" Link="ForskDebug.cs" />

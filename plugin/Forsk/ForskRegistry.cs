@@ -209,6 +209,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("daylight.hide", Runs.Run, "group.daylight", f => f.Map == MapState.Shown),
             new ForskAction("daylight.show", Runs.Run, "group.daylight", f => f.Map == MapState.Hidden),
             new ForskAction("daylight.room", Runs.Run, "group.daylight", f => f.Picked == Picked.Room),
+            new ForskAction("daylight.quality", Runs.Card, "group.daylight", f => f.HasWalls),
             new ForskAction("section.add", Runs.Run, "group.sections", f => f.HasWalls),
             new ForskAction("section.room", Runs.Run, "group.sections", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("section.remove", Runs.Card, "group.sections", f => f.Sections > 0),

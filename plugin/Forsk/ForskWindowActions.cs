@@ -381,6 +381,17 @@ namespace RhinoMCPPlugin.Forsk
                     if (card["data"]?["all"]?.Value<bool>() == true) typeArgs["all"] = true;
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", typeArgs), userText: pill.Label);
                     break;
+                case "daylight.quality":
+                    ForskDaylight.Quality = pill.Id;
+                    var saved = ForskText.Format("daylight.quality.saved", "quality", pill.Label);
+                    // A map on screen is redrawn at the new grid.
+                    var redraw = doc != null && ReadFacts(doc).Map == MapState.Shown;
+                    Job(thread, kind, ForskText.Label(kind), sink =>
+                    {
+                        sink.Line(saved);
+                        if (redraw) Daylight(sink, DaylightAction.Run);
+                    }, userText: pill.Label);
+                    break;
                 case "ink.set":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);
                     break;

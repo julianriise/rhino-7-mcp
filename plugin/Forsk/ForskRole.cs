@@ -115,6 +115,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "section.remove":
                     return ForskRole.Plotter;
                 case "daylight.rooms":
+                case "daylight.quality":
                 case "daylight.run":
                 case "daylight.again":
                 case "daylight.hide":

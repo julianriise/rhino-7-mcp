@@ -79,6 +79,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The set's scale: the one asked for, else the plan page's from the last Print. 0 when neither.</summary>
         public int PrintScale;
         public string Ink = "default";
+        /// <summary>The daylight grid saved on this Mac (DaylightQuality).</summary>
+        public string DaylightQuality = Forsk.DaylightQuality.Low;
         public bool Millimetres = true;
         public bool KeyPresent;
         public bool ListenerUp = true;
@@ -147,6 +149,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The status line's v4 grade, when v4 exists. Empty for now.</summary>
         public string Grade;
         public string Ink = "default";
+        public string DaylightQuality = Forsk.DaylightQuality.Low;
         public Picked Picked;
         public int PickedCount;
         /// <summary>Of the things picked, the Forsk walls and the doors and windows.</summary>
@@ -200,6 +203,7 @@ namespace RhinoMCPPlugin.Forsk
                 PrintPages = input.PrintPages,
                 PrintScale = input.PrintScale,
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
+                DaylightQuality = Forsk.DaylightQuality.Normal(input.DaylightQuality),
                 KeyPresent = input.KeyPresent,
                 ListenerUp = input.ListenerUp,
                 UndoNewest = input.UndoNewest,

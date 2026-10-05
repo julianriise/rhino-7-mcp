@@ -335,7 +335,7 @@ namespace RhinoMCPPlugin.Forsk
         static JArray Settings(FileFacts facts)
         {
             var menu = new JArray();
-            foreach (var id in new[] { "ink.set", "meta.title", "bridge.start" })
+            foreach (var id in new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start" })
             {
                 var action = ForskRegistry.Find(id);
                 if (action != null && action.Shows(facts))

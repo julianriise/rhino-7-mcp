@@ -68,7 +68,7 @@ WINDOW_SILL_MM = 900.0
 WINDOW_HEAD_MM = 2100.0
 DOOR_HEAD_MM = 2100.0
 # The compute is per cell, so a tiny cell size on a large floor is refused.
-MAX_CELLS = 20_000
+MAX_CELLS = 60_000
 SCOPE = "df-estimate"
 LABEL = "Estimated daylight factor (CIE overcast), not a simulation"
 DISCLAIMER = (

@@ -18,7 +18,22 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskDaylight
     {
         public const string ToolName = ForskToolPacks.DaylightTool;
-        const int TimeoutMs = 120000;
+        const int TimeoutMs = 180000;
+
+        /// <summary>The daylight grid saved on this Mac (plug-in settings). Low when unset.</summary>
+        public static string Quality
+        {
+            get
+            {
+                try { return DaylightQuality.Normal(global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.GetString(DaylightQuality.Setting, DaylightQuality.Low)); }
+                catch (Exception) { return DaylightQuality.Low; }
+            }
+            set
+            {
+                try { global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.SetString(DaylightQuality.Setting, DaylightQuality.Normal(value)); }
+                catch (Exception) { /* settings unavailable: the run stays at low */ }
+            }
+        }
 
         /// <summary>call runs one bridge command and returns its envelope.</summary>
         public static JObject Run(string target, Func<string, JObject, JObject> call)
@@ -32,7 +47,8 @@ namespace RhinoMCPPlugin.Forsk
                 traced = Trace(new JObject
                 {
                     ["scene"] = scene["result"],
-                    ["target"] = string.IsNullOrEmpty(target) ? "floor" : target
+                    ["target"] = string.IsNullOrEmpty(target) ? "floor" : target,
+                    ["cell_size"] = DaylightQuality.CellMm(Quality)
                 });
             }
             catch (Exception e)

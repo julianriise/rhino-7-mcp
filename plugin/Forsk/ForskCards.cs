@@ -56,6 +56,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "opening.type": return SwapType(f);
                 case "file.check": return Review(f);
                 case "ink.set": return Ink(f);
+                case "daylight.quality": return Quality(f);
                 case "meta.title": return TitleBlock(f, today: today);
                 case "print.one": return PrintOne(f);
                 case "print.pages": return Pages(f);
@@ -219,6 +220,21 @@ namespace RhinoMCPPlugin.Forsk
                 Rows = new List<string>(f.Review),
                 Pills = { new CardPill("done", ForskText.Get("word.done")) }
             };
+        }
+
+        /// <summary>⋯ → Daylight quality: Low, Medium, High, with the one saved on this Mac named.</summary>
+        public static CardSpec Quality(FileFacts f)
+        {
+            var now = DaylightQuality.Normal(f?.DaylightQuality);
+            var card = new CardSpec
+            {
+                Kind = "daylight.quality",
+                Question = ForskText.Get("daylight.quality.ask"),
+                Note = ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + now))
+            };
+            foreach (var quality in DaylightQuality.All)
+                card.Pills.Add(new CardPill(quality, ForskText.Get("daylight.quality." + quality)));
+            return card;
         }
 
         public static CardSpec Ink(FileFacts f)
