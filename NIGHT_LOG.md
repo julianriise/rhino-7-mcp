@@ -1,3 +1,50 @@
+# Night log: 2.0 head start, 2026-10-06 (cloud)
+
+Plan: `/mnt/project-files/plans/night_2026-10-06_v2_head_start.md`. Cloud only, straight to `main`. Base: rhino-7-mcp `4a8cde1`, forsk `75fa4f0`.
+
+| Task | Commit | State |
+|---|---|---|
+| 1 Package Manager description | rhino-7-mcp `a71d10c` | done headless; Package Manager box unverified |
+| 2 UX audit (UX.0) | forsk `551449f` | done (docs only) |
+| 3 Colour tokens + hidden dark palette (DM.1, DM.2) | rhino-7-mcp `fb40158` | done; light pixel-identical headless |
+| 4 Type catalog (AG.1 data) | rhino-7-mcp `85f99d1` | done; build-ups are placeholders |
+| 5 Saved option format (AN.5 core) | rhino-7-mcp `26d9299` | done; no Rhino command yet |
+| Stretch: Analyser card (AN.1 shell) | patch only | `/mnt/project-files/plans/night_2026-10-06_analyser_panel.patch`, not pushed |
+
+## Gates
+
+Base `4a8cde1`: build 0 warnings; `SoftParam.Tests` 2484 passed, 1 skipped; pytest 479 passed, 2 skipped; contracts exit 0.
+
+- 1: `server/tests/test_manifest.py` failed before (the description was a folded `>` block) and passes after; pytest 481 passed. The manifest parses with PyYAML and the shell's `sed` version read still gives 1.0.0.
+- 2: `docs/ux_audit_count.py`: `intents 11/11, actions 57/57, missing: none`.
+- 3: 95 headless Chromium screenshots of the composed page (every fixture view at 420×820 @2x, busy, sheen, focus ring, ⋯ menu) byte-identical before and after. `PagePaletteTests` 16 (fail on the old file, pass after): no raw colour outside the token blocks, every token has a dark value, dark text pairs ≥ 4.5:1. Three string-pin tests updated to the token names. dotnet 2500 passed.
+- 4: `TypeCatalogTests` 19; build 0 warnings; dotnet 2519 passed.
+- 5: `OptionSnapshotTests` 16 (garage walls and openings, the office's 16 rooms, nb-NO culture); dotnet 2535 passed.
+- Final on `26d9299`: build 0 warnings; dotnet 2535 passed, 1 skipped; pytest 481 passed, 2 skipped; contracts exit 0.
+- Stretch (on top of `26d9299`, not pushed): `AnalyserCardTests` 52; all gates green (dotnet 2587); a headless click on the Analyser face posts `{kind: analyser}`, other faces post nothing.
+
+## Unverified (needs Rhino or the Mac)
+
+- 1: whether the folded block was really why the Package Manager box was empty. The released 1.0.0 .yak already had a description (yak re-emitted it as a folded block); the cloud can't reach the yak server or open Package Manager. Next release: check the box.
+- 3: the window inside Rhino's WebView (headless Chromium is the proxy). Dark is unreachable until DM.3.
+- 4: nothing in Rhino reads the catalog. `forsk:wall_type` is defined but no wall carries it yet. The catalog is not an embedded resource yet.
+- 5: save, restore and compare from a real 3dm.
+- Stretch: the whole card in Rhino (face tap, Daylight run from the card, Area summary card).
+
+## Morning checklist (about 10 minutes)
+
+1. Glance at the Forsk window in Rhino: it should look exactly as yesterday (task 3).
+2. Skim forsk `docs/UX_AUDIT.md`, top ten, and say if the ranking is right (task 2).
+3. Read the build-ups in `plugin/Types/forsk.types.v1.json` and correct any that are wrong for Norwegian practice (task 4).
+4. Say whether `<project>.forsk/options/A.json` is the right place for option files (task 5).
+5. Stretch: the Mac builder runs `git am /mnt/project-files/plans/night_2026-10-06_analyser_panel.patch`, then `./scripts/smoke_garage.sh`; pick Analyser in the role menu, tap the purple face, run Daylight from the card. Green: push. Red: drop or fix.
+6. Package Manager description: only visible after the next release push (Julian's call).
+
+## Found, not fixed
+
+- Light `--faint` (#8A8F98) is 3.0:1 on the page and 3.25:1 on cards, under AA for normal text (placeholders and stale cards). Light `--meta` and `--ok` are just above 4.5 on cards, 4.64–4.66 on the page.
+- `scripts/package_release.sh` needs `rsync`, which the cloud image lacks (Mac only; fine).
+
 # Night log: v3b project info, CSV, vector PDF on `claude/forsk-night-v3b-235eob`
 
 Base: main `de87b2a` (per the launch note; the brief was written at `6a2a456`). This cloud session's designated branch is `claude/forsk-night-v3b-235eob`, so the work is there, not on `night-v3b`; nothing is pushed to `main`.
