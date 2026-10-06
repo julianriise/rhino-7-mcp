@@ -25,6 +25,7 @@
     <Compile Include="..\..\plugin\Functions\SoftParamPlan.cs" Link="SoftParamPlan.cs" />
     <Compile Include="..\..\plugin\Functions\SelectPlan.cs" Link="SelectPlan.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningTypes.cs" Link="OpeningTypes.cs" />
+    <Compile Include="..\..\plugin\Functions\TypeCatalog.cs" Link="TypeCatalog.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningFoot.cs" Link="OpeningFoot.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningElement.cs" Link="OpeningElement.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningBlockShare.cs" Link="OpeningBlockShare.cs" />
@@ -116,6 +117,7 @@
     <None Include="fixtures\office_2D.dxf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\EmbeddedResources\shaded-export.ini" Link="fixtures\shaded-export.ini" CopyToOutputDirectory="PreserveNewest" />
     <None Include="fixtures\recorded_prompts.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\plugin\Types\forsk.types.v1.json" Link="types\forsk.types.v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.js" Link="page\window.js" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\window.html" Link="page\window.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\plugin\Forsk\Page\avatar-planner.svg" Link="page\avatar-planner.svg" CopyToOutputDirectory="PreserveNewest" />

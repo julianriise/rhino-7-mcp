@@ -1,0 +1,491 @@
+{
+  "schema": "forsk.types.v1",
+  "note": "Starting set for Norwegian small residential. Every build-up marked placeholder is a placeholder for Julian to confirm (roadmap decision 3). Layers run exterior to interior for walls and top to bottom for floors and roofs. Thicknesses in millimetres; membranes are 0. Opening ids are the OpeningTypes registry ids, so existing openings keep their type.",
+  "defaults": {
+    "wall": "wall.generic_200"
+  },
+  "materials": [
+    {
+      "id": "generic",
+      "name": "Generic wall",
+      "hatch": "solid",
+      "cut_pen": 0.35,
+      "colour": [60, 60, 60],
+      "render": "plaster"
+    },
+    {
+      "id": "timber",
+      "name": "Timber (battens, boards)",
+      "hatch": "timber",
+      "cut_pen": 0.18,
+      "colour": [191, 155, 107],
+      "render": "wood"
+    },
+    {
+      "id": "timber_cladding",
+      "name": "Timber cladding",
+      "hatch": "timber",
+      "cut_pen": 0.18,
+      "colour": [191, 155, 107],
+      "render": "wood"
+    },
+    {
+      "id": "timber_frame_wool",
+      "name": "Timber studs with mineral wool",
+      "hatch": "wool",
+      "cut_pen": 0.35,
+      "colour": [214, 196, 150],
+      "render": "wood"
+    },
+    {
+      "id": "mineral_wool",
+      "name": "Mineral wool",
+      "hatch": "wool",
+      "cut_pen": 0.18,
+      "colour": [230, 214, 160]
+    },
+    {
+      "id": "gypsum",
+      "name": "Gypsum board",
+      "hatch": "none",
+      "cut_pen": 0.18,
+      "colour": [235, 235, 230],
+      "render": "plaster"
+    },
+    {
+      "id": "concrete",
+      "name": "Concrete",
+      "hatch": "concrete",
+      "cut_pen": 0.35,
+      "colour": [140, 140, 133],
+      "render": "concrete"
+    },
+    {
+      "id": "eps",
+      "name": "EPS insulation",
+      "hatch": "eps",
+      "cut_pen": 0.18,
+      "colour": [240, 240, 245]
+    },
+    {
+      "id": "chipboard",
+      "name": "Chipboard flooring",
+      "hatch": "none",
+      "cut_pen": 0.18,
+      "colour": [205, 180, 140],
+      "render": "wood"
+    },
+    {
+      "id": "plywood",
+      "name": "Plywood",
+      "hatch": "timber",
+      "cut_pen": 0.18,
+      "colour": [200, 170, 120],
+      "render": "wood"
+    },
+    {
+      "id": "roofing",
+      "name": "Roofing membrane",
+      "hatch": "none",
+      "cut_pen": 0.18,
+      "colour": [50, 50, 50]
+    },
+    {
+      "id": "membrane",
+      "name": "Membrane (wind, vapour or radon barrier)",
+      "hatch": "none",
+      "cut_pen": 0.13,
+      "colour": [120, 120, 120]
+    }
+  ],
+  "walls": [
+    {
+      "id": "wall.generic_200",
+      "name": "Generic 200",
+      "thickness": 200,
+      "placeholder": false,
+      "layers": [
+        {
+          "name": "Wall",
+          "material": "generic",
+          "thickness": 200,
+          "function": "structure",
+          "core": true
+        }
+      ]
+    },
+    {
+      "id": "wall.timber_198_ext",
+      "name": "Exterior wall, timber frame 198",
+      "thickness": 301,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Cladding",
+          "material": "timber_cladding",
+          "thickness": 19,
+          "function": "cladding"
+        },
+        {
+          "name": "Battens",
+          "material": "timber",
+          "thickness": 23,
+          "function": "cavity"
+        },
+        {
+          "name": "Wind barrier",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Studs 198 with mineral wool",
+          "material": "timber_frame_wool",
+          "thickness": 198,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Vapour barrier",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Battens 48",
+          "material": "timber",
+          "thickness": 48,
+          "function": "service"
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": "wall.timber_98_int",
+      "name": "Interior wall, timber frame 98",
+      "thickness": 124,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        },
+        {
+          "name": "Studs 98",
+          "material": "timber",
+          "thickness": 98,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": "wall.timber_148_int_lb",
+      "name": "Interior load-bearing wall, timber 148",
+      "thickness": 174,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        },
+        {
+          "name": "Studs 148",
+          "material": "timber",
+          "thickness": 148,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": "wall.concrete_200",
+      "name": "Concrete wall 200",
+      "thickness": 200,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Concrete",
+          "material": "concrete",
+          "thickness": 200,
+          "function": "structure",
+          "core": true
+        }
+      ]
+    }
+  ],
+  "floors": [
+    {
+      "id": "floor.slab_on_ground",
+      "name": "Slab on ground",
+      "thickness": 300,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Concrete",
+          "material": "concrete",
+          "thickness": 100,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "EPS",
+          "material": "eps",
+          "thickness": 200,
+          "function": "insulation"
+        },
+        {
+          "name": "Radon membrane",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        }
+      ]
+    },
+    {
+      "id": "floor.timber_joist_220",
+      "name": "Timber floor joists 220",
+      "thickness": 255,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Chipboard",
+          "material": "chipboard",
+          "thickness": 22,
+          "function": "finish"
+        },
+        {
+          "name": "Joists 220 with mineral wool",
+          "material": "timber_frame_wool",
+          "thickness": 220,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    }
+  ],
+  "roofs": [
+    {
+      "id": "roof.flat_compact",
+      "name": "Flat roof, compact",
+      "thickness": 531,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Roofing",
+          "material": "roofing",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "EPS",
+          "material": "eps",
+          "thickness": 250,
+          "function": "insulation"
+        },
+        {
+          "name": "Vapour barrier",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Plywood",
+          "material": "plywood",
+          "thickness": 18,
+          "function": "structure"
+        },
+        {
+          "name": "Joists 250",
+          "material": "timber",
+          "thickness": 250,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": "roof.shed_ventilated",
+      "name": "Shed roof, ventilated",
+      "thickness": 382,
+      "placeholder": true,
+      "layers": [
+        {
+          "name": "Roofing",
+          "material": "roofing",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Roof boards",
+          "material": "timber",
+          "thickness": 23,
+          "function": "cladding"
+        },
+        {
+          "name": "Ventilation battens",
+          "material": "timber",
+          "thickness": 48,
+          "function": "cavity"
+        },
+        {
+          "name": "Wind barrier",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Rafters 250 with mineral wool",
+          "material": "timber_frame_wool",
+          "thickness": 250,
+          "function": "structure",
+          "core": true
+        },
+        {
+          "name": "Vapour barrier",
+          "material": "membrane",
+          "thickness": 0,
+          "function": "membrane"
+        },
+        {
+          "name": "Battens 48",
+          "material": "timber",
+          "thickness": 48,
+          "function": "service"
+        },
+        {
+          "name": "Gypsum",
+          "material": "gypsum",
+          "thickness": 13,
+          "function": "finish"
+        }
+      ]
+    }
+  ],
+  "openings": [
+    {
+      "id": "door.hinged_single",
+      "kind": "door",
+      "operation": "hinged",
+      "frame_depth": 90,
+      "frame_width": 45,
+      "leaf_thickness": 40,
+      "glazing": "none",
+      "threshold": true,
+      "default_width": 900,
+      "default_height": 2100,
+      "placeholder": true
+    },
+    {
+      "id": "door.hinged_double",
+      "kind": "door",
+      "operation": "double",
+      "frame_depth": 90,
+      "frame_width": 45,
+      "leaf_thickness": 40,
+      "glazing": "none",
+      "threshold": true,
+      "default_width": 900,
+      "default_height": 2100,
+      "placeholder": true
+    },
+    {
+      "id": "door.sliding",
+      "kind": "door",
+      "operation": "sliding",
+      "frame_depth": 90,
+      "frame_width": 45,
+      "leaf_thickness": 40,
+      "glazing": "none",
+      "threshold": false,
+      "default_width": 900,
+      "default_height": 2100,
+      "placeholder": true
+    },
+    {
+      "id": "door.pocket",
+      "kind": "door",
+      "operation": "pocket",
+      "frame_depth": 90,
+      "frame_width": 45,
+      "leaf_thickness": 40,
+      "glazing": "none",
+      "threshold": false,
+      "default_width": 900,
+      "default_height": 2100,
+      "placeholder": true
+    },
+    {
+      "id": "window.fixed",
+      "kind": "window",
+      "operation": "fixed",
+      "frame_depth": 115,
+      "frame_width": 58,
+      "leaf_thickness": 0,
+      "glazing": "triple",
+      "threshold": false,
+      "default_width": 1200,
+      "default_height": 1200,
+      "placeholder": true
+    },
+    {
+      "id": "window.side_hung",
+      "kind": "window",
+      "operation": "side_hung",
+      "frame_depth": 115,
+      "frame_width": 58,
+      "leaf_thickness": 58,
+      "glazing": "triple",
+      "threshold": false,
+      "default_width": 1200,
+      "default_height": 1200,
+      "placeholder": true
+    },
+    {
+      "id": "window.top_hung",
+      "kind": "window",
+      "operation": "top_hung",
+      "frame_depth": 115,
+      "frame_width": 58,
+      "leaf_thickness": 58,
+      "glazing": "triple",
+      "threshold": false,
+      "default_width": 1200,
+      "default_height": 1200,
+      "placeholder": true
+    }
+  ]
+}
