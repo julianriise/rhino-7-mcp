@@ -29,6 +29,7 @@ namespace RhinoMCPPlugin
             Functions.ForskWallHatchHost.Start();
             Functions.RoomTypeColorHost.Start();
             ForskSupportHttp.RetryOnStartup();
+            ForskUpdate.CheckOnStartup();
             return LoadReturnCode.Success;
         }
 

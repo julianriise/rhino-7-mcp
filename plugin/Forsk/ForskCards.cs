@@ -313,6 +313,30 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// Settings → Update available: the new version and the steps in
+        /// Package Manager, with Food4Rhino's way below. Open Package Manager
+        /// and How to update keep the card open. Only Done answers it.
+        /// </summary>
+        public static CardSpec Update(string version, string current)
+        {
+            var card = new CardSpec
+            {
+                Kind = ForskUpdate.MenuId,
+                Question = ForskText.Format("update.ask", "version", version, "current", current),
+                Rows = new List<string>
+                {
+                    ForskText.Format("update.step.pm", "version", version),
+                    ForskText.Get("update.step.restart")
+                },
+                Note = ForskText.Get("update.note")
+            };
+            card.Pills.Add(new CardPill("open", ForskText.Get("update.open")));
+            card.Pills.Add(new CardPill("howto", ForskText.Get("update.howto")));
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         public static CardSpec Ink(FileFacts f)
         {
             var card = new CardSpec

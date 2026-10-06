@@ -358,10 +358,12 @@ namespace RhinoMCPPlugin.Forsk
             return model;
         }
 
-        /// <summary>Ink, the title block, and the bridge, then Set up Forsk, the Grok key and Copy debug report. Those three are always there and are not help-card actions.</summary>
+        /// <summary>Update available first while forsk.app names a newer Forsk. Then ink, the title block, and the bridge, then Set up Forsk, the Grok key and Copy debug report. Those three are always there and are not help-card actions.</summary>
         static JArray Settings(FileFacts facts)
         {
             var menu = new JArray();
+            if (facts.UpdateVersion != null)
+                menu.Add(new JObject { ["id"] = ForskUpdate.MenuId, ["label"] = ForskText.Format("update.row", "version", facts.UpdateVersion) });
             foreach (var id in new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start" })
             {
                 var action = ForskRegistry.Find(id);
@@ -383,10 +385,13 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         static JArray Attention(FileFacts facts)
         {
-            return new JArray
+            var rows = new JArray
             {
                 AttentionRow("meta.title", ForskCards.InfoMissing(facts))
             };
+            // Only while there is an update: the row has no menu item to dot otherwise.
+            if (facts.UpdateVersion != null) rows.Add(AttentionRow(ForskUpdate.MenuId, true));
+            return rows;
         }
 
         static JObject AttentionRow(string id, bool needs)

@@ -44,6 +44,7 @@ namespace RhinoMCPPlugin.Forsk
         static bool _listenerUp = true;
         static bool _keyPresent;
         static bool _toolsReady = true;
+        static string _update;
         static DateTime _polled = DateTime.MinValue;
 
         readonly WebView _web;
@@ -206,6 +207,7 @@ namespace RhinoMCPPlugin.Forsk
             input.OfferArea = Tracker.Was("file.generate", doc.RuntimeSerialNumber)
                 || Tracker.Was("area.stats", doc.RuntimeSerialNumber);
             input.GuideOff = FirstRunGate.Off();
+            input.UpdateVersion = ForskUpdate.Latest;
             return FileClassifier.Read(input);
         }
 
@@ -282,10 +284,12 @@ namespace RhinoMCPPlugin.Forsk
             catch (Exception) { up = false; }
             var key = !string.IsNullOrEmpty(ForskKeys.Load());
             var tools = ForskUv.Uv() != null;
-            if (up == _listenerUp && key == _keyPresent && tools == _toolsReady) return;
+            var update = ForskUpdate.Latest;
+            if (up == _listenerUp && key == _keyPresent && tools == _toolsReady && update == _update) return;
             _listenerUp = up;
             _keyPresent = key;
             _toolsReady = tools;
+            _update = update;
             MarkDirty();
         }
 

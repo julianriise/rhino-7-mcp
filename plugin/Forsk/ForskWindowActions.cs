@@ -118,6 +118,11 @@ namespace RhinoMCPPlugin.Forsk
                 if (thread != null) SetupCard(thread, ForskText.Get(id), null);
                 return;
             }
+            if (id == ForskUpdate.MenuId)
+            {
+                if (thread != null) UpdateCard(thread);
+                return;
+            }
             var action = ForskRegistry.Find(id);
             if (doc == null || thread == null || action == null) return;
             // A click checks the precondition again. If it is no longer true, nothing runs and one line says so.
@@ -370,6 +375,12 @@ namespace RhinoMCPPlugin.Forsk
             if (kind == ForskSetup.MenuId && pillId != "done" && card["state"]?.ToString() == "open")
             {
                 if ((card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId)) SetupPill(thread, pillId);
+                return;
+            }
+            // Open Package Manager and How to update keep the update card open. They run while a job does.
+            if (kind == ForskUpdate.MenuId && pillId != "done" && card["state"]?.ToString() == "open")
+            {
+                if ((card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId)) UpdatePill(pillId);
                 return;
             }
             if (pillId != "cancel" && pillId != "done" && Refuse(thread)) return;
@@ -803,6 +814,35 @@ namespace RhinoMCPPlugin.Forsk
             }
             catch (Exception) { }
             return Environment.MachineName;
+        }
+
+        /// <summary>Settings → Update available. An older open update card closes, so one is pinned. No update known: nothing.</summary>
+        void UpdateCard(DocThread thread)
+        {
+            var version = ForskUpdate.Latest;
+            if (version == null) return;
+            foreach (var item in thread.Items)
+                if (item["kind"]?.ToString() == ForskUpdate.MenuId) thread.Close(item["id"]?.ToString());
+            thread.Add("user", ForskText.Get(ForskUpdate.MenuId));
+            thread.BeginReply(null);
+            thread.AddCard(ForskCards.Update(version, ForskUpdate.Current), null);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
+        void UpdatePill(string pillId)
+        {
+            switch (pillId)
+            {
+                case "open":
+                    RhinoApp.RunScript("_PackageManager", false);
+                    return;
+                case "howto":
+                    try { System.Diagnostics.Process.Start("/usr/bin/open", ForskUpdate.HowTo); }
+                    catch (Exception e) { Log("update · open " + ForskUpdate.HowTo + " · " + e.GetType().Name); }
+                    return;
+            }
         }
 
         /// <summary>

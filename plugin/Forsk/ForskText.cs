@@ -65,6 +65,15 @@ namespace RhinoMCPPlugin.Forsk
             ["grok.key.missing"] = "Chat needs your own Grok API key. Paste it below.",
             ["grok.key.where"] = "Chat needs your own Grok API key: Settings → Grok API key. Get one at https://console.x.ai.",
             // Settings → Set up Forsk: chat's key and daylight's uv, each with its state and one action.
+            // Settings → Update available: a newer Forsk is on forsk.app. Rhino 7 doesn't say so itself.
+            ["update.available"] = "Update available",
+            ["update.row"] = "Update available: Forsk {version}",
+            ["update.ask"] = "Forsk {version} is available. You have {current}.",
+            ["update.step.pm"] = "Package Manager: Installed → forsk → pick {version} under Version → Install, then Apply.",
+            ["update.step.restart"] = "Then quit and reopen Rhino 7.",
+            ["update.note"] = "Installed from Food4Rhino? Download the new .macrhi there and double-click it.",
+            ["update.open"] = "Open Package Manager",
+            ["update.howto"] = "How to update",
             ["forsk.setup"] = "Set up Forsk",
             ["setup.ask"] = "Set up Forsk on this Mac. Each part works on its own.",
             ["setup.note"] = "Chat uses your own xAI Grok key from https://console.x.ai. Set up downloads uv and Python once (about 40 MB) for daylight and AI detection. Connect links this Mac to your forsk.app account; it is optional.",
