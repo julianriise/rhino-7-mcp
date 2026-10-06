@@ -26,6 +26,7 @@
     <Compile Include="..\..\plugin\Functions\SelectPlan.cs" Link="SelectPlan.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningTypes.cs" Link="OpeningTypes.cs" />
     <Compile Include="..\..\plugin\Functions\TypeCatalog.cs" Link="TypeCatalog.cs" />
+    <Compile Include="..\..\plugin\Functions\OptionSnapshot.cs" Link="OptionSnapshot.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningFoot.cs" Link="OpeningFoot.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningElement.cs" Link="OpeningElement.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningBlockShare.cs" Link="OpeningBlockShare.cs" />
