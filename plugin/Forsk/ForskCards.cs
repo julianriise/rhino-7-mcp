@@ -24,6 +24,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool Order;
         /// <summary>Grey hint shown while Value is empty. The page does not submit it.</summary>
         public string Placeholder;
+        /// <summary>A password input: what is typed shows as dots. Its value is never stored on the card.</summary>
+        public bool Secret;
     }
 
     /// <summary>
@@ -237,6 +239,31 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// Settings → Grok API key: one masked field to paste the user's own
+        /// key, Save, Remove while ~/.forsk/grok.env holds one, and Cancel. The
+        /// note says whether a key is set, by its last four characters only.
+        /// </summary>
+        public static CardSpec GrokKey(string loaded, bool stored)
+        {
+            var card = new CardSpec
+            {
+                Kind = ForskKeyFile.MenuId,
+                Question = ForskText.Get("grok.key.ask"),
+                Note = string.IsNullOrEmpty(loaded)
+                    ? ForskText.Get("grok.key.none")
+                    : ForskText.Format("grok.key.set", "tail", ForskKeyFile.Tail(loaded)),
+                Fields = new List<CardField>
+                {
+                    new CardField { Key = ForskKeyFile.FieldKey, Label = ForskText.Get("grok.key.field"), Value = "", Secret = true }
+                }
+            };
+            card.Pills.Add(new CardPill("save", ForskText.Get("word.save")));
+            if (stored) card.Pills.Add(new CardPill("remove", ForskText.Get("word.remove")));
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
+            return card;
+        }
+
         public static CardSpec Ink(FileFacts f)
         {
             var card = new CardSpec
@@ -393,6 +420,9 @@ namespace RhinoMCPPlugin.Forsk
                     if (pillId != "save") return null;
                     var sizes = new[] { Value("width"), Value("riser_max"), Value("going") }.Where(s => s.Length > 0).ToList();
                     return sizes.Count == 0 ? "Stair sizes saved" : "Stair sizes saved · " + string.Join(" × ", sizes);
+                case ForskKeyFile.MenuId:
+                    if (pillId == "save") return ForskText.Get("grok.key.saved");
+                    return pillId == "remove" ? ForskText.Get("grok.key.removed") : null;
                 case "print.pages":
                     if (pillId == "reset") return "Sheet set reset";
                     if (pillId == "export_ifc") return "Export IFC";

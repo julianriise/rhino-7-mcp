@@ -76,6 +76,21 @@ public class RegistryTests
         Assert.Contains("hint.windows", ForskRegistry.Card(Docs.Facts("rooms, no window, no key")).Hints);
     }
 
+    /// <summary>No key hides chat only. The hint points at the key card in Settings, not at files.</summary>
+    [Fact]
+    public void NoKey_KeepsTheLocalActions_AndTheHintPointsAtSettings()
+    {
+        string[] Ids(string name) => ForskRegistry.Card(Docs.Facts(name)).Actions.Select(a => a.Id).ToArray();
+
+        Assert.Equal(Ids("empty"), Ids("empty, no key"));
+        Assert.Contains("file.sample", Ids("empty, no key"));
+        Assert.Equal(Ids("house"), Ids("house, no key"));
+        Assert.Contains("file.print", Ids("house, no key"));
+        Assert.Equal(ForskRegistry.Bar(Docs.Facts("house")).Slots.Select(a => a.Id), ForskRegistry.Bar(Docs.Facts("house, no key")).Slots.Select(a => a.Id));
+        Assert.Equal("Chat actions are hidden until you add your Grok API key: Settings → Grok API key.", ForskText.Get("hint.key"));
+        Assert.Equal("Chat needs your own Grok API key: Settings → Grok API key. Get one at https://console.x.ai.", ForskText.Get("grok.key.where"));
+    }
+
     [Theory]
     [MemberData(nameof(Docs.Names), MemberType = typeof(Docs))]
     public void Delete_IsNeverSlot1OrSlot2(string name)

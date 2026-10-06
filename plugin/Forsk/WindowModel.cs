@@ -158,6 +158,7 @@ namespace RhinoMCPPlugin.Forsk
                     if (field.Options != null && field.Options.Count > 0)
                         f["options"] = new JArray(field.Options);
                     if (!string.IsNullOrEmpty(field.Placeholder)) f["placeholder"] = field.Placeholder;
+                    if (field.Secret) f["secret"] = true;
                     fields.Add(f);
                 }
                 item["fields"] = fields;
@@ -327,11 +328,11 @@ namespace RhinoMCPPlugin.Forsk
             model["settings"] = Settings(facts);
             model["attention"] = Attention(facts);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
-            if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide();
+            if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide(facts.KeyPresent);
             return model;
         }
 
-        /// <summary>Ink, the title block, and the bridge, then Copy debug report. The debug row is always there and is not a help-card action.</summary>
+        /// <summary>Ink, the title block, and the bridge, then the Grok key and Copy debug report. Those two are always there and are not help-card actions.</summary>
         static JArray Settings(FileFacts facts)
         {
             var menu = new JArray();
@@ -341,6 +342,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (action != null && action.Shows(facts))
                     menu.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label });
             }
+            menu.Add(new JObject { ["id"] = ForskKeyFile.MenuId, ["label"] = ForskText.Get(ForskKeyFile.MenuId) });
             menu.Add(new JObject { ["id"] = ForskDebug.MenuId, ["label"] = ForskDebug.MenuLabel });
             return menu;
         }

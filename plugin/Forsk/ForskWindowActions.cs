@@ -108,6 +108,11 @@ namespace RhinoMCPPlugin.Forsk
             }
             var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
+            if (id == ForskKeyFile.MenuId)
+            {
+                if (thread != null) KeyCard(thread, ForskText.Get(id), null);
+                return;
+            }
             var action = ForskRegistry.Find(id);
             if (doc == null || thread == null || action == null) return;
             // A click checks the precondition again. If it is no longer true, nothing runs and one line says so.
@@ -355,6 +360,14 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 }
             }
+            // A key that is empty or has a space keeps the card open with the reason. The key is never kept on the card.
+            if (kind == ForskKeyFile.MenuId && pillId == "save" && card["state"]?.ToString() == "open"
+                && ForskKeyFile.Clean(values?[ForskKeyFile.FieldKey]?.ToString(), out var keyReason) == null)
+            {
+                card["note"] = keyReason;
+                Render();
+                return;
+            }
             // Choose logo and Remove logo keep the Project info card open with the change shown. Save keeps it.
             if (kind == "meta.title" && (pillId == "logo" || pillId == "logo_remove") && card["state"]?.ToString() == "open")
             {
@@ -512,9 +525,47 @@ namespace RhinoMCPPlugin.Forsk
                 case "support.report":
                     SendReport(thread, card, values, doc);
                     break;
+                case ForskKeyFile.MenuId:
+                    SaveKey(card, pill.Id, values);
+                    break;
             }
             Models.Persist(thread);
             Render();
+        }
+
+        /// <summary>
+        /// The Grok key card from Settings, or after a chat turn with no key
+        /// (line says why). An older open key card closes, so one is pinned.
+        /// </summary>
+        void KeyCard(DocThread thread, string userText, string line)
+        {
+            foreach (var item in thread.Items)
+                if (item["kind"]?.ToString() == ForskKeyFile.MenuId) thread.Close(item["id"]?.ToString());
+            thread.Add("user", userText);
+            thread.BeginReply(null);
+            if (line != null) thread.Add("assistant", line);
+            thread.AddCard(ForskCards.GrokKey(ForskKeys.Load(), ForskKeyFile.Stored(ForskKeyFile.DefaultPath)), null);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
+        /// <summary>Save or Remove on the key card: ~/.forsk/grok.env changes, and chat shows or hides at once. The receipt never holds the key.</summary>
+        void SaveKey(JObject card, string pillId, JObject values)
+        {
+            try
+            {
+                if (pillId == "save")
+                    ForskKeyFile.Save(ForskKeyFile.DefaultPath, ForskKeyFile.Clean(values?[ForskKeyFile.FieldKey]?.ToString(), out _));
+                else if (pillId == "remove")
+                    ForskKeyFile.Remove(ForskKeyFile.DefaultPath);
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is DllNotFoundException || e is EntryPointNotFoundException)
+            {
+                card["receipt"] = ForskText.Format("grok.key.failed", "reason", e.Message);
+                Log("grok key · " + e.GetType().Name);
+            }
+            Poll(true);
         }
 
         // ------------------------------------------------------------ chat
@@ -591,6 +642,12 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         void Chat(DocThread thread, string text, string kind)
         {
+            // No key: one line and the key card, not a turn. Local actions never come here.
+            if (string.IsNullOrEmpty(ForskKeys.Load()))
+            {
+                KeyCard(thread, text, ForskText.Get("grok.key.missing"));
+                return;
+            }
             var doc = RhinoDoc.ActiveDoc;
             _busy = true;
             var picked = doc == null ? Picked.None : Facts(doc).Picked;

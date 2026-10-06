@@ -97,9 +97,11 @@ public class WindowViewTests
     {
         string[] Ids(string fixture) => ((JArray)View(fixture)["settings"]!).Select(s => s["id"]!.ToString()).ToArray();
 
-        Assert.Equal(new[] { "meta.title", "debug.copy" }, Ids("empty"));
-        Assert.Equal(new[] { "Ink", "Daylight quality", "Project info", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
-        Assert.Equal(new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start", "debug.copy" }, Ids("bridge down, grey ink"));
+        // The Grok key sits in Settings in every file: chat needs it, Print and Daylight do not.
+        Assert.Equal(new[] { "meta.title", "grok.key", "debug.copy" }, Ids("empty"));
+        Assert.Equal(new[] { "meta.title", "grok.key", "debug.copy" }, Ids("empty, no key"));
+        Assert.Equal(new[] { "Ink", "Daylight quality", "Project info", "Grok API key", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start", "grok.key", "debug.copy" }, Ids("bridge down, grey ink"));
         Assert.DoesNotContain("file.print", Ids("house"));
         Assert.Equal(new[] { "meta.title" }, ((JArray)View("empty")["attention"]!).Select(a => a["id"]!.ToString()));
         var help = View("house", help: true)["help"]!["groups"]!.SelectMany(g => g["actions"]!).Select(a => a["id"]!.ToString());

@@ -215,6 +215,11 @@
     return 'text';
   };
 
+  /* A secret field (the Grok API key) is a password input, so the key shows as dots. No DOM. */
+  Forsk.textType = function (field) {
+    return field && field.secret ? 'password' : 'text';
+  };
+
   /* An open card that asks for a typed or chosen value. A tick list is not one. No DOM. */
   Forsk.isForm = function (item) {
     if (!item || item.role !== 'card' || item.state !== 'open') return false;
@@ -682,7 +687,8 @@
       } else {
         if (field.label) wrap.appendChild(el('span', 'field-label', field.label));
         if (kind === 'text') {
-          input.type = 'text';
+          input.type = Forsk.textType(field);
+          if (field.secret) input.autocomplete = 'off';
           if (field.unit === 'mm') input.inputMode = 'decimal';
         } else input.rows = 4;
         input.value = field.value || '';

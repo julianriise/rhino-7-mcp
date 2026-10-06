@@ -6,8 +6,9 @@ using Newtonsoft.Json.Linq;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// The empty-file hint: three lines, until the user dismisses it or a
-    /// print succeeds. Not a thread line, so "This file is empty." stays.
+    /// The empty-file hint: three lines, and a fourth while chat has no key,
+    /// until the user dismisses it or a print succeeds. Not a thread line, so
+    /// "This file is empty." stays.
     /// </summary>
     public static class FirstRun
     {
@@ -26,11 +27,14 @@ namespace RhinoMCPPlugin.Forsk
             return line.Contains("Printed ") && PrintTemplate.Papers.Any(p => line.Contains(" on " + p.Name));
         }
 
-        public static JObject Guide()
+        /// <summary>The three lines, then "Add your Grok key" when chat has no key: the steps run without one.</summary>
+        public static JObject Guide(bool keyPresent)
         {
+            var lines = new JArray(Lines);
+            if (!keyPresent) lines.Add(ForskText.Get("grok.key.guide"));
             return new JObject
             {
-                ["lines"] = new JArray(Lines),
+                ["lines"] = lines,
                 ["dismiss"] = DismissId
             };
         }

@@ -429,52 +429,30 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         }
     }
 
+    /// <summary>
+    /// The chat key: FORSK_GROK_API_KEY in the environment first (developers),
+    /// then the user's own key saved from Settings → Grok API key in
+    /// ~/.forsk/grok.env, then a dev checkout's .env.
+    /// </summary>
     public static class ForskKeys
     {
-        public const string Missing =
-            "Set FORSK_GROK_API_KEY to chat. Export it before launching Rhino, or put FORSK_GROK_API_KEY=… in ~/.forsk/grok.env. Generate 3D, Print PDF, and Daylight still run without a key.";
+        public static string Missing => ForskText.Get("grok.key.where");
 
         public static string Load()
         {
-            var env = Environment.GetEnvironmentVariable("FORSK_GROK_API_KEY");
+            var env = Environment.GetEnvironmentVariable(ForskKeyFile.Name);
             if (!string.IsNullOrWhiteSpace(env)) return env.Trim();
 
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var paths = new List<string>
-            {
-                Path.Combine(home, ".forsk", "grok.env")
-            };
+            var paths = new List<string> { ForskKeyFile.DefaultPath };
             var root = ForskPrompts.FindRoot();
             if (root != null) paths.Add(Path.Combine(root, ".env"));
 
             foreach (var path in paths)
             {
-                var key = ReadFile(path);
+                var key = ForskKeyFile.Load(path);
                 if (!string.IsNullOrWhiteSpace(key)) return key.Trim();
             }
             return null;
-        }
-
-        static string ReadFile(string path)
-        {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-            string bare = null;
-            foreach (var raw in File.ReadAllLines(path))
-            {
-                var line = raw.Trim();
-                if (line.Length == 0 || line.StartsWith("#")) continue;
-                if (line.StartsWith("export ", StringComparison.Ordinal))
-                    line = line.Substring(7).Trim();
-                const string prefix = "FORSK_GROK_API_KEY=";
-                if (line.StartsWith(prefix, StringComparison.Ordinal))
-                {
-                    var value = line.Substring(prefix.Length).Trim().Trim('"').Trim('\'');
-                    if (value.Length > 0) return value;
-                }
-                if (bare == null && line.IndexOf('=') < 0)
-                    bare = line;
-            }
-            return bare;
         }
     }
 

@@ -575,4 +575,40 @@ Assert.Equal(new[] { "Project", "Project no.", "Client", "Address", "Architect",
         Assert.Null(ForskCards.For("detail.list", Docs.Facts("house")));
         Assert.Equal(new JArray("DET02"), ForskCards.Unticked(new JObject { ["DET01"] = "1", ["DET02"] = "0" }));
     }
+
+    /// <summary>
+    /// Settings → Grok API key: one masked field, Save, Remove only while
+    /// ~/.forsk/grok.env holds a key, and Cancel. Only the last four show.
+    /// </summary>
+    [Fact]
+    public void GrokKey_HasAMaskedField_SaveRemoveCancel_AndShowsOnlyTheLastFour()
+    {
+        var none = ForskCards.GrokKey(null, stored: false);
+        Assert.Equal("grok.key", none.Kind);
+        Assert.Equal("Your own xAI Grok API key for chat. It stays on this Mac.", none.Question);
+        Assert.Equal("No key is set. Get one at https://console.x.ai.", none.Note);
+        Assert.Equal(new[] { "save", "cancel" }, none.Pills.Select(p => p.Id));
+        var field = Assert.Single(none.Fields);
+        Assert.Equal("key", field.Key);
+        Assert.Equal("Key", field.Label);
+        Assert.Equal("", field.Value);
+        Assert.True(field.Secret);
+
+        var set = ForskCards.GrokKey("xai-abcdefgh9xYz", stored: true);
+        Assert.Equal("A key ending in 9xYz is set. Get a new one at https://console.x.ai.", set.Note);
+        Assert.Equal(new[] { "save", "remove", "cancel" }, set.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "Save", "Remove", "Cancel" }, set.Pills.Select(p => p.Label));
+        // A key from the environment is set but not in the file: there is nothing to remove.
+        Assert.Equal(new[] { "save", "cancel" }, ForskCards.GrokKey("xai-abcdefgh9xYz", stored: false).Pills.Select(p => p.Id));
+
+        var item = new DocThread().AddCard(set, null);
+        Assert.True(item["fields"]![0]!["secret"]!.Value<bool>());
+        Assert.Equal("", item["fields"]![0]!["value"]!.ToString());
+        Assert.DoesNotContain("abcdefgh", item.ToString());
+        Assert.Null(new DocThread().AddCard(ForskCards.TitleBlock(Docs.Facts("house"))!, null)["fields"]![0]!["secret"]);
+
+        Assert.Equal("Grok key saved", ForskCards.FormReceipt("grok.key", "save", new JObject { ["key"] = "xai-abcdefgh9xYz" }));
+        Assert.Equal("Grok key removed", ForskCards.FormReceipt("grok.key", "remove", new JObject { ["key"] = "" }));
+        Assert.Null(ForskCards.FormReceipt("grok.key", "cancel", new JObject()));
+    }
 }

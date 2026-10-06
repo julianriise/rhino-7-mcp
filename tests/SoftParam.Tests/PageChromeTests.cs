@@ -529,4 +529,17 @@ public class PageChromeTests
         Assert.Equal("800", engine.Evaluate("String(Forsk.scrollForThumb(200, 1000, 999))").ToString());
         Assert.Equal("0", engine.Evaluate("String(Forsk.scrollForThumb(200, 180, 10))").ToString());
     }
+
+    /// <summary>A secret field (the Grok API key) is a password input: the pasted key shows as dots and is not autofilled.</summary>
+    [Fact]
+    public void ASecretField_IsAPasswordInput()
+    {
+        var engine = PageScript.Load();
+        Assert.Equal("password", engine.Evaluate("Forsk.textType({key:'key', secret:true, value:''})").ToString());
+        Assert.Equal("text", engine.Evaluate("Forsk.textType({value:'1200', unit:'mm'})").ToString());
+        Assert.Equal("text", engine.Evaluate("Forsk.fieldKind({secret:true, value:''})").ToString());
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("input.type = Forsk.textType(field);", script);
+        Assert.Contains("if (field.secret) input.autocomplete = 'off';", script);
+    }
 }

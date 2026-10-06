@@ -103,6 +103,15 @@ public class SampleHouseTests
         Assert.False(FirstRun.Show(FileKind.Plan, false));
     }
 
+    /// <summary>With no Grok key the hint adds one line: chat waits for the key, the three steps do not.</summary>
+    [Fact]
+    public void AnEmptyFileWithNoKey_AddsTheGrokKeyLine()
+    {
+        var view = WindowView.Build(new DocThread { Serial = 1 }, Docs.Facts("empty, no key"));
+        Assert.Equal(new[] { "Open sample house", "Generate 3D", "Print", "Add your Grok key in Settings to chat" },
+            ((JArray)view["guide"]!["lines"]!).Select(line => line.ToString()).ToArray());
+    }
+
     [Fact]
     public void APrintedSheetCounts_ACancelDoesNot_AndThePageDismissesTheHint()
     {
