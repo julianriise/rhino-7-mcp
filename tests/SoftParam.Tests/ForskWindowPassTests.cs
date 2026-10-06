@@ -72,7 +72,7 @@ public class ForskWindowPassTests
     [InlineData("window.js", "document.documentElement.removeAttribute('data-kbd')")]
     [InlineData("window.js", "Forsk.keyAction = function")]
     [InlineData("window.js", "sender.send({ kind: 'action', id: slot.id })")]
-    [InlineData("window.html", "html[data-kbd] button:focus-visible { outline: 1.5px solid rgba(41, 72, 245, 0.55); outline-offset: 2px; }")]
+    [InlineData("window.html", "html[data-kbd] button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }")]
     [InlineData("window.html", "button:focus, textarea:focus, input:focus, select:focus { outline: none; }")]
     public void Tab_StillDrawsTheOnlyRing_AndTheSlotChipsStillFire(string file, string needle)
     {

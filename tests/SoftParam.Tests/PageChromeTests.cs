@@ -349,7 +349,7 @@ public class PageChromeTests
         var rule = html.Substring(at, end - at);
 
         Assert.Contains("background: var(--brand)", rule);
-        Assert.Contains("color: #FFFFFF", rule);
+        Assert.Contains("color: var(--on-brand)", rule);
         Assert.Contains("opacity: 0.85", rule);
         Assert.Contains("cursor: default", rule);
         Assert.DoesNotContain("rgba(255, 255, 255", rule);
@@ -399,7 +399,7 @@ public class PageChromeTests
         Assert.Contains("tabindex=\"0\"", html);
         Assert.Contains("-webkit-tap-highlight-color: transparent", html);
         Assert.Contains("button:focus, textarea:focus, input:focus, select:focus { outline: none; }", html);
-        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid rgba(41, 72, 245, 0.55); outline-offset: 2px; }", html);
+        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }", html);
         Assert.Contains("html[data-kbd] .menu button:focus-visible", html);
         Assert.DoesNotContain("--glow", html);
         Assert.DoesNotContain(".field:focus-within", html);
@@ -537,7 +537,7 @@ public class PageChromeTests
         Assert.Contains("overflow-y: auto", field);
         Assert.DoesNotContain("scrollbar-width", field);
         Assert.Contains("button:focus, textarea:focus, input:focus, select:focus { outline: none; }", html);
-        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid rgba(41, 72, 245, 0.55); outline-offset: 2px; }", html);
+        Assert.Contains("html[data-kbd] button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }", html);
 
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
         Assert.Contains("Forsk.scrollThumb = function", script);
