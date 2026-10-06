@@ -41,7 +41,7 @@ BUNDLE="$STAGE/forsk"
 mkdir -p "$BUNDLE/tools" "$BUNDLE/daylight"
 rsync -a "$FORSK_DIR/prompts/" "$BUNDLE/prompts/"
 for tool in pdf_vector cubicasa; do
-  rsync -a --exclude tests --exclude .venv --exclude __pycache__ --exclude '*.egg-info' \
+  rsync -a --exclude tests --exclude .venv --exclude __pycache__ --exclude '*.egg-info' --exclude .pytest_cache --exclude uv.lock \
     "$FORSK_DIR/tools/$tool/" "$BUNDLE/tools/$tool/"
 done
 cp "$REPO/server/src/forsk_daylight.py" "$BUNDLE/daylight/"
