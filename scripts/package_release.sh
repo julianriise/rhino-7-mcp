@@ -40,8 +40,9 @@ cp "$REPO/LICENSE" "$STAGE/LICENSE-rhinomcp.txt"
 BUNDLE="$STAGE/forsk"
 mkdir -p "$BUNDLE/tools" "$BUNDLE/daylight"
 rsync -a "$FORSK_DIR/prompts/" "$BUNDLE/prompts/"
+# uv.lock stays: the tools run with uv --frozen, which needs it.
 for tool in pdf_vector cubicasa; do
-  rsync -a --exclude tests --exclude .venv --exclude __pycache__ --exclude '*.egg-info' --exclude .pytest_cache --exclude uv.lock \
+  rsync -a --exclude tests --exclude .venv --exclude __pycache__ --exclude '*.egg-info' --exclude .pytest_cache \
     "$FORSK_DIR/tools/$tool/" "$BUNDLE/tools/$tool/"
 done
 cp "$REPO/server/src/forsk_daylight.py" "$BUNDLE/daylight/"
