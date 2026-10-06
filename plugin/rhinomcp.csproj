@@ -17,7 +17,7 @@
          keeps the file name rhinomcp.rhp and its plug-in GUID, so the dev install,
          the smokes and existing installs carry on. -->
     <Version>3.0.0</Version>
-    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Title>Forsk</Title>
     <Product>Forsk</Product>
     <Company>Forsk</Company>

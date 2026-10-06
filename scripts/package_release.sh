@@ -25,7 +25,8 @@ NAME="$(sed -n 's/^name: *//p' "$REPO/plugin/manifest.yml")"
 EXTRA=()
 [[ "$(uname)" == "Darwin" ]] || EXTRA=(-p:UseWindowsForms=false)
 echo "==> building $NAME $VERSION (Release, net48)"
-dotnet build "$REPO/plugin/rhinomcp.csproj" -c Release --nologo -v q "${EXTRA[@]}" >/dev/null
+# macOS bash 3.2 treats an empty array as unbound under set -u, hence the ${...+...} form.
+dotnet build "$REPO/plugin/rhinomcp.csproj" -c Release --nologo -v q ${EXTRA[@]+"${EXTRA[@]}"} >/dev/null
 BUILD="$REPO/plugin/bin/Release/net48"
 [[ -f "$BUILD/rhinomcp.rhp" ]] || { echo "error: no rhinomcp.rhp in $BUILD" >&2; exit 1; }
 
