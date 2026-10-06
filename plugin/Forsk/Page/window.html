@@ -166,6 +166,7 @@ html[data-kbd] .menu button:focus-visible { background: var(--page); }
 .receipt b { color: var(--ink); font-weight: 600; }
 .receipt .tick { color: var(--ok); margin-right: 4px; }
 .receipt .cross { color: var(--bad); margin-right: 4px; }
+.receipt .tick svg, .receipt .cross svg { width: 14px; height: 14px; vertical-align: -2px; }
 .card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; margin: 0 0 10px; animation: rise 160ms ease-out; }
 .card .question { margin: 0 0 8px; }
 .card.done, .card.stale { background: transparent; box-shadow: none; padding: 0; animation: none; color: var(--meta); font-size: 13px; }
@@ -203,9 +204,10 @@ html[data-kbd] .menu button:focus-visible { background: var(--page); }
 /* Choose sheets: ↑ ↓ move a row; the label takes the room between the tick and the arrows. */
 .card .field-row.check .field-label + .move { margin-left: auto; }
 .card .move {
-  font: inherit; font-size: 12px; line-height: 1; padding: 4px 7px; border: 0; border-radius: 8px;
+  padding: 4px 6px; border: 0; border-radius: 8px;
   background: transparent; color: var(--meta); cursor: pointer;
 }
+.card .move svg { display: block; width: 14px; height: 14px; }
 html[data-kbd] .card .move:focus-visible { background: var(--page); color: var(--ink); }
 @media (hover: hover) and (pointer: fine) {
   .menu button:hover { background: var(--page); }
@@ -240,7 +242,7 @@ nav.bar { padding: 4px 16px 0; }
   border: 0; background: var(--card); color: var(--ink); box-shadow: var(--shadow);
   display: grid; place-items: center; cursor: pointer;
 }
-.help-button svg { display: block; }
+.help-button svg { display: block; width: 16px; height: 16px; }
 .help-button.open { background: var(--brand); color: #FFFFFF; box-shadow: none; }
 .reason {
   color: var(--meta); font-size: 12px; line-height: 1.35; margin: 6px 2px 0;
@@ -267,12 +269,11 @@ nav.bar { padding: 4px 16px 0; }
 .tools { display: flex; align-items: center; gap: 4px; min-height: 32px; }
 .add {
   flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--meta);
-  font: 400 22px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
+  display: grid; place-items: center; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
-  /* The system "+" ink sits 2px below the em centre, so the control reads low. */
-  transform: translateY(-2px);
 }
-.key-hint { flex: none; margin-left: auto; color: var(--meta); font-size: 12px; line-height: 1; padding: 0 2px 0 0; }
+.key-hint { flex: none; margin-left: auto; color: var(--meta); display: block; padding: 0 2px 0 0; }
+.add svg, .key-hint svg, .send svg { display: block; }
 .step::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
   background: linear-gradient(90deg, rgba(245,246,248,0) 0%, rgba(245,246,248,0.9) 50%, rgba(245,246,248,0) 100%);
@@ -298,7 +299,7 @@ textarea {
 textarea::placeholder { color: var(--faint); }
 .send {
   flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%;
-  background: var(--brand); color: #FFFFFF; font: 600 16px/32px -apple-system, system-ui, sans-serif; cursor: pointer; padding: 0; margin: 0;
+  background: var(--brand); color: #FFFFFF; display: grid; place-items: center; cursor: pointer; padding: 0; margin: 0;
   -webkit-appearance: none; appearance: none;
 }
 .send:disabled {
@@ -322,14 +323,14 @@ textarea::placeholder { color: var(--faint); }
   <div class="identity">
     <div id="avatar" class="avatar" aria-hidden="true"></div>
     <button id="role-pill" class="role-pill" type="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu">
-      <span class="role-line"><span id="role-name">Planner</span><svg class="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="role-line"><span id="role-name">Planner</span><svg class="chev" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
       <span id="file" class="role-sub"></span>
     </button>
     <div id="role-menu" class="menu" role="menu" hidden></div>
   </div>
   <button id="more" class="round" type="button" tabindex="0" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu">
     <span class="gear">
-      <svg viewBox="0 0 24 24" width="16" height="16" overflow="visible" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
       <span id="gear-dot" class="notice" hidden aria-hidden="true"></span>
     </span>
   </button>
@@ -345,13 +346,21 @@ textarea::placeholder { color: var(--faint); }
     <div id="avatar-render">%%AVATAR_RENDER%%</div>
   </div>
   <div id="icons" hidden>
-    <div id="icon-door.hinged_single"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V4M6 4A12 12 0 0 1 18 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-door.hinged_double"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V10M6 10A6 6 0 0 1 12 16M18 16V10M18 10A6 6 0 0 0 12 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-door.sliding"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14.5h7M11 17.5h7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-door.pocket"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 13.5h4M2 18.5h4M18 16h4M3 16h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-window.fixed"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14h12M6 16h12M6 18h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-window.side_hung"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M6 8A8 8 0 0 1 14 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div id="icon-window.top_hung"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M12 16V10M9.5 10h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <!-- Icons are Lucide 1.52 (ISC, https://lucide.dev), inline so the window works offline. The door and window
+         types are plan symbols Lucide has no match for, drawn on its grid: 24 units, stroke 2, round caps. -->
+    <div id="icon-check"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div id="icon-x"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div>
+    <div id="icon-minus"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></div>
+    <div id="icon-arrow-up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></div>
+    <div id="icon-arrow-down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+    <div id="icon-ellipsis"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></div>
+    <div id="icon-door.hinged_single"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V4M6 4A12 12 0 0 1 18 16"/></svg></div>
+    <div id="icon-door.hinged_double"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V10M6 10A6 6 0 0 1 12 16M18 16V10M18 10A6 6 0 0 0 12 16"/></svg></div>
+    <div id="icon-door.sliding"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14h7M11 18h7"/></svg></div>
+    <div id="icon-door.pocket"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4M2 20h4M18 16h4M3 16h10"/></svg></div>
+    <div id="icon-window.fixed"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14h12v4H6z"/></svg></div>
+    <div id="icon-window.side_hung"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M6 8A8 8 0 0 1 14 16"/></svg></div>
+    <div id="icon-window.top_hung"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M12 16V10M9.5 10h5"/></svg></div>
   </div>
 </header>
 <div id="pin" hidden></div>
@@ -366,9 +375,9 @@ textarea::placeholder { color: var(--faint); }
     <div class="field">
       <textarea id="q" rows="1" placeholder="Ask Forsk…" spellcheck="true" aria-label="Ask Forsk"></textarea>
       <div class="tools">
-        <button id="add" class="add" type="button" tabindex="0" aria-label="Import a plan" title="Import a plan">+</button>
-        <span class="key-hint" aria-hidden="true" title="Return to send">&#x23CE;</span>
-        <button id="send" class="send" type="submit" tabindex="0" aria-label="Send" disabled>&#8593;</button>
+        <button id="add" class="add" type="button" tabindex="0" aria-label="Import a plan" title="Import a plan"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+        <span class="key-hint" aria-hidden="true" title="Return to send"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/></svg></span>
+        <button id="send" class="send" type="submit" tabindex="0" aria-label="Send" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
       </div>
     </div>
   </form>

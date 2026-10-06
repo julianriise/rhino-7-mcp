@@ -61,9 +61,10 @@ public class PageChromeTests
         Assert.Contains("id=\"gear-dot\"", button);
         Assert.Contains("class=\"notice\"", button);
         Assert.Contains("width=\"16\" height=\"16\"", button);
-        Assert.Contains("stroke-width=\"1.7\"", button);
-        Assert.Contains("M19.4 15", button);
-        Assert.Contains("overflow=\"visible\"", button);
+        // Lucide's settings icon (1.52), at Lucide's stroke.
+        Assert.Contains("stroke-width=\"2\"", button);
+        Assert.Contains("M9.671 4.136", button);
+        Assert.DoesNotContain("M19.4 15", button);
         Assert.DoesNotContain("aria-label=\"More\"", header);
         Assert.DoesNotContain("r=\"1.35\"", header);
         Assert.DoesNotContain("cx=\"6\"", header);
@@ -127,7 +128,7 @@ public class PageChromeTests
 
     /// <summary>
     /// R1: every opening type has a pill icon in the page, drawn like its plan
-    /// symbol: 24 units, currentColor, 1.5 stroke, no ids, so a copy needs no
+    /// symbol: 24 units, currentColor, Lucide's 2 stroke, no ids, so a copy needs no
     /// renaming. The card's pill passes its icon to pill().
     /// </summary>
     [Fact]
@@ -146,13 +147,53 @@ public class PageChromeTests
             var svg = html.Substring(at, html.IndexOf("</div>", at, StringComparison.Ordinal) - at);
             Assert.Contains("viewBox=\"0 0 24 24\"", svg);
             Assert.Contains("stroke=\"currentColor\"", svg);
-            Assert.Contains("stroke-width=\"1.5\"", svg);
+            Assert.Contains("stroke-width=\"2\"", svg);
+            Assert.Contains("stroke-linecap=\"round\"", svg);
             Assert.Equal(1, svg.Split(" id=").Length - 1);
         }
         var holders = html.IndexOf("<div id=\"icons\" hidden>", StringComparison.Ordinal);
         Assert.True(holders > 0 && holders < html.IndexOf("</header>", StringComparison.Ordinal));
         Assert.Contains("}, p.icon));", script);
         Assert.Contains(".pill .icon {", html);
+    }
+
+    /// <summary>
+    /// Every icon in the window is Lucide (or a door or window plan symbol
+    /// drawn on Lucide's grid): 24 units, currentColor, stroke 2, round caps.
+    /// No text glyph stands in for an icon. The crew avatars are brand art.
+    /// </summary>
+    [Fact]
+    public void EveryIcon_IsLucide_AndNoGlyphStandsInForOne()
+    {
+        var html = Html();
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));
+
+        var svgs = 0;
+        for (var at = html.IndexOf("<svg", StringComparison.Ordinal); at >= 0; at = html.IndexOf("<svg", at + 1, StringComparison.Ordinal))
+        {
+            var svg = html.Substring(at, html.IndexOf("</svg>", at, StringComparison.Ordinal) - at);
+            Assert.Contains("viewBox=\"0 0 24 24\"", svg);
+            Assert.Contains("stroke=\"currentColor\"", svg);
+            Assert.Contains("stroke-width=\"2\"", svg);
+            Assert.Contains("stroke-linecap=\"round\"", svg);
+            svgs++;
+        }
+        Assert.True(svgs >= 18, svgs.ToString());
+
+        foreach (var name in new[] { "check", "x", "minus", "arrow-up", "arrow-down", "ellipsis" })
+            Assert.Contains("<div id=\"icon-" + name + "\"><svg", html);
+        Assert.Contains("M9.671 4.136", html); // settings
+        Assert.Contains("m9 18 6-6-6-6", html); // chevron-right
+        Assert.Contains("M20 4v7a4 4 0 0 1-4 4H4", html); // corner-down-left
+
+        Assert.DoesNotContain("&#x23CE;", html);
+        Assert.DoesNotContain("&#8593;", html);
+        Assert.DoesNotContain(">+</button>", html);
+        Assert.DoesNotContain("'\u2713'", script);
+        Assert.DoesNotContain("'\u2717'", script);
+        Assert.DoesNotContain("'\\u2191'", script);
+        Assert.DoesNotContain("'\\u2193'", script);
+        Assert.DoesNotContain("createElementNS", script);
     }
 
     [Fact]

@@ -604,8 +604,11 @@
   function receipt(item) {
     var row = el('div', 'receipt');
     if (item.id) row.setAttribute('data-item', item.id);
-    var mark = item.ok === false ? ['cross', '✗'] : item.ok === true ? ['tick', '✓'] : ['tick', '–'];
-    row.appendChild(el('span', mark[0], mark[1]));
+    var mark = item.ok === false ? ['cross', 'x'] : item.ok === true ? ['tick', 'check'] : ['tick', 'minus'];
+    var sign = el('span', mark[0]);
+    var drawn = iconNode(mark[1]);
+    if (drawn) sign.appendChild(drawn);
+    row.appendChild(sign);
     var parts = Forsk.splitSubject(item.text, item.subject);
     if (parts[0]) row.appendChild(document.createTextNode(parts[0]));
     if (parts[1]) row.appendChild(el('b', null, parts[1]));
@@ -622,12 +625,12 @@
     return button;
   }
 
-  /* The holder of a pill icon in window.html. No DOM, so it tests headless. */
+  /* The holder of an icon in window.html. No DOM, so it tests headless. */
   Forsk.iconId = function (name) {
     return 'icon-' + name;
   };
 
-  /* A copy of a pill icon. Icons are strokes with no ids, so a copy needs no renaming. */
+  /* A copy of an icon from the holder in window.html. Icons are strokes with no ids, so a copy needs no renaming. */
   function iconNode(name) {
     var holder = document.getElementById(Forsk.iconId(name));
     var src = holder ? first(holder, 'svg') : null;
@@ -697,8 +700,10 @@
         if (field.unit) wrap.appendChild(el('span', 'unit', field.unit));
       }
       if (field.order) {
-        ['\u2191', '\u2193'].forEach(function (arrow, i) {
-          var move = el('button', 'move', arrow);
+        ['arrow-up', 'arrow-down'].forEach(function (arrow, i) {
+          var move = el('button', 'move');
+          var drawn = iconNode(arrow);
+          if (drawn) move.appendChild(drawn);
           move.type = 'button';
           move.setAttribute('aria-label', (i === 0 ? 'Up: ' : 'Down: ') + (field.label || field.key));
           move.addEventListener('click', function (e) {
@@ -976,25 +981,6 @@
     box.appendChild(h);
   }
 
-  /* Horizontal three dots, 16×16, same weight as the header icons. */
-  function moreMark() {
-    var ns = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '16');
-    svg.setAttribute('height', '16');
-    svg.setAttribute('aria-hidden', 'true');
-    [5, 12, 19].forEach(function (cx) {
-      var dot = document.createElementNS(ns, 'circle');
-      dot.setAttribute('cx', String(cx));
-      dot.setAttribute('cy', '12');
-      dot.setAttribute('r', '1.25');
-      dot.setAttribute('fill', 'currentColor');
-      svg.appendChild(dot);
-    });
-    return svg;
-  }
-
   function renderBar(bar) {
     var nav = document.getElementById('bar');
     while (nav.firstChild) nav.removeChild(nav.firstChild);
@@ -1017,7 +1003,8 @@
       help.title = bar.help.title + '  ' + bar.help.key;
       help.setAttribute('aria-label', bar.help.title);
       help.setAttribute('aria-expanded', 'false');
-      help.appendChild(moreMark());
+      var dots = iconNode('ellipsis');
+      if (dots) help.appendChild(dots);
       help.addEventListener('click', function () {
         var menu = document.getElementById('slot-menu');
         var items = menu ? menu.getElementsByTagName('button').length : 0;
