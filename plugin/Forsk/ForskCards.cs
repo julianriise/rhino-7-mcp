@@ -289,15 +289,15 @@ namespace RhinoMCPPlugin.Forsk
         /// detection, each with its state. The pills are the actions still
         /// open, the one most needed first: Set up (Try again after a failure)
         /// while uv is missing, the Grok key card, Get a key while there is no
-        /// key, and Done. Only Done answers the card.
+        /// key, Connect (or Disconnect) for the account, and Done. Only Done answers the card.
         /// </summary>
-        public static CardSpec Setup(string key, SetupState tools)
+        public static CardSpec Setup(string key, SetupState tools, AccountState account = null)
         {
             var card = new CardSpec
             {
                 Kind = ForskSetup.MenuId,
                 Question = ForskText.Get("setup.ask"),
-                Rows = new List<string> { ForskSetup.ChatRow(key), ForskSetup.ToolsRow(tools) },
+                Rows = new List<string> { ForskSetup.ChatRow(key), ForskSetup.ToolsRow(tools), ForskSetup.AccountRow(account) },
                 Note = ForskText.Get("setup.note")
             };
             var noKey = string.IsNullOrEmpty(key);
@@ -305,6 +305,10 @@ namespace RhinoMCPPlugin.Forsk
                 card.Pills.Add(new CardPill("uv", ForskText.Get(tools.Phase == SetupPhase.Failed ? "setup.uv.again" : "setup.uv")));
             card.Pills.Add(new CardPill("key", ForskText.Get(noKey ? "setup.key.add" : "setup.key.change")));
             if (noKey) card.Pills.Add(new CardPill("get_key", ForskText.Get("setup.key.get")));
+            if (account == null || account.CanConnect)
+                card.Pills.Add(new CardPill("connect", ForskText.Get(account?.Phase == AccountPhase.Failed ? "setup.account.again" : "setup.account.connect")));
+            else if (account.Phase == AccountPhase.Connected)
+                card.Pills.Add(new CardPill("disconnect", ForskText.Get("setup.account.disconnect")));
             card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
             return card;
         }

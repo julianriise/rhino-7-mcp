@@ -625,7 +625,7 @@ namespace RhinoMCPPlugin.Forsk
             thread.Add("user", userText);
             thread.BeginReply(null);
             if (line != null) thread.Add("assistant", line);
-            thread.AddCard(ForskCards.Setup(ForskKeys.Load(), Tools()), null);
+            thread.AddCard(ForskCards.Setup(ForskKeys.Load(), Tools(), Account()), null);
             thread.EndReply();
             Models.Persist(thread);
             Render();
@@ -643,7 +643,7 @@ namespace RhinoMCPPlugin.Forsk
         void RefreshSetup()
         {
             var thread = Active();
-            if (thread != null && thread.Refresh(ForskCards.Setup(ForskKeys.Load(), Tools())) > 0) Models.Persist(thread);
+            if (thread != null && thread.Refresh(ForskCards.Setup(ForskKeys.Load(), Tools(), Account())) > 0) Models.Persist(thread);
             Render();
         }
 
@@ -661,7 +661,148 @@ namespace RhinoMCPPlugin.Forsk
                     try { System.Diagnostics.Process.Start("/usr/bin/open", ForskSetup.KeySite); }
                     catch (Exception e) { Log("setup · open " + ForskSetup.KeySite + " · " + e.GetType().Name); }
                     return;
+                case "connect":
+                    ConnectAccount();
+                    return;
+                case "disconnect":
+                    try { AccountFile.Remove(AccountFile.DefaultPath); }
+                    catch (Exception e) { Log("account · remove · " + e.GetType().Name); }
+                    _account = AccountState.Disconnected();
+                    Log("account · disconnected on this Mac");
+                    RefreshSetup();
+                    return;
             }
+        }
+
+        // ------------------------------------------------------------ account (Connect Rhino)
+
+        static AccountState _account;
+        static int _linking;
+
+        /// <summary>
+        /// The Account row. The first look reads ~/.forsk/account.json and, when
+        /// it holds a token, asks the dashboard once in the background: a Mac
+        /// disconnected there turns Not connected here. Offline changes nothing.
+        /// </summary>
+        AccountState Account()
+        {
+            if (_account != null) return _account;
+            AccountFile file = null;
+            try { file = AccountFile.Load(AccountFile.DefaultPath); }
+            catch (Exception e) { Log("account · read · " + e.GetType().Name); }
+            _account = AccountState.From(file);
+            if (file != null) CheckLicence(file);
+            return _account;
+        }
+
+        void CheckLicence(AccountFile file)
+        {
+            var forsk = PluginVersion();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var status = ForskAccountHttp.Licence(file.Token, forsk, out var body);
+                var known = ForskAccount.ParseLicence(status, body, out var email, out var plan);
+                if (known == null) return;
+                Post(() =>
+                {
+                    if (_account?.Phase != AccountPhase.Connected) return;
+                    try
+                    {
+                        if (known == false) AccountFile.Remove(AccountFile.DefaultPath);
+                        else if (email != file.Email || plan != file.Plan)
+                            new AccountFile { Token = file.Token, Email = email, Plan = plan }.Save(AccountFile.DefaultPath);
+                    }
+                    catch (Exception e) { Log("account · write · " + e.GetType().Name); }
+                    _account = known == false ? AccountState.Disconnected() : _account.Connected(email, plan);
+                    Log("account · licence · " + (known == false ? "disconnected on the dashboard" : plan));
+                    RefreshSetup();
+                });
+            });
+        }
+
+        /// <summary>
+        /// Connect on the card: ask the dashboard for a code, show it on the
+        /// card, open the Connect page in the browser, and wait for the tap off
+        /// the UI thread. A second click while it waits does nothing.
+        /// </summary>
+        void ConnectAccount()
+        {
+            if (Interlocked.CompareExchange(ref _linking, 1, 0) != 0) return;
+            var rhino = RhinoVersion();
+            var forsk = PluginVersion();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { Link(MacName(), rhino, forsk); }
+                catch (Exception e) { Post(() => FailLink(e.GetType().Name)); }
+                finally { Interlocked.Exchange(ref _linking, 0); }
+            });
+        }
+
+        void Link(string name, string rhino, string forsk)
+        {
+            var status = ForskAccountHttp.Post(ForskAccount.StartUrl, ForskAccount.StartBody(name, rhino, forsk), out var body);
+            var started = ForskAccount.ParseStart(status, body);
+            if (started == null)
+            {
+                Post(() => FailLink(status == 0 ? ForskText.Get("setup.account.offline") : "the dashboard did not answer (HTTP " + status + "), try again later."));
+                return;
+            }
+            Post(() =>
+            {
+                _account = (_account ?? AccountState.Disconnected()).Start(started.Code);
+                Log("account · waiting · " + started.Code);
+                RefreshSetup();
+                try { System.Diagnostics.Process.Start("/usr/bin/open", started.Url); }
+                catch (Exception e) { Log("account · open · " + e.GetType().Name); }
+            });
+
+            var deadline = DateTime.UtcNow + ForskAccount.GiveUp;
+            while (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(started.Interval));
+                var pollStatus = ForskAccountHttp.Post(ForskAccount.PollUrl, ForskAccount.PollBody(started.Poll), out var pollBody);
+                var state = ForskAccount.ParsePoll(pollStatus, pollBody, out var connected);
+                if (state == "pending" || state == null) continue;
+                if (state == "expired") break;
+                connected.Save(AccountFile.DefaultPath);
+                Post(() =>
+                {
+                    _account = _account.Connected(connected.Email, connected.Plan);
+                    Log("account · connected · " + connected.Plan);
+                    RefreshSetup();
+                });
+                return;
+            }
+            Post(() => FailLink(ForskText.Get("setup.account.expired")));
+        }
+
+        void FailLink(string reason)
+        {
+            _account = (_account ?? AccountState.Disconnected()).Fail(reason);
+            Log("account · failed · " + reason);
+            RefreshSetup();
+        }
+
+        /// <summary>"Julian's MacBook Air" from System Settings → Sharing, else the host name.</summary>
+        static string MacName()
+        {
+            try
+            {
+                var start = new System.Diagnostics.ProcessStartInfo("/usr/sbin/scutil", "--get ComputerName")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using (var process = System.Diagnostics.Process.Start(start))
+                {
+                    var name = process.StandardOutput.ReadToEnd().Trim();
+                    process.WaitForExit(2000);
+                    if (name.Length > 0) return name;
+                }
+            }
+            catch (Exception) { }
+            return Environment.MachineName;
         }
 
         /// <summary>

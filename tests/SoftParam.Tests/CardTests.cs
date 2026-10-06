@@ -623,23 +623,34 @@ Assert.Equal(new[] { "Project", "Project no.", "Client", "Address", "Architect",
         var fresh = ForskCards.Setup(null, SetupState.From(uvFound: false));
         Assert.Equal("forsk.setup", fresh.Kind);
         Assert.Equal("Set up Forsk on this Mac. Each part works on its own.", fresh.Question);
-        Assert.Equal(new[] { "Chat · Needs your Grok key", "Daylight & AI detection · Not set up" }, fresh.Rows);
-        Assert.Equal(new[] { "uv", "key", "get_key", "done" }, fresh.Pills.Select(p => p.Id));
-        Assert.Equal(new[] { "Set up", "Add Grok key", "Get a key", "Done" }, fresh.Pills.Select(p => p.Label));
-        Assert.Equal("Chat uses your own xAI Grok key from https://console.x.ai. Set up downloads uv and Python once (about 40 MB) for daylight and AI detection.", fresh.Note);
+        Assert.Equal(new[] { "Chat · Needs your Grok key", "Daylight & AI detection · Not set up", "Account · Not connected" }, fresh.Rows);
+        Assert.Equal(new[] { "uv", "key", "get_key", "connect", "done" }, fresh.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "Set up", "Add Grok key", "Get a key", "Connect", "Done" }, fresh.Pills.Select(p => p.Label));
+        Assert.Equal("Chat uses your own xAI Grok key from https://console.x.ai. Set up downloads uv and Python once (about 40 MB) for daylight and AI detection. Connect links this Mac to your forsk.app account; it is optional.", fresh.Note);
 
         var ready = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(uvFound: true));
-        Assert.Equal(new[] { "Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Ready" }, ready.Rows);
-        Assert.Equal(new[] { "Change Grok key", "Done" }, ready.Pills.Select(p => p.Label));
+        Assert.Equal(new[] { "Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Ready", "Account · Not connected" }, ready.Rows);
+        Assert.Equal(new[] { "Change Grok key", "Connect", "Done" }, ready.Pills.Select(p => p.Label));
         Assert.DoesNotContain("abcdefgh", string.Join(" ", ready.Rows) + ready.Note);
 
         var running = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start().Step("Checking the download"));
         Assert.Equal("Daylight & AI detection · Setting up… Checking the download", running.Rows[1]);
-        Assert.Equal(new[] { "key", "done" }, running.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "key", "connect", "done" }, running.Pills.Select(p => p.Id));
 
         var failed = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start().Fail("No internet connection: try again when online."));
         Assert.Equal("Daylight & AI detection · Failed: No internet connection: try again when online.", failed.Rows[1]);
-        Assert.Equal(new[] { "Try again", "Change Grok key", "Done" }, failed.Pills.Select(p => p.Label));
+        Assert.Equal(new[] { "Try again", "Change Grok key", "Connect", "Done" }, failed.Pills.Select(p => p.Label));
+
+        // Account: the code while the browser confirms, then who is connected, with Disconnect instead of Connect.
+        var waiting = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(true), AccountState.From(null).Start("K7M2-QX4P"));
+        Assert.Equal("Account · Code K7M2-QX4P · confirm it in your browser", waiting.Rows[2]);
+        Assert.Equal(new[] { "key", "done" }, waiting.Pills.Select(p => p.Id));
+        var connected = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(true), AccountState.From(new AccountFile { Token = "t", Email = "julian@forsk.app", Plan = "Early tester" }));
+        Assert.Equal("Account · Connected as julian@forsk.app · Early tester", connected.Rows[2]);
+        Assert.Equal(new[] { "Change Grok key", "Disconnect", "Done" }, connected.Pills.Select(p => p.Label));
+        var expired = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(true), AccountState.From(null).Start("K7M2-QX4P").Fail("the code expired, click Connect again."));
+        Assert.Equal("Account · Not connected: the code expired, click Connect again.", expired.Rows[2]);
+        Assert.Equal(new[] { "Change Grok key", "Connect again", "Done" }, expired.Pills.Select(p => p.Label));
     }
 
     /// <summary>An install step rewrites the open setup card in place: rows, pills and note. Answered cards keep what they showed.</summary>
@@ -653,8 +664,8 @@ Assert.Equal(new[] { "Project", "Project no.", "Client", "Address", "Architect",
         var other = thread.AddCard(ForskCards.GrokKey(null, stored: false), null);
 
         Assert.Equal(1, thread.Refresh(ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start())));
-        Assert.Equal(new JArray("Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Setting up… Downloading uv"), open["rows"]);
-        Assert.Equal(new JArray("key", "done"), new JArray(((JArray)open["pills"]!).Select(p => p["id"])));
+        Assert.Equal(new JArray("Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Setting up… Downloading uv", "Account · Not connected"), open["rows"]);
+        Assert.Equal(new JArray("key", "connect", "done"), new JArray(((JArray)open["pills"]!).Select(p => p["id"])));
         Assert.Equal("open", open["state"]!.ToString());
         Assert.Equal("Daylight & AI detection · Not set up", answered["rows"]![1]!.ToString());
         Assert.Null(other["rows"]);

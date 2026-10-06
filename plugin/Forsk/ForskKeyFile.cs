@@ -140,8 +140,9 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>
         /// A new file beside the old one, owner-only before the key goes in,
         /// then moved over it: the key is never in a file others can read.
+        /// The account token (ForskAccount) is written the same way.
         /// </summary>
-        static void Write(string path, string text)
+        internal static void Write(string path, string text)
         {
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);

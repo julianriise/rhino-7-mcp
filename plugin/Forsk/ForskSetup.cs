@@ -53,7 +53,7 @@ namespace RhinoMCPPlugin.Forsk
         public bool NeedsAction => Phase == SetupPhase.NotSetUp || Phase == SetupPhase.Failed;
     }
 
-    /// <summary>The Set up Forsk card's words: one row each for chat and for daylight and AI detection.</summary>
+    /// <summary>The Set up Forsk card's words: one row each for chat, for daylight and AI detection, and for the account.</summary>
     public static class ForskSetup
     {
         /// <summary>The Settings menu row, the first-run button and the card's kind.</summary>
@@ -67,6 +67,23 @@ namespace RhinoMCPPlugin.Forsk
                 ? ForskText.Get("setup.chat.needs")
                 : ForskText.Format("setup.chat.ready", "tail", ForskKeyFile.Tail(key));
             return ForskText.Get("setup.chat") + " · " + state;
+        }
+
+        /// <summary>The Account row: not connected, the code while the browser confirms, connected as whom, or why not.</summary>
+        public static string AccountRow(AccountState account)
+        {
+            string state;
+            switch (account?.Phase ?? AccountPhase.NotConnected)
+            {
+                case AccountPhase.Waiting: state = ForskText.Format("setup.account.waiting", "code", account.Text); break;
+                case AccountPhase.Connected:
+                    state = ForskText.Format("setup.account.connected", "email", account.Email);
+                    if (!string.IsNullOrEmpty(account.Plan)) state += " · " + account.Plan;
+                    break;
+                case AccountPhase.Failed: state = ForskText.Format("setup.account.failed", "reason", account.Text); break;
+                default: state = ForskText.Get("setup.account.none"); break;
+            }
+            return ForskText.Get("setup.account") + " · " + state;
         }
 
         public static string ToolsRow(SetupState tools)
