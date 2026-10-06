@@ -167,6 +167,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "role":
                         PickRole(message["role"]?.ToString());
                         return;
+                    case "analyser":
+                        AnalyserCard();
+                        return;
                 }
             }
             catch (Exception e)

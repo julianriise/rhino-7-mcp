@@ -899,6 +899,21 @@
     fileEl.textContent = Forsk.roleSubtitle(model);
     fileEl.title = fileEl.textContent;
     setFace(shown);
+    // AN.1: the Analyser's face opens the analyses card.
+    var face = document.getElementById('avatar');
+    var tap = shown === 'analyser';
+    face.className = 'avatar' + (tap ? ' tap' : '');
+    if (tap) {
+      face.setAttribute('role', 'button');
+      face.setAttribute('tabindex', '0');
+      face.setAttribute('aria-label', 'Analyses');
+      face.removeAttribute('aria-hidden');
+    } else {
+      face.removeAttribute('role');
+      face.removeAttribute('tabindex');
+      face.removeAttribute('aria-label');
+      face.setAttribute('aria-hidden', 'true');
+    }
     pill.className = 'role-pill' + (role && role.value && role.value !== 'auto' ? ' set' : '');
     pill.title = (role && role.title) || '';
     var spoken = (role && role.label ? role.label + ', ' : '') + name.textContent;
@@ -1429,6 +1444,14 @@
     });
     var pill = document.getElementById('role-pill');
     var more = document.getElementById('more');
+    var face = document.getElementById('avatar');
+    function openAnalyser() { if (face.className.indexOf('tap') >= 0) sender.send({ kind: 'analyser' }); }
+    face.addEventListener('click', openAnalyser);
+    face.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openAnalyser();
+    });
     pill.addEventListener('click', function () {
       if (document.getElementById('role-menu').hidden) openMenu('role-menu', pill);
       else closeMenus(true);

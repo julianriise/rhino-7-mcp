@@ -239,6 +239,26 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>The Analyser's daylight pill: the one the file's state offers, in the bar's order.</summary>
+        static readonly string[] AnalyserDaylight = { "daylight.again", "daylight.hide", "daylight.show", "daylight.run", "daylight.rooms" };
+
+        /// <summary>
+        /// AN.1: tapping the Analyser's face lists the analyses this file can
+        /// run now, daylight and areas, each a pill that runs the existing
+        /// action. A file with neither says what comes first.
+        /// </summary>
+        public static CardSpec Analyser(FileFacts f)
+        {
+            var card = new CardSpec { Kind = "analyser", Question = ForskText.Get("analyser.ask"), Depends = "model" };
+            var daylight = AnalyserDaylight.Select(ForskRegistry.Find).FirstOrDefault(a => a != null && a.Shows(f));
+            if (daylight != null) card.Pills.Add(new CardPill(daylight.Id, ForskText.Label(daylight.Id)));
+            var area = ForskRegistry.Find("area.stats");
+            if (area != null && area.Shows(f)) card.Pills.Add(new CardPill(area.Id, ForskText.Label(area.Id)));
+            if (card.Pills.Count == 0) card.Note = ForskText.Get("analyser.none");
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         /// <summary>
         /// Settings → Grok API key: one masked field to paste the user's own
         /// key, Save, Remove while ~/.forsk/grok.env holds one, and Cancel. The

@@ -319,6 +319,21 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
+        /// <summary>AN.1: the Analyser's face opens the analyses card, as a card action does.</summary>
+        void AnalyserCard()
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            var thread = Active();
+            if (doc == null || thread == null) return;
+            var facts = ReadFacts(doc);
+            thread.Add("user", ForskText.Get("analyser.title"));
+            thread.BeginReply(ForskRoles.Label(ForskRole.Analyser));
+            thread.AddCard(ForskCards.Analyser(facts), facts);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
         void CloseCard(string id)
         {
             if (id == "help")
@@ -408,6 +423,11 @@ namespace RhinoMCPPlugin.Forsk
             if (receipt != null) card["receipt"] = receipt;
             switch (kind)
             {
+                case "analyser":
+                    // The pill is the action's id: it runs as the bar's pill does, with the same checks.
+                    Models.Persist(thread);
+                    Fire(pill.Id, true);
+                    return;
                 case "scale":
                     var mm = ParseMm(length).Value;
                     card["answer"] = FormatMm(mm) + " mm";
