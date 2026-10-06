@@ -43,6 +43,7 @@ namespace RhinoMCPPlugin.Forsk
         static int _jobChanges;
         static bool _listenerUp = true;
         static bool _keyPresent;
+        static bool _toolsReady = true;
         static DateTime _polled = DateTime.MinValue;
 
         readonly WebView _web;
@@ -193,6 +194,7 @@ namespace RhinoMCPPlugin.Forsk
         {
             var input = RhinoMCPFunctions.ReadDocInput(doc);
             input.KeyPresent = _keyPresent;
+            input.ToolsReady = _toolsReady;
             input.FirmArchitect = ForskPrint.FirmArchitect();
             input.DaylightQuality = ForskDaylight.Quality;
             input.ListenerUp = _listenerUp;
@@ -267,7 +269,7 @@ namespace RhinoMCPPlugin.Forsk
             _dirty = true;
         }
 
-        /// <summary>The listener and the chat key have no events. Look again every couple of seconds on idle.</summary>
+        /// <summary>The listener, the chat key and uv have no events. Look again every couple of seconds on idle.</summary>
         static void Poll(bool force)
         {
             if (!force && DateTime.UtcNow - _polled < PollEvery) return;
@@ -276,9 +278,11 @@ namespace RhinoMCPPlugin.Forsk
             try { up = RhinoMCPServerController.IsServerRunning(); }
             catch (Exception) { up = false; }
             var key = !string.IsNullOrEmpty(ForskKeys.Load());
-            if (up == _listenerUp && key == _keyPresent) return;
+            var tools = ForskUv.Uv() != null;
+            if (up == _listenerUp && key == _keyPresent && tools == _toolsReady) return;
             _listenerUp = up;
             _keyPresent = key;
+            _toolsReady = tools;
             MarkDirty();
         }
 

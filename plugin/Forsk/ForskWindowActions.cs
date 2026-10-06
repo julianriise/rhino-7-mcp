@@ -113,6 +113,11 @@ namespace RhinoMCPPlugin.Forsk
                 if (thread != null) KeyCard(thread, ForskText.Get(id), null);
                 return;
             }
+            if (id == ForskSetup.MenuId)
+            {
+                if (thread != null) SetupCard(thread, ForskText.Get(id), null);
+                return;
+            }
             var action = ForskRegistry.Find(id);
             if (doc == null || thread == null || action == null) return;
             // A click checks the precondition again. If it is no longer true, nothing runs and one line says so.
@@ -223,6 +228,7 @@ namespace RhinoMCPPlugin.Forsk
                     return;
                 case "daylight.run":
                 case "daylight.again":
+                    if (AskSetup(thread, label, ForskDaylight.NeedsSetup())) return;
                     Job(thread, action.Id, label, sink => Daylight(sink, DaylightAction.Run));
                     return;
                 case "daylight.hide":
@@ -232,6 +238,7 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, action.Id, label, sink => Daylight(sink, DaylightAction.Show));
                     return;
                 case "daylight.room":
+                    if (AskSetup(thread, label, ForskDaylight.NeedsSetup())) return;
                     Job(thread, action.Id, label, sink =>
                     {
                         var envelope = ForskDaylight.Run("selection", ForskTools.CommandOnUi);
@@ -342,6 +349,12 @@ namespace RhinoMCPPlugin.Forsk
             {
                 card["note"] = ForskText.Get("line.scale.number");
                 Render();
+                return;
+            }
+            // Set up, the key card and Get a key keep the Set up Forsk card open; they run while a job does.
+            if (kind == ForskSetup.MenuId && pillId != "done" && card["state"]?.ToString() == "open")
+            {
+                if ((card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId)) SetupPill(thread, pillId);
                 return;
             }
             if (pillId != "cancel" && pillId != "done" && Refuse(thread)) return;
@@ -566,6 +579,106 @@ namespace RhinoMCPPlugin.Forsk
                 Log("grok key · " + e.GetType().Name);
             }
             Poll(true);
+            RefreshSetup();
+        }
+
+        /// <summary>Daylight and AI detection's uv, this session. Null until first looked at.</summary>
+        static SetupState _setup;
+
+        /// <summary>The uv row as of now: the install under way, else what the disk says.</summary>
+        static SetupState Tools()
+        {
+            var found = ForskUv.Uv() != null;
+            _setup = (_setup ?? SetupState.From(found)).Seen(found);
+            return _setup;
+        }
+
+        /// <summary>
+        /// Settings → Set up Forsk, the first-run button, or daylight or an
+        /// import with no uv (line says why). An older open setup card closes,
+        /// so one is pinned.
+        /// </summary>
+        void SetupCard(DocThread thread, string userText, string line)
+        {
+            foreach (var item in thread.Items)
+                if (item["kind"]?.ToString() == ForskSetup.MenuId) thread.Close(item["id"]?.ToString());
+            thread.Add("user", userText);
+            thread.BeginReply(null);
+            if (line != null) thread.Add("assistant", line);
+            thread.AddCard(ForskCards.Setup(ForskKeys.Load(), Tools()), null);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
+        /// <summary>Daylight or AI detection with no uv: one line and the Set up Forsk card instead of an error.</summary>
+        bool AskSetup(DocThread thread, string userText, bool needed)
+        {
+            if (!needed) return false;
+            SetupCard(thread, userText, ForskText.Get("setup.needed"));
+            return true;
+        }
+
+        /// <summary>The open setup card in the active thread shows the key and the uv row as they are now, and the page redraws.</summary>
+        void RefreshSetup()
+        {
+            var thread = Active();
+            if (thread != null && thread.Refresh(ForskCards.Setup(ForskKeys.Load(), Tools())) > 0) Models.Persist(thread);
+            Render();
+        }
+
+        void SetupPill(DocThread thread, string pillId)
+        {
+            switch (pillId)
+            {
+                case "uv":
+                    InstallUv();
+                    return;
+                case "key":
+                    KeyCard(thread, ForskText.Get(ForskKeyFile.MenuId), null);
+                    return;
+                case "get_key":
+                    try { System.Diagnostics.Process.Start("/usr/bin/open", ForskSetup.KeySite); }
+                    catch (Exception e) { Log("setup · open " + ForskSetup.KeySite + " · " + e.GetType().Name); }
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// Set up on the card: uv installs off the UI thread, with no undo record
+        /// and without holding the window busy. Each step, and the end, redraws
+        /// the card. A second click while it runs does nothing.
+        /// </summary>
+        void InstallUv()
+        {
+            if (Tools().Phase == SetupPhase.Running) return;
+            _setup = _setup.Start();
+            RefreshSetup();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string failed = null;
+                ForskUvInstall.Installed installed = null;
+                try
+                {
+                    installed = ForskUvInstall.Install(new ForskUvInstall.Options(), step => Post(() =>
+                    {
+                        _setup = _setup.Step(step);
+                        RefreshSetup();
+                    }));
+                }
+                catch (ForskUvInstall.Failure e)
+                {
+                    failed = e.Message;
+                }
+                Post(() =>
+                {
+                    _setup = failed == null ? _setup.Done() : _setup.Fail(failed);
+                    Log("setup · uv · " + (failed ?? installed.Version + " · sha256 " + installed.Sha));
+                    // The facts read uv again, so the first-run line and the card both move now.
+                    Poll(true);
+                    RefreshSetup();
+                });
+            });
         }
 
         // ------------------------------------------------------------ chat
@@ -1170,6 +1283,8 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         void ImportJob(DocThread thread, JObject source, string userText)
         {
+            // A PDF, scan or image goes through uv's tools; a DXF does not.
+            if (source["dxf"] == null && AskSetup(thread, userText, ForskUv.Uv() == null)) return;
             var doc = RhinoDoc.ActiveDoc;
             Job(thread, "file.import", ForskText.Label("file.import"), sink =>
             {

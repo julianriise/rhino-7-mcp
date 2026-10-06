@@ -77,6 +77,7 @@
     <Compile Include="..\..\plugin\Functions\PlanRaster.cs" Link="PlanRaster.cs" />
     <Compile Include="..\..\plugin\Functions\PlanSource.cs" Link="PlanSource.cs" />
     <Compile Include="..\..\plugin\Functions\ForskUv.cs" Link="ForskUv.cs" />
+    <Compile Include="..\..\plugin\Functions\ForskUvInstall.cs" Link="ForskUvInstall.cs" />
     <Compile Include="..\..\plugin\Forsk\PageChannel.cs" Link="PageChannel.cs" />
     <Compile Include="..\..\plugin\Forsk\WindowBounds.cs" Link="WindowBounds.cs" />
     <Compile Include="..\..\plugin\Forsk\WindowModel.cs" Link="WindowModel.cs" />
@@ -99,6 +100,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskSupport.cs" Link="ForskSupport.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskReplyEmail.cs" Link="ForskReplyEmail.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskKeyFile.cs" Link="ForskKeyFile.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskSetup.cs" Link="ForskSetup.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskOutbox.cs" Link="ForskOutbox.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskSupportSend.cs" Link="ForskSupportSend.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />

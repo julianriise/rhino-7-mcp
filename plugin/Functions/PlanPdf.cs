@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -76,8 +77,7 @@ public static class PlanPdf
                 "Importing a PDF needs Forsk's tools/pdf_vector, which is missing. Reinstall Forsk from the Package Manager, or set FORSK_HOME to the forsk checkout.");
         var uv = ForskUv.Uv();
         if (uv == null)
-            throw new InvalidOperationException(
-                "Importing a PDF needs uv (docs.astral.sh/uv) to run tools/pdf_vector. In Terminal: curl -LsSf https://astral.sh/uv/install.sh | sh, then reopen Rhino.");
+            throw new InvalidOperationException("Importing a PDF needs " + ForskText.Get("setup.where") + ".");
 
         var ran = ForskUv.Run(uv, ForskUv.RunArgs(dir, "pdf-vector") + " " + ForskUv.Quote(pdf) + " " + args, dir, "The PDF extractor", TimeoutMs);
         if (ran.Code != 0)

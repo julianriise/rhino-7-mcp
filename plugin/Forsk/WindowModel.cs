@@ -128,19 +128,12 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         public JObject AddCard(CardSpec spec, FileFacts facts)
         {
-            var pills = new JArray();
-            foreach (var pill in spec.Pills)
-            {
-                var token = new JObject { ["id"] = pill.Id, ["label"] = pill.Label };
-                if (!string.IsNullOrEmpty(pill.Icon)) token["icon"] = pill.Icon;
-                pills.Add(token);
-            }
             var item = new JObject
             {
                 ["role"] = "card",
                 ["kind"] = spec.Kind,
                 ["question"] = spec.Question,
-                ["pills"] = pills,
+                ["pills"] = Pills(spec),
                 ["state"] = "open",
                 ["depends"] = spec.Depends ?? "none",
                 ["stamp"] = ForskCards.Stamp(spec.Depends, facts)
@@ -167,6 +160,39 @@ namespace RhinoMCPPlugin.Forsk
             if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
             if (spec.Data != null) item["data"] = spec.Data.DeepClone();
             return Push(item);
+        }
+
+        static JArray Pills(CardSpec spec)
+        {
+            var pills = new JArray();
+            foreach (var pill in spec.Pills)
+            {
+                var token = new JObject { ["id"] = pill.Id, ["label"] = pill.Label };
+                if (!string.IsNullOrEmpty(pill.Icon)) token["icon"] = pill.Icon;
+                pills.Add(token);
+            }
+            return pills;
+        }
+
+        /// <summary>
+        /// Background work moved what an open card of spec's kind shows: its
+        /// question, rows, pills and note become spec's, in place. Returns how many.
+        /// </summary>
+        public int Refresh(CardSpec spec)
+        {
+            var count = 0;
+            foreach (var item in Items)
+            {
+                if (item["role"]?.ToString() != "card" || item["state"]?.ToString() != "open" || item["kind"]?.ToString() != spec.Kind) continue;
+                item["question"] = spec.Question;
+                item["pills"] = Pills(spec);
+                if (spec.Rows != null) item["rows"] = new JArray(spec.Rows);
+                else item.Remove("rows");
+                if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
+                else item.Remove("note");
+                count++;
+            }
+            return count;
         }
 
         /// <summary>
@@ -328,11 +354,11 @@ namespace RhinoMCPPlugin.Forsk
             model["settings"] = Settings(facts);
             model["attention"] = Attention(facts);
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
-            if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide(facts.KeyPresent);
+            if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide(facts.KeyPresent, facts.ToolsReady);
             return model;
         }
 
-        /// <summary>Ink, the title block, and the bridge, then the Grok key and Copy debug report. Those two are always there and are not help-card actions.</summary>
+        /// <summary>Ink, the title block, and the bridge, then Set up Forsk, the Grok key and Copy debug report. Those three are always there and are not help-card actions.</summary>
         static JArray Settings(FileFacts facts)
         {
             var menu = new JArray();
@@ -342,6 +368,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (action != null && action.Shows(facts))
                     menu.Add(new JObject { ["id"] = action.Id, ["label"] = action.Label });
             }
+            menu.Add(new JObject { ["id"] = ForskSetup.MenuId, ["label"] = ForskText.Get(ForskSetup.MenuId) });
             menu.Add(new JObject { ["id"] = ForskKeyFile.MenuId, ["label"] = ForskText.Get(ForskKeyFile.MenuId) });
             menu.Add(new JObject { ["id"] = ForskDebug.MenuId, ["label"] = ForskDebug.MenuLabel });
             return menu;

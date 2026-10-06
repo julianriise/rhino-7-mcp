@@ -103,13 +103,33 @@ public class SampleHouseTests
         Assert.False(FirstRun.Show(FileKind.Plan, false));
     }
 
-    /// <summary>With no Grok key the hint adds one line: chat waits for the key, the three steps do not.</summary>
+    /// <summary>
+    /// With no Grok key, or no uv, the hint adds the setup line and its Set up
+    /// Forsk button: chat and daylight wait for it, the three steps do not.
+    /// </summary>
     [Fact]
-    public void AnEmptyFileWithNoKey_AddsTheGrokKeyLine()
+    public void AnEmptyFileWithNoKeyOrNoUv_AddsTheSetupLineAndButton()
     {
-        var view = WindowView.Build(new DocThread { Serial = 1 }, Docs.Facts("empty, no key"));
-        Assert.Equal(new[] { "Open sample house", "Generate 3D", "Print", "Add your Grok key in Settings to chat" },
-            ((JArray)view["guide"]!["lines"]!).Select(line => line.ToString()).ToArray());
+        var lines = new[] { "Open sample house", "Generate 3D", "Print", "Set up chat, daylight and AI detection" };
+        var noKey = WindowView.Build(new DocThread { Serial = 1 }, Docs.Facts("empty, no key"));
+        Assert.Equal(lines, ((JArray)noKey["guide"]!["lines"]!).Select(line => line.ToString()).ToArray());
+        Assert.Equal("forsk.setup", noKey["guide"]!["setup"]!["id"]!.ToString());
+        Assert.Equal("Set up Forsk", noKey["guide"]!["setup"]!["label"]!.ToString());
+
+        var facts = Docs.Facts("empty");
+        Assert.Null(WindowView.Build(new DocThread { Serial = 1 }, facts)["guide"]!["setup"]);
+        facts.ToolsReady = false;
+        var noUv = WindowView.Build(new DocThread { Serial = 1 }, facts);
+        Assert.Equal(lines, ((JArray)noUv["guide"]!["lines"]!).Select(line => line.ToString()).ToArray());
+        Assert.Equal("forsk.setup", noUv["guide"]!["setup"]!["id"]!.ToString());
+        // The input carries it: the window polls uv like the key.
+        Assert.False(FileClassifier.Read(new DocInput { ToolsReady = false }).ToolsReady);
+        Assert.True(FileClassifier.Read(new DocInput()).ToolsReady);
+
+        // The page draws the button and sends the same action as the Settings row.
+        var js = System.IO.File.ReadAllText(PageJs());
+        Assert.Contains("if (spec.setup) box.appendChild(pill(spec.setup.label, true", js);
+        Assert.Contains("sender.send({ kind: 'action', id: spec.setup.id });", js);
     }
 
     [Fact]

@@ -83,6 +83,8 @@ namespace RhinoMCPPlugin.Forsk
         public string DaylightQuality = Forsk.DaylightQuality.Low;
         public bool Millimetres = true;
         public bool KeyPresent;
+        /// <summary>uv is found: daylight and AI detection can run (Settings → Set up Forsk).</summary>
+        public bool ToolsReady = true;
         public bool ListenerUp = true;
         /// <summary>The last Forsk record is still the newest thing in this document (LastActionTracker).</summary>
         public bool UndoNewest;
@@ -164,6 +166,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>door or window when every picked opening is that kind, else null.</summary>
         public string PickedOpeningKind;
         public bool KeyPresent;
+        public bool ToolsReady = true;
         public bool ListenerUp = true;
         public bool UndoNewest;
         /// <summary>A Print was the last action: the bar offers Export DWG next.</summary>
@@ -205,6 +208,7 @@ namespace RhinoMCPPlugin.Forsk
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
                 DaylightQuality = Forsk.DaylightQuality.Normal(input.DaylightQuality),
                 KeyPresent = input.KeyPresent,
+                ToolsReady = input.ToolsReady,
                 ListenerUp = input.ListenerUp,
                 UndoNewest = input.UndoNewest,
                 JustPrinted = input.JustPrinted,

@@ -1238,6 +1238,10 @@
     var box = el('div', 'guide');
     var lines = spec.lines || [];
     for (var i = 0; i < lines.length; i++) box.appendChild(el('p', null, lines[i]));
+    // The setup line's own button opens Set up Forsk, as the Settings row does.
+    if (spec.setup) box.appendChild(pill(spec.setup.label, true, function () {
+      sender.send({ kind: 'action', id: spec.setup.id });
+    }));
     var dismiss = el('button', 'guide-x', 'Dismiss');
     dismiss.addEventListener('click', function () {
       sender.send({ kind: 'action', id: spec.dismiss || 'guide.dismiss' });

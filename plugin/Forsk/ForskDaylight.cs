@@ -194,12 +194,12 @@ namespace RhinoMCPPlugin.Forsk
         {
             var src = ServerSource();
             // A checkout's server venv, else uv with numpy (the release package has no venv).
-            var python = Path.Combine(src, "..", ".venv", "bin", "python");
+            var python = Venv(src);
             var exe = python;
             var args = "-m forsk_daylight";
             if (!File.Exists(python))
             {
-                exe = ForskUv.Uv() ?? throw new InvalidOperationException(NeedsUv);
+                exe = ForskUv.Uv() ?? throw new InvalidOperationException("Daylight needs " + ForskText.Get("setup.where") + ".");
                 args = ForskUv.RunModuleArgs("forsk_daylight");
             }
 
@@ -233,7 +233,21 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        const string NeedsUv = "Daylight needs uv. In Terminal: curl -LsSf https://astral.sh/uv/install.sh | sh, then quit and reopen Rhino.";
+        /// <summary>
+        /// The tracer would run through uv and there is none: the window answers
+        /// with the Set up Forsk card instead of starting. A missing tracer is
+        /// not this: Trace says so itself.
+        /// </summary>
+        public static bool NeedsSetup()
+        {
+            string src;
+            try { src = ServerSource(); }
+            catch (InvalidOperationException) { return false; }
+            return !File.Exists(Venv(src)) && ForskUv.Uv() == null;
+        }
+
+        /// <summary>A checkout's server venv python beside the tracer's folder.</summary>
+        static string Venv(string src) => Path.Combine(src, "..", ".venv", "bin", "python");
 
         /// <summary>The tracer's folder: RHINO_MCP_HOME's server/src, the package's daylight folder, else the checkout's server/src.</summary>
         static string ServerSource()

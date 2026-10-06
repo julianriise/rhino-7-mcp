@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using RhinoMCPPlugin.Forsk;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -117,8 +118,7 @@ public static class PlanRaster
                 "Reinstall Forsk from the Package Manager, or set FORSK_HOME to the forsk checkout.");
         exe = ForskUv.Uv();
         if (exe == null)
-            throw new Failure("reading a scan or image needs uv (docs.astral.sh/uv) to run tools/cubicasa",
-                "Install uv: in Terminal, curl -LsSf https://astral.sh/uv/install.sh | sh, then reopen Rhino.");
+            throw new Failure("reading a scan or image needs " + ForskText.Get("setup.where"), null);
         prefix = ForskUv.RunArgs(dir, "cubicasa-plan") + " ";
     }
 }

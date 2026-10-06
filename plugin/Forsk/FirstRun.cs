@@ -6,9 +6,10 @@ using Newtonsoft.Json.Linq;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// The empty-file hint: three lines, and a fourth while chat has no key,
-    /// until the user dismisses it or a print succeeds. Not a thread line, so
-    /// "This file is empty." stays.
+    /// The empty-file hint: three lines, and a fourth with a Set up Forsk
+    /// button while chat has no key or daylight has no uv, until the user
+    /// dismisses it or a print succeeds. Not a thread line, so "This file is
+    /// empty." stays.
     /// </summary>
     public static class FirstRun
     {
@@ -27,16 +28,18 @@ namespace RhinoMCPPlugin.Forsk
             return line.Contains("Printed ") && PrintTemplate.Papers.Any(p => line.Contains(" on " + p.Name));
         }
 
-        /// <summary>The three lines, then "Add your Grok key" when chat has no key: the steps run without one.</summary>
-        public static JObject Guide(bool keyPresent)
+        /// <summary>The three lines, then the setup line and its button while something is not set up: the steps run without it.</summary>
+        public static JObject Guide(bool keyPresent, bool toolsReady)
         {
-            var lines = new JArray(Lines);
-            if (!keyPresent) lines.Add(ForskText.Get("grok.key.guide"));
-            return new JObject
+            var guide = new JObject
             {
-                ["lines"] = lines,
+                ["lines"] = new JArray(Lines),
                 ["dismiss"] = DismissId
             };
+            if (keyPresent && toolsReady) return guide;
+            ((JArray)guide["lines"]).Add(ForskText.Get("setup.guide"));
+            guide["setup"] = new JObject { ["id"] = ForskSetup.MenuId, ["label"] = ForskText.Get(ForskSetup.MenuId) };
+            return guide;
         }
     }
 }

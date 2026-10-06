@@ -264,6 +264,31 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// Settings → Set up Forsk: a row for chat and a row for daylight and AI
+        /// detection, each with its state. The pills are the actions still
+        /// open, the one most needed first: Set up (Try again after a failure)
+        /// while uv is missing, the Grok key card, Get a key while there is no
+        /// key, and Done. Only Done answers the card.
+        /// </summary>
+        public static CardSpec Setup(string key, SetupState tools)
+        {
+            var card = new CardSpec
+            {
+                Kind = ForskSetup.MenuId,
+                Question = ForskText.Get("setup.ask"),
+                Rows = new List<string> { ForskSetup.ChatRow(key), ForskSetup.ToolsRow(tools) },
+                Note = ForskText.Get("setup.note")
+            };
+            var noKey = string.IsNullOrEmpty(key);
+            if (tools != null && tools.NeedsAction)
+                card.Pills.Add(new CardPill("uv", ForskText.Get(tools.Phase == SetupPhase.Failed ? "setup.uv.again" : "setup.uv")));
+            card.Pills.Add(new CardPill("key", ForskText.Get(noKey ? "setup.key.add" : "setup.key.change")));
+            if (noKey) card.Pills.Add(new CardPill("get_key", ForskText.Get("setup.key.get")));
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         public static CardSpec Ink(FileFacts f)
         {
             var card = new CardSpec

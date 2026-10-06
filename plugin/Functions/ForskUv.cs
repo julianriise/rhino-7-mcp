@@ -54,25 +54,37 @@ public static class ForskUv
     /// <summary>uv's arguments to run a module with numpy in a throwaway environment: the daylight tracer without a venv.</summary>
     public static string RunModuleArgs(string module) => "run --no-project --quiet --with numpy python -m " + module;
 
-    /// <summary>uv: UV when set, else PATH, else where its installers put it. Rhino's PATH has no Homebrew.</summary>
+    /// <summary>~/.forsk/bin: where Settings → Set up Forsk puts uv.</summary>
+    public static string ForskBin()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".forsk", "bin");
+    }
+
+    /// <summary>
+    /// uv: UV when set, else the copy Set up Forsk installed, else PATH, else
+    /// where uv's own installers put it. Rhino's PATH has no Homebrew. Looked
+    /// up on every call, so an install shows without a restart.
+    /// </summary>
     public static string Uv()
     {
-        var set = Environment.GetEnvironmentVariable("UV");
-        if (!string.IsNullOrWhiteSpace(set) && File.Exists(set)) return set;
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
+        return Find(Environment.GetEnvironmentVariable("UV"), home, Environment.GetEnvironmentVariable("PATH"));
+    }
+
+    /// <summary>Uv's lookup from its inputs: the UV variable, the home folder and PATH.</summary>
+    public static string Find(string set, string home, string path)
+    {
+        if (!string.IsNullOrWhiteSpace(set) && File.Exists(set)) return set;
+        var dirs = new List<string> { Path.Combine(home, ".forsk", "bin") };
+        dirs.AddRange((path ?? "").Split(Path.PathSeparator));
+        dirs.AddRange(new[] { "/opt/homebrew/bin", "/usr/local/bin", Path.Combine(home, ".local", "bin"), Path.Combine(home, ".cargo", "bin") });
         foreach (var dir in dirs)
         {
             if (string.IsNullOrWhiteSpace(dir)) continue;
-            var path = Path.Combine(dir, "uv");
-            if (File.Exists(path)) return path;
+            var uv = Path.Combine(dir, "uv");
+            if (File.Exists(uv)) return uv;
         }
-        foreach (var path in new[]
-        {
-            "/opt/homebrew/bin/uv", "/usr/local/bin/uv",
-            Path.Combine(home, ".local", "bin", "uv"), Path.Combine(home, ".cargo", "bin", "uv")
-        })
-            if (File.Exists(path)) return path;
         return null;
     }
 
@@ -85,9 +97,9 @@ public static class ForskUv
     /// <summary>
     /// exe with args in dir: what it exited with and what it wrote. Throws
     /// only when it cannot start or runs over timeoutMs; what is the tool's
-    /// name in those messages.
+    /// name in those messages. env adds to the child's environment.
     /// </summary>
-    public static Ran Run(string exe, string args, string dir, string what, int timeoutMs)
+    public static Ran Run(string exe, string args, string dir, string what, int timeoutMs, IDictionary<string, string> env = null)
     {
         var start = new ProcessStartInfo(exe, args)
         {
@@ -97,6 +109,8 @@ public static class ForskUv
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        foreach (var pair in env ?? new Dictionary<string, string>())
+            start.EnvironmentVariables[pair.Key] = pair.Value;
         using (var process = Process.Start(start))
         {
             if (process == null) throw new InvalidOperationException("Could not start " + what + ".");

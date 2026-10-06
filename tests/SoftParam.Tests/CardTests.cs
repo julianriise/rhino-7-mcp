@@ -611,4 +611,52 @@ Assert.Equal(new[] { "Project", "Project no.", "Client", "Address", "Architect",
         Assert.Equal("Grok key removed", ForskCards.FormReceipt("grok.key", "remove", new JObject { ["key"] = "" }));
         Assert.Null(ForskCards.FormReceipt("grok.key", "cancel", new JObject()));
     }
+
+    /// <summary>
+    /// Settings → Set up Forsk: a row for chat and a row for daylight and AI
+    /// detection, each with its state. The pills are what is still open, the
+    /// most needed first, then Done. No key: Add Grok key and Get a key.
+    /// </summary>
+    [Fact]
+    public void Setup_HasAChatRowAndAToolsRow_AndThePillsStillOpen()
+    {
+        var fresh = ForskCards.Setup(null, SetupState.From(uvFound: false));
+        Assert.Equal("forsk.setup", fresh.Kind);
+        Assert.Equal("Set up Forsk on this Mac. Each part works on its own.", fresh.Question);
+        Assert.Equal(new[] { "Chat · Needs your Grok key", "Daylight & AI detection · Not set up" }, fresh.Rows);
+        Assert.Equal(new[] { "uv", "key", "get_key", "done" }, fresh.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "Set up", "Add Grok key", "Get a key", "Done" }, fresh.Pills.Select(p => p.Label));
+        Assert.Equal("Chat uses your own xAI Grok key from https://console.x.ai. Set up downloads uv and Python once (about 40 MB) for daylight and AI detection.", fresh.Note);
+
+        var ready = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(uvFound: true));
+        Assert.Equal(new[] { "Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Ready" }, ready.Rows);
+        Assert.Equal(new[] { "Change Grok key", "Done" }, ready.Pills.Select(p => p.Label));
+        Assert.DoesNotContain("abcdefgh", string.Join(" ", ready.Rows) + ready.Note);
+
+        var running = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start().Step("Checking the download"));
+        Assert.Equal("Daylight & AI detection · Setting up… Checking the download", running.Rows[1]);
+        Assert.Equal(new[] { "key", "done" }, running.Pills.Select(p => p.Id));
+
+        var failed = ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start().Fail("No internet connection: try again when online."));
+        Assert.Equal("Daylight & AI detection · Failed: No internet connection: try again when online.", failed.Rows[1]);
+        Assert.Equal(new[] { "Try again", "Change Grok key", "Done" }, failed.Pills.Select(p => p.Label));
+    }
+
+    /// <summary>An install step rewrites the open setup card in place: rows, pills and note. Answered cards keep what they showed.</summary>
+    [Fact]
+    public void Refresh_RewritesOpenCardsOfTheKind_Only()
+    {
+        var thread = new DocThread();
+        var open = thread.AddCard(ForskCards.Setup(null, SetupState.From(false)), null);
+        var answered = thread.AddCard(ForskCards.Setup(null, SetupState.From(false)), null);
+        thread.Answer(answered["id"]!.ToString(), "done");
+        var other = thread.AddCard(ForskCards.GrokKey(null, stored: false), null);
+
+        Assert.Equal(1, thread.Refresh(ForskCards.Setup("xai-abcdefgh9xYz", SetupState.From(false).Start())));
+        Assert.Equal(new JArray("Chat · Ready · key ending in 9xYz", "Daylight & AI detection · Setting up… Downloading uv"), open["rows"]);
+        Assert.Equal(new JArray("key", "done"), new JArray(((JArray)open["pills"]!).Select(p => p["id"])));
+        Assert.Equal("open", open["state"]!.ToString());
+        Assert.Equal("Daylight & AI detection · Not set up", answered["rows"]![1]!.ToString());
+        Assert.Null(other["rows"]);
+    }
 }
