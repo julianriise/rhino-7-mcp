@@ -133,6 +133,14 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
     else:
         fail("no furnished plan PDF")
 
+    # Jump inside: the Perspective view inside the first furnished room's door, kept as a named view.
+    first_room = (rooms[0] or {}).get("room") if rooms else None
+    inside = send("jump_inside", {"room": first_room}) if first_room else {}
+    lines.append(f"jump inside {first_room}: {inside.get('view')} eye {inside.get('eye')}")
+    named = send("execute_rhinoscript_python_code", {"code": "import scriptcontext as sc\nprint(sc.doc.NamedViews.FindByName(%r) >= 0)" % str(inside.get("view"))})
+    if not str(inside.get("view", "")).startswith("Interior: ") or str(named.get("output", "")).strip() != "True":
+        fail(f"jump inside: {inside.get('message')}")
+
     gone = send("delete_furniture", {"all": True})
     if not gone.get("count"):
         fail(f"delete: {gone.get('message')}")
