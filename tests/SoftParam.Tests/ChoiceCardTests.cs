@@ -26,7 +26,7 @@ public class ChoiceCardTests
     {
         var card = ForskCards.JumpInside(Docs.Facts("house, room selected"));
         Assert.True(card.Choice);
-        Assert.Equal(new[] { "north", "east", "south", "west", "done", "cancel" }, Ids(card));
+        Assert.Equal(new[] { "north", "east", "south", "west", "done" }, Ids(card));
         Assert.Equal("Confirm", card.Pills[4].Label);
         Assert.Equal("Looking north. Confirm saves it as a named view.", card.Note);
     }
@@ -94,10 +94,26 @@ public class ChoiceCardTests
     {
         var card = ForskCards.SwapType(Docs.Facts("house, door selected"))!;
         Assert.True(card.Choice);
-        Assert.Equal(new[] { "done", "cancel" }, Ids(card).TakeLast(2));
+        Assert.Equal("done", Ids(card).Last());
+        Assert.DoesNotContain("cancel", Ids(card));
         Assert.DoesNotContain(card.Pills, p => p.Primary);
         var facts = Docs.Facts("house, door selected");
         var json = new DocThread().AddCard(card, facts);
         Assert.Null(ForskCards.HeldChoice(json));
+    }
+
+    /// <summary>UI unification pass 2: every choice card ends in Confirm alone (Julian: "just a confirm button").</summary>
+    [Fact]
+    public void EveryChoiceCard_EndsInConfirmAlone()
+    {
+        var cards = new[]
+        {
+            ForskCards.Quality(Docs.Facts("house")),
+            ForskCards.Ink(Docs.Facts("house")),
+            ForskCards.SwapType(Docs.Facts("house, door selected"))!,
+            ForskCards.JumpInside(Docs.Facts("house, room selected"))
+        };
+        Assert.All(cards, c => Assert.Equal("done", c.Pills.Last().Id));
+        Assert.All(cards, c => Assert.DoesNotContain(c.Pills, p => p.Id == "cancel"));
     }
 }

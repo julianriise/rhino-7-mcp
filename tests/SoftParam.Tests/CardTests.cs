@@ -21,9 +21,9 @@ public class CardTests
         Assert.Equal("Change to:", card.Question);
         Assert.Equal("selection", card.Depends);
         Assert.Null(card.Data);
-        // Each type pill carries its plan-symbol icon; Confirm and Cancel have none.
-        Assert.All(card.Pills.Where(p => p.Id != "cancel" && p.Id != "done"), p => Assert.Equal(p.Id, p.Icon));
-        Assert.Null(card.Pills.Single(p => p.Id == "cancel").Icon);
+        // Each type pill carries its plan-symbol icon; Confirm has none.
+        Assert.All(card.Pills.Where(p => p.Id != "done"), p => Assert.Equal(p.Id, p.Icon));
+        Assert.Null(card.Pills.Single(p => p.Id == "done").Icon);
     }
 
     /// <summary>Nothing picked: one card with every type of the kinds in the file, and a pill means all of that kind.</summary>
@@ -55,7 +55,7 @@ public class CardTests
         var card = thread.AddCard(ForskCards.SwapType(facts)!, facts);
         var pills = (JArray)card["pills"]!;
         Assert.Equal("door.sliding", pills.Single(p => p["id"]!.ToString() == "door.sliding")["icon"]!.ToString());
-        Assert.Null(pills.Single(p => p["id"]!.ToString() == "cancel")["icon"]);
+        Assert.Null(pills.Single(p => p["id"]!.ToString() == "done")["icon"]);
     }
 
     [Fact]

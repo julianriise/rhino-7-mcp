@@ -114,13 +114,12 @@ namespace RhinoMCPPlugin.Forsk
                 question = ForskText.Get(kinds.Count == 2 ? "opening.type.all.ask" : "opening.type.all." + kinds[0]);
             }
             else return null;
-            // A choice card: a type applies at once (one Undo each) and Confirm closes it.
+            // A choice card: a type applies at once (one Undo each) and Confirm alone closes it.
             var card = new CardSpec { Kind = "opening.type", Question = question, Depends = "selection", Choice = true };
             if (f.Picked == Picked.None) card.Data = new JObject { ["all"] = true };
             foreach (var type in kinds.SelectMany(k => OpeningTypes.All.Where(t => t.Kind == k)))
                 card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
             card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
-            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }
 
@@ -334,7 +333,6 @@ namespace RhinoMCPPlugin.Forsk
             foreach (var way in Functions.InteriorCamera.Directions)
                 card.Pills.Add(new CardPill(way, ForskText.Get("room.inside." + way)) { Primary = way == "north" });
             card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
-            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }
 
