@@ -60,7 +60,8 @@ public partial class RhinoMCPFunctions
             throw new ArgumentException("scale_hint must read like 1:100.");
         // The plan file and image from the source: a vector PDF, a scan or photo through the raster source, or both given.
         // What cannot be imported is refused here, with its reason and next step, before anything is placed.
-        var resolved = PlanSource.Resolve(parameters, PlanSource.WorkDir());
+        // The Forsk window's AI detection reads the source off the UI thread first (PlanSource.Prepare).
+        var resolved = PlanSource.Take(parameters) ?? PlanSource.Resolve(parameters, PlanSource.WorkDir());
         var plan = resolved.Plan;
         var imagePath = resolved.ImagePath;
         var planPath = resolved.PlanPath;

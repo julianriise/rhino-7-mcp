@@ -184,7 +184,7 @@ namespace RhinoMCPPlugin.Forsk
             switch (action.Id)
             {
                 case "file.import":
-                    Import(thread, action);
+                    OpenImportGuide(thread, action.Label);
                     return;
                 case "file.use_curves":
                     UseCurves(thread, action, doc);
@@ -400,6 +400,11 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             if (doc != null && thread.StaleCards(ReadFacts(doc)) > 0) Log("cards: went stale at the click");
             var kind = card["kind"]?.ToString();
+            if (kind == ForskImportGuide.Kind)
+            {
+                GuidePill(thread, card, pillId);
+                return;
+            }
             var length = values?["length"]?.ToString();
             if (kind == "scale" && pillId == "set" && ParseMm(length) == null && card["state"]?.ToString() == "open")
             {
@@ -643,10 +648,6 @@ namespace RhinoMCPPlugin.Forsk
                 case "section.remove":
                     var sectionArgs = pill.Id == "all" ? new JObject() : new JObject { ["letter"] = pill.Id };
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("section_clear", sectionArgs), userText: pill.Label);
-                    break;
-                case "pdf.page":
-                    var page = int.Parse(pill.Id, CultureInfo.InvariantCulture);
-                    ImportJob(thread, new JObject { ["pdf_path"] = card["data"]?["pdf_path"], ["page"] = page }, pill.Label);
                     break;
                 case "support.report":
                     SendReport(thread, card, values, doc);
@@ -991,6 +992,12 @@ namespace RhinoMCPPlugin.Forsk
             }
             if (Refuse(thread)) return;
             NoteMisroute(ForskMisroutes.Rephrase(ForskMisroutes.AnsweredSentence(thread.Items), PickedNow(), text, DateTimeOffset.UtcNow));
+            // UX.2: "import a plan" opens the AI detection card, with no chat model call. Once walls exist, it goes to chat.
+            if (ForskImportGuide.Opens(text) && ForskRegistry.Find("file.import")?.Shows(Facts(doc)) == true)
+            {
+                OpenImportGuide(thread, text);
+                return;
+            }
             // Support, picked or routed, answers a bug or a feature request and the card follows.
             if (ForskReports.EndsWithReport(thread.Override, text))
             {
@@ -1656,6 +1663,7 @@ namespace RhinoMCPPlugin.Forsk
             _busy = false;
             Models.Persist(thread);
             MarkDirty();
+            RefreshImportGuide(thread);
             Render();
         }
 
@@ -1750,10 +1758,6 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// The import dialog, parented to this window. A PDF with more than one
-        /// page asks which on a card in the thread; then plan_import or dxf_import.
-        /// </summary>
-        /// <summary>
         /// The logo's file dialog, parented to this window. A usable file is
         /// held on the card (an SVG as the PNG it prints as); one that is not
         /// says why on the card. Cancel changes nothing.
@@ -1785,58 +1789,6 @@ namespace RhinoMCPPlugin.Forsk
                 File.WriteAllBytes(held, picture);
             }
             ForskCards.HoldLogo(card, Path.GetFileName(path), held, picture);
-        }
-
-        void Import(DocThread thread, ForskAction action)
-        {
-            var path = ForskPlanImport.PickFile(this);
-            if (path == null) return;
-            var argument = ForskPlanFile.Argument(path);
-            if (argument == null) return;
-            if (argument == "pdf_path")
-            {
-                var pages = ForskPlanImport.PageCount(path);
-                if (pages > 1)
-                {
-                    thread.Add("user", action.Label);
-                    thread.BeginReply(ForskRoles.MarkForAction(action.Id));
-                    thread.AddCard(ForskCards.PdfPage(path, pages), null);
-                    thread.EndReply();
-                    Models.Persist(thread);
-                    Render();
-                    return;
-                }
-                ImportJob(thread, new JObject { ["pdf_path"] = path, ["page"] = 1 }, action.Label);
-                return;
-            }
-            ImportJob(thread, new JObject { [argument] = path }, action.Label);
-        }
-
-        /// <summary>
-        /// One import: a short receipt, then the review as a card under it, and
-        /// only when the review was stored on the underlay. A DXF keeps its note.
-        /// </summary>
-        void ImportJob(DocThread thread, JObject source, string userText)
-        {
-            // A PDF, scan or image goes through uv's tools; a DXF does not.
-            if (source["dxf"] == null && AskSetup(thread, userText, ForskUv.Uv() == null)) return;
-            var doc = RhinoDoc.ActiveDoc;
-            Job(thread, "file.import", ForskText.Label("file.import"), sink =>
-            {
-                if (source["dxf"] != null)
-                {
-                    var dxf = sink.Tool(ForskDxf.Tool, new JObject { ["path"] = source["dxf"] });
-                    sink.Say(ForskPlanImport.DxfNote(dxf));
-                    return;
-                }
-                sink.Tool(ForskPlanImport.ImportTool, source);
-            }, userText: userText, after: () =>
-            {
-                if (doc == null) return;
-                var facts = ReadFacts(doc);
-                var review = ForskCards.Review(facts);
-                if (review != null) thread.AddCard(review, facts);
-            });
         }
 
         /// <summary>Two points in the view, then the length in a Forsk field.</summary>

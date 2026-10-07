@@ -31,6 +31,55 @@ public static class PlanSource
         public string Scan;
     }
 
+    /// <summary>The stages Resolve reports: a PDF's own lines read, then a page or image read as a scan.</summary>
+    public const string StagePdf = "pdf";
+    public const string StageScan = "scan";
+
+    static readonly object HeldLock = new object();
+    static string _heldKey;
+    static Resolved _held;
+
+    /// <summary>
+    /// Resolve off the UI thread, before plan_import runs (UX.2): the slow
+    /// reading (pdf-vector, the raster model) no longer holds Rhino, and stage
+    /// names each step as it starts. The result is held for the next
+    /// plan_import with the same source, once.
+    /// </summary>
+    public static Resolved Prepare(JObject parameters, string workDir, Action<string> stage)
+    {
+        lock (HeldLock)
+        {
+            _held = null;
+            _heldKey = null;
+        }
+        var resolved = Resolve(parameters, workDir, stage);
+        lock (HeldLock)
+        {
+            _held = resolved;
+            _heldKey = Key(parameters);
+        }
+        return resolved;
+    }
+
+    /// <summary>The source Prepare read for these parameters, taken once; null when none is held for them.</summary>
+    public static Resolved Take(JObject parameters)
+    {
+        lock (HeldLock)
+        {
+            if (_held == null || _heldKey != Key(parameters)) return null;
+            var held = _held;
+            _held = null;
+            _heldKey = null;
+            return held;
+        }
+    }
+
+    static string Key(JObject parameters)
+    {
+        return string.Join("|", Given(parameters?["pdf_path"]), parameters?["page"]?.ToString(),
+            Given(parameters?["image_path"]), Given(parameters?["plan_path"]));
+    }
+
     /// <summary>Where a source's plan file and image go: they stay beside each other, and the image is embedded in the .3dm.</summary>
     public static string WorkDir()
     {
@@ -44,7 +93,7 @@ public static class PlanSource
     /// The plan and image files go to workDir. Throws with the reason, and
     /// the next step where there is one, when nothing can be imported.
     /// </summary>
-    public static Resolved Resolve(JObject parameters, string workDir)
+    public static Resolved Resolve(JObject parameters, string workDir, Action<string> stage = null)
     {
         var imagePath = Given(parameters["image_path"]);
         var planPath = Given(parameters["plan_path"]);
@@ -65,11 +114,12 @@ public static class PlanSource
                 page = 1;
             }
             var label = Path.GetFileName(pdfPath) + " page " + page.Value.ToString(CultureInfo.InvariantCulture);
+            stage?.Invoke(StagePdf);
             var extracted = PlanPdf.Extract(pdfPath, page.Value, workDir);
             var plan = PlanImport.Parse(File.ReadAllText(extracted.PlanPath));
             // No vector walls, a scan or a page drawn some other way: the raster source reads the page as an image.
             if (plan.Walls.Count == 0)
-                return Raster(pdfPath, page, workDir, label, plan.Diagnostic ?? "no vector walls found");
+                return Raster(pdfPath, page, workDir, label, plan.Diagnostic ?? "no vector walls found", stage);
             resolved = new Resolved
             {
                 Plan = plan,
@@ -93,7 +143,7 @@ public static class PlanSource
             {
                 if (!PlanRaster.IsImage(imagePath))
                     throw new ArgumentException("image_path must be a PNG or JPEG for the raster source to read, or come with its plan_path.");
-                return Raster(imagePath, null, workDir, Path.GetFileName(imagePath), null);
+                return Raster(imagePath, null, workDir, Path.GetFileName(imagePath), null, stage);
             }
             if (!File.Exists(planPath))
                 throw new ArgumentException("plan_path must be an existing forsk.plan_import.v0 file.");
@@ -142,8 +192,9 @@ public static class PlanSource
     }
 
     /// <summary>The raster source on input; a failure is named with label, and with scan, why the PDF page came to it.</summary>
-    static Resolved Raster(string input, int? page, string workDir, string label, string scan)
+    static Resolved Raster(string input, int? page, string workDir, string label, string scan, Action<string> stage)
     {
+        stage?.Invoke(StageScan);
         PlanPdf.Extracted detected;
         try
         {

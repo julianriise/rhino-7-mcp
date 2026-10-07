@@ -684,6 +684,33 @@
     return node;
   }
 
+  /* UX.2: a step card's numbered steps. Done shows a tick, failed a cross; the step under way is filled. */
+  Forsk.stepMark = function (step) {
+    if (!step) return '';
+    if (step.state === 'done') return 'check';
+    if (step.state === 'failed') return 'x';
+    return String(step.n || '');
+  };
+
+  function stepList(steps) {
+    var list = el('ol', 'steps');
+    steps.forEach(function (step) {
+      var li = el('li', 'step-row ' + (step.state || 'todo'));
+      var mark = Forsk.stepMark(step);
+      var badge = el('span', 'step-mark');
+      var drawn = mark === 'check' || mark === 'x' ? iconNode(mark) : null;
+      if (drawn) badge.appendChild(drawn);
+      else badge.textContent = mark;
+      li.appendChild(badge);
+      var words = el('div', 'step-words');
+      words.appendChild(el('div', 'step-title', step.title || ''));
+      if (step.detail) words.appendChild(el('div', 'step-detail', step.detail));
+      li.appendChild(words);
+      list.appendChild(li);
+    });
+    return list;
+  }
+
   /* What's new: its slides, one per release, newest first. No DOM, so it tests headless. */
   Forsk.newsSlides = function (item) {
     return ((item && item.slides) || []).filter(function (slide) { return slide && slide.features && slide.features.length; });
@@ -806,6 +833,7 @@
       }
       box.appendChild(head);
     } else box.appendChild(el('div', 'question', item.question));
+    if (item.steps && item.steps.length) box.appendChild(stepList(item.steps));
     if (item.rows && item.rows.length) {
       var list = el('ul', 'rows');
       item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
@@ -1426,7 +1454,8 @@
   function formKey(forms) {
     return forms.map(function (item) {
       return (item.id || '') + '|' + (item.question || '') + '|' + (item.note || '') + '|' + (item.image || '') + '|'
-        + JSON.stringify(item.fields || []) + '|' + JSON.stringify(item.pills || []) + '|' + JSON.stringify(item.rows || []);
+        + JSON.stringify(item.fields || []) + '|' + JSON.stringify(item.pills || []) + '|' + JSON.stringify(item.rows || [])
+        + '|' + JSON.stringify(item.steps || []);
     }).join('\n');
   }
 

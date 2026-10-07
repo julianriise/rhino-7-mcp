@@ -125,6 +125,22 @@ public class PlanRasterTests : IDisposable
     }
 
     [Fact]
+    public void Prepare_NamesTheScanStage_AndHoldsTheReadForTheNextImportOfTheSameFile_Once()
+    {
+        if (Stub(Writes) == null) return;
+        var image = Image();
+        var source = new JObject { ["image_path"] = image, ["replace"] = true };
+        var stages = new System.Collections.Generic.List<string>();
+
+        var prepared = PlanSource.Prepare(source, Out, stages.Add);
+
+        Assert.Equal(new[] { PlanSource.StageScan }, stages);
+        Assert.Null(PlanSource.Take(new JObject { ["image_path"] = Image("other.png") }));
+        Assert.Same(prepared, PlanSource.Take(new JObject { ["image_path"] = image }));
+        Assert.Null(PlanSource.Take(new JObject { ["image_path"] = image }));
+    }
+
+    [Fact]
     public void ARasterPlan_IsNeverDetectedToScale_AndStatesItsLicenceEvenWhenTheFileDoesNot()
     {
         var plan = RoomPlan.Replace(@"""status"": ""assumed""", @"""status"": ""detected""")
