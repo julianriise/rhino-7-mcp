@@ -250,12 +250,19 @@ namespace RhinoMCPPlugin.Forsk
             var thread = Active();
             JObject model;
             if (thread != null) WhatsNew(thread);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            long factsMs = 0;
             if (doc == null || thread == null)
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
-                model = WindowView.Build(thread, Facts(doc), _helpOpen);
+            {
+                var facts = Facts(doc);
+                factsMs = clock.ElapsedMilliseconds;
+                model = WindowView.Build(thread, facts, _helpOpen);
+            }
             var count = model["thread"] is JArray items ? items.Count : 0;
-            Log("render · " + count + " items");
+            // Where a click's time goes: reading the file's facts, then building the page's model.
+            Log("render · " + count + " items · facts " + factsMs + " ms · model " + (clock.ElapsedMilliseconds - factsMs) + " ms");
             Script("Forsk.render", model);
             if (thread != null) thread.Prefill = null;
         }

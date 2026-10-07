@@ -1253,7 +1253,8 @@ namespace RhinoMCPPlugin.Forsk
                     // date, so the bar offers Run again at the new grid when the user wants it.
                     ForskDaylight.Quality = option;
                     var doc = RhinoDoc.ActiveDoc;
-                    if (doc != null && ReadFacts(doc).Map == MapState.Shown) RhinoMCPFunctions.MarkMapAfterEdit(doc, MapEdit.Opening);
+                    // The facts the window already holds: a second full read here cost a click as much as the render.
+                    if (doc != null && Facts(doc).Map == MapState.Shown) RhinoMCPFunctions.MarkMapAfterEdit(doc, MapEdit.Opening);
                     MarkDirty();
                     return ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + option));
                 case "room.inside":

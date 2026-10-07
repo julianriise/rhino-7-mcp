@@ -32,6 +32,23 @@ public partial class RhinoMCPFunctions
             var index = obj.Attributes.LayerIndex;
             var geometry = obj.Geometry;
             var generated = IsForskGenerated(obj);
+            // A printed set is most of a file's objects. Its drawings and layout pieces need only
+            // their id, kind, layer and state: no edit stamp (a CRC of the geometry), no solid test.
+            // They were ~95 % of the rows the window read after every click (garage, 2026-10-07).
+            if (generated && IsPrintOutput(GetForskKind(obj)))
+            {
+                rows.Add(new ChipRow
+                {
+                    Id = obj.Id.ToString(),
+                    Generated = true,
+                    Kind = GetForskKind(obj),
+                    Layer = index >= 0 && index < doc.Layers.Count ? doc.Layers[index].Name : "",
+                    Visible = obj.Visible,
+                    Selected = obj.IsSelected(false) > 0,
+                    Curve = geometry is Curve
+                });
+                continue;
+            }
             var wallRings = generated && string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)
                 ? WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"))
                 : null;
@@ -90,6 +107,9 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>Sorted Rhino group indexes, comma-separated. Null when the object is in none.</summary>
+    private static bool IsPrintOutput(string kind) =>
+        string.Equals(kind, "drawing", StringComparison.OrdinalIgnoreCase) || string.Equals(kind, "layout", StringComparison.OrdinalIgnoreCase);
+
     private static string GroupKey(RhinoObject obj)
     {
         var groups = obj?.GetGroupList();
