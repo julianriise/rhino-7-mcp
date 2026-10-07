@@ -89,6 +89,16 @@ public class ProjectInfoTests
         Assert.Equal("", ProjectInfo.MacFullName("  \n"));
     }
 
+    /// <summary>Rhino's account name is "Name - email": the title block gets the name, never the address.</summary>
+    [Fact]
+    public void TheRhinoAccountsEmail_StaysOutOfTheTitleBlock()
+    {
+        Assert.Equal("Jan Ris", ProjectInfo.PickArchitect(null, "Jan Ris - jan@example.com", "Other"));
+        Assert.Equal("Jan Ris", ProjectInfo.PickArchitect("Jan Ris - jan@example.com", "", ""));
+        Assert.Equal("Riise - Arkitekter", ProjectInfo.PickArchitect("Riise - Arkitekter", "", ""));
+        Assert.Equal("Julian Riise", ProjectInfo.PickArchitect(null, "jan@example.com", "Julian Riise"));
+    }
+
     [Fact]
     public void AnEmptyArchitect_TakesTheDefault_AndAnEmptyDateStaysThePrintDay()
     {

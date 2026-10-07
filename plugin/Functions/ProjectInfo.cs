@@ -117,10 +117,25 @@ public static class ProjectInfo
     {
         foreach (var name in new[] { saved, rhinoName, macFullName })
         {
-            var text = (name ?? "").Trim();
+            var text = WithoutEmail(name);
             if (text.Length > 0) return text;
         }
         return "";
+    }
+
+    /// <summary>
+    /// Rhino's account name reads "Name - email": the name alone. An address
+    /// alone is no name. Other dashes stay.
+    /// </summary>
+    static string WithoutEmail(string name)
+    {
+        var words = (name ?? "").Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (words.Count > 0 && words[words.Count - 1].Contains("@"))
+        {
+            words.RemoveAt(words.Count - 1);
+            if (words.Count > 0 && words[words.Count - 1] == "-") words.RemoveAt(words.Count - 1);
+        }
+        return string.Join(" ", words);
     }
 
     /// <summary>The one line <c>id -F</c> prints. Empty when it printed nothing.</summary>

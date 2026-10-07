@@ -1537,8 +1537,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         /// </summary>
         public static string FirmArchitect()
         {
-            var saved = ArchitectSetting();
-            if (!string.IsNullOrWhiteSpace(saved)) return saved.Trim();
+            // A name saved from the Rhino account before 1.2 carries its email: the name alone prints.
+            var saved = ProjectInfo.PickArchitect(ArchitectSetting(), null, null);
+            if (saved.Length > 0) return saved;
             var rhino = RhinoPerson();
             var mac = string.IsNullOrWhiteSpace(rhino) ? MacFullName() : "";
             var name = ProjectInfo.PickArchitect(null, rhino, mac);
