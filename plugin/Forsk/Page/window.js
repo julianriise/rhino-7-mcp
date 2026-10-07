@@ -1023,15 +1023,18 @@
       box.appendChild(button);
     });
     var help = model && model.bar && model.bar.help;
-    if (!help) return;
-    var h = el('button', items.length ? 'split' : null, help.title || help.label);
-    h.type = 'button';
-    h.setAttribute('role', 'menuitem');
-    h.addEventListener('click', function () {
-      closeMenus(false);
-      sender.send({ kind: 'help' });
-    });
-    box.appendChild(h);
+    if (help) {
+      var h = el('button', items.length ? 'split' : null, help.title || help.label);
+      h.type = 'button';
+      h.setAttribute('role', 'menuitem');
+      h.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'help' });
+      });
+      box.appendChild(h);
+    }
+    // Which Forsk runs: the test copy or the Package Manager release. Text, not an action.
+    if (model && model.build) box.appendChild(el('div', 'build', model.build));
   }
 
   function renderBar(bar) {

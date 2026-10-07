@@ -365,6 +365,7 @@ namespace RhinoMCPPlugin.Forsk
             model["role"] = ForskRoles.Control(thread.Override);
             model["settings"] = Settings(facts);
             model["attention"] = Attention(facts);
+            if (!string.IsNullOrEmpty(facts.Build)) model["build"] = facts.Build;
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide(facts.KeyPresent, facts.ToolsReady);
             return model;

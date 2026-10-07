@@ -208,6 +208,7 @@ namespace RhinoMCPPlugin.Forsk
                 || Tracker.Was("area.stats", doc.RuntimeSerialNumber);
             input.GuideOff = FirstRunGate.Off();
             input.UpdateVersion = ForskUpdate.Latest;
+            input.Build = ForskBuild.Line();
             return FileClassifier.Read(input);
         }
 

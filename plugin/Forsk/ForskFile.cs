@@ -98,6 +98,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
         public string UpdateVersion;
+        /// <summary>"Forsk 1.1.0 · test copy" or "· Package Manager": the line at the foot of Settings.</summary>
+        public string Build;
         /// <summary>Full paths of the 2D layers Generate 3D hid, one per line.</summary>
         public string PlanLayers;
         /// <summary>Those layers are currently hidden.</summary>
@@ -183,6 +185,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
         public string UpdateVersion;
+        /// <summary>"Forsk 1.1.0 · test copy" or "· Package Manager": the line at the foot of Settings.</summary>
+        public string Build;
         /// <summary>Generate 3D remembered 2D layers.</summary>
         public bool PlanRecall;
         /// <summary>Those layers are hidden. The bar offers Show 2D.</summary>
@@ -224,6 +228,7 @@ namespace RhinoMCPPlugin.Forsk
                 OfferArea = input.OfferArea,
                 GuideOff = input.GuideOff,
                 UpdateVersion = input.UpdateVersion,
+                Build = input.Build,
                 PlanRecall = global::RhinoMCPPlugin.Functions.PlanLayers.Stored(input.PlanLayers).Count > 0,
                 PlanHidden = input.PlanHidden,
                 Millimetres = input.Millimetres
