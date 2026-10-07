@@ -70,10 +70,18 @@ internal static class ForskPlanCutHost
 
     static void OnIdle()
     {
-        if (!_dirty || _writing) return;
+        if (_writing) return;
+        var doc = RhinoDoc.ActiveDoc;
+        if (doc == null) return;
+        // The cut follows the views: a viewport turned to a plan or away from one moves no object.
+        var views = string.Join(",", Wanted(doc));
+        if (!_dirty && views == _views) return;
         _dirty = false;
-        Apply(RhinoDoc.ActiveDoc, ForskWhiteHost.Enabled());
+        _views = views;
+        Apply(doc, ForskWhiteHost.Enabled());
     }
+
+    static string _views;
 
     static bool Ensure(RhinoDoc doc)
     {

@@ -23,19 +23,19 @@ public class ForskPlanCutTests
     }
 
     [Fact]
-    public void Viewport_list_is_the_top_view_only()
+    public void Viewport_list_is_the_plan_views_only()
     {
         var views = new[]
         {
-            new ForskPlanCut.ViewSlot("top", "Top", "RhinoView"),
+            new ForskPlanCut.ViewSlot("top", "Top", "RhinoView", plan: true),
             new ForskPlanCut.ViewSlot("persp", "Perspective", "RhinoView"),
             new ForskPlanCut.ViewSlot("front", "Front", "RhinoView"),
-            new ForskPlanCut.ViewSlot("page", "Top", ForskWhite.PageViewType),
-            new ForskPlanCut.ViewSlot("detail", "Top", ForskWhite.DetailType),
+            new ForskPlanCut.ViewSlot("page", "Top", ForskWhite.PageViewType, plan: true),
+            new ForskPlanCut.ViewSlot("detail", "Top", ForskWhite.DetailType, plan: true),
             new ForskPlanCut.ViewSlot("topo", "Topography", "RhinoView"),
-            new ForskPlanCut.ViewSlot("topic", "Topic", "RhinoView"),
-            new ForskPlanCut.ViewSlot("top2", "Top 01", "RhinoView"),
-            new ForskPlanCut.ViewSlot("top3", "top1", "RhinoView")
+            new ForskPlanCut.ViewSlot("orbited", "Top", "RhinoView"),
+            new ForskPlanCut.ViewSlot("top2", "Right", "RhinoView", plan: true),
+            new ForskPlanCut.ViewSlot("top3", "top1", "RhinoView", plan: true)
         };
         var ids = ForskPlanCut.TopIds(views);
         Assert.Equal(new[] { "top", "top2", "top3" }, ids);

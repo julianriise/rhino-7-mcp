@@ -88,7 +88,7 @@ public class ViewPickerTests
     }
 
     [Fact]
-    public void ThePlanCut_ClipsAnyPlanView_NotOnlyOneNamedTop()
+    public void ThePlanCut_ClipsThePlanViews_WhateverTheirName()
     {
         var views = new[]
         {
@@ -97,7 +97,8 @@ public class ViewPickerTests
             new ForskPlanCut.ViewSlot("top", "Top", "RhinoView"),
             new ForskPlanCut.ViewSlot("page", "Plan", ForskWhite.PageViewType, plan: true)
         };
-        Assert.Equal(new[] { "persp", "top" }, ForskPlanCut.TopIds(views));
+        // The Top viewport turned to Perspective or an elevation loses the cut: it follows the view, not the name.
+        Assert.Equal(new[] { "persp" }, ForskPlanCut.TopIds(views));
     }
 
     [Fact]
