@@ -78,6 +78,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "option.delete":
                     return OptionPick(f, actionId);
                 case "room.inside": return JumpInside(f);
+                case "options": return OptionsMenu(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
@@ -371,6 +372,16 @@ namespace RhinoMCPPlugin.Forsk
             if (note != null) card["note"] = note;
         }
 
+        /// <summary>The Options card: the option actions this file can take now, then Done. Each pill runs its action.</summary>
+        public static CardSpec OptionsMenu(FileFacts f)
+        {
+            var card = new CardSpec { Kind = "options", Question = ForskText.Get("options.ask"), Depends = "model" };
+            foreach (var action in ForskRegistry.All.Where(a => a.Group == "group.options" && a.Shows(f)))
+                card.Pills.Add(new CardPill(action.Id, ForskText.Label(action.Id)));
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         /// <summary>AN.6: which saved option to compare with the model now, newest first, at most four.</summary>
         public static CardSpec OptionPick(FileFacts f, string kind = "option.compare")
         {
@@ -484,7 +495,7 @@ namespace RhinoMCPPlugin.Forsk
             if (daylight != null) card.Pills.Add(new CardPill(daylight.Id, ForskText.Label(daylight.Id)));
             var area = ForskRegistry.Find("area.stats");
             if (area != null && area.Shows(f)) card.Pills.Add(new CardPill(area.Id, ForskText.Label(area.Id)));
-            foreach (var id in new[] { "analysis.print", "option.save", "option.compare", "option.restore" })
+            foreach (var id in new[] { "analysis.print", "options" })
             {
                 var action = ForskRegistry.Find(id);
                 if (action != null && action.Shows(f)) card.Pills.Add(new CardPill(action.Id, ForskText.Label(action.Id)));

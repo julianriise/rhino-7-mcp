@@ -82,13 +82,13 @@ public class WindowViewTests
     }
 
     [Fact]
-    public void TheStatusLine_ListenerDownAndNonDefaultInk_AndStartBridgeOnTheCard()
+    public void TheStatusLine_ListenerDownAndNonDefaultInk_AndStartBridgeInSettings()
     {
         var view = View("bridge down, grey ink", help: true);
         Assert.Equal("ink: grey", view["status"]!.ToString());
-        var start = view["help"]!["groups"]![0]!;
-        Assert.Equal("Start a project", start["title"]!.ToString());
-        Assert.Equal("bridge.start", start["actions"]![0]!["id"]!.ToString());
+        // Settings is Start the bridge's one home (UI unification, 2026-10-07).
+        Assert.DoesNotContain(view["help"]!["groups"]!.SelectMany(g => g["actions"]!), a => a["id"]!.ToString() == "bridge.start");
+        Assert.Contains(view["settings"]!, s => s["id"]!.ToString() == "bridge.start");
         Assert.DoesNotContain("bridge.start", Slots(view));
     }
 

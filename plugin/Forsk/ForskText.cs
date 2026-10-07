@@ -493,14 +493,12 @@ namespace RhinoMCPPlugin.Forsk
 
             // "What can I do here?" groups, in card order.
             ["group.start"] = "Start a project",
-            ["group.import"] = "Import a plan",
             ["group.model"] = "Model and edit",
-            ["group.openings"] = "Openings",
             ["group.rooms"] = "Rooms",
-            ["group.print"] = "Print and sheets",
-            ["group.daylight"] = "Daylight",
-            ["group.sections"] = "Sections",
-            ["group.profiles"] = "Ink",
+            ["group.analyses"] = "Analyses",
+            ["group.print"] = "Print and export",
+            ["options"] = "Options",
+            ["options.ask"] = "Options of this model, kept beside the saved file.",
 
             // One sentence where a neighbour would expect a dead control.
             ["hint.key"] = "Chat actions are hidden until you add your Grok API key: Settings → Grok API key.",

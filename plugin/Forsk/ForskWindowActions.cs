@@ -492,6 +492,7 @@ namespace RhinoMCPPlugin.Forsk
             switch (kind)
             {
                 case "analyser":
+                case "options":
                     // The pill is the action's id: it runs as the bar's pill does, with the same checks.
                     Models.Persist(thread);
                     Fire(pill.Id, true);

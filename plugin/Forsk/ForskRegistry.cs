@@ -143,20 +143,27 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class ForskRegistry
     {
+        /// <summary>
+        /// More actions' groups, by the work (UI unification, 2026-10-07). Two groups
+        /// stay off the sheet: Settings (the gear's menu is their one home) and
+        /// Options (the Options card opens them).
+        /// </summary>
         public static readonly IReadOnlyList<string> GroupOrder = new[]
         {
-            "group.start", "group.import", "group.model", "group.openings", "group.rooms",
-            "group.print", "group.daylight", "group.sections", "group.profiles"
+            "group.start", "group.model", "group.rooms", "group.analyses", "group.print"
         };
+
+        /// <summary>Groups with a home of their own, off the More actions sheet.</summary>
+        public static readonly IReadOnlyList<string> OffSheet = new[] { "group.settings", "group.options" };
 
         public static readonly IReadOnlyList<ForskAction> All = new List<ForskAction>
         {
-            new ForskAction("file.sample", Runs.Run, "group.import", f => f.Kind == FileKind.Empty),
-            new ForskAction("file.import", Runs.Run, "group.import", f => !f.HasWalls),
-            new ForskAction("file.use_curves", Runs.Run, "group.import", f => f.Kind == FileKind.Foreign),
-            new ForskAction("file.scale", Runs.Run, "group.import", f => f.HasUnderlay && !f.ScaleSet),
-            new ForskAction("file.check", Runs.Card, "group.import", f => f.ReviewStored && !f.HasWalls),
-            new ForskAction("file.draw", Runs.Run, "group.import", f => !f.HasWalls),
+            new ForskAction("file.sample", Runs.Run, "group.start", f => f.Kind == FileKind.Empty),
+            new ForskAction("file.import", Runs.Run, "group.start", f => !f.HasWalls),
+            new ForskAction("file.use_curves", Runs.Run, "group.start", f => f.Kind == FileKind.Foreign),
+            new ForskAction("file.scale", Runs.Run, "group.start", f => f.HasUnderlay && !f.ScaleSet),
+            new ForskAction("file.check", Runs.Card, "group.start", f => f.ReviewStored && !f.HasWalls),
+            new ForskAction("file.draw", Runs.Run, "group.start", f => !f.HasWalls),
             new ForskAction("file.generate", Runs.Run, "group.model", f => f.HasPlanCurves && !f.HasGenerated),
             new ForskAction("file.rebuild", Runs.Run, "group.model", f => f.HasGenerated),
             new ForskAction("plan.show", Runs.Run, "group.model", f => f.PlanHidden),
@@ -174,17 +181,16 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("stair.add", Runs.Run, "group.model", f => f.HasWalls && f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("stair.edit", Runs.Card, "group.model", f => f.Picked == Picked.Stair && f.PickedCount == 1),
             new ForskAction("stair.delete", Runs.Run, "group.model", f => f.Picked == Picked.Stair),
-            new ForskAction("opening.move", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
-            new ForskAction("opening.resize", Runs.Prefill, "group.openings", f => f.Picked == Picked.Opening),
+            new ForskAction("opening.move", Runs.Prefill, "group.model", f => f.Picked == Picked.Opening),
+            new ForskAction("opening.resize", Runs.Prefill, "group.model", f => f.Picked == Picked.Opening),
             // One kind of opening picked: those. Nothing picked: all of a kind (the card's pills say which).
-            new ForskAction("opening.type", Runs.Card, "group.openings", f => f.Picked == Picked.Opening && f.PickedOpeningKind != null
+            new ForskAction("opening.type", Runs.Card, "group.model", f => f.Picked == Picked.Opening && f.PickedOpeningKind != null
                 || f.Picked == Picked.None && (f.HasDoors || f.HasWindows)),
-            new ForskAction("opening.delete", Runs.Run, "group.openings", f => f.Picked == Picked.Opening),
-            new ForskAction("opening.add_door", Runs.Ask, "group.openings", f => f.Picked == Picked.Wall),
-            new ForskAction("daylight.window", Runs.Ask, "group.openings", f => f.HasWalls && f.HasRooms && !f.HasWindows && f.Map == MapState.None),
+            new ForskAction("opening.delete", Runs.Run, "group.model", f => f.Picked == Picked.Opening),
+            new ForskAction("opening.add_door", Runs.Ask, "group.model", f => f.Picked == Picked.Wall),
+            new ForskAction("daylight.window", Runs.Ask, "group.model", f => f.HasWalls && f.HasRooms && !f.HasWindows && f.Map == MapState.None),
             new ForskAction("daylight.rooms", Runs.Run, "group.rooms", f => f.HasWalls && !f.HasRooms && f.Map == MapState.None),
             new ForskAction("rooms.list", Runs.Card, "group.rooms", f => f.HasRooms),
-            new ForskAction("area.stats", Runs.Run, "group.rooms", f => f.HasRooms),
             // AI detection misses rooms: click a room's corners to draw its area, or redraw the picked room.
             new ForskAction("room.draw", Runs.Run, "group.rooms", f => f.HasWalls),
             new ForskAction("room.redraw", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
@@ -209,28 +215,32 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("export.csv", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
             new ForskAction("takeoff", Runs.Run, "group.print", f => f.HasWalls),
-            new ForskAction("meta.title", Runs.Card, "group.print", f => true),
+            new ForskAction("meta.title", Runs.Card, "group.settings", f => true),
             new ForskAction("print.clear", Runs.Card, "group.print", f => f.Layouts > 0),
             new ForskAction("sheets.clear", Runs.Card, "group.print", f => f.HasSheetCache),
-            new ForskAction("daylight.run", Runs.Run, "group.daylight", f => f.HasWalls && f.HasRooms && f.HasWindows && f.Map == MapState.None),
-            new ForskAction("daylight.again", Runs.Run, "group.daylight", f => f.Map == MapState.Stale),
-            new ForskAction("daylight.hide", Runs.Run, "group.daylight", f => f.Map == MapState.Shown),
-            new ForskAction("daylight.show", Runs.Run, "group.daylight", f => f.Map == MapState.Hidden),
-            new ForskAction("daylight.room", Runs.Run, "group.daylight", f => f.Picked == Picked.Room),
-            new ForskAction("daylight.quality", Runs.Card, "group.daylight", f => f.HasWalls),
+            new ForskAction("daylight.run", Runs.Run, "group.analyses", f => f.HasWalls && f.HasRooms && f.HasWindows && f.Map == MapState.None),
+            new ForskAction("daylight.again", Runs.Run, "group.analyses", f => f.Map == MapState.Stale),
+            new ForskAction("daylight.hide", Runs.Run, "group.analyses", f => f.Map == MapState.Shown),
+            new ForskAction("daylight.show", Runs.Run, "group.analyses", f => f.Map == MapState.Hidden),
+            new ForskAction("daylight.room", Runs.Run, "group.analyses", f => f.Picked == Picked.Room),
+            new ForskAction("daylight.quality", Runs.Card, "group.settings", f => f.HasWalls),
+            // Areas sit with daylight: both are analyses.
+            new ForskAction("area.stats", Runs.Run, "group.analyses", f => f.HasRooms),
             // AN.3: the analysis that just ran goes into the Analysis set; AN.4 picks the set's analyses and prints it.
-            new ForskAction("analysis.add", Runs.Run, "group.daylight", f => f.Analysed != null && !(f.Analysis?.InSet(f.Analysed) ?? false)),
-            new ForskAction("analysis.print", Runs.Card, "group.daylight", f => f.HasWalls && f.HasRooms),
+            new ForskAction("analysis.add", Runs.Run, "group.analyses", f => f.Analysed != null && !(f.Analysis?.InSet(f.Analysed) ?? false)),
+            new ForskAction("analysis.print", Runs.Card, "group.analyses", f => f.HasWalls && f.HasRooms),
             // AN.5 and AN.6: the model saved as option A, B, … beside the 3dm, and an option against the model now.
-            new ForskAction("option.save", Runs.Run, "group.daylight", f => f.HasWalls && f.Saved),
-            new ForskAction("option.compare", Runs.Card, "group.daylight", f => f.Options != null && f.Options.Count > 0),
-            new ForskAction("option.restore", Runs.Card, "group.daylight", f => f.Options != null && f.Options.Count > 0),
-            new ForskAction("option.delete", Runs.Card, "group.daylight", f => f.Options != null && f.Options.Count > 0),
-            new ForskAction("section.add", Runs.Run, "group.sections", f => f.HasWalls),
-            new ForskAction("section.room", Runs.Run, "group.sections", f => f.Picked == Picked.Room && f.PickedCount == 1),
-            new ForskAction("section.remove", Runs.Card, "group.sections", f => f.Sections > 0),
-            new ForskAction("ink.set", Runs.Card, "group.profiles", f => f.HasWalls),
-            new ForskAction("bridge.start", Runs.Card, "group.start", f => !f.ListenerUp),
+            // One Options entry on the sheet and in the Analyses menu opens these four.
+            new ForskAction("options", Runs.Card, "group.analyses", f => f.HasWalls && f.Saved || f.Options != null && f.Options.Count > 0),
+            new ForskAction("option.save", Runs.Run, "group.options", f => f.HasWalls && f.Saved),
+            new ForskAction("option.compare", Runs.Card, "group.options", f => f.Options != null && f.Options.Count > 0),
+            new ForskAction("option.restore", Runs.Card, "group.options", f => f.Options != null && f.Options.Count > 0),
+            new ForskAction("option.delete", Runs.Card, "group.options", f => f.Options != null && f.Options.Count > 0),
+            new ForskAction("section.add", Runs.Run, "group.print", f => f.HasWalls),
+            new ForskAction("section.room", Runs.Run, "group.print", f => f.Picked == Picked.Room && f.PickedCount == 1),
+            new ForskAction("section.remove", Runs.Card, "group.print", f => f.Sections > 0),
+            new ForskAction("ink.set", Runs.Card, "group.settings", f => f.HasWalls),
+            new ForskAction("bridge.start", Runs.Card, "group.settings", f => !f.ListenerUp),
             new ForskAction("help.card", Runs.Card, null, f => true)
         };
 

@@ -85,9 +85,9 @@ public class OptionCompareTests
         Assert.True(ForskRegistry.Find("option.compare")!.Shows(facts));
         Assert.Equal("Save as option", ForskRegistry.Find("option.save")!.Label);
         Assert.Equal("Compare options", ForskRegistry.Find("option.compare")!.Label);
-        var pills = ForskCards.Analyser(facts).Pills.Select(p => p.Id).ToList();
-        Assert.Contains("option.save", pills);
-        Assert.Contains("option.compare", pills);
+        // The Analyses menu opens one Options card for the four option actions (UI unification).
+        Assert.Contains("options", ForskCards.Analyser(facts).Pills.Select(p => p.Id));
+        Assert.Contains("option.compare", ForskCards.For("options", facts)!.Pills.Select(p => p.Id));
         var pick = ForskCards.For("option.compare", facts)!;
         Assert.Equal(new[] { "B", "A", "cancel" }, pick.Pills.Select(p => p.Id));
     }
@@ -124,6 +124,6 @@ public class OptionCompareTests
         Assert.Equal("option.restore", restore.Kind);
         Assert.Equal(new[] { "B", "A", "cancel" }, restore.Pills.Select(p => p.Id));
         Assert.Equal("Restore which option? The model goes back to it; one Undo brings it back.", restore.Question);
-        Assert.Contains("option.restore", ForskCards.Analyser(facts).Pills.Select(p => p.Id));
+        Assert.Contains("option.restore", ForskCards.For("options", facts)!.Pills.Select(p => p.Id));
     }
 }

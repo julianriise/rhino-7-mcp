@@ -248,7 +248,7 @@ public class RegistryTests
             Assert.True(ForskText.Has(id + ".reason"), id + " has no reason");
         foreach (var group in ForskRegistry.GroupOrder)
             Assert.True(ForskText.Has(group), group);
-        Assert.All(ForskRegistry.All.Where(a => a.Id != "help.card"), a => Assert.Contains(a.Group, ForskRegistry.GroupOrder));
+        Assert.All(ForskRegistry.All.Where(a => a.Id != "help.card"), a => Assert.Contains(a.Group, ForskRegistry.GroupOrder.Concat(ForskRegistry.OffSheet)));
     }
 
     [Fact]
@@ -256,9 +256,10 @@ public class RegistryTests
     {
         string[] Ids(string name) => ForskRegistry.Card(Docs.Facts(name)).Actions.Select(a => a.Id).ToArray();
 
-        Assert.Equal(new[] { "file.sample", "file.import", "file.draw", "wall.draw", "meta.title" }, Ids("empty"));
-        Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "wall.draw", "meta.title" }, Ids("plan curves"));
-        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "area.stats", "room.draw", "room.inside", "furniture.add", "furniture.furnish", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "export.csv", "takeoff", "meta.title", "daylight.run", "daylight.quality", "analysis.print", "section.add", "ink.set" },
+        Assert.Equal(new[] { "file.sample", "file.import", "file.draw", "wall.draw" }, Ids("empty"));
+        Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "wall.draw" }, Ids("plan curves"));
+        // Grouped by the work: model, rooms, analyses, print and export. Settings stay in the gear's menu.
+        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "room.draw", "room.inside", "furniture.add", "furniture.furnish", "daylight.run", "area.stats", "analysis.print", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "export.csv", "takeoff", "section.add" },
             Ids("house"));
     }
 
