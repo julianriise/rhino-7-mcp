@@ -227,6 +227,7 @@ namespace RhinoMCPPlugin.Forsk
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
+            ["whats.new.show"] = "Release notes",
             ["furniture.add"] = "Add furniture",
             ["furniture.furnish"] = "Furnish rooms",
             ["furniture.add.ask"] = "Add which piece, and where?",

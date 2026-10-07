@@ -385,6 +385,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             menu.Add(new JObject { ["id"] = ForskSetup.MenuId, ["label"] = ForskText.Get(ForskSetup.MenuId) });
             menu.Add(new JObject { ["id"] = ForskKeyFile.MenuId, ["label"] = ForskText.Get(ForskKeyFile.MenuId) });
+            menu.Add(new JObject { ["id"] = ForskWhatsNew.MenuId, ["label"] = ForskText.Get(ForskWhatsNew.MenuId) });
             menu.Add(new JObject { ["id"] = ForskDebug.MenuId, ["label"] = ForskDebug.MenuLabel });
             return menu;
         }

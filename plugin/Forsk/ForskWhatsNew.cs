@@ -32,6 +32,8 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskWhatsNew
     {
         public const string Kind = "whats.new";
+        /// <summary>Settings → Release notes: this version's What's new card again.</summary>
+        public const string MenuId = "whats.new.show";
         /// <summary>The embedded copy of plugin/Forsk/whats_new.json.</summary>
         public const string Resource = "rhinomcp.Forsk.whats_new.json";
         public const string DefaultIcon = "sparkles";

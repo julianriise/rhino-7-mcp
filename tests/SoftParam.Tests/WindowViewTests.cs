@@ -98,10 +98,10 @@ public class WindowViewTests
         string[] Ids(string fixture) => ((JArray)View(fixture)["settings"]!).Select(s => s["id"]!.ToString()).ToArray();
 
         // Set up Forsk and the Grok key sit in Settings in every file: chat and daylight need them, Print does not.
-        Assert.Equal(new[] { "meta.title", "forsk.setup", "grok.key", "debug.copy" }, Ids("empty"));
-        Assert.Equal(new[] { "meta.title", "forsk.setup", "grok.key", "debug.copy" }, Ids("empty, no key"));
-        Assert.Equal(new[] { "Ink", "Daylight quality", "Project info", "Set up Forsk", "Grok API key", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
-        Assert.Equal(new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start", "forsk.setup", "grok.key", "debug.copy" }, Ids("bridge down, grey ink"));
+        Assert.Equal(new[] { "meta.title", "forsk.setup", "grok.key", "whats.new.show", "debug.copy" }, Ids("empty"));
+        Assert.Equal(new[] { "meta.title", "forsk.setup", "grok.key", "whats.new.show", "debug.copy" }, Ids("empty, no key"));
+        Assert.Equal(new[] { "Ink", "Daylight quality", "Project info", "Set up Forsk", "Grok API key", "Release notes", "Copy debug report" }, ((JArray)View("house")["settings"]!).Select(s => s["label"]!.ToString()));
+        Assert.Equal(new[] { "ink.set", "daylight.quality", "meta.title", "bridge.start", "forsk.setup", "grok.key", "whats.new.show", "debug.copy" }, Ids("bridge down, grey ink"));
         Assert.DoesNotContain("file.print", Ids("house"));
         Assert.Equal(new[] { "meta.title" }, ((JArray)View("empty")["attention"]!).Select(a => a["id"]!.ToString()));
         var help = View("house", help: true)["help"]!["groups"]!.SelectMany(g => g["actions"]!).Select(a => a["id"]!.ToString());

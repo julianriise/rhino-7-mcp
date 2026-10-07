@@ -99,6 +99,11 @@ namespace RhinoMCPPlugin.Forsk
                 CopyDebugReport(RhinoDoc.ActiveDoc);
                 return;
             }
+            if (id == ForskWhatsNew.MenuId)
+            {
+                ReleaseNotes();
+                return;
+            }
             if (id == FirstRun.DismissId)
             {
                 FirstRunGate.Dismiss();
@@ -1164,6 +1169,19 @@ namespace RhinoMCPPlugin.Forsk
         {
             try { return RuntimeInformation.OSDescription ?? ""; }
             catch (Exception) { return ""; }
+        }
+
+        /// <summary>Settings → Release notes: this version's What's new card again, from Support, under the chat.</summary>
+        void ReleaseNotes()
+        {
+            var thread = Active();
+            var notes = ForskWhatsNewGate.Notes();
+            if (thread == null || notes == null) return;
+            thread.BeginReply(ForskText.Get("role.support"));
+            thread.AddCard(ForskWhatsNew.Card(notes), null);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
         }
 
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
