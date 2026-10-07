@@ -245,4 +245,22 @@ public class RoomTypeTests
         Assert.Equal("Living", table.Rows[0][2]);
         Assert.Equal(new[] { "Sum", "20.0 m²" }, table.Total);
     }
+
+    /// <summary>Furnish and Add furniture: a room asked for by any of its type's words, English or Norwegian.</summary>
+    [Theory]
+    [InlineData("toilet", "wc", "Bathroom", true)]
+    [InlineData("the toilet", "wc", "Bathroom", true)]
+    [InlineData("toalett", "wc", "", true)]
+    [InlineData("wc", "wc", "Bad", true)]
+    [InlineData("bath", "unassigned", "Baderom", true)]
+    [InlineData("soverom", "bedroom", "Master", true)]
+    [InlineData("toilet", "bathroom", "Bathroom", false)]
+    [InlineData("bath", "wc", "Bad", false)]
+    [InlineData("kitchen", "living", "Stue", false)]
+    [InlineData("room", "bedroom", "Room", false)]
+    [InlineData("", "bedroom", "Bedroom", false)]
+    public void ARoomAskedForBy_ATypeWord_MatchesItsType(string asked, string type, string name, bool expected)
+    {
+        Assert.Equal(expected, RoomTypes.Matches(asked, type, name));
+    }
 }

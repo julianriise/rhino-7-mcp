@@ -146,6 +146,20 @@ public static class RoomTypes
     }
 
     /// <summary>
+    /// The room a user asked for by a type word, English or Norwegian
+    /// ("the toilet", "soverom", "bath"): the room's stored type, else the
+    /// type its name says. A WC named Bathroom is the toilet. False when the
+    /// words name no type.
+    /// </summary>
+    public static bool Matches(string asked, string roomType, string roomName)
+    {
+        var key = TryParse(asked, out var parsed) && parsed != Unassigned ? parsed : FromLabel(asked);
+        if (key == Unassigned) return false;
+        var stored = Read(roomType);
+        return stored != Unassigned ? stored == key : FromLabel(roomName) == key;
+    }
+
+    /// <summary>
     /// A first guess from the room's openings and shape. No door stays unassigned.
     /// No window, one door, under <see cref="StorageMaxM2"/> is storage, even inside the bathroom band.
     /// Several doors and a long narrow plan is a hall.

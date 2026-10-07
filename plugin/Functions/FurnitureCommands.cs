@@ -176,7 +176,8 @@ public partial class RhinoMCPFunctions
             var hit = MatchRoom(rooms, named);
             if (hit == null)
             {
-                var typed = rooms.Where(r => string.Equals(r.RoomType, named.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                // A type word: "the toilet" is the WC, whatever it is named.
+                var typed = rooms.Where(r => RoomTypes.Matches(named, r.RoomType, r.Name)).ToList();
                 if (typed.Count > 1) throw new InvalidOperationException("There are " + typed.Count + " rooms of that type. Say which: " + string.Join(", ", typed.Select(RoomWords)) + ".");
                 hit = typed.FirstOrDefault();
             }
