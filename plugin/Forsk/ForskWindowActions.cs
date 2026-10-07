@@ -585,6 +585,11 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
                     break;
+                case "option.restore":
+                case "option.delete":
+                    var picked = pill.Id;
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool(kind == "option.restore" ? "restore_option" : "delete_option", new JObject { ["name"] = picked }), userText: pill.Label);
+                    break;
                 case "option.compare":
                     var optionName = pill.Id;
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("compare_option", new JObject { ["name"] = optionName }), userText: pill.Label);

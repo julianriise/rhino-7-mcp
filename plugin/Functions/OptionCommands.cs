@@ -4,13 +4,16 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino;
+using Rhino.DocObjects;
+using Rhino.Geometry;
 
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// AN.5 and AN.6, first cut: save_option writes the model's records as
-/// option A, B, … beside the 3dm (OptionSnapshot); compare_option sets one
-/// against the model now (OptionCompare). Restore, rename and delete come next.
+/// AN.5 and AN.6: save_option writes the model's records as option A, B, …
+/// beside the 3dm (OptionSnapshot); compare_option sets one against the model
+/// now (OptionCompare); restore_option puts one back (OptionRestore), one
+/// Undo; rename_option and delete_option manage the files.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -59,6 +62,136 @@ public partial class RhinoMCPFunctions
             ["rows"] = rows,
             ["message"] = "Option " + name + " against now: " + summary.TrimEnd('.') + "."
         };
+    }
+
+    [McpCommand("restore_option", ModelView = true, Map = Forsk.MapEdit.Wall)]
+    public JObject RestoreOption(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("No active document.");
+        var (name, option) = ReadOption(doc, parameters);
+        var steps = OptionRestore.Plan(option, ReadOptionSnapshot(doc, "now"));
+        if (steps.Refusal != null) throw new InvalidOperationException(steps.Refusal);
+        if (steps.Nothing)
+            return OptionResult(name, 0, 0, 0, "The model already matches option " + name + ".");
+
+        var undos = new List<HostUndo>();
+        // Floor, roof and rooms follow each wall cluster's whole shape, as a wall move does.
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var walls = EnumerateDocObjects(doc)
+            .Where(o => IsForskGenerated(o) && string.Equals(GetForskKind(o), "wall", StringComparison.OrdinalIgnoreCase))
+            .Select(o => (Obj: o, Rings: WallEdit.Rings(o.Attributes.GetUserString("forsk:path"))))
+            .Where(w => w.Rings != null && w.Rings.Count > 0)
+            .ToList();
+        var before = walls.Select(w => w.Rings).ToList();
+        var after = walls.Select(w => w.Rings).ToList();
+        var changed = new List<int>();
+        void Hold(Guid host)
+        {
+            if (host != Guid.Empty && undos.All(u => u.HostBefore != host)) undos.Add(SnapshotWholeHost(doc, host));
+        }
+        try
+        {
+            // The walls take their saved records back.
+            foreach (var wall in steps.Walls)
+            {
+                var index = walls.FindIndex(w => string.Equals(w.Obj.Attributes.GetUserString("forsk:id"), wall.Id, StringComparison.Ordinal));
+                if (index < 0) throw new InvalidOperationException("Wall " + wall.Id + " is not in the model.");
+                var obj = walls[index].Obj;
+                Hold(obj.Id);
+                WriteWallPath(doc, obj.Id, wall.Record);
+                after[index] = WallEdit.Rings(wall.Record);
+                changed.Add(index);
+            }
+            // The doors and windows go back where they stood, before their walls cut them again.
+            foreach (var move in steps.Moves)
+            {
+                if (!Guid.TryParse(move.Id, out var markerId)) continue;
+                var marker = doc.Objects.FindId(markerId) ?? throw new InvalidOperationException("An opening of option " + name + " is not in the model.");
+                Hold(HostOfMarker(doc, marker));
+                var brep = GetBrepFromObject(marker)?.DuplicateBrep();
+                if (brep == null || !brep.Translate(new Vector3d(move.Dx, move.Dy, 0)) || !ReplaceOpeningMarker(doc, markerId, brep))
+                    throw new InvalidOperationException("An opening could not move back.");
+            }
+            foreach (var undo in undos) RebuildUnder(undo);
+            var done = new HashSet<int>();
+            foreach (var index in changed)
+            {
+                if (done.Contains(index)) continue;
+                var cluster = WallJoins.ClusterOf(before, index, tol);
+                foreach (var i in cluster) done.Add(i);
+                FollowNeighbours(doc, walls[index].Obj.Attributes.GetUserString("forsk:source_layer"),
+                    WallJoins.Shape(before, cluster, tol), WallJoins.Shape(after, cluster, tol));
+            }
+            // Sizes last: set_opening rebuilds the host with the opening's own size.
+            foreach (var size in steps.Sizes)
+                SetOpening(new JObject { ["id"] = size.Id, ["width"] = size.Width, ["sill"] = size.Sill, ["head"] = size.Head });
+        }
+        catch (Exception ex)
+        {
+            for (var i = undos.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, undos[i]);
+            throw new InvalidOperationException("Option " + name + " not restored. " + ex.Message, ex);
+        }
+        doc.Views.Redraw();
+        return OptionResult(name, steps.Walls.Count, steps.Moves.Count, steps.Sizes.Count,
+            "Restored option " + name + ": " + OptionCount(steps.Walls.Count, "wall") + " back, "
+            + OptionCount(steps.Moves.Count, "opening") + " moved and " + OptionCount(steps.Sizes.Count, "opening") + " resized.");
+    }
+
+    [McpCommand("rename_option", ReadOnly = true)]
+    public JObject RenameOption(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("No active document.");
+        var (name, _) = ReadOption(doc, parameters);
+        var to = (parameters?["to"]?.ToString() ?? "").Trim();
+        var target = OptionSnapshot.PathFor(doc.Path, to);
+        if (OptionNames(doc.Path).Any(n => string.Equals(n, to, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("There is already an option " + to + ".");
+        var source = OptionSnapshot.PathFor(doc.Path, name);
+        var json = JObject.Parse(File.ReadAllText(source));
+        json["name"] = to;
+        File.WriteAllText(target, json.ToString(Newtonsoft.Json.Formatting.Indented));
+        File.Delete(source);
+        return new JObject { ["name"] = to, ["was"] = name, ["path"] = target, ["message"] = "Option " + name + " is now " + to + "." };
+    }
+
+    [McpCommand("delete_option", ReadOnly = true)]
+    public JObject DeleteOption(JObject parameters)
+    {
+        var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("No active document.");
+        var (name, _) = ReadOption(doc, parameters);
+        File.Delete(OptionSnapshot.PathFor(doc.Path, name));
+        return new JObject { ["name"] = name, ["message"] = "Deleted option " + name + ". The model did not change." };
+    }
+
+    /// <summary>The option the parameters name, read from beside the 3dm. Throws with what is saved when it is not there.</summary>
+    private static (string Name, OptionSnapshot.Snapshot Option) ReadOption(RhinoDoc doc, JObject parameters)
+    {
+        if (string.IsNullOrEmpty(doc.Path)) throw new InvalidOperationException("Save the file first: options are kept beside it.");
+        var name = (parameters?["name"]?.ToString() ?? "").Trim();
+        var path = OptionSnapshot.PathFor(doc.Path, name);
+        if (!File.Exists(path)) throw new InvalidOperationException("No option " + name + ". Saved: " + string.Join(", ", OptionNames(doc.Path)) + ".");
+        var option = OptionSnapshot.Read(File.ReadAllText(path), out var error) ?? throw new InvalidOperationException(error);
+        return (name, option);
+    }
+
+    private static JObject OptionResult(string name, int walls, int moved, int resized, string message) => new JObject
+    {
+        ["name"] = name,
+        ["walls"] = walls,
+        ["moved"] = moved,
+        ["resized"] = resized,
+        ["message"] = message
+    };
+
+    /// <summary>The wall an opening marker stands in, or empty.</summary>
+    private Guid HostOfMarker(RhinoDoc doc, RhinoObject marker)
+    {
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!IsForskGenerated(obj) || !string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase)) continue;
+            if (MarkersOnHost(doc, obj.Id, obj.Attributes.GetUserString("forsk:id")).Any(m => m.Id == marker.Id)) return obj.Id;
+        }
+        return Guid.Empty;
     }
 
     /// <summary>The saved options beside the 3dm, oldest first. Empty for an unsaved file or none saved.</summary>
@@ -110,7 +243,8 @@ public partial class RhinoMCPFunctions
                 Path = rings[0],
                 Thickness = ParseMm(obj.Attributes.GetUserString("forsk:thickness")) ?? 0,
                 Height = ParseMm(obj.Attributes.GetUserString("forsk:height")) ?? (box.HasValue && box.Value.IsValid ? box.Value.Max.Z - box.Value.Min.Z : 0),
-                Existing = existing
+                Existing = existing,
+                Record = obj.Attributes.GetUserString("forsk:path")
             });
         }
         foreach (var o in OpeningRows(doc, null, out _))

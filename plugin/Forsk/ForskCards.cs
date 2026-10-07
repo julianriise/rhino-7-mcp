@@ -73,7 +73,10 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.one": return PrintOne(f);
                 case "print.pages": return Pages(f);
                 case "analysis.print": return AnalysisSet(f);
-                case "option.compare": return OptionPick(f);
+                case "option.compare":
+                case "option.restore":
+                case "option.delete":
+                    return OptionPick(f, actionId);
                 case "room.inside": return JumpInside(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
@@ -367,9 +370,9 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>AN.6: which saved option to compare with the model now, newest first, at most four.</summary>
-        public static CardSpec OptionPick(FileFacts f)
+        public static CardSpec OptionPick(FileFacts f, string kind = "option.compare")
         {
-            var card = new CardSpec { Kind = "option.compare", Question = ForskText.Get("option.compare.ask"), Depends = "model" };
+            var card = new CardSpec { Kind = kind, Question = ForskText.Get(kind + ".ask"), Depends = "model" };
             foreach (var name in (f?.Options ?? new List<string>()).AsEnumerable().Reverse().Take(4))
                 card.Pills.Add(new CardPill(name, ForskText.Format("option.name", "name", name)));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
@@ -479,7 +482,7 @@ namespace RhinoMCPPlugin.Forsk
             if (daylight != null) card.Pills.Add(new CardPill(daylight.Id, ForskText.Label(daylight.Id)));
             var area = ForskRegistry.Find("area.stats");
             if (area != null && area.Shows(f)) card.Pills.Add(new CardPill(area.Id, ForskText.Label(area.Id)));
-            foreach (var id in new[] { "analysis.print", "option.save", "option.compare" })
+            foreach (var id in new[] { "analysis.print", "option.save", "option.compare", "option.restore" })
             {
                 var action = ForskRegistry.Find(id);
                 if (action != null && action.Shows(f)) card.Pills.Add(new CardPill(action.Id, ForskText.Label(action.Id)));

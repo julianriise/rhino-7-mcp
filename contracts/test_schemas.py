@@ -424,6 +424,9 @@ def test_new_commands():
         ("commands/save_option.json", {}),
         ("commands/save_option.json", {"name": "A"}),
         ("commands/compare_option.json", {"name": "A"}),
+        ("commands/restore_option.json", {"name": "A"}),
+        ("commands/rename_option.json", {"name": "A", "to": "Wide hall"}),
+        ("commands/delete_option.json", {"name": "B"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -1036,6 +1039,12 @@ def test_responses():
         all_passed = False
     if not validate("responses/compare_option_result.json", {"name": "A", "summary": "1 wall moved.", "rows": [{"label": "Net area", "option": "27.4 m²", "now": "28.6 m²", "better": ""}], "message": "Option A against now: 1 wall moved."}):
         all_passed = False
+    if not validate("responses/restore_option_result.json", {"name": "A", "walls": 3, "moved": 5, "resized": 0, "message": "Restored option A."}):
+        all_passed = False
+    if not validate("responses/rename_option_result.json", {"name": "Wide hall", "was": "A", "path": "/tmp/g.forsk/options/Wide hall.json", "message": "Option A is now Wide hall."}):
+        all_passed = False
+    if not validate("responses/delete_option_result.json", {"name": "B", "message": "Deleted option B."}):
+        all_passed = False
     if not validate("responses/show_view_result.json", {"view": "south", "label": "South elevation", "viewport": "Perspective", "display": "Forsk Technical", "zoom": "building", "message": "South elevation in the Perspective viewport, zoomed to the building."}):
         all_passed = False
     if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
@@ -1570,6 +1579,8 @@ def test_invalid_examples():
         ("commands/show_view.json", {}, "show_view needs a view"),
         ("commands/save_option.json", {"name": "A/B"}, "save_option bad name"),
         ("commands/compare_option.json", {}, "compare_option needs a name"),
+        ("commands/rename_option.json", {"name": "A"}, "rename_option needs to"),
+        ("commands/delete_option.json", {"name": "../A"}, "delete_option bad name"),
         ("commands/furnish_room.json", {"variant": "random"}, "furnish_room unknown variant"),
         ("commands/furnish_room.json", {"room": "R01", "style": "modern"}, "furnish_room unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),

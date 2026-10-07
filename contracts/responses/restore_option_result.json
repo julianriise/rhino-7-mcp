@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "restore_option_result.json",
+  "title": "RestoreOptionResult",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "walls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "moved": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resized": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "walls",
+    "moved",
+    "resized",
+    "message"
+  ]
+}

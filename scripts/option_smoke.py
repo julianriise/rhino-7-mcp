@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""AN.5 and AN.6 smoke: save the garage as option A, move a wall, compare A with now.
+"""AN.5 and AN.6 smoke: save the garage as option A, move a wall, compare, restore A.
 
 Run on the garage after the garage smoke has built and saved it. save_option
 writes A beside the 3dm (forsk.option.v1, the JSON reads back), the south
 wall moves out 300 mm, compare_option A says a wall moved and the net area
-grew. The wall goes back and the option folder is removed.
+grew, restore_option A puts the records back (compare then names no wall,
+door, window or room). The option folder is removed.
 Stdout at most 25 lines; exit 0 when all pass.
 
 Usage:
@@ -22,6 +23,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analysis_smoke  # noqa: E402  (the socket send and the south wall lookup)
 
 
+SLABS = """
+import scriptcontext as sc, Rhino
+s = Rhino.DocObjects.ObjectEnumeratorSettings(); s.HiddenObjects = True; s.LockedObjects = True
+out = []
+for o in sc.doc.Objects.GetObjectList(s):
+    kind = o.Attributes.GetUserString("forsk:kind")
+    if kind in ("floor", "roof") and o.Attributes.GetUserString("forsk:generated") == "1":
+        b = o.Geometry.GetBoundingBox(True)
+        out.append("%s %.0f,%.0f,%.0f,%.0f" % (kind, b.Min.X, b.Min.Y, b.Max.X, b.Max.Y))
+print("SLABS " + " | ".join(sorted(out)))
+"""
+
+
+def slabs(send) -> str:
+    out = str(send("execute_rhinoscript_python_code", {"code": SLABS}).get("output") or "")
+    return next((r[6:] for r in out.splitlines() if r.startswith("SLABS ")), "")
+
+
 def run(send) -> tuple[list[str], bool]:
     lines: list[str] = []
     ok = True
@@ -31,6 +50,7 @@ def run(send) -> tuple[list[str], bool]:
         lines.append("FAIL " + why)
         ok = False
 
+    slabs_before = slabs(send)
     saved = send("save_option", {})
     path = str(saved.get("path") or "")
     lines.append(f"save: {saved.get('message')}")
@@ -57,8 +77,20 @@ def run(send) -> tuple[list[str], bool]:
             net = rows.get("Net area")
             if not net or float(net["now"].split()[0]) <= float(net["option"].split()[0]):
                 fail(f"the net area did not grow: {net}")
+            restored = send("restore_option", {"name": "A"})
+            lines.append(f"restore: {restored.get('message')}")
+            again = send("compare_option", {"name": "A"})
+            left = str(again.get("summary") or "")
+            lines.append(f"after restore: {left}")
+            if any(noun in left for noun in ("wall", "door", "window", "room")):
+                fail("restore did not give the records back")
+            slabs_after = slabs(send)
+            lines.append(f"floor and roof: {slabs_after}")
+            if slabs_after != slabs_before:
+                fail(f"floor and roof did not follow back: {slabs_before} -> {slabs_after}")
         finally:
-            send("move_wall", {"id": wall, "side": "south", "toward": "north", "distance_mm": 300})
+            if "moved" in str(send("compare_option", {"name": "A"}).get("summary")):
+                send("move_wall", {"id": wall, "side": "south", "toward": "north", "distance_mm": 300})
     finally:
         shutil.rmtree(os.path.dirname(os.path.dirname(path)), ignore_errors=True)
     return lines[:24], ok

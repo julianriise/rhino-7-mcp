@@ -110,4 +110,20 @@ public class OptionCompareTests
         Assert.Equal(new[] { "Living daylight: B 2.0 % · now 1.5 % · B is better" }, card.Rows);
         Assert.Null(ForskCards.OptionCompareFrom(Newtonsoft.Json.Linq.JObject.Parse(@"{""status"":""error"",""message"":""No option C.""}"))) ;
     }
+
+    [Fact]
+    public void RestoreAndDelete_PickAnOption_NewestFirst()
+    {
+        var facts = Docs.Facts("saved, two options");
+        Assert.True(ForskRegistry.Find("option.restore")!.Shows(facts));
+        Assert.True(ForskRegistry.Find("option.delete")!.Shows(facts));
+        Assert.False(ForskRegistry.Find("option.restore")!.Shows(Docs.Facts("house")));
+        Assert.Equal("Restore an option", ForskRegistry.Find("option.restore")!.Label);
+        Assert.Equal("Delete an option", ForskRegistry.Find("option.delete")!.Label);
+        var restore = ForskCards.For("option.restore", facts)!;
+        Assert.Equal("option.restore", restore.Kind);
+        Assert.Equal(new[] { "B", "A", "cancel" }, restore.Pills.Select(p => p.Id));
+        Assert.Equal("Restore which option? The model goes back to it; one Undo brings it back.", restore.Question);
+        Assert.Contains("option.restore", ForskCards.Analyser(facts).Pills.Select(p => p.Id));
+    }
 }

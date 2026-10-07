@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rename_option_result.json",
+  "title": "RenameOptionResult",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "was": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "was",
+    "path",
+    "message"
+  ]
+}

@@ -72,6 +72,9 @@ namespace RhinoMCPPlugin.Forsk
             "show_view",
             "save_option",
             "compare_option",
+            "restore_option",
+            "rename_option",
+            "delete_option",
             "rooms_set_type",
             "rooms_colors"
         };
@@ -646,6 +649,15 @@ namespace RhinoMCPPlugin.Forsk
                 Fn("compare_option",
                     "Compare a saved option with the model now: what changed, areas, daylight per room and door and window counts side by side.",
                     new JObject { ["name"] = Str("The saved option: A, B, …") }, "name"),
+                Fn("restore_option",
+                    "Put a saved option back: walls, doors and windows return to it, floor, roof and rooms follow. One Undo. Refused with the reason when something was added or removed since.",
+                    new JObject { ["name"] = Str("The saved option: A, B, …") }, "name"),
+                Fn("rename_option",
+                    "Rename a saved option. The model does not change.",
+                    new JObject { ["name"] = Str("The saved option."), ["to"] = Str("The new name: letters, digits, space, _ or -.") }, "name", "to"),
+                Fn("delete_option",
+                    "Delete a saved option's file. The model does not change.",
+                    new JObject { ["name"] = Str("The saved option.") }, "name"),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
                     new JObject

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_option.json",
+  "title": "DeleteOption Command",
+  "description": "Delete a saved option's file. The model does not change.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The saved option: A, B, …"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

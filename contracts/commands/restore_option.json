@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "restore_option.json",
+  "title": "RestoreOption Command",
+  "description": "Put a saved option back (AN.5): walls whose record changed get the saved record back, doors and windows move and resize back, then floor, roof and rooms follow. One Undo. Refused with the reason when a wall or opening was added or removed since, or a door or window changed type.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The saved option: A, B, …"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

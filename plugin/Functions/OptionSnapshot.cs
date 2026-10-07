@@ -35,6 +35,8 @@ public static class OptionSnapshot
         /// <summary>forsk:wall_type, or null (Generic 200 in the type catalog).</summary>
         public string Type;
         public bool Existing;
+        /// <summary>The wall's whole record (forsk:path, every ring) as Forsk wrote it: restore writes it back. Null in files saved before restore.</summary>
+        public string Record;
     }
 
     public sealed class Opening
@@ -111,6 +113,7 @@ public static class OptionSnapshot
                 ["height"] = w.Height,
                 ["type"] = w.Type,
                 ["existing"] = w.Existing ? (JToken)true : null,
+                ["record"] = w.Record,
             }))),
             ["openings"] = new JArray(snapshot.Openings.OrderBy(o => o.Id, StringComparer.Ordinal).Select(o => Drop(new JObject
             {
@@ -168,7 +171,7 @@ public static class OptionSnapshot
                 {
                     Id = Id(w, "wall"), Level = (string)w["level"], Path = Points(w["path"]),
                     Thickness = (double)w["thickness"], Height = (double)w["height"],
-                    Type = (string)w["type"], Existing = (bool?)w["existing"] ?? false,
+                    Type = (string)w["type"], Existing = (bool?)w["existing"] ?? false, Record = (string)w["record"],
                 });
             foreach (var o in Items(root, "openings"))
                 snapshot.Openings.Add(new Opening
@@ -248,7 +251,7 @@ public static class OptionSnapshot
             (a, b) => a.Mark == b.Mark);
         Match(diff, from.Rooms, to.Rooms, r => r.Id, r => "room",
             (a, b) => true,
-            (a, b) => SamePath(a.Outline, b.Outline),
+            (a, b) => SameRing(a.Outline, b.Outline),
             (a, b) => a.Name == b.Name && a.Type == b.Type);
         return diff;
     }
@@ -277,6 +280,35 @@ public static class OptionSnapshot
 
     static bool SamePath(List<Pt> a, List<Pt> b) =>
         a.Count == b.Count && a.Zip(b, (p, q) => Near(p, q)).All(x => x);
+
+    /// <summary>
+    /// The same closed outline from any corner, either way round: rooms are
+    /// detected again and can start at another corner.
+    /// </summary>
+    static bool SameRing(List<Pt> a, List<Pt> b)
+    {
+        var x = Open(a);
+        var y = Open(b);
+        if (x.Count != y.Count) return false;
+        if (x.Count == 0) return true;
+        foreach (var way in new[] { y, Enumerable.Reverse(y).ToList() })
+            for (var shift = 0; shift < way.Count; shift++)
+            {
+                var same = true;
+                for (var i = 0; i < x.Count && same; i++)
+                    same = Near(x[i], way[(i + shift) % way.Count]);
+                if (same) return true;
+            }
+        return false;
+    }
+
+    /// <summary>The ring without its closing point.</summary>
+    static List<Pt> Open(List<Pt> ring)
+    {
+        var points = (ring ?? new List<Pt>()).ToList();
+        if (points.Count > 1 && Near(points[0], points[points.Count - 1])) points.RemoveAt(points.Count - 1);
+        return points;
+    }
 
     static bool SameMap(IDictionary<string, string> a, IDictionary<string, string> b) =>
         a.Count == b.Count && a.All(p => b.TryGetValue(p.Key, out var v) && v == p.Value);

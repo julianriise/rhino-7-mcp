@@ -94,6 +94,15 @@ def test_options_send_the_name(mock_get_conn):
     compare_option(ctx=None, name="A")
     conn.send_command.assert_called_with("compare_option", {"name": "A"})
     assert save_option(ctx=None, name="../x")["success"] is False
+    from rhinomcp.tools.options import delete_option, rename_option, restore_option
+
+    restore_option(ctx=None, name="A")
+    conn.send_command.assert_called_with("restore_option", {"name": "A"})
+    rename_option(ctx=None, name="A", to="Wide hall")
+    conn.send_command.assert_called_with("rename_option", {"name": "A", "to": "Wide hall"})
+    delete_option(ctx=None, name="B")
+    conn.send_command.assert_called_with("delete_option", {"name": "B"})
+    assert rename_option(ctx=None, name="A", to="a/b")["success"] is False
 
 
 @patch("rhinomcp.tools.show_view.get_rhino_connection")

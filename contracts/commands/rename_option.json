@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rename_option.json",
+  "title": "RenameOption Command",
+  "description": "Rename a saved option's file and name. The model does not change.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The saved option: A, B, …"
+    },
+    "to": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The new name."
+    }
+  },
+  "required": [
+    "name",
+    "to"
+  ],
+  "additionalProperties": false
+}
