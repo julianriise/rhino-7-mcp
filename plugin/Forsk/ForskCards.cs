@@ -72,6 +72,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "section.remove": return RemoveSection(f);
                 case "detail.list": return DetailList(f);
                 case "stair.edit": return EditStair(f);
+                case "furniture.add": return AddFurniture(f);
                 default: return null;
             }
         }
@@ -141,6 +142,60 @@ namespace RhinoMCPPlugin.Forsk
                     new CardPill("cancel", ForskText.Get("word.cancel"))
                 }
             };
+        }
+
+        /// <summary>
+        /// More actions → Add furniture: the catalogue's pieces by name, and the
+        /// room (the picked one first, else the file's rooms by name; none to
+        /// choose when there is one). Add runs add_furniture.
+        /// </summary>
+        public static CardSpec AddFurniture(FileFacts f)
+        {
+            if (f == null || !f.HasRooms) return null;
+            var card = new CardSpec
+            {
+                Kind = "furniture.add",
+                Question = ForskText.Get("furniture.add.ask"),
+                Note = ForskText.Get("furniture.add.note"),
+                Fields = new List<CardField>
+                {
+                    new CardField
+                    {
+                        Key = "item",
+                        Label = ForskText.Get("furniture.add.item"),
+                        Options = Functions.Furniture.All.Select(p => p.Name).ToList(),
+                        Value = Functions.Furniture.All.First(p => p.Default && p.Type == "bed" && p.W >= 1400).Name
+                    }
+                },
+                Pills =
+                {
+                    new CardPill("add", ForskText.Get("furniture.add")),
+                    new CardPill("cancel", ForskText.Get("word.cancel"))
+                }
+            };
+            var rooms = new List<string>();
+            if (f.Picked == Picked.Room) rooms.Add(ForskText.Get("furniture.add.picked"));
+            rooms.AddRange(f.Rooms.Select(RoomName).Where(n => n.Length > 0).Distinct());
+            if (rooms.Count > 1)
+                card.Fields.Add(new CardField { Key = "room", Label = ForskText.Get("furniture.add.room"), Options = rooms, Value = rooms[0] });
+            return card;
+        }
+
+        /// <summary>"Stue" from the facts' room line "Stue · 24.5 m² (living)".</summary>
+        public static string RoomName(string line)
+        {
+            var name = (line ?? "").Split('·')[0].Trim();
+            var paren = name.IndexOf(" (", StringComparison.Ordinal);
+            return paren > 0 ? name.Substring(0, paren).Trim() : name;
+        }
+
+        /// <summary>The add_furniture arguments for the Add pill: the piece by name, and the room unless it is the picked one.</summary>
+        public static JObject AddFurnitureArgs(JObject values)
+        {
+            var args = new JObject { ["item"] = (values?["item"]?.ToString() ?? "").Trim() };
+            var room = (values?["room"]?.ToString() ?? "").Trim();
+            if (room.Length > 0 && room != ForskText.Get("furniture.add.picked")) args["room"] = room;
+            return args;
         }
 
         /// <summary>

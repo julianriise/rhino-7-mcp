@@ -220,3 +220,40 @@ public class FurnitureTests
         Assert.Equal("Added a WC.", Furniture.Receipt(Furniture.Find("wc")!, null, null));
     }
 }
+
+/// <summary>Julian, 2026-10-07: furniture belongs in More actions too, not only in chat.</summary>
+public class FurnitureActionTests
+{
+    [Fact]
+    public void MoreActions_OffersAddFurnitureAndFurnish_OnceTheFileHasRooms()
+    {
+        var house = Docs.Facts("house");
+        Assert.Contains(RhinoMCPPlugin.Forsk.ForskRegistry.All, a => a.Id == "furniture.add" && a.When(house));
+        Assert.Contains(RhinoMCPPlugin.Forsk.ForskRegistry.All, a => a.Id == "furniture.furnish" && a.When(house));
+        Assert.DoesNotContain(RhinoMCPPlugin.Forsk.ForskRegistry.All, a => a.Id.StartsWith("furniture.") && a.When(Docs.Facts("walls only")));
+        Assert.Equal("Add furniture", RhinoMCPPlugin.Forsk.ForskText.Label("furniture.add"));
+        Assert.Equal("Furnish rooms", RhinoMCPPlugin.Forsk.ForskText.Label("furniture.furnish"));
+    }
+
+    [Fact]
+    public void TheAddCard_ListsTheCatalogueByName_AndTheRooms()
+    {
+        var facts = Docs.Facts("house");
+        var card = RhinoMCPPlugin.Forsk.ForskCards.AddFurniture(facts)!;
+        var item = card.Fields!.Single(f => f.Key == "item");
+        Assert.Equal(Furniture.All.Count, item.Options!.Count);
+        Assert.Equal("Double bed 160", item.Value);
+        Assert.Equal(new[] { "add", "cancel" }, card.Pills.Select(p => p.Id));
+        if (facts.Rooms.Count > 1)
+            Assert.Contains(card.Fields!, f => f.Key == "room");
+        Assert.Equal("Stue", RhinoMCPPlugin.Forsk.ForskCards.RoomName("Stue · 24.5 m² (living)"));
+    }
+
+    [Fact]
+    public void ThePickedRoom_IsNotNamed_AnotherRoomIs()
+    {
+        var picked = RhinoMCPPlugin.Forsk.ForskText.Get("furniture.add.picked");
+        Assert.Equal("{\"item\":\"Sofa\"}", RhinoMCPPlugin.Forsk.ForskCards.AddFurnitureArgs(new Newtonsoft.Json.Linq.JObject { ["item"] = " Sofa ", ["room"] = picked }).ToString(Newtonsoft.Json.Formatting.None));
+        Assert.Equal("Kitchen", RhinoMCPPlugin.Forsk.ForskCards.AddFurnitureArgs(new Newtonsoft.Json.Linq.JObject { ["item"] = "Hob unit 60", ["room"] = "Kitchen" })["room"]!.ToString());
+    }
+}

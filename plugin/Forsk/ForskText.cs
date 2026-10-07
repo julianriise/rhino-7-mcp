@@ -227,6 +227,13 @@ namespace RhinoMCPPlugin.Forsk
             ["print.clear"] = "Clear the layouts",
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
+            ["furniture.add"] = "Add furniture",
+            ["furniture.furnish"] = "Furnish rooms",
+            ["furniture.add.ask"] = "Add which piece, and where?",
+            ["furniture.add.item"] = "Piece",
+            ["furniture.add.room"] = "Room",
+            ["furniture.add.picked"] = "The picked room",
+            ["furniture.add.note"] = "Forsk stands it against the longest free wall, or in the middle for tables and chairs.",
             ["area.stats"] = "Area summary",
             ["area.summary.note"] = "Estimate. Not measured to NS 3940.",
 

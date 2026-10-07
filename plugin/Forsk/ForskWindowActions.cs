@@ -288,6 +288,13 @@ namespace RhinoMCPPlugin.Forsk
                 case "stair.add":
                     Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
                     return;
+                case "furniture.furnish":
+                    // The picked room, else every room: both layouts as ghosts, and the card to place one.
+                    var picked = facts.Picked == Picked.Room;
+                    var furnish = new JObject { ["preview"] = true };
+                    if (!picked) furnish["room"] = "all";
+                    Job(thread, action.Id, label, sink => sink.Tool("furnish_room", furnish));
+                    return;
                 case "stair.draw":
                     DrawPick(thread, label, "stair.draw", "prompt.stair", "add_stair", ForskStair.RunOnUi);
                     return;
@@ -555,6 +562,9 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "sheets.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_drawings", new JObject()), userText: pill.Label);
+                    break;
+                case "furniture.add":
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("add_furniture", ForskCards.AddFurnitureArgs(values)), userText: values?["item"]?.ToString() ?? pill.Label);
                     break;
                 case "stair.edit":
                     var stairArgs = ForskCards.StairArgs(pill.Id, values, card["fields"] as JArray);
