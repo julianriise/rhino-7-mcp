@@ -399,11 +399,15 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The status line: listener down, and a non-default ink. Empty when there is nothing to say.</summary>
+        /// <summary>
+        /// The status line: a non-default ink. Empty when there is nothing to say.
+        /// The bridge is for outside AI apps (MCP); Forsk itself never needs it, so
+        /// a stopped bridge is no status (Julian, 2026-10-07: "Bridge off" read as broken).
+        /// Settings keeps Start bridge for those apps.
+        /// </summary>
         public static string Status(FileFacts f)
         {
             var parts = new List<string>();
-            if (!f.ListenerUp) parts.Add(ForskText.Get("status.bridge"));
             if (!string.Equals(f.Ink, "default", StringComparison.OrdinalIgnoreCase))
                 parts.Add(ForskText.Format("status.ink", "ink", f.Ink));
             // Hooks for later jobs: a Render job and the v4 grade. Both are empty until those exist.

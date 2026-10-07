@@ -85,7 +85,7 @@ public class WindowViewTests
     public void TheStatusLine_ListenerDownAndNonDefaultInk_AndStartBridgeOnTheCard()
     {
         var view = View("bridge down, grey ink", help: true);
-        Assert.Equal("Bridge off · ink: grey", view["status"]!.ToString());
+        Assert.Equal("ink: grey", view["status"]!.ToString());
         var start = view["help"]!["groups"]![0]!;
         Assert.Equal("Start a project", start["title"]!.ToString());
         Assert.Equal("bridge.start", start["actions"]![0]!["id"]!.ToString());

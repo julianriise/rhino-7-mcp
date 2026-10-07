@@ -346,7 +346,7 @@ public class FileClassifierTests
     [Fact]
     public void TheStatusLine_SaysListenerDownAndANonDefaultInk()
     {
-        Assert.Equal("Bridge off · ink: grey", ForskRegistry.Status(Docs.Facts("bridge down, grey ink")));
+        Assert.Equal("ink: grey", ForskRegistry.Status(Docs.Facts("bridge down, grey ink")));
         Assert.Equal("", ForskRegistry.Status(Docs.Facts("house")));
     }
 

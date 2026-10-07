@@ -164,7 +164,7 @@ public class ForskCoreTests
         Assert.Equal("holmen.3dm", model["file"]!.ToString());
         // Nothing is picked, and the last message was Norwegian.
         Assert.Equal("Klikk noe i modellen.", model["target"]!.ToString());
-        Assert.Equal("Bridge off · ink: grey", model["status"]!.ToString());
+        Assert.Equal("ink: grey", model["status"]!.ToString());
         Assert.Equal("skriv ut", model["thread"]![0]!["text"]!.ToString());
         var slots = (JArray)model["bar"]!["slots"]!;
         Assert.Equal("Print PDF", slots[0]["label"]!.ToString());

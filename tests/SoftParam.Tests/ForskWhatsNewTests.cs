@@ -101,7 +101,7 @@ public class ForskWhatsNewTests
     {
         var notes = ForskWhatsNew.Parse(@"{""version"":""1.1.0"",""items"":[
             {""title"":""A"",""how"":""a"",""icon"":""armchair""},
-            {""title"":""B"",""how"":""b"",""icon"":""rocket""},
+            {""title"":""B"",""how"":""b"",""icon"":""unicorn""},
             {""title"":""C"",""how"":""c""}]}")!;
         Assert.Equal(new[] { "armchair", "sparkles", "sparkles" }, notes.Items.Select(i => i.Icon));
         var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.html"));

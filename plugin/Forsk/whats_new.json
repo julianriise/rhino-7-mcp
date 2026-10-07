@@ -1,21 +1,21 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link (Lucide).",
-  "version": "1.1.0",
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket (Lucide).",
+  "version": "1.1.1",
   "items": [
     {
-      "title": "Furnish a room",
-      "how": "Ask in chat: furnish the bedroom. Pick the blue or orange layout on the card.",
+      "title": "Forsk opens ready",
+      "how": "Type Forsk in Rhino and start. No mcpstart: the bridge is only for outside AI apps.",
+      "icon": "rocket"
+    },
+    {
+      "title": "Release notes",
+      "how": "Settings → Release notes shows this card again whenever you want.",
+      "icon": "book-open"
+    },
+    {
+      "title": "Furniture in More actions",
+      "how": "Open More actions and pick Add furniture or Furnish rooms.",
       "icon": "armchair"
-    },
-    {
-      "title": "Live analyses",
-      "how": "Tap the purple Analyser face at the top, then switch Live on for Daylight or Areas.",
-      "icon": "activity"
-    },
-    {
-      "title": "Connect Rhino to your account",
-      "how": "Settings → Set up Forsk → Account → Connect, then confirm the code in your browser.",
-      "icon": "link"
     }
   ]
 }

@@ -488,7 +488,6 @@ namespace RhinoMCPPlugin.Forsk
             ["state.units"] = "This file is not in millimetres. Switch the .3dm to millimetres, then Forsk can work on it.",
 
             // The status line.
-            ["status.bridge"] = "Bridge off",
             ["status.ink"] = "ink: {ink}",
 
             // A step whose object is not named in its message.
