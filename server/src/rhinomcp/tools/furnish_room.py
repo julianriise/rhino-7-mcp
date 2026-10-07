@@ -34,8 +34,9 @@ def furnish_room(
     - density: spacious, relaxed (default) or compact.
     - variant: consistent (default) or creative (the main piece takes the
       next-best wall). Offer creative when the user wants another layout.
-    - replace: clear the room's furniture first. Without it, pieces already
-      in the room stay and a kind the room has is not added again.
+    - replace: clear the room's furniture first, keeping pieces the user
+      moved by hand. Without it, pieces already in the room stay and a kind
+      the room has is not added again.
 
     A room that cannot be furnished is refused with the reason; say it.
     Returns rooms (room, type, added, skipped, why), count, message.

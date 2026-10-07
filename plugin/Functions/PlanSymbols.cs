@@ -23,8 +23,9 @@ public partial class RhinoMCPFunctions
         public int Roof;
         // R5: stairs drawn as their plan symbol.
         public int Stairs;
-        // FU.2: furniture drawn as its plan symbol.
+        // FU.2: furniture drawn as its plan symbol, and room tags that found no spot clear of it.
         public int Furniture;
+        public int TagsOnFurniture;
         // Every room marker ends in exactly one of three counts: Rooms (tagged:
         // its name is on the sheet), RoomsTooSmall (under the 1 m² room cutoff),
         // RoomsNoOutline (no outline to read). Of the

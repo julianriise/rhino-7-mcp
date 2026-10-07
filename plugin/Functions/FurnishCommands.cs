@@ -45,9 +45,14 @@ public partial class RhinoMCPFunctions
         var total = 0;
         foreach (var room in targets)
         {
+            // A re-furnish keeps every piece moved by hand (FU.8); the rest goes.
+            var kept = 0;
             if (replace)
                 foreach (var obj in FurnitureObjects(doc).Where(o => InRoom(o, room)).ToList())
-                    doc.Objects.Delete(obj.Id, true);
+                {
+                    if (MovedByHand(obj)) kept++;
+                    else doc.Objects.Delete(obj.Id, true);
+                }
             var layout = Furnish.Plan(room.RoomType ?? "", room.Outline, openings, FurnitureItems(doc), density, variant);
             var added = new JArray();
             if (layout.Why == null)
@@ -58,6 +63,7 @@ public partial class RhinoMCPFunctions
                 }
             total += added.Count;
             var words = RoomWords(room);
+            if (kept > 0) lines.Add("Kept " + kept.ToString(CultureInfo.InvariantCulture) + (kept == 1 ? " piece" : " pieces") + " you moved in " + words + ".");
             lines.Add(layout.Why != null
                 ? "Did not furnish " + words + ": " + layout.Why + "."
                 : layout.Items.Count == 0 ? words.Substring(0, 1).ToUpperInvariant() + words.Substring(1) + " already has its furniture."
@@ -68,6 +74,7 @@ public partial class RhinoMCPFunctions
                 ["type"] = room.RoomType ?? "",
                 ["added"] = added,
                 ["skipped"] = new JArray(layout.Skipped),
+                ["kept"] = kept,
                 ["why"] = layout.Why ?? ""
             });
         }
@@ -81,6 +88,9 @@ public partial class RhinoMCPFunctions
             ["message"] = string.Join(" ", lines)
         };
     }
+
+    private static bool MovedByHand(Rhino.DocObjects.RhinoObject obj) =>
+        !TryFurniture(obj, out _, out var frame, out _) || Furniture.MovedByHand(obj.Attributes.GetUserString(Furniture.PlacedKey), frame);
 
     /// <summary>A piece belongs to the room its record names, else to the room its centre stands in.</summary>
     private static bool InRoom(Rhino.DocObjects.RhinoObject obj, PlanRoom room)

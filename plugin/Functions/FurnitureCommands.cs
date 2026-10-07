@@ -80,6 +80,7 @@ public partial class RhinoMCPFunctions
         StampForskTags(attr, new ForskStamp { Kind = Furniture.Kind, Level = "0", Id = forskId });
         attr.SetUserString(Furniture.CatalogKey, piece.Id);
         attr.SetUserString(Furniture.RoomKey, room?.ScheduleId ?? "");
+        attr.SetUserString(Furniture.PlacedKey, Furniture.FrameText(frame));
         var id = doc.Objects.AddInstanceObject(index, FurnitureXform(frame, floor), attr);
         if (id == Guid.Empty) throw new InvalidOperationException("Could not add the " + piece.Name.ToLowerInvariant() + ".");
         return (id, forskId);

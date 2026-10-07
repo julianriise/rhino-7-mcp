@@ -330,6 +330,40 @@ public static class ForskTechnical
         return strokes;
     }
 
+    /// <summary>A piece of furniture as its plan symbol (Furniture.Plan at 1:50), role furniture, thin pen.</summary>
+    public static List<Stroke> FromFurniture(Furniture.Piece piece, Furniture.Frame placed, double z, PrintProfile profile)
+    {
+        var strokes = new List<Stroke>();
+        if (piece == null) return strokes;
+        profile = profile ?? PrintProfiles.Default;
+        var role = Furniture.RoleFor(piece);
+        var frame = new Frame(placed.Ox, placed.Oy, placed.Ux, placed.Uy, -placed.Uy, placed.Ux);
+        foreach (var mark in Furniture.Plan(piece, Furniture.DetailScale))
+        {
+            var pen = PenFor(role, mark.Part, profile);
+            var stroke = new Stroke { Role = role, Part = mark.Part, Z = z, Dashed = mark.Dashed, Mm = pen.Mm, Ink = Ink(pen, mark.Dashed, profile) };
+            if (mark.Shape == "line")
+            {
+                stroke.Shape = "line";
+                frame.Map(mark.X0, mark.Y0, out stroke.X0, out stroke.Y0);
+                frame.Map(mark.X1, mark.Y1, out stroke.X1, out stroke.Y1);
+            }
+            else
+            {
+                double At(double degrees, bool y) => y
+                    ? mark.Cy + mark.R * Math.Sin(degrees * Math.PI / 180)
+                    : mark.Cx + mark.R * Math.Cos(degrees * Math.PI / 180);
+                stroke.Shape = "arc";
+                frame.Map(At(mark.A0, false), At(mark.A0, true), out stroke.X0, out stroke.Y0);
+                var mid = (mark.A0 + mark.A1) / 2;
+                frame.Map(At(mid, false), At(mid, true), out stroke.Xm, out stroke.Ym);
+                frame.Map(At(mark.A1, false), At(mark.A1, true), out stroke.X1, out stroke.Y1);
+            }
+            strokes.Add(stroke);
+        }
+        return strokes;
+    }
+
     /// <summary>
     /// The elevation's ground line: level at the ground, across the model as
     /// the view sees it and FacadeGroundOverMm past each side, at the ground
@@ -423,13 +457,14 @@ public static class ForskTechnical
     }
 
     /// <summary>
-    /// Opening blocks and stairs stay off a plan: their symbols stand in.
+    /// Opening blocks, stairs and furniture stay off a plan: their symbols stand in.
     /// <paramref name="fullPath"/> is the layer's full path. A-WALL is not included.
     /// </summary>
     public static bool HidesInPlan(string fullPath)
     {
         if (string.IsNullOrEmpty(fullPath)) return false;
-        return IsPlanLayer(fullPath, "A-OPEN") || IsPlanLayer(fullPath, "A-STAIR");
+        return IsPlanLayer(fullPath, "A-OPEN") || IsPlanLayer(fullPath, "A-STAIR")
+            || IsPlanLayer(fullPath, Furniture.LayerName) || IsPlanLayer(fullPath, Furniture.FixedLayerName);
     }
 
     static bool IsPlanLayer(string path, string name)

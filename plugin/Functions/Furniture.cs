@@ -30,6 +30,8 @@ public static class Furniture
     public const string SchemaKey = "forsk:schema";
     public const string RevKey = "forsk:catalog_rev";
     public const string RoomKey = "forsk:room";
+    /// <summary>Where Forsk placed the piece (FrameText). A piece standing elsewhere was moved by hand, and a re-furnish keeps it (FU.8).</summary>
+    public const string PlacedKey = "forsk:fu_placed";
     /// <summary>The 2D symbol's block in a DWG sheet (FU.2).</summary>
     public const string BlockPrefix = "FORSK_FU_";
     /// <summary>The 3D block in the model: another name, so a sheet export can add its 2D block beside it.</summary>
@@ -782,6 +784,49 @@ public static class Furniture
                 return a < 0 ? a + 360 : a;
             }
         }
+    }
+
+    /// <summary>"ox,oy,ux,uy": a frame as the record keeps it.</summary>
+    public static string FrameText(Frame frame) => string.Format(CultureInfo.InvariantCulture,
+        "{0:0.###},{1:0.###},{2:0.######},{3:0.######}", frame.Ox, frame.Oy, frame.Ux, frame.Uy);
+
+    /// <summary>
+    /// True when the piece no longer stands where Forsk put it: more than
+    /// 1 mm off or turned. A record without the placement counts as moved,
+    /// so a re-furnish never removes what it cannot vouch for.
+    /// </summary>
+    public static bool MovedByHand(string placed, Frame now)
+    {
+        var parts = (placed ?? "").Split(',');
+        if (parts.Length != 4) return true;
+        var v = new double[4];
+        for (var i = 0; i < 4; i++)
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out v[i])) return true;
+        return Math.Abs(v[0] - now.Ox) > 1 || Math.Abs(v[1] - now.Oy) > 1 || v[2] * now.Ux + v[3] * now.Uy < 0.99999;
+    }
+
+    /// <summary>
+    /// Where a room tag's middle goes so its box (half sizes hw, hh) stays in
+    /// the room and off every piece of furniture: the tag point when it is
+    /// clear, else the nearest clear spot in steps of step. Null when no spot is clear.
+    /// </summary>
+    public static Pt? TagSpot(Pt start, IList<Pt> room, double hw, double hh, IEnumerable<Pt[]> pieces, double step)
+    {
+        var ring = Ccw(room);
+        var blocks = (pieces ?? Enumerable.Empty<Pt[]>()).ToList();
+        if (blocks.Count == 0) return start;
+        var reach = Math.Max(
+            ring.Max(p => p.X) - ring.Min(p => p.X),
+            ring.Max(p => p.Y) - ring.Min(p => p.Y));
+        foreach (var offset in Spiral(Math.Max(step, 1), reach))
+        {
+            var c = new Pt(start.X + offset.X, start.Y + offset.Y);
+            var box = new[] { new Pt(c.X - hw, c.Y - hh), new Pt(c.X + hw, c.Y - hh), new Pt(c.X + hw, c.Y + hh), new Pt(c.X - hw, c.Y + hh) };
+            if (box.Any(p => !RoomDetect.Contains(ring, p))) continue;
+            if (blocks.Any(b => Overlap(box, b))) continue;
+            return c;
+        }
+        return null;
     }
 
     /// <summary>Something placed, as a footprint in plan with its height range.</summary>

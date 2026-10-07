@@ -37,12 +37,12 @@ public sealed class ForskTechnicalCache<T>
 
     public static bool Draws(string kind)
     {
-        return Is(kind, "opening_marker") || Is(kind, Stairs.Kind);
+        return Is(kind, "opening_marker") || Is(kind, Stairs.Kind) || Is(kind, Furniture.Kind);
     }
 
     public static bool Hides(string kind)
     {
-        return Is(kind, "opening") || Is(kind, Stairs.Kind);
+        return Is(kind, "opening") || Is(kind, Stairs.Kind) || Is(kind, Furniture.Kind);
     }
 
     public static bool Grounds(string kind)

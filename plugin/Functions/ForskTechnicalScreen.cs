@@ -8,7 +8,7 @@ namespace RhinoMCPPlugin.Functions;
 public partial class RhinoMCPFunctions
 {
     /// <summary>
-    /// The plan pieces of one opening marker or generated stair, from the plan
+    /// The plan pieces of one opening marker, generated stair or piece of furniture, from the plan
     /// sheet's own symbol code at the plan cut. Null when it draws nothing.
     /// <paramref name="host"/> is the marker's wall.
     /// </summary>
@@ -30,6 +30,11 @@ public partial class RhinoMCPFunctions
             && IsForskGenerated(obj)
             && TryStairAsBuilt(obj, out var spec, out var flight))
             return ForskTechnical.FromStair(spec, flight, cutZ, StairDraw.PreviewScale, z, profile);
+        if (string.Equals(kind, Furniture.Kind, StringComparison.OrdinalIgnoreCase)
+            && IsForskGenerated(obj)
+            && TryFurniture(obj, out var piece, out var placed, out _))
+            // A piece hung above the cut (a wall unit) shows dashed, as on the sheet.
+            return ForskTechnical.FromFurniture(piece, placed, z, profile);
         return null;
     }
 }

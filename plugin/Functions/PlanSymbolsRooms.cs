@@ -32,6 +32,8 @@ public partial class RhinoMCPFunctions
         var texts = new List<string>();
         var height = OpeningTypes.PlanAnnotationHeight(scale);
         var loose = new List<PlanRoom>();
+        // FU.2: a tag keeps off the furniture symbols.
+        var pieces = FurnitureFootprints(doc, null).Select(f => f.Corners).ToList();
         foreach (var planRoom in rooms)
         {
             var roomId = planRoom.RoomId;
@@ -51,6 +53,16 @@ public partial class RhinoMCPFunctions
                 continue;
             }
             var inside = planRoom.Inside;
+            if (pieces.Count > 0 && planRoom.Outline != null)
+            {
+                // The tag box: the name 1.15 heights over the area line, both centred.
+                var line0 = OpeningTypes.RoomTag(planRoom.Area);
+                var hw = Math.Max(TextWidthOf(doc, name, height), TextWidthOf(doc, line0, height)) / 2 + 0.25 * height;
+                var lift = 0.575 * height;
+                var spot = Furniture.TagSpot(new RoomDetect.Pt(inside.X, inside.Y + lift), planRoom.Outline, hw, 1.25 * height, pieces, height);
+                if (spot.HasValue) inside = new RoomDetect.Pt(spot.Value.X, spot.Value.Y - lift);
+                else stats.TagsOnFurniture++;
+            }
             var stamps = RoomStamps(roomId);
             var at = new Point3d(inside.X, inside.Y, 0);
             var room = RoomStamp(planRoom.Ring.Select(p => ToDrawing(p, worldToHld, delta)).ToList());

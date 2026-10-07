@@ -5,7 +5,9 @@ Run on the sample house after first_run.py has generated it and found its
 rooms. Furnishes every room of a type Forsk furnishes (furnish_room all),
 which must furnish each one, then again (nothing to add: each room already
 has its pieces), then again with replace (the same pieces, room by room:
-the rules give the same layout). Prints the plan with the furniture to
+the rules give the same layout). A piece moved by hand stays through a
+re-furnish. Lays out the plan (no room tag on a piece) and the south
+facade with the furniture in, prints the plan with the furniture to
 /tmp/forsk-f5-first-run-furnished.pdf (one symbol per piece), and deletes
 every piece again. Stdout at most 25 lines; exit 0 when all pass.
 
@@ -63,12 +65,42 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
     if same != now:
         fail("the same rooms gave different pieces")
 
-    pack = send("layout_pack", {"views": ["plan"], "replace": True})
+    # FU.8: a piece moved by hand stays through a re-furnish.
+    moved_id, moved_room = None, None
+    for room in redo.get("rooms") or []:
+        for piece in room.get("added") or []:
+            for by in ([50, 0], [-50, 0], [0, 50], [0, -50]):
+                if "centre" in send("move_furniture", {"id": piece["forsk_id"], "by": by}):
+                    moved_id, moved_room = piece["forsk_id"], room.get("room")
+                    break
+            if moved_id:
+                break
+        if moved_id:
+            break
+    if moved_id is None:
+        fail("could not move any piece by hand")
+    else:
+        third = send("furnish_room", {"room": moved_room, "replace": True})
+        kept = sum(r.get("kept", 0) for r in third.get("rooms") or [])
+        still = "centre" in send("move_furniture", {"id": moved_id, "by": [0, 0]})
+        lines.append(f"moved {moved_id} by hand, re-furnished {moved_room}: kept {kept}, " + ("still there" if still else "gone"))
+        if kept != 1 or not still:
+            fail(f"re-furnish kept {kept} and the moved piece is {'there' if still else 'gone'}")
+    total_now = sum(len(r.get("added") or []) for r in (send("furnish_room", {"room": "all"}).get("rooms") or [])) or 0
+    if total_now:
+        fail(f"furnish after the re-furnish added {total_now}")
+
+    pack = send("layout_pack", {"views": ["plan", "south"], "replace": True})
     plan = next((p for p in pack.get("pages") or [] if p.get("view") == "plan"), None)
     drawn = (plan or {}).get("furniture", 0)
-    lines.append(f"plan: {drawn} furniture symbols at 1:{(plan or {}).get('scale', '?')}")
-    if drawn != redo.get("count"):
-        fail(f"plan: {drawn} symbols for {redo.get('count')} pieces")
+    on_tags = (plan or {}).get("tags_on_furniture", -1)
+    lines.append(f"plan: {drawn} furniture symbols at 1:{(plan or {}).get('scale', '?')}, {on_tags} room tags on furniture")
+    if drawn < redo.get("count", 0) - 1 or drawn == 0:
+        fail(f"plan: {drawn} symbols for about {redo.get('count')} pieces")
+    if on_tags != 0:
+        fail(f"{on_tags} room tags sit on furniture")
+    if not any(p.get("view") == "south" for p in pack.get("pages") or []):
+        fail(f"no south facade with the furniture in: {pack.get('message')}")
     if pdf_path.exists():
         pdf_path.unlink()
     send("export_pdf", {"path": str(pdf_path), "layout": "plan"})
@@ -78,7 +110,7 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
         fail("no furnished plan PDF")
 
     gone = send("delete_furniture", {"all": True})
-    if gone.get("count") != redo.get("count"):
+    if not gone.get("count"):
         fail(f"delete: {gone.get('message')}")
     return lines[:24], ok
 

@@ -184,6 +184,32 @@ public class FurnitureTests
     }
 
     [Fact]
+    public void APieceOffItsPlacement_WasMovedByHand()
+    {
+        var frame = new Furniture.Frame(1000, 2000, 0, 1);
+        var placed = Furniture.FrameText(frame);
+        Assert.False(Furniture.MovedByHand(placed, frame));
+        Assert.False(Furniture.MovedByHand(placed, new Furniture.Frame(1000.4, 2000, 0, 1)));
+        Assert.True(Furniture.MovedByHand(placed, new Furniture.Frame(1100, 2000, 0, 1)));
+        Assert.True(Furniture.MovedByHand(placed, new Furniture.Frame(1000, 2000, 1, 0)));
+        Assert.True(Furniture.MovedByHand(null, frame));
+    }
+
+    [Fact]
+    public void ARoomTag_StepsOffTheFurniture_AndStaysInTheRoom()
+    {
+        var bed = Furniture.Find("bed.double.160x200")!;
+        var foot = Furniture.FootprintOf(bed, Furniture.Centred(bed, 1500, 2000, 90));
+        var spot = Furniture.TagSpot(new Pt(1500, 2000), Room3x4, 600, 200, new[] { foot.Corners }, 125);
+        Assert.NotNull(spot);
+        var c = spot!.Value;
+        var box = new[] { new Pt(c.X - 600, c.Y - 200), new Pt(c.X + 600, c.Y - 200), new Pt(c.X + 600, c.Y + 200), new Pt(c.X - 600, c.Y + 200) };
+        Assert.Null(Furniture.Clash(new Furniture.Footprint { Corners = box, Z0 = 0, Z1 = 1, Label = "tag" }, Room3x4, new[] { foot }));
+        // Nothing in the way: the tag point stays.
+        Assert.Equal(new Pt(10, 20), Furniture.TagSpot(new Pt(10, 20), Room3x4, 5, 5, new Pt[0][], 125));
+    }
+
+    [Fact]
     public void Ids_CountUpFromF01_AndTheReceiptNamesThePiece()
     {
         Assert.Equal("F01", Furniture.NextId(new string[0]));

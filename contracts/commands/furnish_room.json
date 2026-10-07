@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "furnish_room.json",
   "title": "FurnishRoom Command",
-  "description": "Furnish a room by its type, with rules not guesses: the same room gives the same layout. Bedroom: a bed (the largest that fits with 0.6 m beside it and at its foot) head to a solid wall away from the door, bedside tables, a wardrobe. Living: a sofa looking at the window, a coffee table, an armchair, a TV bench, a bookshelf. Dining: a table with a chair at every seat and room to pull them out. Kitchen: a run of fridge, sink, dishwasher and hob on the 600 module along a wall without a door, wall units over the base units, a table when the floor allows. Bathroom: shower or bath, WC with 0.2 m beside it, basin, washing machine. WC: WC and basin. Office: a desk with its end at the window and its chair, a shelf. Hall: shoe cabinet and coat rack. Laundry and storage: washing machine and shelves. Door swings and the floor in front of every piece stay clear; tall pieces keep off windows. Pieces already in the room stay, and a kind the room has is not added again; replace clears the room's furniture first. A room that cannot be furnished is refused with the reason.",
+  "description": "Furnish a room by its type, with rules not guesses: the same room gives the same layout. Bedroom: a bed (the largest that fits with 0.6 m beside it and at its foot) head to a solid wall away from the door, bedside tables, a wardrobe. Living: a sofa looking at the window, a coffee table, an armchair, a TV bench, a bookshelf. Dining: a table with a chair at every seat and room to pull them out. Kitchen: a run of fridge, sink, dishwasher and hob on the 600 module along a wall without a door, wall units over the base units, a table when the floor allows. Bathroom: shower or bath, WC with 0.2 m beside it, basin, washing machine. WC: WC and basin. Office: a desk with its end at the window and its chair, a shelf. Hall: shoe cabinet and coat rack. Laundry and storage: washing machine and shelves. Door swings and the floor in front of every piece stay clear; tall pieces keep off windows. Pieces already in the room stay, and a kind the room has is not added again; replace clears the room's furniture first and keeps pieces moved by hand. A room that cannot be furnished is refused with the reason.",
   "type": "object",
   "properties": {
     "room": {
@@ -29,7 +29,7 @@
     },
     "replace": {
       "type": "boolean",
-      "description": "Clear the room's furniture first."
+      "description": "Clear the room's furniture first, except pieces moved by hand since Forsk placed them."
     }
   },
   "additionalProperties": false

@@ -47,6 +47,11 @@
           "why": {
             "type": "string",
             "description": "Empty when furnished, else why not."
+          },
+          "kept": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Pieces moved by hand that replace kept."
           }
         },
         "required": [

@@ -408,7 +408,7 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// Generated wall, floor, roof, opening and stair solids. Skips markers, rooms, and drawings.
+    /// Generated wall, floor, roof, opening, stair and furniture solids. Skips markers, rooms, and drawings.
     /// Existing underlay is included only when includeExisting is true.
     /// </summary>
     private static bool IsSheetSource(RhinoDoc doc, RhinoObject obj, bool includeExisting)
@@ -425,7 +425,8 @@ public partial class RhinoMCPFunctions
             || kind.Equals("floor", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("roof", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
-            || kind.Equals(Stairs.Kind, StringComparison.OrdinalIgnoreCase);
+            || kind.Equals(Stairs.Kind, StringComparison.OrdinalIgnoreCase)
+            || kind.Equals(Furniture.Kind, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -888,6 +889,8 @@ public partial class RhinoMCPFunctions
                                 || kind.Equals(Stairs.Kind, StringComparison.OrdinalIgnoreCase)))
             || kind.Equals("opening", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("opening_marker", StringComparison.OrdinalIgnoreCase)
+            // A section cuts furniture as lines, never poché.
+            || kind.Equals(Furniture.Kind, StringComparison.OrdinalIgnoreCase)
             || kind.Equals("room", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("drawing", StringComparison.OrdinalIgnoreCase)
             || kind.Equals("layout", StringComparison.OrdinalIgnoreCase);
@@ -1350,8 +1353,9 @@ public partial class RhinoMCPFunctions
         public int RoofOutline;
         /// <summary>R5: stairs drawn as their plan symbol.</summary>
         public int Stairs;
-        /// <summary>FU.2: furniture drawn as its plan symbol.</summary>
+        /// <summary>FU.2: furniture drawn as its plan symbol, and room tags with no spot clear of it.</summary>
         public int Furniture;
+        public int TagsOnFurniture;
         // Room tag outcomes as PlanStats defines them.
         public int RoomTags;
         public int RoomAreasDropped;
@@ -1603,10 +1607,11 @@ public partial class RhinoMCPFunctions
         var wallSolids = WallClusterSolids(doc, sources, out result.WallNote, clusterMembers);
         foreach (var obj in sources)
         {
-            // Plan symbols replace the frame and the stair. Elevations and sections keep the 3D solid.
+            // Plan symbols replace the frame, the stair and the furniture. Elevations and sections keep the 3D.
             if (plan
                 && (string.Equals(GetForskKind(obj), "opening", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(GetForskKind(obj), Stairs.Kind, StringComparison.OrdinalIgnoreCase)))
+                    || string.Equals(GetForskKind(obj), Stairs.Kind, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(GetForskKind(obj), Furniture.Kind, StringComparison.OrdinalIgnoreCase)))
                 continue;
             var kind = GetForskKind(obj) ?? "";
             AppendSource(obj, wallSolids, geometries);
@@ -1863,6 +1868,7 @@ public partial class RhinoMCPFunctions
                     result.RoofOutline = planStats.Roof;
                     result.Stairs = planStats.Stairs;
                     result.Furniture = planStats.Furniture;
+                    result.TagsOnFurniture = planStats.TagsOnFurniture;
                     result.RoomTags = planStats.Rooms;
                     result.RoomAreasDropped = planStats.RoomAreasDropped;
                     result.RoomsLeader = planStats.RoomsLeader;
