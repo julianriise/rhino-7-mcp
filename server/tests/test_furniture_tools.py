@@ -71,3 +71,12 @@ def test_furnish_sends_the_room_and_refuses_bad_words(mock_get_conn):
     furnish_room(ctx=None, room="all", density="compact", variant="creative", replace=True)
     conn.send_command.assert_called_once_with(
         "furnish_room", {"room": "all", "density": "compact", "variant": "creative", "replace": True})
+
+
+@patch("rhinomcp.tools.furnish_room.get_rhino_connection")
+def test_furnish_preview_is_sent(mock_get_conn):
+    from rhinomcp.tools.furnish_room import furnish_room
+
+    conn = _conn(mock_get_conn, {"preview": True, "count": 0, "message": "ok"})
+    furnish_room(ctx=None, room="R02", preview=True)
+    conn.send_command.assert_called_once_with("furnish_room", {"room": "R02", "preview": True})

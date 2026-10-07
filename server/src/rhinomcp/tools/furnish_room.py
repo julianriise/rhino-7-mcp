@@ -16,6 +16,7 @@ def furnish_room(
     density: Optional[str] = None,
     variant: Optional[str] = None,
     replace: Optional[bool] = None,
+    preview: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Furnish a room by its type ("furnish the bedroom", "furnish the house",
@@ -38,6 +39,9 @@ def furnish_room(
       moved by hand. Without it, pieces already in the room stay and a kind
       the room has is not added again.
 
+    - preview: show both layouts as ghosts in the viewport (usual in blue,
+      creative in orange) and place nothing; place one with variant after.
+
     A room that cannot be furnished is refused with the reason; say it.
     Returns rooms (room, type, added, skipped, why), count, message.
     """
@@ -52,6 +56,8 @@ def furnish_room(
                 params[key] = value
         if replace:
             params["replace"] = True
+        if preview:
+            params["preview"] = True
         result = get_rhino_connection().send_command("furnish_room", params)
         return {"success": True, **result}
     except Exception as e:

@@ -516,6 +516,14 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.move_furniture"] = "Furniture",
             ["tool.delete_furniture"] = "Furniture",
             ["tool.furnish_room"] = "Furniture",
+            // FU.7: the two furnish layouts as ghosts, picked on a card.
+            ["furnish.pick.ask"] = "Two layouts for {room}. Which one goes in?",
+            ["furnish.pick.one"] = "One layout for {room}, shown in blue.",
+            ["furnish.pick.usual"] = "Blue: {pieces}",
+            ["furnish.pick.other"] = "Orange: {pieces}",
+            ["furnish.place.usual"] = "Place blue",
+            ["furnish.place.other"] = "Place orange",
+            ["furnish.place.one"] = "Place it",
             ["receipt.ok"] = "done",
         };
 

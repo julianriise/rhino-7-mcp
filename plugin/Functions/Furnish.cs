@@ -774,12 +774,15 @@ public static class Furnish
         return Dist(p, new Pt(a.X + t * dx, a.Y + t * dy));
     }
 
-    /// <summary>"Furnished the bedroom: double bed 160, 2 bedside tables, wardrobe 100."</summary>
+    /// <summary>"double bed 160, 2 × bedside table, wardrobe 100".</summary>
+    public static string Pieces(Layout layout) =>
+        string.Join(", ", layout.Items.GroupBy(i => i.Piece.Name).Select(g =>
+            g.Count() == 1 ? g.Key.ToLowerInvariant() : g.Count().ToString(CultureInfo.InvariantCulture) + " × " + g.Key.ToLowerInvariant()));
+
+    /// <summary>"Furnished the bedroom: double bed 160, 2 × bedside table, wardrobe 100."</summary>
     public static string Receipt(string room, Layout layout)
     {
-        var groups = layout.Items.GroupBy(i => i.Piece.Name).Select(g =>
-            g.Count() == 1 ? g.Key.ToLowerInvariant() : g.Count().ToString(CultureInfo.InvariantCulture) + " × " + g.Key.ToLowerInvariant());
-        var text = "Furnished " + room + ": " + string.Join(", ", groups) + ".";
+        var text = "Furnished " + room + ": " + Pieces(layout) + ".";
         if (layout.Skipped.Count > 0) text += " Left out " + string.Join(", ", layout.Skipped) + ".";
         return text;
     }

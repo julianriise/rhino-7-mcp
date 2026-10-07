@@ -747,6 +747,42 @@ namespace RhinoMCPPlugin.Forsk
             };
         }
 
+        /// <summary>
+        /// The furnish preview under its receipt: one row per layout (blue the
+        /// usual, orange the creative), a pill to place each, and Cancel. One
+        /// row and one pill when both are the same. Null for a placing run.
+        /// </summary>
+        public static CardSpec FurnishChoice(JObject envelope)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            var result = envelope["result"] as JObject;
+            if (result?["preview"]?.Value<bool>() != true || !(result["options"] is JArray options) || options.Count < 2) return null;
+            var room = result["room_words"]?.ToString() ?? "the room";
+            var same = result["same"]?.Value<bool>() == true;
+            var card = new CardSpec
+            {
+                Kind = "furnish.pick",
+                Question = ForskText.Format(same ? "furnish.pick.one" : "furnish.pick.ask", "room", room),
+                Rows = new List<string>(),
+                Depends = "model",
+                Data = new JObject
+                {
+                    ["room"] = result["room"],
+                    ["density"] = result["density"],
+                    ["replace"] = result["replace"]
+                }
+            };
+            card.Rows.Add(ForskText.Format("furnish.pick.usual", "pieces", options[0]["summary"]?.ToString() ?? ""));
+            card.Pills.Add(new CardPill("consistent", ForskText.Get(same ? "furnish.place.one" : "furnish.place.usual")));
+            if (!same)
+            {
+                card.Rows.Add(ForskText.Format("furnish.pick.other", "pieces", options[1]["summary"]?.ToString() ?? ""));
+                card.Pills.Add(new CardPill("creative", ForskText.Get("furnish.place.other")));
+            }
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
+            return card;
+        }
+
         /// <summary>The takeoff under its receipt: one row per line. Null when the tool failed or found nothing.</summary>
         public static CardSpec Takeoff(JObject envelope)
         {

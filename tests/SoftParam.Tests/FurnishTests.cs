@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -222,6 +223,31 @@ public class FurnishTests
         var again = Furnish.Plan(RoomTypes.Kitchen, room, openings, first.Items);
         Assert.Null(again.Why);
         Assert.Empty(again.Items);
+    }
+
+    [Fact]
+    public void APreview_GetsACardToPlaceEitherLayout_AndAPlacingRunGetsNone()
+    {
+        JObject Envelope(bool preview, bool same) => new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject
+            {
+                ["preview"] = preview, ["same"] = same, ["room"] = "R02", ["room_words"] = "the bedroom", ["density"] = "relaxed", ["replace"] = true,
+                ["options"] = new JArray(new JObject { ["summary"] = "double bed 160" }, new JObject { ["summary"] = "double bed 140" })
+            }
+        };
+        var card = RhinoMCPPlugin.Forsk.ForskCards.FurnishChoice(Envelope(true, false))!;
+        Assert.Equal("furnish.pick", card.Kind);
+        Assert.Equal("Two layouts for the bedroom. Which one goes in?", card.Question);
+        Assert.Equal(new[] { "Blue: double bed 160", "Orange: double bed 140" }, card.Rows);
+        Assert.Equal(new[] { "consistent", "creative", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("R02", card.Data!["room"]!.ToString());
+        Assert.True(card.Data["replace"]!.Value<bool>());
+        var one = RhinoMCPPlugin.Forsk.ForskCards.FurnishChoice(Envelope(true, true))!;
+        Assert.Equal(new[] { "consistent", "cancel" }, one.Pills.Select(p => p.Id));
+        Assert.Single(one.Rows!);
+        Assert.Null(RhinoMCPPlugin.Forsk.ForskCards.FurnishChoice(Envelope(false, false)));
     }
 
     [Fact]

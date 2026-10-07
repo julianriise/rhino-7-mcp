@@ -27,6 +27,9 @@ public partial class RhinoMCPFunctions
         var variant = (parameters?["variant"]?.ToString() ?? Furnish.Consistent).Trim().ToLowerInvariant();
         if (variant != Furnish.Consistent && variant != Furnish.Creative) throw new ArgumentException("variant is consistent or creative.");
         var replace = parameters?["replace"]?.Type == JTokenType.Boolean && parameters["replace"].Value<bool>();
+        var preview = parameters?["preview"]?.Type == JTokenType.Boolean && parameters["preview"].Value<bool>();
+        // Placing, or asking again, takes the old ghosts away.
+        FurnishPreview.Hide(doc);
 
         var rooms = FurnitureRooms(doc);
         var named = parameters?["room"]?.ToString()?.Trim();
@@ -40,6 +43,7 @@ public partial class RhinoMCPFunctions
 
         var openings = FurnishOpenings(doc);
         var floor = StairFloorTop(doc);
+        if (preview) return FurnishPreviewResult(doc, named, targets, openings, floor, density, replace);
         var results = new JArray();
         var lines = new List<string>();
         var total = 0;
@@ -86,6 +90,67 @@ public partial class RhinoMCPFunctions
             ["density"] = density,
             ["variant"] = variant,
             ["message"] = string.Join(" ", lines)
+        };
+    }
+
+    /// <summary>
+    /// Both layouts for the rooms, shown as ghosts (the usual in blue, the
+    /// creative in orange) with nothing placed. Each is planned as the
+    /// placing run would: replace leaves out the room's pieces not moved by
+    /// hand, and each room sees the pieces planned before it.
+    /// </summary>
+    private JObject FurnishPreviewResult(RhinoDoc doc, string named, List<PlanRoom> targets, List<Furnish.Opening> openings,
+        double floor, string density, bool replace)
+    {
+        var options = new JArray();
+        var shown = new List<(IEnumerable<Furnish.Item> Items, System.Drawing.Color Colour)>();
+        var summaries = new List<string>();
+        foreach (var variant in new[] { Furnish.Consistent, Furnish.Creative })
+        {
+            var standing = FurnitureObjects(doc)
+                .Where(o => !(replace && targets.Any(r => InRoom(o, r)) && !MovedByHand(o)))
+                .Select(o => TryFurniture(o, out var piece, out var frame, out _) ? new Furnish.Item { Piece = piece, Frame = frame } : null)
+                .Where(i => i != null).ToList();
+            var planned = new List<Furnish.Item>();
+            var rooms = new JArray();
+            var words = new List<string>();
+            foreach (var room in targets)
+            {
+                var layout = Furnish.Plan(room.RoomType ?? "", room.Outline, openings, standing.Concat(planned).ToList(), density, variant);
+                if (layout.Why == null) planned.AddRange(layout.Items);
+                rooms.Add(new JObject
+                {
+                    ["room"] = room.ScheduleId,
+                    ["type"] = room.RoomType ?? "",
+                    ["pieces"] = new JArray(layout.Items.Select(i => i.Piece.Id)),
+                    ["skipped"] = new JArray(layout.Skipped),
+                    ["why"] = layout.Why ?? ""
+                });
+                words.Add(layout.Why != null ? "not " + RoomWords(room) + " (" + layout.Why + ")" : Furnish.Pieces(layout));
+            }
+            var summary = string.Join("; ", words.Where(w => w.Length > 0));
+            summaries.Add(summary);
+            options.Add(new JObject { ["variant"] = variant, ["count"] = planned.Count, ["summary"] = summary, ["rooms"] = rooms });
+            shown.Add((planned, variant == Furnish.Consistent ? FurnishPreview.Usual : FurnishPreview.Other));
+        }
+        var same = summaries[0] == summaries[1]
+            && options[0]["rooms"].ToString() == options[1]["rooms"].ToString();
+        // Two equal layouts draw once.
+        FurnishPreview.Show(doc, same ? shown.Take(1) : shown, floor);
+        var where = targets.Count == 1 ? RoomWords(targets[0]) : "the house";
+        return new JObject
+        {
+            ["preview"] = true,
+            ["room"] = string.IsNullOrEmpty(named) ? targets[0].ScheduleId : named,
+            ["room_words"] = where,
+            ["density"] = density,
+            ["replace"] = replace,
+            ["same"] = same,
+            ["options"] = options,
+            ["count"] = 0,
+            ["message"] = same
+                ? "One layout for " + where + ", shown in blue. Place it or cancel on the card."
+                : "Two layouts for " + where + ": the usual in blue, another in orange. Pick one on the card."
         };
     }
 

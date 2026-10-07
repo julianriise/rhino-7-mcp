@@ -423,6 +423,8 @@ namespace RhinoMCPPlugin.Forsk
                 Render();
                 return;
             }
+            // The furnish ghosts go with their card, placed or not.
+            if (kind == "furnish.pick") FurnishPreview.Hide(RhinoDoc.ActiveDoc);
             if (pill.Id == "cancel" || pill.Id == "done")
             {
                 Models.Persist(thread);
@@ -444,6 +446,13 @@ namespace RhinoMCPPlugin.Forsk
                     card["answer"] = FormatMm(mm) + " mm";
                     var scaleArgs = new JObject { ["p1"] = card["data"]?["p1"], ["p2"] = card["data"]?["p2"], ["length_mm"] = mm };
                     Job(thread, "file.scale", ForskText.Label("file.scale"), sink => sink.Tool(ForskPlanImport.ScaleTool, scaleArgs), userText: FormatMm(mm) + " mm");
+                    break;
+                case "furnish.pick":
+                    // The layout the ghost showed: the same rules give the same pieces.
+                    var furnishArgs = new JObject { ["variant"] = pill.Id };
+                    foreach (var key in new[] { "room", "density", "replace" })
+                        if (card["data"]?[key] != null && card["data"][key].Type != JTokenType.Null) furnishArgs[key] = card["data"][key];
+                    Job(thread, kind, ForskText.Get("tool.furnish_room"), sink => sink.Tool("furnish_room", furnishArgs), userText: pill.Label);
                     break;
                 case "wall.delete":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("delete_wall", new JObject { ["side"] = pill.Id }), userText: pill.Label);
@@ -1155,6 +1164,11 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var lines = ForskCards.Takeoff(envelope);
                 if (lines != null) thread.AddCard(lines, facts);
+            }
+            if (string.Equals(tool, "furnish_room", StringComparison.Ordinal))
+            {
+                var pick = ForskCards.FurnishChoice(envelope);
+                if (pick != null) thread.AddCard(pick, facts);
             }
         }
 

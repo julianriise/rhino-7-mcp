@@ -29,6 +29,19 @@ TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "600"))
 PDF_PATH = Path("/tmp/forsk-f5-first-run-furnished.pdf")
 
 
+SHOWING = """
+import System, Rhino
+asm = [a for a in System.AppDomain.CurrentDomain.GetAssemblies() if a.GetName().Name == 'rhinomcp'][0]
+print(asm.GetType('RhinoMCPPlugin.Functions.FurnishPreview').GetProperty('Showing').GetValue(None))
+"""
+
+
+def showing(send) -> str:
+    """True while the furnish ghosts are on screen."""
+    result = send("execute_rhinoscript_python_code", {"code": SHOWING})
+    return str(result.get("output") or result.get("message") or "").strip()
+
+
 def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
     """send(cmd, params) -> result. Returns the report lines and whether all passed."""
     lines: list[str] = []
@@ -39,6 +52,13 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
         lines.append("FAIL " + why)
         ok = False
 
+    # The two layouts as ghosts first: nothing placed, the ghosts on, then off once a layout goes in.
+    shown = send("furnish_room", {"room": "all", "preview": True})
+    options = shown.get("options") or []
+    lines.append(f"preview: {len(options)} layouts, {' / '.join(str(o.get('count')) for o in options)} pieces, "
+                 + f"same {shown.get('same')}, ghosts {showing(send)}")
+    if len(options) != 2 or shown.get("count") != 0 or showing(send) != "True":
+        fail(f"preview: {shown.get('message')}")
     first = send("furnish_room", {"room": "all"})
     rooms = first.get("rooms") or []
     for room in rooms:
@@ -48,6 +68,10 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
                      + (f" · {room['why']}" if room.get("why") else ""))
         if room.get("why"):
             fail(f"{room.get('room')} {room.get('type')} not furnished: {room['why']}")
+    if showing(send) != "False":
+        fail("the ghosts stayed after the furniture went in")
+    if options and options[0].get("count") != first.get("count"):
+        fail(f"the blue preview had {options[0].get('count')} pieces, the house got {first.get('count')}")
     total = first.get("count") or 0
     lines.append(f"furnish all: {len(rooms)} rooms, {total} pieces")
     if not rooms or total == 0:

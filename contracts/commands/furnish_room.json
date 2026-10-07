@@ -30,6 +30,10 @@
     "replace": {
       "type": "boolean",
       "description": "Clear the room's furniture first, except pieces moved by hand since Forsk placed them."
+    },
+    "preview": {
+      "type": "boolean",
+      "description": "Show both layouts as ghosts in the viewport (the usual in blue, the creative in orange) and place nothing; the window offers a card to place one."
     }
   },
   "additionalProperties": false

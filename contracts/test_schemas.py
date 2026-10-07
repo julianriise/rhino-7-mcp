@@ -413,6 +413,7 @@ def test_new_commands():
         ("commands/furnish_room.json", {}),
         ("commands/furnish_room.json", {"room": "bedroom"}),
         ("commands/furnish_room.json", {"room": "all", "density": "compact", "variant": "creative", "replace": True}),
+        ("commands/furnish_room.json", {"room": "R02", "preview": True}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -1008,6 +1009,16 @@ def test_responses():
         "message": "Furnished the bedroom: double bed 160. Did not furnish the bathroom: no wall holds an 80 shower.",
     }
     if not validate("responses/furnish_result.json", furnished):
+        all_passed = False
+    preview = {
+        "preview": True, "room": "R02", "room_words": "the bedroom", "density": "relaxed", "replace": False, "same": False, "count": 0,
+        "options": [{"variant": "consistent", "count": 4, "summary": "double bed 160, 2 × bedside table, wardrobe 100",
+                     "rooms": [{"room": "R02", "type": "bedroom", "pieces": ["bed.double.160x200"], "skipped": [], "why": ""}]},
+                    {"variant": "creative", "count": 4, "summary": "double bed 160, 2 × bedside table, wardrobe 100",
+                     "rooms": [{"room": "R02", "type": "bedroom", "pieces": ["bed.double.160x200"], "skipped": [], "why": ""}]}],
+        "message": "Two layouts for the bedroom: the usual in blue, another in orange. Pick one on the card.",
+    }
+    if not validate("responses/furnish_result.json", preview):
         all_passed = False
     if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
         all_passed = False
