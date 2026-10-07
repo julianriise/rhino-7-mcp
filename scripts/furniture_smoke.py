@@ -96,6 +96,11 @@ def run(send, pdf_path: Path = PDF_PATH, dxf_dir: Path = DXF_DIR, dxf=check_dxf)
     elif "overlap the double bed" not in str(on_bed.get("message", "")):
         fail(f"armchair on the bed: {on_bed.get('message')}")
 
+    # FU.7 furnishes homes: a garage is refused with the reason.
+    garage = send("furnish_room", {})
+    if "set the room's type first" not in str(garage.get("message", "")):
+        fail(f"furnish the garage: {garage.get('message')}")
+
     # A half turn keeps a table's footprint, so nothing can be in its way.
     table = placed[3]
     turned = send("move_furniture", {"id": table["forsk_id"], "rotate": 180})

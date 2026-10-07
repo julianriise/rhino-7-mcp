@@ -48,9 +48,7 @@ public partial class RhinoMCPFunctions
             if (replace)
                 foreach (var obj in FurnitureObjects(doc).Where(o => InRoom(o, room)).ToList())
                     doc.Objects.Delete(obj.Id, true);
-            var inRoom = FurnitureObjects(doc).Where(o => InRoom(o, room)).ToList();
-            var layout = Furnish.Plan(room.RoomType ?? "", room.Outline, openings, FurnitureFootprints(doc, null),
-                inRoom.Select(o => o.Attributes.GetUserString(Furniture.CatalogKey)).ToList(), density, variant);
+            var layout = Furnish.Plan(room.RoomType ?? "", room.Outline, openings, FurnitureItems(doc), density, variant);
             var added = new JArray();
             if (layout.Why == null)
                 foreach (var item in layout.Items)
@@ -90,6 +88,15 @@ public partial class RhinoMCPFunctions
         var stamped = obj.Attributes.GetUserString(Furniture.RoomKey);
         if (!string.IsNullOrEmpty(stamped)) return string.Equals(stamped, room.ScheduleId, StringComparison.OrdinalIgnoreCase);
         return TryFurniture(obj, out var piece, out var frame, out _) && RoomDetect.Contains(room.Outline, Furniture.CentreOf(piece, frame));
+    }
+
+    private static List<Furnish.Item> FurnitureItems(RhinoDoc doc)
+    {
+        var items = new List<Furnish.Item>();
+        foreach (var obj in FurnitureObjects(doc))
+            if (TryFurniture(obj, out var piece, out var frame, out _))
+                items.Add(new Furnish.Item { Piece = piece, Frame = frame });
+        return items;
     }
 
     /// <summary>Every door and window marker: its middle in plan and its width (the longer side of its box).</summary>

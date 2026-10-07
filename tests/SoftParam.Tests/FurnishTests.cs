@@ -18,7 +18,7 @@ public class FurnishTests
     static Furnish.Opening Window(double x, double y, double w = 1200) => new Furnish.Opening { Centre = new Pt(x, y), Width = w };
 
     static Furnish.Layout Plan(string type, Pt[] room, params Furnish.Opening[] openings) =>
-        Furnish.Plan(type, room, openings, new List<Furniture.Footprint>(), new List<string>());
+        Furnish.Plan(type, room, openings, new List<Furnish.Item>());
 
     /// <summary>Inside the room, nothing overlapping, and no body in front of a door (900 square on the room side).</summary>
     static void Sound(Furnish.Layout layout, Pt[] room, params Furnish.Opening[] openings)
@@ -74,7 +74,7 @@ public class FurnishTests
         var room = Box(3200, 3800);
         var openings = new[] { Door(700, 0) };
         var usual = Plan(RoomTypes.Bedroom, room, openings);
-        var other = Furnish.Plan(RoomTypes.Bedroom, room, openings, new List<Furniture.Footprint>(), new List<string>(), Furnish.Relaxed, Furnish.Creative);
+        var other = Furnish.Plan(RoomTypes.Bedroom, room, openings, new List<Furnish.Item>(), Furnish.Relaxed, Furnish.Creative);
         Sound(other, room, openings);
         var a = usual.Items.First(i => i.Piece.Type == "bed").Frame;
         var b = other.Items.First(i => i.Piece.Type == "bed").Frame;
@@ -93,7 +93,7 @@ public class FurnishTests
     public void ACompactDensity_TakesASmallerBed()
     {
         var room = Box(3200, 3800);
-        var layout = Furnish.Plan(RoomTypes.Bedroom, room, new[] { Door(700, 0) }, new List<Furniture.Footprint>(), new List<string>(), Furnish.Compact);
+        var layout = Furnish.Plan(RoomTypes.Bedroom, room, new[] { Door(700, 0) }, new List<Furnish.Item>(), Furnish.Compact);
         Assert.Equal("bed.double.140x200", layout.Items.First(i => i.Piece.Type == "bed").Piece.Id);
     }
 
@@ -183,11 +183,24 @@ public class FurnishTests
         var bed = Furniture.Find("bed.double.160x200")!;
         var frame = new Furniture.Frame(1600, 3800, -1, 0);
         var layout = Furnish.Plan(RoomTypes.Bedroom, room, new[] { Door(700, 0) },
-            new List<Furniture.Footprint> { Furniture.FootprintOf(bed, frame) }, new List<string> { bed.Id });
+            new List<Furnish.Item> { new Furnish.Item { Piece = bed, Frame = frame } });
         Assert.Null(layout.Why);
         Assert.DoesNotContain(layout.Items, i => i.Piece.Type == "bed");
         var wardrobe = layout.Items.First(i => i.Piece.Type == "wardrobe");
         Assert.Null(Furniture.Clash(Furniture.FootprintOf(wardrobe.Piece, wardrobe.Frame), room, new[] { Furniture.FootprintOf(bed, frame) }));
+    }
+
+    /// <summary>A room furnished once is furnished: a second pass adds nothing, its pieces' free floor still counts.</summary>
+    [Fact]
+    public void FurnishingAgain_AddsNothing()
+    {
+        var room = Box(3600, 4200);
+        var openings = new[] { Door(0, 1500), Window(1800, 4200) };
+        var first = Plan(RoomTypes.Kitchen, room, openings);
+        Assert.Null(first.Why);
+        var again = Furnish.Plan(RoomTypes.Kitchen, room, openings, first.Items);
+        Assert.Null(again.Why);
+        Assert.Empty(again.Items);
     }
 
     [Fact]

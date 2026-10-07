@@ -108,23 +108,33 @@ public static class Furnish
     static Furniture.Piece P(string id) => Furniture.Find(id) ?? throw new InvalidOperationException("No catalogue piece " + id);
 
     /// <summary>
-    /// The layout for a room of this type, or Why. existing pieces stay where
-    /// they are and are furnished around; a kind the room already has is not added again.
+    /// The layout for a room of this type, or Why. existing pieces (the whole
+    /// file's) stay where they are, each with the free floor in front of it,
+    /// and are furnished around; a kind the room already has is not added again.
     /// </summary>
-    public static Layout Plan(string roomType, IList<Pt> room, IList<Opening> openings, IList<Furniture.Footprint> existing,
-        IList<string> existingIds, string density = Relaxed, string variant = Consistent)
+    public static Layout Plan(string roomType, IList<Pt> room, IList<Opening> openings, IList<Item> existing,
+        string density = Relaxed, string variant = Consistent)
     {
         var layout = new Layout();
         density = Densities.Contains(density) ? density : Relaxed;
         var ring = Furniture.Ccw(room);
         if (ring.Count < 3) { layout.Why = "the room has no outline"; return layout; }
         var ctx = new Ctx { Ring = ring, Density = density, Out = layout };
-        ctx.Bodies.AddRange(existing ?? new List<Furniture.Footprint>());
+        existing = existing ?? new List<Item>();
+        foreach (var item in existing)
+        {
+            ctx.Bodies.Add(Furniture.FootprintOf(item.Piece, item.Frame));
+            // A piece against a wall keeps the floor in front of it, as it did when it was placed.
+            if (item.Piece.Place == Furniture.Wall && item.Piece.Z0 < ZoneTopMm)
+                ctx.Zones.Add(ZoneFoot(item.Piece, item.Frame, FrontZone(ctx).Invoke(item.Piece)[0], "the space in front of the " + item.Piece.Name.ToLowerInvariant()));
+        }
         ctx.Edges = BuildEdges(ring);
         ctx.Doors = new List<Pt>();
         foreach (var opening in openings ?? new List<Opening>())
             AddOpening(ctx, opening);
-        var have = new HashSet<string>((existingIds ?? new List<string>()).Select(id => Furniture.Find(id)?.Type ?? ""));
+        var have = new HashSet<string>(existing
+            .Where(i => RoomDetect.Contains(ring, Furniture.CentreOf(i.Piece, i.Frame)))
+            .Select(i => i.Piece.Type));
         var skip = variant == Creative ? 1 : 0;
 
         switch (roomType)
