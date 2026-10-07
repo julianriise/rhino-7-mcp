@@ -155,7 +155,7 @@ public class PageChromeTests
         }
         var holders = html.IndexOf("<div id=\"icons\" hidden>", StringComparison.Ordinal);
         Assert.True(holders > 0 && holders < html.IndexOf("</header>", StringComparison.Ordinal));
-        Assert.Contains("}, p.icon));", script);
+        Assert.Contains("}, p.icon);", script);
         Assert.Contains(".pill .icon {", html);
     }
 

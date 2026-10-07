@@ -198,6 +198,18 @@
     return (fields || []).filter(function (f) { return f.order; }).map(function (f) { return f.key; });
   };
 
+  /*
+   * Instant state (Julian, 2026-10-07): a pill shows its new state the moment it
+   * is clicked, before Rhino answers; the next render settles it. On a choice card
+   * the picked option is filled at once; elsewhere the clicked pill is pressed and
+   * the card's other pills wait. Returns what to draw. No DOM, so it tests headless.
+   */
+  Forsk.pressState = function (item, pillId) {
+    var settle = pillId === 'done' || pillId === 'cancel';
+    if (item && item.choice && !settle) return { fill: pillId, press: null, wait: false };
+    return { fill: null, press: pillId, wait: true };
+  };
+
   /* A card answer: the pill, the values, and the rows' order when the card's rows move. No DOM. */
   Forsk.cardAction = function (item, pillId, values, order) {
     var action = { kind: 'card', card: item.id, pill: pillId };
@@ -626,6 +638,28 @@
     return row;
   }
 
+  /* Draw a click's state at once: the picked option filled, or the clicked pill pressed and its siblings waiting. */
+  function showPress(group, button, state) {
+    // A clicked card is never reused as it is: the next render draws what Rhino decided.
+    group.setAttribute('data-touched', '1');
+    var all = group.getElementsByTagName('button');
+    if (state.fill) {
+      for (var i = 0; i < all.length; i++) {
+        var id = all[i].getAttribute('data-pill');
+        if (id === 'done' || id === 'cancel') continue;
+        all[i].className = all[i].className.replace(/\s*primary\b/g, '') + (all[i] === button ? ' primary' : '');
+      }
+      return;
+    }
+    pressed(button);
+    if (state.wait && group.className.indexOf('waiting') < 0) group.className += ' waiting';
+  }
+
+  /* A button that was clicked shows it at once, until the next render redraws it. */
+  function pressed(button) {
+    if (button && button.className.indexOf('pressed') < 0) button.className += ' pressed';
+  }
+
   function pill(label, primary, onClick, icon) {
     var button = el('button', 'pill' + (primary ? ' primary' : ''), label);
     button.type = 'button';
@@ -770,9 +804,12 @@
     }
     var pills = el('div', 'pills');
     (item.pills || []).forEach(function (p, index) {
-      pills.appendChild(pill(p.label, Forsk.isPrimaryPill(item.pills, index), function () {
+      var button = pill(p.label, Forsk.isPrimaryPill(item.pills, index), function () {
+        showPress(pills, button, Forsk.pressState(item, p.id));
         sender.send(Forsk.cardAction(item, p.id, values(), order));
-      }, p.icon));
+      }, p.icon);
+      button.setAttribute('data-pill', p.id);
+      pills.appendChild(button);
     });
     box.appendChild(pills);
     if (item.note) box.appendChild(el('div', 'note', item.note));
@@ -1074,7 +1111,7 @@
       button.type = 'button';
       button.title = slot.label + '  ' + slot.key;
       button.setAttribute('data-slot', slot.id);
-      button.addEventListener('click', function () { sender.send({ kind: 'action', id: slot.id }); });
+      button.addEventListener('click', function () { pressed(button); sender.send({ kind: 'action', id: slot.id }); });
       slots.appendChild(button);
     });
     if (bar.help) {
@@ -1221,7 +1258,8 @@
       body.appendChild(el('h3', null, group.title));
       var pills = el('div', 'pills');
       group.actions.forEach(function (action) {
-        pills.appendChild(pill(action.label, false, function () { sender.send({ kind: 'action', id: action.id, from: 'card' }); }));
+        var sheetPill = pill(action.label, false, function () { pressed(sheetPill); sender.send({ kind: 'action', id: action.id, from: 'card' }); });
+        pills.appendChild(sheetPill);
       });
       body.appendChild(pills);
     });
@@ -1357,7 +1395,8 @@
       var keys = Forsk.entryKeys(entries);
       var kept = {};
       entries.forEach(function (entry, i) {
-        var node = builtItems[keys[i]] || item(entry);
+        var cached = builtItems[keys[i]];
+        var node = cached && !(cached.querySelector && cached.querySelector('[data-touched]')) ? cached : item(entry);
         kept[keys[i]] = node;
         thread.appendChild(node);
       });

@@ -236,6 +236,11 @@ html[data-kbd] .menu button:focus-visible { background: var(--page); }
   max-width: 100%; overflow-wrap: anywhere;
 }
 .pill.primary { background: var(--brand); color: var(--on-brand); box-shadow: none; font-weight: 600; }
+/* Instant state: a click shows before Rhino answers (Julian, 2026-10-07). */
+.pill, .menu button { transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1); }
+.pill:active, .menu button:active { transform: scale(0.97); }
+.pill.pressed { box-shadow: 0 0 0 2px var(--brand-ring); }
+.pills.waiting .pill:not(.pressed) { opacity: 0.45; pointer-events: none; }
 .guide .pill { margin: 6px 10px 0 0; }
 .pill .icon { width: 18px; height: 18px; margin: -4px 6px -4px -4px; vertical-align: middle; }
 .step { position: relative; overflow: hidden; color: var(--meta); font-size: 13px; margin: 0 0 8px; }
@@ -400,6 +405,8 @@ textarea::placeholder { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) {
   .step::after { animation: none; display: none; }
   .card, .sheet { animation: none; }
+  .pill, .menu button { transition: none; }
+  .pill:active, .menu button:active { transform: none; }
   .dots span { animation: none; opacity: 0.6; }
   #thread-thumb { transition: none; }
 }

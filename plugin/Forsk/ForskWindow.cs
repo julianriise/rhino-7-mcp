@@ -199,7 +199,9 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The classifier's read of the document, with the key, the listener and Undo. Fresh every call.</summary>
         static FileFacts ReadFacts(RhinoDoc doc)
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             var input = RhinoMCPFunctions.ReadDocInput(doc);
+            var docMs = clock.ElapsedMilliseconds;
             input.KeyPresent = _keyPresent;
             input.ToolsReady = _toolsReady;
             input.FirmArchitect = ForskPrint.FirmArchitect();
@@ -213,7 +215,11 @@ namespace RhinoMCPPlugin.Forsk
             input.GuideOff = FirstRunGate.Off();
             input.UpdateVersion = ForskUpdate.Latest;
             input.Build = ForskBuild.Line();
-            return FileClassifier.Read(input);
+            var read = FileClassifier.Read(input);
+            // Where a facts read goes, for the speed log: the document, then the rest.
+            if (clock.ElapsedMilliseconds > 100)
+                Log("facts · " + doc.Objects.Count + " objects · document " + docMs + " ms · rest " + (clock.ElapsedMilliseconds - docMs) + " ms");
+            return read;
         }
 
         /// <summary>The facts the bar was drawn from. Recomputed when a document event marked them dirty, never mid-job.</summary>

@@ -131,7 +131,8 @@ namespace RhinoMCPPlugin.Forsk
             var action = ForskRegistry.Find(id);
             if (doc == null || thread == null || action == null) return;
             // A click checks the precondition again. If it is no longer true, nothing runs and one line says so.
-            var facts = ReadFacts(doc);
+            // The facts the window holds (read again only when the document changed): a click must not wait on a full read.
+            var facts = Facts(doc);
             if (!action.Shows(facts))
             {
                 thread.AddLine(ForskText.Format("bar.refused", "label", action.Label));
@@ -361,7 +362,7 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
             if (doc == null || thread == null) return;
-            var facts = ReadFacts(doc);
+            var facts = Facts(doc);
             thread.Add("user", ForskText.Get("analyser.title"));
             thread.BeginReply(ForskRoles.Label(ForskRole.Analyser));
             thread.AddCard(ForskCards.Analyser(facts), facts);
@@ -1309,7 +1310,7 @@ namespace RhinoMCPPlugin.Forsk
             doc.Objects.Select(room);
             doc.Views.Redraw();
             MarkDirty();
-            var facts = ReadFacts(doc);
+            var facts = Facts(doc);
             var spec = ForskCards.For(action.Id, facts);
             if (spec != null) thread.AddCard(spec, facts);
             thread.EndReply();
