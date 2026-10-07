@@ -28,7 +28,9 @@ public partial class RhinoMCPFunctions
                 ["omitted"] = new JArray()
             };
         }
-        return AreaStats.ToJson(ReadAreaStats(doc));
+        var stats = ReadAreaStats(doc);
+        NoteAreas(doc, stats);
+        return AreaStats.ToJson(stats);
     }
 
     /// <summary>Tagged rooms, as the Romliste lists them, plus BRA/BTA where the walls give them.</summary>

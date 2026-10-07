@@ -41,6 +41,28 @@ public class AnalyserCardTests
     }
 
     [Fact]
+    public void TheMenu_SitsUnderTheTopBar_WithALastResultAndALiveSwitchPerAnalysis()
+    {
+        var facts = Docs.Facts("house");
+        facts.Analysis.Last["daylight"] = "DF mean 2.1 % in 8 rooms";
+        var card = ForskCards.Analyser(facts);
+        Assert.True(card.Pin);
+        Assert.Equal(new[] { "Daylight: DF mean 2.1 % in 8 rooms", "Areas: not run yet" }, card.Rows);
+        Assert.Equal(new[] { "live.daylight", "live.areas" }, card.Fields!.Select(f => f.Key));
+        Assert.All(card.Fields!, f => Assert.True(f.Check));
+        Assert.Equal(new[] { "0", "1" }, card.Fields!.Select(f => f.Value));
+        Assert.Equal("Daylight live", card.Fields![0].Label);
+    }
+
+    [Fact]
+    public void APinnedCard_DrawsInThePanel_LikeAForm()
+    {
+        var engine = PageScript.Load();
+        Assert.True(engine.Evaluate("Forsk.isForm({ role: 'card', state: 'open', pin: true })").ToString() == "true");
+        Assert.False(engine.Evaluate("Forsk.isForm({ role: 'card', state: 'done', pin: true })").ToString() == "true");
+    }
+
+    [Fact]
     public void ThePage_SendsAnalyser_OnlyFromTheAnalysersFace()
     {
         var js = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js"));

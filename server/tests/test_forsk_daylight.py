@@ -618,3 +618,13 @@ def test_split_walls_give_the_same_daylight_per_room():
 def test_the_mesh_floats_above_the_room_plates():
     """S3: room plates stand 20 mm on the slab (RoomPlate.ThicknessMm, pinned in RoomPlateTests); the mesh sits above them."""
     assert fd.FLOOR_OFFSET_MM == 50.0
+
+
+def test_the_summary_gives_each_room_its_own_mean():
+    """AN.2: the live line compares rooms, so the summary carries each room's mean by its scene id."""
+    run = fd.run_scene(box())
+    summary = run.summary()
+    assert len(summary["rooms"]) == summary["spaces"]
+    room = summary["rooms"][0]
+    assert room["id"] == run.model.rooms[run.rooms[0]].id
+    assert abs(room["df_mean"] - summary["df_mean"]) < 0.01

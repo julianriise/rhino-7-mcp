@@ -279,6 +279,13 @@ namespace RhinoMCPPlugin.Forsk
             ["analyser.title"] = "Analyses",
             ["analyser.ask"] = "Analyses for this file.",
             ["analyser.none"] = "Daylight and areas need walls and rooms. Generate 3D first.",
+            // AN.1 and AN.2: the menu's rows and Live switches.
+            ["analysis.daylight"] = "Daylight",
+            ["analysis.areas"] = "Areas",
+            ["analysis.row"] = "{name}: {last}",
+            ["analysis.never"] = "not run yet",
+            ["analysis.live"] = "{name} live",
+            ["analysis.live.note"] = "Live analyses run again after every wall or opening edit, and the edit says what changed. Daylight live uses the Low grid.",
             ["word.save"] = "Save",
             ["print.pages.paper"] = "Paper",
             ["meta.logo.choose"] = "Choose logo",

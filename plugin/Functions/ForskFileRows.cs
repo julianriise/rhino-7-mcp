@@ -144,6 +144,7 @@ public partial class RhinoMCPFunctions
         input.PlanHidden = PlanLayerHost.AreHidden(doc);
         input.PrintScale = KnownPrintScale(doc);
         input.Ink = ReadPrintProfile(doc).Name;
+        input.Analysis = ReadAnalysis(doc);
         var units = doc.ModelUnitSystem;
         input.Millimetres = units == UnitSystem.Millimeters;
         return input;

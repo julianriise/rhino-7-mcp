@@ -81,6 +81,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Ink = "default";
         /// <summary>The daylight grid saved on this Mac (DaylightQuality).</summary>
         public string DaylightQuality = Forsk.DaylightQuality.Low;
+        /// <summary>AN.1: each analysis's Live switch and last result, from the file.</summary>
+        public Functions.Analysis.State Analysis;
         public bool Millimetres = true;
         public bool KeyPresent;
         /// <summary>uv is found: daylight and AI detection can run (Settings → Set up Forsk).</summary>
@@ -154,6 +156,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Grade;
         public string Ink = "default";
         public string DaylightQuality = Forsk.DaylightQuality.Low;
+        /// <summary>AN.1: each analysis's Live switch and last result. Never null.</summary>
+        public Functions.Analysis.State Analysis = new Functions.Analysis.State();
         public Picked Picked;
         public int PickedCount;
         /// <summary>Of the things picked, the Forsk walls and the doors and windows.</summary>
@@ -211,6 +215,7 @@ namespace RhinoMCPPlugin.Forsk
                 PrintScale = input.PrintScale,
                 Ink = string.IsNullOrWhiteSpace(input.Ink) ? "default" : input.Ink,
                 DaylightQuality = Forsk.DaylightQuality.Normal(input.DaylightQuality),
+                Analysis = input.Analysis ?? new Functions.Analysis.State(),
                 KeyPresent = input.KeyPresent,
                 ToolsReady = input.ToolsReady,
                 ListenerUp = input.ListenerUp,

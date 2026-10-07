@@ -61,8 +61,11 @@ public partial class RhinoMCPFunctions
                 var inner = handler;
                 handler = parameters =>
                 {
+                    // AN.2: with an analysis live, the edit's result says what it did to the rooms.
+                    var live = BeginLive(RhinoDoc.ActiveDoc);
                     var result = inner(parameters);
                     MarkMapAfterEdit(RhinoDoc.ActiveDoc, edit);
+                    FinishLive(RhinoDoc.ActiveDoc, live, result);
                     return result;
                 };
             }

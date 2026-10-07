@@ -43,6 +43,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Note;
         public string Depends = "none";
         public JObject Data;
+        /// <summary>Drawn in the panel under the top bar, not in the thread (AN.1's menu).</summary>
+        public bool Pin;
     }
 
     /// <summary>The cards' contents from the classifier's facts. No RhinoCommon, so they test from fixtures.</summary>
@@ -243,13 +245,36 @@ namespace RhinoMCPPlugin.Forsk
         static readonly string[] AnalyserDaylight = { "daylight.again", "daylight.hide", "daylight.show", "daylight.run", "daylight.rooms" };
 
         /// <summary>
-        /// AN.1: tapping the Analyser's face lists the analyses this file can
-        /// run now, daylight and areas, each a pill that runs the existing
-        /// action. A file with neither says what comes first.
+        /// AN.1: tapping the Analyser's face opens the analysis menu under the
+        /// top bar: one row per analysis with its last result, a Live switch
+        /// for each (AN.2), and a pill per analysis this file can run now that
+        /// runs the existing action. A file with neither says what comes first.
         /// </summary>
         public static CardSpec Analyser(FileFacts f)
         {
-            var card = new CardSpec { Kind = "analyser", Question = ForskText.Get("analyser.ask"), Depends = "model" };
+            var state = f?.Analysis ?? new Functions.Analysis.State();
+            var card = new CardSpec
+            {
+                Kind = "analyser",
+                Question = ForskText.Get("analyser.ask"),
+                Pin = true,
+                Rows = new List<string>(),
+                Fields = new List<CardField>(),
+                Note = ForskText.Get("analysis.live.note")
+            };
+            foreach (var id in Functions.Analysis.All)
+            {
+                var name = ForskText.Get("analysis." + id);
+                card.Rows.Add(ForskText.Format("analysis.row", "name", name, "last",
+                    state.Last.TryGetValue(id, out var last) ? last : ForskText.Get("analysis.never")));
+                card.Fields.Add(new CardField
+                {
+                    Key = Functions.Analysis.LiveKey(id),
+                    Label = ForskText.Format("analysis.live", "name", name),
+                    Value = state.IsLive(id) ? "1" : "0",
+                    Check = true
+                });
+            }
             var daylight = AnalyserDaylight.Select(ForskRegistry.Find).FirstOrDefault(a => a != null && a.Shows(f));
             if (daylight != null) card.Pills.Add(new CardPill(daylight.Id, ForskText.Label(daylight.Id)));
             var area = ForskRegistry.Find("area.stats");

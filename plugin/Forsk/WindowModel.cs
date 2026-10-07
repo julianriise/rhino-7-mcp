@@ -136,6 +136,7 @@ namespace RhinoMCPPlugin.Forsk
                 ["pills"] = Pills(spec),
                 ["state"] = "open",
                 ["depends"] = spec.Depends ?? "none",
+                ["pin"] = spec.Pin,
                 ["stamp"] = ForskCards.Stamp(spec.Depends, facts)
             };
             if (spec.Fields != null)

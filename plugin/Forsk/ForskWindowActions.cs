@@ -423,6 +423,8 @@ namespace RhinoMCPPlugin.Forsk
                 Render();
                 return;
             }
+            // AN.2: the menu's Live switches are kept on the file whichever pill closes it.
+            if (kind == "analyser" && pill.Id != "cancel") SaveLive(values);
             // The furnish ghosts go with their card, placed or not.
             if (kind == "furnish.pick") FurnishPreview.Hide(RhinoDoc.ActiveDoc);
             if (pill.Id == "cancel" || pill.Id == "done")
@@ -1143,6 +1145,18 @@ namespace RhinoMCPPlugin.Forsk
         {
             try { return RuntimeInformation.OSDescription ?? ""; }
             catch (Exception) { return ""; }
+        }
+
+        /// <summary>The analysis menu's Live ticks, on the file.</summary>
+        static void SaveLive(JObject values)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc == null || values == null) return;
+            foreach (var id in Functions.Analysis.All)
+            {
+                var value = values[Functions.Analysis.LiveKey(id)]?.ToString();
+                if (value == "1" || value == "0") RhinoMCPFunctions.WriteAnalysis(doc, Functions.Analysis.LiveKey(id), value);
+            }
         }
 
         /// <summary>A tool's receipt, and under it the wall review when more than the wall changed.</summary>

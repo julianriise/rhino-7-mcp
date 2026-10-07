@@ -223,6 +223,8 @@
   /* An open card that asks for a typed or chosen value. A tick list is not one. No DOM. */
   Forsk.isForm = function (item) {
     if (!item || item.role !== 'card' || item.state !== 'open') return false;
+    // AN.1: the analysis menu sits under the top bar like a form.
+    if (item.pin) return true;
     var fields = item.fields || [];
     for (var i = 0; i < fields.length; i++) {
       var kind = Forsk.fieldKind(fields[i]);

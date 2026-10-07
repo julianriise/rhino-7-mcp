@@ -287,6 +287,16 @@ class DaylightRun:
             gap = max(gap, min(segment_distance(x, y, a[0], a[1], b[0], b[1]) for a, b in segments))
         return gap
 
+    def room_means(self) -> list[dict]:
+        """Each scored room's area-weighted DF mean, by the scene's room id (AN.2 live lines)."""
+        out = []
+        for r in self.rooms:
+            cells = [c for c in self.cells if c.room == r]
+            area = sum(c.area for c in cells)
+            mean = sum(c.df * c.area for c in cells) / area if area else 0.0
+            out.append({"id": self.model.rooms[r].id, "df_mean": round(mean, 2)})
+        return out
+
     def summary(self) -> dict:
         area = sum(c.area for c in self.cells)
         mean = sum(c.df * c.area for c in self.cells) / area if area else 0.0
@@ -296,6 +306,7 @@ class DaylightRun:
             "cells": len(self.cells),
             "df_max": round(max((c.df for c in self.cells), default=0.0), 2),
             "df_mean": round(mean, 2),
+            "rooms": self.room_means(),
             "scope": SCOPE,
             "disclaimer": DISCLAIMER,
             "notes": self.notes,

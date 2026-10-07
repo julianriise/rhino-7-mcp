@@ -35,8 +35,8 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>call runs one bridge command and returns its envelope.</summary>
-        public static JObject Run(string target, Func<string, JObject, JObject> call)
+        /// <summary>call runs one bridge command and returns its envelope. quality overrides the saved one (a live run is Low).</summary>
+        public static JObject Run(string target, Func<string, JObject, JObject> call, string quality = null)
         {
             var scene = call("daylight_scene", new JObject());
             if (!Ok(scene)) return scene;
@@ -48,7 +48,7 @@ namespace RhinoMCPPlugin.Forsk
                 {
                     ["scene"] = scene["result"],
                     ["target"] = string.IsNullOrEmpty(target) ? "floor" : target,
-                    ["cell_size"] = DaylightQuality.CellMm(Quality)
+                    ["cell_size"] = DaylightQuality.CellMm(quality ?? Quality)
                 });
             }
             catch (Exception e)
@@ -66,6 +66,8 @@ namespace RhinoMCPPlugin.Forsk
             traced["id"] = result["id"];
             traced["deleted"] = result["deleted"];
             traced["layer"] = result["layer"];
+            // AN.1: the menu's last result and each room's mean, for the live line.
+            RhinoMCPFunctions.NoteDaylight(RhinoDoc.ActiveDoc, traced);
             return new JObject { ["status"] = "success", ["result"] = traced };
         }
 
