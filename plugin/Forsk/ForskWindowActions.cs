@@ -334,6 +334,16 @@ namespace RhinoMCPPlugin.Forsk
                     StartBridge(thread);
                     return;
                 default:
+                    // Jump inside needs one room picked: with none, the chat says so (Julian, 2026-10-07).
+                    var needsPick = action.Id == "room.inside" ? ForskCards.JumpInsideNeedsPick(facts) : null;
+                    if (needsPick != null)
+                    {
+                        thread.Add("user", action.Label);
+                        thread.Add("line", needsPick);
+                        Models.Persist(thread);
+                        Render();
+                        return;
+                    }
                     var spec = ForskCards.For(action.Id, facts);
                     if (spec == null) return;
                     thread.Add("user", action.Label);

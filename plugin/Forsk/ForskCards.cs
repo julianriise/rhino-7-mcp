@@ -333,6 +333,10 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>An option pill of an open choice card: neither Confirm nor Cancel.</summary>
+        /// <summary>What Jump inside says when no single room is picked; null when one is.</summary>
+        public static string JumpInsideNeedsPick(FileFacts f) =>
+            f != null && f.Picked == Picked.Room && f.PickedCount == 1 ? null : ForskText.Get("room.inside.pick");
+
         public static bool IsChoiceOption(JObject card, string pillId)
         {
             if (card?["choice"]?.Type != JTokenType.Boolean || !card["choice"].Value<bool>()) return false;

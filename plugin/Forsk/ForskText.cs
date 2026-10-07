@@ -233,6 +233,7 @@ namespace RhinoMCPPlugin.Forsk
             ["room.inside.east"] = "East",
             ["room.inside.south"] = "South",
             ["room.inside.west"] = "West",
+            ["room.inside.pick"] = "Click a room's floor first, then Jump inside.",
             ["room.inside.held"] = "Looking {way}. Confirm saves it as a named view.",
             ["furniture.add"] = "Add furniture",
             ["furniture.furnish"] = "Furnish rooms",

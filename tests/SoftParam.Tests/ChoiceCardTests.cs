@@ -68,4 +68,15 @@ public class ChoiceCardTests
         Assert.Equal("Medium", card["answer"]!.ToString());
         Assert.False(thread.Settle(card["id"]!.ToString(), "Medium"));
     }
+
+    /// <summary>Julian, 2026-10-07: Jump inside with no room picked says to pick one first.</summary>
+    [Fact]
+    public void JumpInside_WithNoRoomPicked_AsksForARoomFirst()
+    {
+        var house = Docs.Facts("house");
+        Assert.True(ForskRegistry.Find("room.inside")!.Shows(house));
+        Assert.Equal("Click a room's floor first, then Jump inside.", ForskCards.JumpInsideNeedsPick(house));
+        Assert.Null(ForskCards.JumpInsideNeedsPick(Docs.Facts("house, room selected")));
+        Assert.False(ForskRegistry.Find("room.inside")!.Shows(Docs.Facts("walls only")));
+    }
 }
