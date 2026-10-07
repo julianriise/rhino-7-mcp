@@ -431,11 +431,21 @@ namespace RhinoMCPPlugin.Forsk
                 Render();
                 return;
             }
-            // Jump inside: a direction shows at once and keeps the card open. Save view keeps the shot.
-            if (kind == "room.inside" && ForskCards.IsDirection(pillId) && card["state"]?.ToString() == "open")
+            // A choice card (Julian, 2026-10-07): an option applies at once and keeps the card open;
+            // Confirm closes it with no chat message.
+            if (card["state"]?.ToString() == "open" && ForskCards.IsChoiceOption(card, pillId))
             {
-                ForskCards.HoldDirection(card, pillId);
-                TryInside(pillId);
+                ForskCards.HoldChoice(card, pillId, ApplyChoice(kind, pillId));
+                Models.Persist(thread);
+                Render();
+                return;
+            }
+            if (card["state"]?.ToString() == "open" && card["choice"] != null && pillId == "done")
+            {
+                var held = ForskCards.HeldChoice(card);
+                ConfirmChoice(kind, held);
+                var heldLabel = (card["pills"] as JArray ?? new JArray()).FirstOrDefault(p => p["id"]?.ToString() == held)?["label"]?.ToString();
+                thread.Settle(cardId, heldLabel ?? held);
                 Models.Persist(thread);
                 Render();
                 return;
@@ -498,16 +508,6 @@ namespace RhinoMCPPlugin.Forsk
                     if (card["data"]?["all"]?.Value<bool>() == true) typeArgs["all"] = true;
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", typeArgs), userText: pill.Label);
                     break;
-                case "daylight.quality":
-                    // Saving is instant: no job, no tracer. A map on screen is now out of
-                    // date, so the bar offers Run again at the new grid when the user wants it.
-                    ForskDaylight.Quality = pill.Id;
-                    if (doc != null && ReadFacts(doc).Map == MapState.Shown) RhinoMCPFunctions.MarkMapAfterEdit(doc, MapEdit.Opening);
-                    thread.Add("user", pill.Label);
-                    thread.Add("line", ForskText.Format("daylight.quality.saved", "quality", pill.Label));
-                    Models.Persist(thread);
-                    Render();
-                    return;
                 case "ink.set":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);
                     break;
@@ -574,10 +574,6 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
-                    break;
-                case "room.inside":
-                    var way = ForskCards.HeldDirection(card);
-                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("jump_inside", new JObject { ["direction"] = way }), userText: pill.Label);
                     break;
                 case "option.compare":
                     var optionName = pill.Id;
@@ -1243,6 +1239,36 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
         /// <summary>AN.4: the Choose analyses ticks onto the file. The names of the analyses now in the set.</summary>
+        /// <summary>A choice card's option, applied at once. Returns the card's new note.</summary>
+        string ApplyChoice(string kind, string option)
+        {
+            switch (kind)
+            {
+                case "daylight.quality":
+                    // Saving is instant: no job, no tracer. A map on screen is now out of
+                    // date, so the bar offers Run again at the new grid when the user wants it.
+                    ForskDaylight.Quality = option;
+                    var doc = RhinoDoc.ActiveDoc;
+                    if (doc != null && ReadFacts(doc).Map == MapState.Shown) RhinoMCPFunctions.MarkMapAfterEdit(doc, MapEdit.Opening);
+                    MarkDirty();
+                    return ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + option));
+                case "room.inside":
+                    TryInside(option);
+                    return ForskText.Format("room.inside.held", "way", option);
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>A choice card's Confirm: what the held option still needs. Quiet unless it fails.</summary>
+        void ConfirmChoice(string kind, string held)
+        {
+            if (kind != "room.inside") return;
+            var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = held });
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view was not saved.");
+        }
+
         /// <summary>Jump inside, tried: the Perspective view takes the shot, nothing saved. Quiet unless it fails.</summary>
         void TryInside(string way)
         {

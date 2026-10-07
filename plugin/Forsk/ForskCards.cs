@@ -47,6 +47,12 @@ namespace RhinoMCPPlugin.Forsk
         public JObject Data;
         /// <summary>Drawn in the panel under the top bar, not in the thread (AN.1's menu).</summary>
         public bool Pin;
+        /// <summary>
+        /// A choice card: each option pill applies at once and keeps the card
+        /// open, filled; Confirm ("done") closes it with no chat message
+        /// (Julian, 2026-10-07). Cancel closes it too.
+        /// </summary>
+        public bool Choice;
     }
 
     /// <summary>The cards' contents from the classifier's facts. No RhinoCommon, so they test from fixtures.</summary>
@@ -294,18 +300,20 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Kind = "daylight.quality",
                 Question = ForskText.Get("daylight.quality.ask"),
-                Note = ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + now))
+                Note = ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + now)),
+                Choice = true
             };
             // The saved quality is the filled pill: a filled Low read as "it went back to Low".
             foreach (var quality in DaylightQuality.All)
                 card.Pills.Add(new CardPill(quality, ForskText.Get("daylight.quality." + quality)) { Primary = quality == now });
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
             return card;
         }
 
         /// <summary>
-        /// Jump inside: which way to look. The viewport shows north as the card
-        /// opens; a direction shows at once and keeps the card open; Save view
-        /// keeps the shot as a named view (Julian, 2026-10-07).
+        /// Jump inside, a choice card: the viewport shows north as the card
+        /// opens, a direction shows at once, and Confirm keeps the shot as a
+        /// named view (Julian, 2026-10-07).
         /// </summary>
         public static CardSpec JumpInside(FileFacts f)
         {
@@ -314,35 +322,44 @@ namespace RhinoMCPPlugin.Forsk
                 Kind = "room.inside",
                 Question = ForskText.Get("room.inside.ask"),
                 Depends = "selection",
-                Note = ForskText.Format("room.inside.held", "way", "north")
+                Note = ForskText.Format("room.inside.held", "way", "north"),
+                Choice = true
             };
             foreach (var way in Functions.InteriorCamera.Directions)
                 card.Pills.Add(new CardPill(way, ForskText.Get("room.inside." + way)) { Primary = way == "north" });
-            card.Pills.Add(new CardPill("save", ForskText.Get("room.inside.save")));
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }
 
-        public static bool IsDirection(string id) => Functions.InteriorCamera.Directions.Contains(id ?? "");
-
-        /// <summary>The direction the open Jump inside card shows: north until one is picked.</summary>
-        public static string HeldDirection(JObject card)
+        /// <summary>An option pill of an open choice card: neither Confirm nor Cancel.</summary>
+        public static bool IsChoiceOption(JObject card, string pillId)
         {
-            var way = card?["data"]?["direction"]?.ToString();
-            return IsDirection(way) ? way : "north";
+            if (card?["choice"]?.Type != JTokenType.Boolean || !card["choice"].Value<bool>()) return false;
+            if (pillId == "done" || pillId == "cancel") return false;
+            return (card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId);
         }
 
-        /// <summary>A direction picked on the open card: held, filled, and named in the note.</summary>
-        public static void HoldDirection(JObject card, string way)
+        /// <summary>The option a choice card holds: the one picked, else the one it opened filled.</summary>
+        public static string HeldChoice(JObject card)
         {
-            if (card == null || !IsDirection(way)) return;
-            LogoData(card)["direction"] = way;
+            var held = card?["data"]?["choice"]?.ToString();
+            if (!string.IsNullOrEmpty(held)) return held;
+            var pills = (card?["pills"] as JArray ?? new JArray()).OfType<JObject>().ToList();
+            return (pills.FirstOrDefault(p => (bool?)p["primary"] == true) ?? pills.FirstOrDefault())?["id"]?.ToString();
+        }
+
+        /// <summary>An option picked on an open choice card: held, filled, and said in the note.</summary>
+        public static void HoldChoice(JObject card, string pillId, string note)
+        {
+            if (!IsChoiceOption(card, pillId)) return;
+            LogoData(card)["choice"] = pillId;
             foreach (var pill in (card["pills"] as JArray ?? new JArray()).OfType<JObject>())
             {
-                if (pill["id"]?.ToString() == way) pill["primary"] = true;
+                if (pill["id"]?.ToString() == pillId) pill["primary"] = true;
                 else pill.Remove("primary");
             }
-            card["note"] = ForskText.Format("room.inside.held", "way", way);
+            if (note != null) card["note"] = note;
         }
 
         /// <summary>AN.6: which saved option to compare with the model now, newest first, at most four.</summary>

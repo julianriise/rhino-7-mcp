@@ -142,6 +142,7 @@ namespace RhinoMCPPlugin.Forsk
                 ["pin"] = spec.Pin,
                 ["stamp"] = ForskCards.Stamp(spec.Depends, facts)
             };
+            if (spec.Choice) item["choice"] = true;
             if (spec.Fields != null)
             {
                 var fields = new JArray();
@@ -246,6 +247,16 @@ namespace RhinoMCPPlugin.Forsk
                 return pill;
             }
             return null;
+        }
+
+        /// <summary>Confirm on an open choice card: it closes with the option it holds, and adds no message.</summary>
+        public bool Settle(string cardId, string answer)
+        {
+            var card = Find(cardId);
+            if (card == null || card["role"]?.ToString() != "card" || card["state"]?.ToString() != "open") return false;
+            card["state"] = "answered";
+            card["answer"] = answer ?? "";
+            return true;
         }
 
         /// <summary>Esc on an open card: it closes and does nothing else.</summary>

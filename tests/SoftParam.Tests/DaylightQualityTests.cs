@@ -36,8 +36,8 @@ public class DaylightQualityTests
     {
         var facts = Docs.Facts("house");
         var card = ForskCards.For("daylight.quality", facts)!;
-        Assert.Equal(new[] { "low", "medium", "high" }, card.Pills.Select(p => p.Id));
-        Assert.Equal(new[] { "Low", "Medium", "High" }, card.Pills.Select(p => p.Label));
+        Assert.Equal(new[] { "low", "medium", "high", "done" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "Low", "Medium", "High", "Confirm" }, card.Pills.Select(p => p.Label));
         Assert.Equal("Now: Low.", card.Note);
 
         facts.DaylightQuality = "medium";
