@@ -305,7 +305,8 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Opening) yield return Find("opening.type");
             // AI detection often gets a room's outline wrong: Redraw area is the first suggestion for one room.
             if (f.Picked == Picked.Room && f.PickedCount == 1) yield return Find("room.redraw");
-            if (f.Picked == Picked.Room) yield return Find("daylight.room");
+            // A picked room is furnished next; Daylight for this room stays on the card.
+            if (f.Picked == Picked.Room) yield return Find("furniture.add");
             if (f.Picked == Picked.Room) yield return Find("section.room");
             if (f.Picked == Picked.Room) yield return Find("room.push_pull");
             if (f.HasWalls && f.Picked != Picked.Opening && f.Picked != Picked.Wall && f.Picked != Picked.Room)
