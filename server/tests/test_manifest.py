@@ -31,7 +31,9 @@ def test_description_is_one_inline_line_led_by_the_tagline():
 
 def test_version_name_url_and_authors():
     fields = top_level()
-    assert fields["version"] == "1.0.0"
+    # The manifest and the assembly carry one version; a release bumps both.
+    csproj = (MANIFEST.parent / "rhinomcp.csproj").read_text(encoding="utf-8")
+    assert f"<Version>{fields['version']}</Version>" in csproj
     assert fields["name"] == "forsk"
     assert unquote(fields["url"]) == "https://forsk.app"
     assert "Julian Riise" in MANIFEST.read_text(encoding="utf-8")

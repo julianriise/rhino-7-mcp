@@ -3,12 +3,16 @@
   "version": "1.1.0",
   "items": [
     {
-      "title": "Update available",
-      "how": "When a new Forsk is out, the gear gets a red dot. Open Settings and click Update available."
+      "title": "Furnish a room",
+      "how": "Ask in chat: furnish the bedroom. Pick the blue or orange layout on the card."
+    },
+    {
+      "title": "Live analyses",
+      "how": "Tap the purple Analyser face at the top, then switch Live on for Daylight or Areas."
     },
     {
       "title": "Connect Rhino to your account",
-      "how": "Settings → Set up Forsk → Connect. Confirm the code in your browser and your licence follows you to every Mac."
+      "how": "Settings → Set up Forsk → Account → Connect, then confirm the code in your browser."
     }
   ]
 }
