@@ -868,12 +868,9 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             foreach (var prior in history)
                 messages.Add(prior);
 
-            var model = Environment.GetEnvironmentVariable("FORSK_GROK_MODEL");
-            if (string.IsNullOrWhiteSpace(model)) model = "grok-4.7";
-
             var body = new JObject
             {
-                ["model"] = model.Trim(),
+                ["model"] = ForskGrokModel.Current(),
                 ["reasoning_effort"] = "low",
                 ["messages"] = messages,
                 ["tools"] = tools,
