@@ -110,6 +110,8 @@ internal static class ForskWhiteHost
             }
             if (changed) doc.Views.Redraw();
             ForskPlanCutHost.Apply(doc, on);
+            // A file from before the roof lock gets it when it opens: the roof is never a click.
+            RhinoMCPFunctions.RoofLayerLocked(doc, true);
         }
         catch (Exception ex)
         {

@@ -140,6 +140,22 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    /// <summary>A-ROOF locked or open. Nothing when the file has no roof layer.</summary>
+    internal static void RoofLayerLocked(RhinoDoc doc, bool locked)
+    {
+        if (doc == null) return;
+        // The table's own layer, never a cached copy: the lock must land on the document.
+        foreach (var layer in doc.Layers)
+        {
+            if (layer == null || layer.IsDeleted || !layer.Name.Equals(RoofLayerName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (layer.IsLocked == locked) continue;
+            layer.IsLocked = locked;
+            doc.Layers.Modify(layer, layer.Index, true);
+        }
+    }
+
+    private const string RoofLayerName = "A-ROOF";
+
     private static void ApplyDefaultLayerVisibility(RhinoDoc doc, Layer layer, string name)
     {
         if (!LayerHiddenByDefault(name)) return;

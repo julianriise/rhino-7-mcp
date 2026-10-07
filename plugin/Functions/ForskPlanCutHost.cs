@@ -151,7 +151,29 @@ internal static class ForskPlanCutHost
         return id;
     }
 
+    /// <summary>
+    /// The cut clips exactly the wanted viewports. The cut is locked, and Rhino
+    /// refuses to add or remove a clipped viewport on a locked object, so it is
+    /// unlocked for the edit and locked again.
+    /// </summary>
     static bool SyncViews(RhinoDoc doc, ClippingPlaneObject plane, List<Guid> wanted)
+    {
+        var have = new HashSet<Guid>(plane.ClippingPlaneGeometry?.ViewportIds() ?? new Guid[0]);
+        if (have.SetEquals(wanted)) return false;
+        var id = plane.Id;
+        if (plane.IsLocked) doc.Objects.Unlock(id, true);
+        try
+        {
+            return SyncUnlocked(doc, doc.Objects.FindId(id) as ClippingPlaneObject ?? plane, wanted);
+        }
+        finally
+        {
+            var now = doc.Objects.FindId(id);
+            if (now != null && !now.IsLocked) doc.Objects.Lock(id, true);
+        }
+    }
+
+    static bool SyncUnlocked(RhinoDoc doc, ClippingPlaneObject plane, List<Guid> wanted)
     {
         var map = Viewports(doc);
         var want = new HashSet<Guid>(wanted);
