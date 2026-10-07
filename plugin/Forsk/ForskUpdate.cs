@@ -73,6 +73,17 @@ namespace RhinoMCPPlugin.Forsk
             return IsNewer(version, current) ? version : null;
         }
 
+        /// <summary>The save-first dialog before Package Manager. unsaved names the open file when it has changes.</summary>
+        public static string ConfirmText(string unsaved)
+        {
+            var text = ForskText.Get("update.confirm");
+            if (!string.IsNullOrEmpty(unsaved)) text += "\n\n" + ForskText.Format("update.confirm.unsaved", "file", unsaved);
+            return text;
+        }
+
+        /// <summary>True when the text reads as a version (1.0.1).</summary>
+        public static bool IsVersion(string text) => Parse(text) != null;
+
         /// <summary>1.0.1 and 1.0.1+abc read as 1.0.1. Pre-release tags and junk do not read.</summary>
         static System.Version Parse(string text)
         {

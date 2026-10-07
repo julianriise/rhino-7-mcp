@@ -232,6 +232,7 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             var thread = Active();
             JObject model;
+            if (thread != null) WhatsNew(thread);
             if (doc == null || thread == null)
                 model = new JObject { ["file"] = ForskText.Get("window.nofile"), ["thread"] = new JArray() };
             else
@@ -240,6 +241,18 @@ namespace RhinoMCPPlugin.Forsk
             Log("render · " + count + " items");
             Script("Forsk.render", model);
             if (thread != null) thread.Prefill = null;
+        }
+
+        /// <summary>The What's new card from Support, once, in the first thread the window draws after an update.</summary>
+        void WhatsNew(DocThread thread)
+        {
+            var notes = ForskWhatsNewGate.Take();
+            if (notes == null) return;
+            thread.BeginReply(ForskText.Get("role.support"));
+            thread.AddCard(ForskWhatsNew.Card(notes), null);
+            thread.EndReply();
+            Models.Persist(thread);
+            Log("whats new · " + notes.Version);
         }
 
         /// <summary>

@@ -30,6 +30,7 @@ namespace RhinoMCPPlugin
             Functions.RoomTypeColorHost.Start();
             ForskSupportHttp.RetryOnStartup();
             ForskUpdate.CheckOnStartup();
+            ForskWhatsNewGate.Prepare();
             return LoadReturnCode.Success;
         }
 

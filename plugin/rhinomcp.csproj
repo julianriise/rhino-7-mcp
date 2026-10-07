@@ -49,6 +49,9 @@
 
   <ItemGroup>
     <!-- The Forsk window's page: window.js is inlined into window.html at load. -->
+    <EmbeddedResource Include="Forsk/whats_new.json">
+      <LogicalName>rhinomcp.Forsk.whats_new.json</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Forsk/Page/window.html">
       <LogicalName>RhinoMCPPlugin.Page.window.html</LogicalName>
     </EmbeddedResource>

@@ -842,12 +842,22 @@ namespace RhinoMCPPlugin.Forsk
             Render();
         }
 
+        /// <summary>Before Package Manager: Rhino has to quit and reopen, so save first. Cancel opens nothing.</summary>
+        static bool ConfirmUpdate()
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            var text = ForskUpdate.ConfirmText(doc != null && doc.Modified ? (string.IsNullOrEmpty(doc.Name) ? "Untitled" : doc.Name) : null);
+            var answer = Rhino.UI.Dialogs.ShowMessage(text, ForskText.Get("update.confirm.title"),
+                Rhino.UI.ShowMessageButton.OKCancel, Rhino.UI.ShowMessageIcon.Information);
+            return answer == Rhino.UI.ShowMessageResult.OK;
+        }
+
         void UpdatePill(string pillId)
         {
             switch (pillId)
             {
                 case "open":
-                    RhinoApp.RunScript("_PackageManager", false);
+                    if (ConfirmUpdate()) RhinoApp.RunScript("_PackageManager", false);
                     return;
                 case "howto":
                     try { System.Diagnostics.Process.Start("/usr/bin/open", ForskUpdate.HowTo); }

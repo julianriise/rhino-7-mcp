@@ -40,6 +40,8 @@ namespace RhinoMCPPlugin.Forsk
         public List<CardPill> Pills = new List<CardPill>();
         public List<CardField> Fields;
         public List<string> Rows;
+        /// <summary>What's new: a title and a how per item, drawn as a list.</summary>
+        public List<WhatsNewItem> Features;
         public string Note;
         public string Depends = "none";
         public JObject Data;

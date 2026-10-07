@@ -655,6 +655,16 @@
       item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
       box.appendChild(list);
     }
+    if (item.features && item.features.length) {
+      var news = el('ul', 'features');
+      item.features.forEach(function (feature) {
+        var li = el('li');
+        li.appendChild(el('div', 'feature-title', feature.title));
+        li.appendChild(el('div', 'feature-how', feature.how));
+        news.appendChild(li);
+      });
+      box.appendChild(news);
+    }
     var inputs = [];
     var order = Forsk.orderKeys(item.fields);
     var wraps = {};

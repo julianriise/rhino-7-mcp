@@ -94,6 +94,6 @@ public class ForskUpdateTests
         }, card.Rows);
         Assert.Contains("Food4Rhino", card.Note);
         Assert.Equal(new[] { "open", "howto", "done" }, card.Pills.Select(p => p.Id));
-        Assert.Equal(new[] { "Open Package Manager", "How to update", "Done" }, card.Pills.Select(p => p.Label));
+        Assert.Equal(new[] { "Update now", "How to update", "Done" }, card.Pills.Select(p => p.Label));
     }
 }

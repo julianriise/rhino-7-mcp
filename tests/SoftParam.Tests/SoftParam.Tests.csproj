@@ -108,6 +108,7 @@
     <Compile Include="..\..\plugin\Forsk\ForskSetup.cs" Link="ForskSetup.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskAccount.cs" Link="ForskAccount.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskUpdate.cs" Link="ForskUpdate.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskWhatsNew.cs" Link="ForskWhatsNew.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskOutbox.cs" Link="ForskOutbox.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskSupportSend.cs" Link="ForskSupportSend.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskMisroutes.cs" Link="ForskMisroutes.cs" />

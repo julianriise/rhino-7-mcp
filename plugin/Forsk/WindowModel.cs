@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
@@ -158,6 +159,8 @@ namespace RhinoMCPPlugin.Forsk
                 item["fields"] = fields;
             }
             if (spec.Rows != null) item["rows"] = new JArray(spec.Rows);
+            if (spec.Features != null)
+                item["features"] = new JArray(spec.Features.Select(f => new JObject { ["title"] = f.Title ?? "", ["how"] = f.How ?? "" }));
             if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
             if (spec.Data != null) item["data"] = spec.Data.DeepClone();
             return Push(item);

@@ -1,0 +1,14 @@
+{
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now.",
+  "version": "1.1.0",
+  "items": [
+    {
+      "title": "Update available",
+      "how": "When a new Forsk is out, the gear gets a red dot. Open Settings and click Update available."
+    },
+    {
+      "title": "Connect Rhino to your account",
+      "how": "Settings → Set up Forsk → Connect. Confirm the code in your browser and your licence follows you to every Mac."
+    }
+  ]
+}
