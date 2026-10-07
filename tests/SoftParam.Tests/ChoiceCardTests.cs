@@ -49,8 +49,8 @@ public class ChoiceCardTests
     [Fact]
     public void ACardThatIsNoChoice_HasNoOptions()
     {
-        var facts = Docs.Facts("house, door selected");
-        var card = new DocThread().AddCard(ForskCards.SwapType(facts)!, facts);
+        var facts = Docs.Facts("printed, then edited");
+        var card = new DocThread().AddCard(ForskCards.For("print.clear", facts)!, facts);
         Assert.False(ForskCards.IsChoiceOption(card, card["pills"]![0]!["id"]!.ToString()));
     }
 
@@ -78,5 +78,26 @@ public class ChoiceCardTests
         Assert.Equal("Click a room's floor first, then Jump inside.", ForskCards.JumpInsideNeedsPick(house));
         Assert.Null(ForskCards.JumpInsideNeedsPick(Docs.Facts("house, room selected")));
         Assert.False(ForskRegistry.Find("room.inside")!.Shows(Docs.Facts("walls only")));
+    }
+
+    [Fact]
+    public void Ink_IsAChoiceCard_TheSetInkFilled()
+    {
+        var card = ForskCards.Ink(Docs.Facts("bridge down, grey ink"));
+        Assert.True(card.Choice);
+        Assert.Equal(new[] { "default", "grey", "hatch", "done" }, Ids(card));
+        Assert.Equal(new[] { "grey" }, card.Pills.Where(p => p.Primary).Select(p => p.Id));
+    }
+
+    [Fact]
+    public void DoorAndWindowType_IsAChoiceCard_NothingFilledUntilPicked()
+    {
+        var card = ForskCards.SwapType(Docs.Facts("house, door selected"))!;
+        Assert.True(card.Choice);
+        Assert.Equal(new[] { "done", "cancel" }, Ids(card).TakeLast(2));
+        Assert.DoesNotContain(card.Pills, p => p.Primary);
+        var facts = Docs.Facts("house, door selected");
+        var json = new DocThread().AddCard(card, facts);
+        Assert.Null(ForskCards.HeldChoice(json));
     }
 }

@@ -332,6 +332,8 @@ namespace RhinoMCPPlugin.Forsk
             ["analysis.live.note"] = "Live analyses run again after every wall or opening edit, and the edit says what changed. Daylight live uses the Low grid.",
             ["word.save"] = "Save",
             ["word.confirm"] = "Confirm",
+            ["word.unchanged"] = "unchanged",
+            ["opening.type.now"] = "Now: {type}.",
             ["print.pages.paper"] = "Paper",
             ["meta.logo.choose"] = "Choose logo",
             ["meta.logo.change"] = "Change logo",

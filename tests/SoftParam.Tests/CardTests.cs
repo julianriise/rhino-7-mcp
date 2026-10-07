@@ -21,8 +21,8 @@ public class CardTests
         Assert.Equal("Change to:", card.Question);
         Assert.Equal("selection", card.Depends);
         Assert.Null(card.Data);
-        // Each type pill carries its plan-symbol icon; Cancel has none.
-        Assert.All(card.Pills.Where(p => p.Id != "cancel"), p => Assert.Equal(p.Id, p.Icon));
+        // Each type pill carries its plan-symbol icon; Confirm and Cancel have none.
+        Assert.All(card.Pills.Where(p => p.Id != "cancel" && p.Id != "done"), p => Assert.Equal(p.Id, p.Icon));
         Assert.Null(card.Pills.Single(p => p.Id == "cancel").Icon);
     }
 
@@ -35,7 +35,7 @@ public class CardTests
         var card = ForskCards.For("opening.type", facts)!;
         Assert.Equal("Change all windows or all doors to:", card.Question);
         Assert.Equal(OpeningTypes.All.Select(t => t.Label), Choices(card));
-        Assert.All(card.Pills.Where(p => p.Id != "cancel"), p => Assert.Equal(p.Id, p.Icon));
+        Assert.All(card.Pills.Where(p => p.Id != "cancel" && p.Id != "done"), p => Assert.Equal(p.Id, p.Icon));
         Assert.True(card.Data!["all"]!.Value<bool>());
         Assert.Equal("selection", card.Depends);
 
@@ -109,7 +109,7 @@ public class CardTests
     public void TheInkCard_HasTheThreeNames_AndSaysWhichIsSet()
     {
         var card = ForskCards.For("ink.set", Docs.Facts("bridge down, grey ink"))!;
-        Assert.Equal(new[] { "default", "grey", "hatch" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "default", "grey", "hatch", "done" }, card.Pills.Select(p => p.Id));
         Assert.Equal("Now: grey.", card.Note);
     }
 

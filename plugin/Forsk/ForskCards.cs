@@ -113,10 +113,12 @@ namespace RhinoMCPPlugin.Forsk
                 question = ForskText.Get(kinds.Count == 2 ? "opening.type.all.ask" : "opening.type.all." + kinds[0]);
             }
             else return null;
-            var card = new CardSpec { Kind = "opening.type", Question = question, Depends = "selection" };
+            // A choice card: a type applies at once (one Undo each) and Confirm closes it.
+            var card = new CardSpec { Kind = "opening.type", Question = question, Depends = "selection", Choice = true };
             if (f.Picked == Picked.None) card.Data = new JObject { ["all"] = true };
             foreach (var type in kinds.SelectMany(k => OpeningTypes.All.Where(t => t.Kind == k)))
                 card.Pills.Add(new CardPill(type.Id, type.Label, type.Id));
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }
@@ -347,13 +349,13 @@ namespace RhinoMCPPlugin.Forsk
             return (card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId);
         }
 
-        /// <summary>The option a choice card holds: the one picked, else the one it opened filled.</summary>
+        /// <summary>The option a choice card holds: the one picked, else the one it opened filled, else null.</summary>
         public static string HeldChoice(JObject card)
         {
             var held = card?["data"]?["choice"]?.ToString();
             if (!string.IsNullOrEmpty(held)) return held;
-            var pills = (card?["pills"] as JArray ?? new JArray()).OfType<JObject>().ToList();
-            return (pills.FirstOrDefault(p => (bool?)p["primary"] == true) ?? pills.FirstOrDefault())?["id"]?.ToString();
+            return (card?["pills"] as JArray ?? new JArray()).OfType<JObject>()
+                .FirstOrDefault(p => (bool?)p["primary"] == true)?["id"]?.ToString();
         }
 
         /// <summary>An option picked on an open choice card: held, filled, and said in the note.</summary>
@@ -572,14 +574,17 @@ namespace RhinoMCPPlugin.Forsk
 
         public static CardSpec Ink(FileFacts f)
         {
+            var now = f?.Ink ?? "default";
             var card = new CardSpec
             {
                 Kind = "ink.set",
                 Question = ForskText.Get("ink.set.ask"),
-                Note = ForskText.Format("ink.set.now", "ink", f?.Ink ?? "default")
+                Note = ForskText.Format("ink.set.now", "ink", now),
+                Choice = true
             };
             foreach (var profile in PrintProfiles.All)
-                card.Pills.Add(new CardPill(profile.Name, ForskText.Get("ink." + profile.Name)));
+                card.Pills.Add(new CardPill(profile.Name, ForskText.Get("ink." + profile.Name)) { Primary = profile.Name == now });
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
             return card;
         }
 

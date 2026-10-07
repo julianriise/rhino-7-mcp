@@ -445,7 +445,7 @@ namespace RhinoMCPPlugin.Forsk
             // Confirm closes it with no chat message.
             if (card["state"]?.ToString() == "open" && ForskCards.IsChoiceOption(card, pillId))
             {
-                ForskCards.HoldChoice(card, pillId, ApplyChoice(kind, pillId));
+                ForskCards.HoldChoice(card, pillId, ApplyChoice(kind, card, pillId));
                 Models.Persist(thread);
                 Render();
                 return;
@@ -455,7 +455,7 @@ namespace RhinoMCPPlugin.Forsk
                 var held = ForskCards.HeldChoice(card);
                 ConfirmChoice(kind, held);
                 var heldLabel = (card["pills"] as JArray ?? new JArray()).FirstOrDefault(p => p["id"]?.ToString() == held)?["label"]?.ToString();
-                thread.Settle(cardId, heldLabel ?? held);
+                thread.Settle(cardId, heldLabel ?? ForskText.Get("word.unchanged"));
                 Models.Persist(thread);
                 Render();
                 return;
@@ -511,15 +511,6 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "wall.delete":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("delete_wall", new JObject { ["side"] = pill.Id }), userText: pill.Label);
-                    break;
-                case "opening.type":
-                    // The card made with nothing picked changes every opening of the pill's kind.
-                    var typeArgs = new JObject { ["type"] = pill.Id };
-                    if (card["data"]?["all"]?.Value<bool>() == true) typeArgs["all"] = true;
-                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", typeArgs), userText: pill.Label);
-                    break;
-                case "ink.set":
-                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);
                     break;
                 case "meta.title":
                     var meta = new JObject();
@@ -1255,7 +1246,7 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
         /// <summary>AN.4: the Choose analyses ticks onto the file. The names of the analyses now in the set.</summary>
         /// <summary>A choice card's option, applied at once. Returns the card's new note.</summary>
-        string ApplyChoice(string kind, string option)
+        string ApplyChoice(string kind, JObject card, string option)
         {
             switch (kind)
             {
@@ -1270,9 +1261,25 @@ namespace RhinoMCPPlugin.Forsk
                 case "room.inside":
                     TryInside(option);
                     return ForskText.Format("room.inside.held", "way", option);
+                case "ink.set":
+                    return QuietTool("print_profile", new JObject { ["name"] = option })
+                        ?? ForskText.Format("ink.set.now", "ink", option);
+                case "opening.type":
+                    // The card made with nothing picked changes every opening of the pill's kind.
+                    var typeArgs = new JObject { ["type"] = option };
+                    if (card["data"]?["all"]?.Value<bool>() == true) typeArgs["all"] = true;
+                    return QuietTool("set_opening_type", typeArgs) ?? ForskText.Format("opening.type.now", "type", OpeningTypes.All.FirstOrDefault(t => t.Id == option)?.Label ?? option);
                 default:
                     return null;
             }
+        }
+
+        /// <summary>A tool run for a choice card, with no chat line. The reason when it failed, else null.</summary>
+        static string QuietTool(string name, JObject args)
+        {
+            var envelope = ForskTools.CommandOnUi(name, args);
+            if (string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            return envelope?["message"]?.ToString() ?? "That did not change.";
         }
 
         /// <summary>A choice card's Confirm: what the held option still needs. Quiet unless it fails.</summary>
