@@ -39,9 +39,14 @@ public partial class RhinoMCPFunctions
         view.Redraw();
 
         var name = string.IsNullOrEmpty(room.Name) ? room.ScheduleId : room.Name;
-        var old = doc.NamedViews.FindByName(name);
-        if (old >= 0) doc.NamedViews.Delete(old);
-        doc.NamedViews.Add(name, vp.Id);
+        // save false: the window's direction card tries a shot; Save view keeps it.
+        var save = parameters?["save"]?.Type != JTokenType.Boolean || parameters["save"].Value<bool>();
+        if (save)
+        {
+            var old = doc.NamedViews.FindByName(name);
+            if (old >= 0) doc.NamedViews.Delete(old);
+            doc.NamedViews.Add(name, vp.Id);
+        }
         return new JObject
         {
             ["view"] = name,
@@ -50,8 +55,9 @@ public partial class RhinoMCPFunctions
             ["target"] = new JArray(Math.Round(shot.Target.X, 1), Math.Round(shot.Target.Y, 1), Math.Round(z, 1)),
             ["lens_mm"] = InteriorCamera.LensMm,
             ["direction"] = shot.From.Substring("looking ".Length),
-            ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m, saved as the named view "
-                + name + ". Orbit or walk to adjust before a render."
+            ["saved"] = save,
+            ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m"
+                + (save ? ", saved as the named view " + name + ". Orbit or walk to adjust before a render." : ".")
         };
     }
 }

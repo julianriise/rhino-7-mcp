@@ -80,8 +80,25 @@ public class InteriorCameraTests
     {
         var facts = Docs.Facts("house, room selected");
         var card = ForskCards.For("room.inside", facts)!;
-        Assert.Equal(new[] { "north", "east", "south", "west", "cancel" }, card.Pills.Select(p => p.Id));
+        Assert.Equal(new[] { "north", "east", "south", "west", "save", "cancel" }, card.Pills.Select(p => p.Id));
         Assert.True(card.Pills[0].Primary);
-        Assert.Equal("Look north", card.Pills[0].Label);
+        Assert.Equal("North", card.Pills[0].Label);
+        Assert.Equal("Save view", card.Pills[4].Label);
+    }
+
+    /// <summary>Julian, 2026-10-07: a direction shows at once and keeps the card; only Save view saves.</summary>
+    [Fact]
+    public void ADirection_IsHeldOnTheOpenCard_AndSaveViewSavesThatOne()
+    {
+        var facts = Docs.Facts("house, room selected");
+        var card = new DocThread().AddCard(ForskCards.JumpInside(facts), facts);
+        Assert.Equal("north", ForskCards.HeldDirection(card));
+        ForskCards.HoldDirection(card, "east");
+        Assert.Equal("east", ForskCards.HeldDirection(card));
+        var primary = ((Newtonsoft.Json.Linq.JArray)card["pills"]!).Where(p => (bool?)p["primary"] == true).Select(p => p["id"]!.ToString());
+        Assert.Equal(new[] { "east" }, primary);
+        Assert.Equal("Looking east. Save view keeps it as a named view.", card["note"]!.ToString());
+        Assert.True(ForskCards.IsDirection("west"));
+        Assert.False(ForskCards.IsDirection("save"));
     }
 }

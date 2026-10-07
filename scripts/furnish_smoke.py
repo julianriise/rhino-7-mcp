@@ -140,6 +140,14 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
     named = send("execute_rhinoscript_python_code", {"code": "import scriptcontext as sc\nprint(sc.doc.NamedViews.FindByName(%r) >= 0)" % str(inside.get("view"))})
     if not inside.get("view") or inside.get("direction") != "east" or str(named.get("output", "")).strip() != "True":
         fail(f"jump inside: {inside.get('message')}")
+    # The window's direction card tries a shot without saving it.
+    count = "import scriptcontext as sc\nprint(sc.doc.NamedViews.Count)"
+    before = str(send("execute_rhinoscript_python_code", {"code": count}).get("output", "")).strip()
+    tried = send("jump_inside", {"room": first_room, "direction": "south", "save": False}) if first_room else {}
+    after = str(send("execute_rhinoscript_python_code", {"code": count}).get("output", "")).strip()
+    lines.append(f"jump inside tried south: saved {tried.get('saved')}, named views {before} -> {after}")
+    if tried.get("saved") is not False or before != after:
+        fail(f"a tried shot was saved: {tried.get('message')}")
 
     gone = send("delete_furniture", {"all": True})
     if not gone.get("count"):

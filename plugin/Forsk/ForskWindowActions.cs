@@ -341,6 +341,8 @@ namespace RhinoMCPPlugin.Forsk
                     thread.AddCard(spec, facts);
                     thread.EndReply();
                     Models.Persist(thread);
+                    // Jump inside shows north as its card opens (Julian, 2026-10-07).
+                    if (action.Id == "room.inside") TryInside("north");
                     Render();
                     return;
             }
@@ -426,6 +428,15 @@ namespace RhinoMCPPlugin.Forsk
                 && ForskKeyFile.Clean(values?[ForskKeyFile.FieldKey]?.ToString(), out var keyReason) == null)
             {
                 card["note"] = keyReason;
+                Render();
+                return;
+            }
+            // Jump inside: a direction shows at once and keeps the card open. Save view keeps the shot.
+            if (kind == "room.inside" && ForskCards.IsDirection(pillId) && card["state"]?.ToString() == "open")
+            {
+                ForskCards.HoldDirection(card, pillId);
+                TryInside(pillId);
+                Models.Persist(thread);
                 Render();
                 return;
             }
@@ -565,7 +576,7 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
                     break;
                 case "room.inside":
-                    var way = pill.Id;
+                    var way = ForskCards.HeldDirection(card);
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("jump_inside", new JObject { ["direction"] = way }), userText: pill.Label);
                     break;
                 case "option.compare":
@@ -1232,6 +1243,14 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
         /// <summary>AN.4: the Choose analyses ticks onto the file. The names of the analyses now in the set.</summary>
+        /// <summary>Jump inside, tried: the Perspective view takes the shot, nothing saved. Quiet unless it fails.</summary>
+        void TryInside(string way)
+        {
+            var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = way, ["save"] = false });
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view did not change.");
+        }
+
         /// <summary>The view picker: the active viewport shows the view. Quiet unless it fails.</summary>
         void PickView(string id)
         {

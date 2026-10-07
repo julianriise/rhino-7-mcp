@@ -40,6 +40,9 @@
         "south",
         "west"
       ]
+    },
+    "saved": {
+      "type": "boolean"
     }
   },
   "required": [

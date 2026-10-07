@@ -419,6 +419,7 @@ def test_new_commands():
         ("commands/jump_inside.json", {}),
         ("commands/jump_inside.json", {"room": "bedroom"}),
         ("commands/jump_inside.json", {"room": "bedroom", "direction": "east"}),
+        ("commands/jump_inside.json", {"direction": "west", "save": False}),
         ("commands/show_view.json", {"view": "south"}),
         ("commands/save_option.json", {}),
         ("commands/save_option.json", {"name": "A"}),

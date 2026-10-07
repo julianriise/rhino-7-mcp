@@ -302,14 +302,47 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
-        /// <summary>Jump inside: which way to look, north first and filled.</summary>
+        /// <summary>
+        /// Jump inside: which way to look. The viewport shows north as the card
+        /// opens; a direction shows at once and keeps the card open; Save view
+        /// keeps the shot as a named view (Julian, 2026-10-07).
+        /// </summary>
         public static CardSpec JumpInside(FileFacts f)
         {
-            var card = new CardSpec { Kind = "room.inside", Question = ForskText.Get("room.inside.ask"), Depends = "selection" };
+            var card = new CardSpec
+            {
+                Kind = "room.inside",
+                Question = ForskText.Get("room.inside.ask"),
+                Depends = "selection",
+                Note = ForskText.Format("room.inside.held", "way", "north")
+            };
             foreach (var way in Functions.InteriorCamera.Directions)
                 card.Pills.Add(new CardPill(way, ForskText.Get("room.inside." + way)) { Primary = way == "north" });
+            card.Pills.Add(new CardPill("save", ForskText.Get("room.inside.save")));
             card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
+        }
+
+        public static bool IsDirection(string id) => Functions.InteriorCamera.Directions.Contains(id ?? "");
+
+        /// <summary>The direction the open Jump inside card shows: north until one is picked.</summary>
+        public static string HeldDirection(JObject card)
+        {
+            var way = card?["data"]?["direction"]?.ToString();
+            return IsDirection(way) ? way : "north";
+        }
+
+        /// <summary>A direction picked on the open card: held, filled, and named in the note.</summary>
+        public static void HoldDirection(JObject card, string way)
+        {
+            if (card == null || !IsDirection(way)) return;
+            LogoData(card)["direction"] = way;
+            foreach (var pill in (card["pills"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                if (pill["id"]?.ToString() == way) pill["primary"] = true;
+                else pill.Remove("primary");
+            }
+            card["note"] = ForskText.Format("room.inside.held", "way", way);
         }
 
         /// <summary>AN.6: which saved option to compare with the model now, newest first, at most four.</summary>

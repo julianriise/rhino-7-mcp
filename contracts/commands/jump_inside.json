@@ -19,6 +19,10 @@
         "west"
       ],
       "description": "Which way the camera looks. Default north."
+    },
+    "save": {
+      "type": "boolean",
+      "description": "false: show the shot without saving the named view (the window tries a direction). Default true."
     }
   },
   "additionalProperties": false
