@@ -75,7 +75,8 @@ public class ChoiceCardTests
     {
         var house = Docs.Facts("house");
         Assert.True(ForskRegistry.Find("room.inside")!.Shows(house));
-        Assert.Equal("Click a room's floor first, then Jump inside.", ForskCards.JumpInsideNeedsPick(house));
+        // The window then waits for that click and opens Jump inside itself (Julian, 2026-10-07).
+        Assert.Equal("Click a room's floor to jump inside.", ForskCards.JumpInsideNeedsPick(house));
         Assert.Null(ForskCards.JumpInsideNeedsPick(Docs.Facts("house, room selected")));
         Assert.False(ForskRegistry.Find("room.inside")!.Shows(Docs.Facts("walls only")));
     }

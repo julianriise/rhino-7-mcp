@@ -41,11 +41,14 @@ public partial class RhinoMCPFunctions
         var name = string.IsNullOrEmpty(room.Name) ? room.ScheduleId : room.Name;
         // save false: the window's direction card tries a shot; Save view keeps it.
         var save = parameters?["save"]?.Type != JTokenType.Boolean || parameters["save"].Value<bool>();
+        var active = false;
         if (save)
         {
             var old = doc.NamedViews.FindByName(name);
             if (old >= 0) doc.NamedViews.Delete(old);
-            doc.NamedViews.Add(name, vp.Id);
+            var index = doc.NamedViews.Add(name, vp.Id);
+            // The saved view is the current one too, as Rhino's own Named Views restore makes it (Julian, 2026-10-07).
+            active = index >= 0 && doc.NamedViews.Restore(index, vp);
         }
         return new JObject
         {
@@ -56,6 +59,7 @@ public partial class RhinoMCPFunctions
             ["lens_mm"] = InteriorCamera.LensMm,
             ["direction"] = shot.From.Substring("looking ".Length),
             ["saved"] = save,
+            ["active"] = active,
             ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m"
                 + (save ? ", saved as the named view " + name + ". Orbit or walk to adjust before a render." : ".")
         };

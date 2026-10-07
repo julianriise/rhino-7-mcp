@@ -43,6 +43,10 @@
     },
     "saved": {
       "type": "boolean"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "The saved named view is the viewport's current view."
     }
   },
   "required": [

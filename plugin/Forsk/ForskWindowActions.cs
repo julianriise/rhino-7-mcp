@@ -334,14 +334,11 @@ namespace RhinoMCPPlugin.Forsk
                     StartBridge(thread);
                     return;
                 default:
-                    // Jump inside needs one room picked: with none, the chat says so (Julian, 2026-10-07).
+                    // Jump inside with no room picked asks for one, waits for the click, then opens itself (Julian, 2026-10-07).
                     var needsPick = action.Id == "room.inside" ? ForskCards.JumpInsideNeedsPick(facts) : null;
                     if (needsPick != null)
                     {
-                        thread.Add("user", action.Label);
-                        thread.Add("line", needsPick);
-                        Models.Persist(thread);
-                        Render();
+                        PickRoomThenJump(thread, action, needsPick);
                         return;
                     }
                     var spec = ForskCards.For(action.Id, facts);
@@ -1281,6 +1278,44 @@ namespace RhinoMCPPlugin.Forsk
             var envelope = ForskTools.CommandOnUi(name, args);
             if (string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
             return envelope?["message"]?.ToString() ?? "That did not change.";
+        }
+
+        /// <summary>
+        /// Jump inside with no room picked: the chat asks for a room's floor, Rhino
+        /// waits for the click, the room is picked, and the direction card opens
+        /// with north shown. Esc says nothing was clicked.
+        /// </summary>
+        void PickRoomThenJump(DocThread thread, ForskAction action, string prompt)
+        {
+            if (Refuse(thread)) return;
+            var doc = RhinoDoc.ActiveDoc;
+            thread.Add("user", action.Label);
+            thread.BeginReply(ForskRoles.MarkForAction(action.Id));
+            thread.Add("line", prompt);
+            Render();
+            HandToRhino();
+            var room = ForskRoomPick.Pick(doc, prompt);
+            if (room == Guid.Empty)
+            {
+                thread.Add("line", ForskText.Get("room.inside.nopick"));
+                thread.EndReply();
+                Models.Persist(thread);
+                Render();
+                TakeKeyboard();
+                return;
+            }
+            doc.Objects.UnselectAll();
+            doc.Objects.Select(room);
+            doc.Views.Redraw();
+            MarkDirty();
+            var facts = ReadFacts(doc);
+            var spec = ForskCards.For(action.Id, facts);
+            if (spec != null) thread.AddCard(spec, facts);
+            thread.EndReply();
+            Models.Persist(thread);
+            if (spec != null) TryInside("north");
+            Render();
+            TakeKeyboard();
         }
 
         /// <summary>A choice card's Confirm: what the held option still needs. Quiet unless it fails.</summary>
