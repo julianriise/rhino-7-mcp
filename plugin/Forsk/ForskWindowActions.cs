@@ -466,16 +466,15 @@ namespace RhinoMCPPlugin.Forsk
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("set_opening_type", typeArgs), userText: pill.Label);
                     break;
                 case "daylight.quality":
+                    // Saving is instant: no job, no tracer. A map on screen is now out of
+                    // date, so the bar offers Run again at the new grid when the user wants it.
                     ForskDaylight.Quality = pill.Id;
-                    var saved = ForskText.Format("daylight.quality.saved", "quality", pill.Label);
-                    // A map on screen is redrawn at the new grid.
-                    var redraw = doc != null && ReadFacts(doc).Map == MapState.Shown;
-                    Job(thread, kind, ForskText.Label(kind), sink =>
-                    {
-                        sink.Line(saved);
-                        if (redraw) Daylight(sink, DaylightAction.Run);
-                    }, userText: pill.Label);
-                    break;
+                    if (doc != null && ReadFacts(doc).Map == MapState.Shown) RhinoMCPFunctions.MarkMapAfterEdit(doc, MapEdit.Opening);
+                    thread.Add("user", pill.Label);
+                    thread.Add("line", ForskText.Format("daylight.quality.saved", "quality", pill.Label));
+                    Models.Persist(thread);
+                    Render();
+                    return;
                 case "ink.set":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("print_profile", new JObject { ["name"] = pill.Id }), userText: pill.Label);
                     break;

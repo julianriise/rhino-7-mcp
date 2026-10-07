@@ -238,8 +238,9 @@ namespace RhinoMCPPlugin.Forsk
                 Question = ForskText.Get("daylight.quality.ask"),
                 Note = ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + now))
             };
+            // The saved quality is the filled pill: a filled Low read as "it went back to Low".
             foreach (var quality in DaylightQuality.All)
-                card.Pills.Add(new CardPill(quality, ForskText.Get("daylight.quality." + quality)));
+                card.Pills.Add(new CardPill(quality, ForskText.Get("daylight.quality." + quality)) { Primary = quality == now });
             return card;
         }
 

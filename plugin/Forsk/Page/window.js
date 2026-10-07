@@ -220,6 +220,14 @@
     return field && field.secret ? 'password' : 'text';
   };
 
+  /* The filled pill: the one the card names (the saved daylight quality), else the first. No DOM. */
+  Forsk.isPrimaryPill = function (pills, index) {
+    pills = pills || [];
+    for (var i = 0; i < pills.length; i++)
+      if (pills[i] && pills[i].primary) return i === index;
+    return index === 0;
+  };
+
   /* An open card that asks for a typed or chosen value. A tick list is not one. No DOM. */
   Forsk.isForm = function (item) {
     if (!item || item.role !== 'card' || item.state !== 'open') return false;
@@ -762,7 +770,7 @@
     }
     var pills = el('div', 'pills');
     (item.pills || []).forEach(function (p, index) {
-      pills.appendChild(pill(p.label, index === 0, function () {
+      pills.appendChild(pill(p.label, Forsk.isPrimaryPill(item.pills, index), function () {
         sender.send(Forsk.cardAction(item, p.id, values(), order));
       }, p.icon));
     });

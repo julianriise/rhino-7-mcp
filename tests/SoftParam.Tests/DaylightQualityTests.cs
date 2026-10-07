@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using RhinoMCPPlugin.Forsk;
 using Xunit;
 
@@ -42,5 +43,32 @@ public class DaylightQualityTests
         facts.DaylightQuality = "medium";
         Assert.Equal("Now: Medium.", ForskCards.For("daylight.quality", facts)!.Note);
         Assert.Equal(ForskRole.Analyser, ForskRoles.OfAction("daylight.quality"));
+    }
+
+    /// <summary>
+    /// The card fills the saved quality's pill, not the first one: with Medium
+    /// saved, a filled Low read as "it went back to Low" (Julian, 2026-10-07).
+    /// </summary>
+    [Theory]
+    [InlineData("low")]
+    [InlineData("medium")]
+    [InlineData("high")]
+    public void TheCard_FillsTheSavedQuality(string saved)
+    {
+        var facts = Docs.Facts("house");
+        facts.DaylightQuality = saved;
+        var card = ForskCards.Quality(facts);
+        Assert.Equal(new[] { saved }, card.Pills.Where(p => p.Primary).Select(p => p.Id));
+        var json = new DocThread().AddCard(card, facts);
+        Assert.Equal(saved, json["pills"]!.Single(p => p["primary"]?.Value<bool>() == true)["id"]!.ToString());
+    }
+
+    /// <summary>The page fills the pill the card names, and the first one only when it names none.</summary>
+    [Fact]
+    public void ThePage_FillsTheNamedPill()
+    {
+        var engine = PageScript.Load();
+        Assert.Equal("false,true,false", engine.Evaluate("var ps = [{id:'low'},{id:'medium',primary:true},{id:'high'}]; ps.map(function (p, i) { return Forsk.isPrimaryPill(ps, i); }).join(',')").ToString());
+        Assert.Equal("true,false", engine.Evaluate("var qs = [{id:'a'},{id:'b'}]; qs.map(function (p, i) { return Forsk.isPrimaryPill(qs, i); }).join(',')").ToString());
     }
 }

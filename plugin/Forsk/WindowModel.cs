@@ -16,6 +16,8 @@ namespace RhinoMCPPlugin.Forsk
         public string Label;
         /// <summary>An inline page icon drawn before the label (window.html holder icon-{Icon}), or null.</summary>
         public string Icon;
+        /// <summary>The filled pill. When no pill on a card says so, the first one is.</summary>
+        public bool Primary;
 
         public CardPill(string id, string label, string icon = null)
         {
@@ -173,6 +175,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var token = new JObject { ["id"] = pill.Id, ["label"] = pill.Label };
                 if (!string.IsNullOrEmpty(pill.Icon)) token["icon"] = pill.Icon;
+                if (pill.Primary) token["primary"] = true;
                 pills.Add(token);
             }
             return pills;
