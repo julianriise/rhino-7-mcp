@@ -1374,30 +1374,17 @@ namespace RhinoMCPPlugin.Forsk
             var item = ForskReceipt.From(tool, envelope);
             if (!string.IsNullOrWhiteSpace(text)) item.Text = text;
             thread.Add(item);
-            var review = ForskCards.WallReview(envelope, LastUserIsNorwegian(thread));
+            var cards = new List<CardSpec> { ForskCards.WallReview(envelope, LastUserIsNorwegian(thread)) };
+            if (string.Equals(tool, "compare_option", StringComparison.Ordinal)) cards.Add(ForskCards.OptionCompareFrom(envelope));
+            if (string.Equals(tool, "area_stats", StringComparison.Ordinal)) cards.Add(ForskCards.AreaSummary(envelope));
+            if (string.Equals(tool, ForskToolPacks.TakeoffTool, StringComparison.Ordinal)) cards.Add(ForskCards.Takeoff(envelope));
+            if (string.Equals(tool, "furnish_room", StringComparison.Ordinal)) cards.Add(ForskCards.FurnishChoice(envelope));
+            cards.RemoveAll(c => c == null);
+            // The file's facts stamp the cards; a receipt with no card reads nothing (the render after the job does).
+            if (cards.Count == 0) return;
             var doc = RhinoDoc.ActiveDoc;
             var facts = doc == null ? null : ReadFacts(doc);
-            if (review != null) thread.AddCard(review, facts);
-            if (string.Equals(tool, "compare_option", StringComparison.Ordinal))
-            {
-                var compare = ForskCards.OptionCompareFrom(envelope);
-                if (compare != null) thread.AddCard(compare, facts);
-            }
-            if (string.Equals(tool, "area_stats", StringComparison.Ordinal))
-            {
-                var rooms = ForskCards.AreaSummary(envelope);
-                if (rooms != null) thread.AddCard(rooms, facts);
-            }
-            if (string.Equals(tool, ForskToolPacks.TakeoffTool, StringComparison.Ordinal))
-            {
-                var lines = ForskCards.Takeoff(envelope);
-                if (lines != null) thread.AddCard(lines, facts);
-            }
-            if (string.Equals(tool, "furnish_room", StringComparison.Ordinal))
-            {
-                var pick = ForskCards.FurnishChoice(envelope);
-                if (pick != null) thread.AddCard(pick, facts);
-            }
+            foreach (var card in cards) thread.AddCard(card, facts);
         }
 
         /// <summary>The review card follows the last thing the user wrote. The tool's own phrase was already chosen.</summary>

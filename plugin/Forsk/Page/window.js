@@ -1318,6 +1318,23 @@
     return box;
   }
 
+  /*
+   * The thread's items keep their nodes between renders: an item whose JSON did
+   * not change is reused, not built again. A click used to rebuild every message
+   * and card, which grew slower with the conversation. Two equal items get their
+   * own keys by count. No DOM, so it tests headless.
+   */
+  Forsk.entryKeys = function (entries) {
+    var seen = {};
+    return (entries || []).map(function (entry) {
+      var json = JSON.stringify(entry);
+      seen[json] = (seen[json] || 0) + 1;
+      return json + '#' + seen[json];
+    });
+  };
+
+  var builtItems = {};
+
   Forsk.render = function (next) {
     model = next || {};
     var thread = document.getElementById('thread');
@@ -1336,10 +1353,15 @@
       forms.forEach(function (form) { if (form.id) skip[form.id] = 1; });
       while (thread.firstChild) thread.removeChild(thread.firstChild);
       if (model.guide && model.guide.lines && model.guide.lines.length) thread.appendChild(guideBlock(model.guide));
-      (model.thread || []).forEach(function (entry) {
-        if (entry.id && skip[entry.id]) return;
-        thread.appendChild(item(entry));
+      var entries = (model.thread || []).filter(function (entry) { return !(entry.id && skip[entry.id]); });
+      var keys = Forsk.entryKeys(entries);
+      var kept = {};
+      entries.forEach(function (entry, i) {
+        var node = builtItems[keys[i]] || item(entry);
+        kept[keys[i]] = node;
+        thread.appendChild(node);
       });
+      builtItems = kept;
       if (model.busy && model.busy.text) thread.appendChild(busy(model.busy));
       if (follow) thread.scrollTop = thread.scrollHeight;
       else thread.scrollTop = keep;
