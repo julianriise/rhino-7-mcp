@@ -50,6 +50,14 @@ public partial class RhinoMCPFunctions
         public string Font;
         /// <summary>The object's resolved print colour: the PDF writes it as grey. Black by default.</summary>
         public System.Drawing.Color Color = System.Drawing.Color.Black;
+        /// <summary>FU.2: a furniture symbol as one insert of this named block, else null.</summary>
+        public string BlockName;
+        /// <summary>The block's curves in the piece's own frame, model millimetres.</summary>
+        public List<Curve> BlockCurves;
+        /// <summary>The piece's frame to paper millimetres.</summary>
+        public Transform BlockXform;
+        /// <summary>The symbol's scale: a 1:50 symbol has its detail lines, so it is another block than 1:100.</summary>
+        public int BlockScale;
     }
 
     [McpCommand("export_sheets", ModelView = true)]
@@ -191,6 +199,7 @@ public partial class RhinoMCPFunctions
             var map = toMm * detail.WorldToPageTransform;
             SheetFlat.TryCentre(doc.Strings.GetValue(SheetFlat.CentreSection, SheetFlat.CentreEntry(drawLayer.FullPath)),
                 out var dx, out var dy);
+            var blocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var layer in doc.Layers)
             {
                 if (layer == null || layer.IsDeleted || !SheetFlat.InDrawing(layer.FullPath, drawLayer.FullPath)) continue;
@@ -198,6 +207,17 @@ public partial class RhinoMCPFunctions
                 {
                     if (obj == null || !IsPrintDrawing(doc, obj) || obj.IsHidden) continue;
                     if (obj.Attributes.Space != ActiveSpace.ModelSpace) continue;
+                    // A furniture symbol is one insert of its block, not its lines.
+                    if (obj.Attributes.GetUserString("forsk:role")?.StartsWith("furniture", StringComparison.Ordinal) == true
+                        && !string.IsNullOrEmpty(obj.Attributes.GetUserString(FurnitureFrameKey)))
+                    {
+                        if (blocks.Add(obj.Attributes.GetUserString("forsk:marker_id") ?? ""))
+                        {
+                            var block = FurnitureBlockPiece(obj, map, dx, dy);
+                            if (block != null) pieces.Add(block);
+                        }
+                        continue;
+                    }
                     AddFlat(doc, obj, map, pieces, misc, dx, dy);
                 }
             }
@@ -305,7 +325,7 @@ public partial class RhinoMCPFunctions
                 var layers = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var def in SheetFlat.Layers)
                     layers[def.Name] = target.Layers.Add(ExportLayer(def));
-                AddPieces(source, target, pieces, layers, null, null);
+                AddPieces(source, target, pieces, layers, null, null, null);
                 AddLogoFrames(target, logos, logoPath, layers, null);
                 return WriteAndCheck(target, path);
             }
@@ -327,6 +347,7 @@ public partial class RhinoMCPFunctions
         var picked = doc.Objects.GetSelectedObjects(false, false)?.Select(o => o.Id).ToList() ?? new List<Guid>();
         var made = new List<int>();
         var madeStyles = new List<int>();
+        var madeBlocks = new List<int>();
         var added = new List<Guid>();
         try
         {
@@ -342,7 +363,7 @@ public partial class RhinoMCPFunctions
                 layers[def.Name] = found;
             }
             doc.Objects.UnselectAll(true);
-            AddPieces(doc, doc, pieces, layers, added, madeStyles);
+            AddPieces(doc, doc, pieces, layers, added, madeStyles, madeBlocks);
             AddLogoFrames(doc, logos, logoPath, layers, added);
             doc.Objects.Select(added, true);
             if (File.Exists(path)) File.Delete(path);
@@ -357,6 +378,11 @@ public partial class RhinoMCPFunctions
         {
             foreach (var id in added)
                 doc.Objects.Delete(id, true);
+            foreach (var index in madeBlocks)
+            {
+                try { doc.InstanceDefinitions.Delete(index, true, true); }
+                catch (Exception) { }
+            }
             madeStyles.Sort();
             for (var i = madeStyles.Count - 1; i >= 0; i--)
             {
@@ -454,9 +480,11 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    private static void AddPieces(RhinoDoc source, RhinoDoc target, List<FlatPiece> pieces, Dictionary<string, int> layers, List<Guid> added, List<int> madeStyles)
+    private static void AddPieces(RhinoDoc source, RhinoDoc target, List<FlatPiece> pieces, Dictionary<string, int> layers, List<Guid> added,
+        List<int> madeStyles, List<int> madeBlocks)
     {
         var patterns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var blocks = new Dictionary<string, int>(StringComparer.Ordinal);
         var scale = DocumentDimensionScale(target);
         foreach (var piece in pieces)
         {
@@ -499,6 +527,13 @@ public partial class RhinoMCPFunctions
                 copy.PatternIndex = index;
                 id = target.Objects.AddHatch(copy, attr);
                 copy.Dispose();
+            }
+            else if (piece.BlockName != null)
+            {
+                var def = FurnitureBlockIn(target, piece, layer, blocks, madeBlocks);
+                if (def < 0) continue;
+                attr.PlotWeightSource = ObjectPlotWeightSource.PlotWeightFromLayer;
+                id = target.Objects.AddInstanceObject(def, piece.BlockXform, attr);
             }
             else if (piece.Geometry is Curve curve)
                 id = target.Objects.AddCurve(curve, attr);

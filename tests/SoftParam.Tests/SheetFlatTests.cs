@@ -98,11 +98,14 @@ public class SheetFlatTests
     public void TheLayers_CarryTheirWeights()
     {
         Assert.Equal(
-            new[] { "A-WALL-CUT", "A-WALL-PATT", "A-SYMB", "A-STAIR", "A-ELEV", "A-GRND", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-ANNO-MISC" },
+            new[] { "A-WALL-CUT", "A-WALL-PATT", "A-SYMB", "A-STAIR", "A-FURN", "A-FURN-FIXD", "A-ELEV", "A-GRND", "A-ANNO-DIMS", "A-ANNO-TEXT", "A-ANNO-TTLB", "A-ANNO-MISC" },
             SheetFlat.Layers.Select(l => l.Name));
         Assert.Equal(0.50, SheetFlat.Def("A-WALL-CUT").WeightMm);
         Assert.Equal(0.00, SheetFlat.Def("A-WALL-PATT").WeightMm);
         Assert.Equal(0.25, SheetFlat.Def("A-ANNO-TTLB").WeightMm);
+        // FU.2: furniture by role, fixed kitchen and bathroom pieces apart.
+        Assert.Equal("A-FURN", SheetFlat.LayerFor("furniture"));
+        Assert.Equal("A-FURN-FIXD", SheetFlat.LayerFor("furniture_fixed"));
         Assert.All(SheetFlat.Layers, l => Assert.Contains(l.WeightMm, SheetFlat.Lineweights));
     }
 

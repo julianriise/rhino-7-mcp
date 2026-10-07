@@ -1350,6 +1350,8 @@ public partial class RhinoMCPFunctions
         public int RoofOutline;
         /// <summary>R5: stairs drawn as their plan symbol.</summary>
         public int Stairs;
+        /// <summary>FU.2: furniture drawn as its plan symbol.</summary>
+        public int Furniture;
         // Room tag outcomes as PlanStats defines them.
         public int RoomTags;
         public int RoomAreasDropped;
@@ -1860,6 +1862,7 @@ public partial class RhinoMCPFunctions
                     result.SymbolDashed = planStats.Dashed;
                     result.RoofOutline = planStats.Roof;
                     result.Stairs = planStats.Stairs;
+                    result.Furniture = planStats.Furniture;
                     result.RoomTags = planStats.Rooms;
                     result.RoomAreasDropped = planStats.RoomAreasDropped;
                     result.RoomsLeader = planStats.RoomsLeader;
