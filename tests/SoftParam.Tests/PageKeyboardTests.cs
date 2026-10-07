@@ -132,13 +132,13 @@ public class PageKeyboardTests
         Assert.Equal(0, r["sent"]!.Value<int>());
     }
 
+    /// <summary>A card without Cancel (What's new, a review) stays open on Esc: only its own pill closes it (Julian, 2026-10-07).</summary>
     [Fact]
-    public void Escape_ClosesTheOpenCard()
+    public void Escape_LeavesACardWithoutCancelOpen()
     {
         var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "m4");
-        Assert.Equal("card.close", r["kind"]!.ToString());
-        Assert.True(r["prevented"]!.Value<bool>());
-        Assert.Equal("m4", r["last"]!["card"]!.ToString());
+        Assert.True(r["kind"]!.Type == JTokenType.Null, "Esc was taken: " + r);
+        Assert.Equal(0, r["sent"]!.Value<int>());
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class PageKeyboardTests
         var kinds = engine.Evaluate("JSON.stringify(sent.map(function (a) { return a.kind; }))").AsString();
         var sent = JArray.Parse(kinds).Select(k => k.ToString()).ToList();
         Assert.NotEmpty(sent);
-        Assert.All(sent, kind => Assert.Contains(kind, new[] { "send", "slot", "help", "card.close" }));
+        Assert.All(sent, kind => Assert.Contains(kind, new[] { "send", "slot", "help", "card" }));
     }
 
     [Fact]

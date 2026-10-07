@@ -254,13 +254,18 @@ namespace RhinoMCPPlugin.Forsk
             return true;
         }
 
-        /// <summary>The state moved under every open card: each turns grey and stops taking clicks.</summary>
+        /// <summary>
+        /// The state moved under every open card: each turns grey and stops
+        /// taking clicks. What's new stays open: it is shown once and closes
+        /// only with Got it.
+        /// </summary>
         public int StaleOpenCards()
         {
             var count = 0;
             foreach (var item in Items)
             {
                 if (item["role"]?.ToString() != "card" || item["state"]?.ToString() != "open") continue;
+                if (item["kind"]?.ToString() == ForskWhatsNew.Kind) continue;
                 item["state"] = "stale";
                 count++;
             }

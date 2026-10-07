@@ -14,7 +14,7 @@
    * to leave the key to the field, so letters, æ ø å, a dead key and an IME
    * composition always type. Enter sends, Shift+Enter breaks the line,
    * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?", Esc cancels a
-   * form and closes any other card.
+   * form; any other card stays until its own pill.
    */
   Forsk.keyAction = function (e, state) {
     if (!e) return null;
@@ -25,9 +25,9 @@
       return { kind: 'send' };
     }
     if (e.key === 'Escape') {
-      if (!state.card) return null;
-      if (state.cancel) return { kind: 'card', card: state.card, pill: 'cancel' };
-      return { kind: 'card.close', card: state.card };
+      // Esc cancels a form. A card without Cancel (What's new, a review) stays until its own pill (Julian, 2026-10-07).
+      if (!state.card || !state.cancel) return null;
+      return { kind: 'card', card: state.card, pill: 'cancel' };
     }
     if (e.metaKey && !e.ctrlKey && !e.altKey) {
       if (!e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) return { kind: 'slot', slot: Number(e.key) };

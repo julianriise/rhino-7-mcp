@@ -81,6 +81,18 @@ public class WindowModelTests : IDisposable
     }
 
     [Fact]
+    public void WhatsNew_StaysOpen_WhenItsChatComesBack()
+    {
+        var thread = new DocThread();
+        thread.AddCard(new CardSpec { Kind = ForskWhatsNew.Kind, Question = "What's new" }, null);
+        thread.AddCard("print", "Print this file as a PDF?", new CardPill("print", "Print PDF"));
+        var restored = new DocThread();
+        restored.Restore(thread.Save());
+        Assert.Equal("open", restored.Items[0]["state"]!.ToString());
+        Assert.Equal("stale", restored.Items[1]["state"]!.ToString());
+    }
+
+    [Fact]
     public void ACard_IsAnsweredOnce()
     {
         var thread = new DocThread();
