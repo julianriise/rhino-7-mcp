@@ -68,6 +68,7 @@ namespace RhinoMCPPlugin.Forsk
             "move_furniture",
             "delete_furniture",
             "furnish_room",
+            "jump_inside",
             "rooms_set_type",
             "rooms_colors"
         };
@@ -622,6 +623,12 @@ namespace RhinoMCPPlugin.Forsk
                         ["variant"] = new JObject { ["type"] = "string", ["enum"] = new JArray("consistent", "creative"), ["description"] = "creative: the main piece on the next-best wall, for another layout." },
                         ["replace"] = Bool("Clear the room's furniture first, keeping pieces moved by hand."),
                         ["preview"] = Bool("Show both layouts as ghosts with a card to pick one; nothing is placed yet.")
+                    }),
+                Fn("jump_inside",
+                    "Jump inside a room: the Perspective view stands just inside its door at 1.2 m, looking across the room with a 24 mm lens, saved as the named view Interior: <room>. A first interior shot to adjust before a render.",
+                    new JObject
+                    {
+                        ["room"] = Str("Room id, name or type. Omit for the picked room, else the only one.")
                     }),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jump_inside_result.json",
+  "title": "JumpInsideResult",
+  "type": "object",
+  "properties": {
+    "view": {
+      "type": "string"
+    },
+    "room": {
+      "type": "string"
+    },
+    "eye": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "target": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "lens_mm": {
+      "type": "number"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "view",
+    "room",
+    "eye",
+    "target",
+    "lens_mm",
+    "message"
+  ]
+}

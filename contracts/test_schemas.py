@@ -414,6 +414,8 @@ def test_new_commands():
         ("commands/furnish_room.json", {"room": "bedroom"}),
         ("commands/furnish_room.json", {"room": "all", "density": "compact", "variant": "creative", "replace": True}),
         ("commands/furnish_room.json", {"room": "R02", "preview": True}),
+        ("commands/jump_inside.json", {}),
+        ("commands/jump_inside.json", {"room": "bedroom"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -1020,6 +1022,8 @@ def test_responses():
     }
     if not validate("responses/furnish_result.json", preview):
         all_passed = False
+    if not validate("responses/jump_inside_result.json", {"view": "Interior: Bedroom", "room": "R02", "eye": [1000, 300, 1200], "target": [1000, 5000, 1200], "lens_mm": 24, "message": "Perspective is inside the bedroom."}):
+        all_passed = False
     if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
         all_passed = False
 
@@ -1546,6 +1550,7 @@ def test_invalid_examples():
         ("commands/move_furniture.json", {"to": [1]}, "move_furniture one coordinate"),
         ("commands/delete_furniture.json", {"kind": "bed"}, "delete_furniture unknown field"),
         ("commands/furnish_room.json", {"density": "tight"}, "furnish_room unknown density"),
+        ("commands/jump_inside.json", {"lens": 24}, "jump_inside unknown field"),
         ("commands/furnish_room.json", {"variant": "random"}, "furnish_room unknown variant"),
         ("commands/furnish_room.json", {"room": "R01", "style": "modern"}, "furnish_room unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),

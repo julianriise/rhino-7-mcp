@@ -293,6 +293,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "stair.add":
                     Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
                     return;
+                case "room.inside":
+                    Job(thread, action.Id, label, sink => sink.Tool("jump_inside", new JObject()));
+                    return;
                 case "furniture.furnish":
                     // The picked room, else every room: both layouts as ghosts, and the card to place one.
                     var picked = facts.Picked == Picked.Room;

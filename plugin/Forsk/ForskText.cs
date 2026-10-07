@@ -228,6 +228,7 @@ namespace RhinoMCPPlugin.Forsk
             ["sheets.clear"] = "Clear the sheet cache",
             ["rooms.list"] = "List rooms",
             ["whats.new.show"] = "Release notes",
+            ["room.inside"] = "Jump inside",
             ["furniture.add"] = "Add furniture",
             ["furniture.furnish"] = "Furnish rooms",
             ["furniture.add.ask"] = "Add which piece, and where?",
@@ -537,6 +538,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.move_furniture"] = "Furniture",
             ["tool.delete_furniture"] = "Furniture",
             ["tool.furnish_room"] = "Furniture",
+            ["tool.jump_inside"] = "View",
             // FU.7: the two furnish layouts as ghosts, picked on a card.
             ["furnish.pick.ask"] = "Two layouts for {room}. Which one goes in?",
             ["furnish.pick.one"] = "One layout for {room}, shown in blue.",

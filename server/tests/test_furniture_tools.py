@@ -80,3 +80,14 @@ def test_furnish_preview_is_sent(mock_get_conn):
     conn = _conn(mock_get_conn, {"preview": True, "count": 0, "message": "ok"})
     furnish_room(ctx=None, room="R02", preview=True)
     conn.send_command.assert_called_once_with("furnish_room", {"room": "R02", "preview": True})
+
+
+@patch("rhinomcp.tools.jump_inside.get_rhino_connection")
+def test_jump_inside_sends_the_room(mock_get_conn):
+    from rhinomcp.tools.jump_inside import jump_inside
+
+    conn = _conn(mock_get_conn, {"view": "Interior: Bedroom", "message": "ok"})
+    jump_inside(ctx=None)
+    conn.send_command.assert_called_with("jump_inside", {})
+    jump_inside(ctx=None, room="bedroom")
+    conn.send_command.assert_called_with("jump_inside", {"room": "bedroom"})

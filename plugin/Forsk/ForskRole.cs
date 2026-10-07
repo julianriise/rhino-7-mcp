@@ -89,6 +89,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "room.redraw":
                 case "furniture.add":
                 case "furniture.furnish":
+                case "room.inside":
                 case "exist.mark":
                 case "edit.undo":
                 case "opening.move":

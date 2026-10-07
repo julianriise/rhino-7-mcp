@@ -190,6 +190,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("room.redraw", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             // FU: a piece from the catalogue into a room, and furnishing by rules (the picked room, else every room) with the two previews.
+            // A first interior shot of the one room picked: Perspective inside its door at 1.2 m.
+            new ForskAction("room.inside", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("furniture.add", Runs.Card, "group.rooms", f => f.HasRooms),
             new ForskAction("furniture.furnish", Runs.Run, "group.rooms", f => f.HasRooms),
             new ForskAction("file.print", Runs.Run, "group.print", f => f.HasWalls),
