@@ -70,19 +70,6 @@ public partial class RhinoMCPFunctions
                 };
             }
 
-            if (!attr.ReadOnly)
-            {
-                var inner = handler;
-                handler = parameters =>
-                {
-                    // The roof cannot be picked with the cursor (Julian, 2026-10-07): its layer stays
-                    // locked, and only a Forsk write opens it, to replace or clear the roof.
-                    RoofLayerLocked(RhinoDoc.ActiveDoc, false);
-                    try { return inner(parameters); }
-                    finally { RoofLayerLocked(RhinoDoc.ActiveDoc, true); }
-                };
-            }
-
             if (table.ContainsKey(attr.Name))
             {
                 throw new InvalidOperationException(

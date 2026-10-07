@@ -204,13 +204,7 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         public static JObject Write(string name, Func<JObject> run)
         {
-            // As every bridge write (the dispatch table): the roof layer opens for the write, then locks again.
-            return Invoke(name, false, () =>
-            {
-                RhinoMCPFunctions.RoofLayerLocked(RhinoDoc.ActiveDoc, false);
-                try { return run(); }
-                finally { RhinoMCPFunctions.RoofLayerLocked(RhinoDoc.ActiveDoc, true); }
-            });
+            return Invoke(name, false, run);
         }
 
         static JObject Invoke(string name, bool readOnly, Func<JObject> run)

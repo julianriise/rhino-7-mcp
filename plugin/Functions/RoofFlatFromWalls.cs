@@ -18,6 +18,14 @@ public partial class RhinoMCPFunctions
     [McpCommand("roof_flat_from_walls", ModelView = true)]
     public JObject RoofFlatFromWalls(JObject parameters)
     {
+        // The roof layer is locked so the roof is never a click. Open it for the bake, then lock it.
+        UnlockFloors(RhinoDoc.ActiveDoc);
+        try { return AddFlatRoof(parameters); }
+        finally { LockFloors(RhinoDoc.ActiveDoc); }
+    }
+
+    JObject AddFlatRoof(JObject parameters)
+    {
         var doc = RhinoDoc.ActiveDoc;
         var layerName = parameters["layer"]?.ToString();
         if (string.IsNullOrWhiteSpace(layerName)) layerName = "wall";

@@ -123,7 +123,8 @@ public partial class RhinoMCPFunctions
     }
 
     /// <summary>
-    /// The floor slab stays visible and is not a click. The layer and each
+    /// The floor slab stays visible and is not a click, and so is the roof
+    /// when its layer is shown (Julian, 2026-10-07). The layers and each
     /// slab stay locked, the same way as the daylight map, so a click falls
     /// through to the room plate. Unlock the layer first, then the slabs,
     /// before a replace or a delete. An object reports locked when either it
@@ -160,7 +161,8 @@ public partial class RhinoMCPFunctions
         foreach (var candidate in doc.Layers)
         {
             if (candidate == null || candidate.IsDeleted) continue;
-            if (!candidate.Name.Equals("A-FLOR", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!candidate.Name.Equals("A-FLOR", StringComparison.OrdinalIgnoreCase)
+                && !candidate.Name.Equals("A-ROOF", StringComparison.OrdinalIgnoreCase)) continue;
             if (candidate.IsLocked == locked) continue;
             candidate.IsLocked = locked;
             doc.Layers.Modify(candidate, candidate.Index, true);

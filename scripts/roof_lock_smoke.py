@@ -28,6 +28,13 @@ L = sc.doc.Layers.FindName("A-ROOF")
 print("ROOF %s %d %d %s" % (",".join(roofs) or "-", 1 if L and L.IsVisible else 0, 1 if L and L.IsLocked else 0, len(roofs)))
 """
 
+# The Layers panel open: a layer change reloads it (the 2026-10-07 crash was a reload racing a redraw).
+PANEL = """
+import Rhino
+Rhino.UI.Panels.OpenPanel(Rhino.UI.PanelIds.Layers)
+print(Rhino.UI.Panels.IsPanelVisible(Rhino.UI.PanelIds.Layers))
+"""
+
 SHOW = """
 import scriptcontext as sc
 L = sc.doc.Layers.FindName("A-ROOF")
@@ -69,8 +76,9 @@ def run(send) -> tuple[list[str], bool]:
         lines.append("FAIL " + why)
         ok = False
 
+    panel = str(send("execute_rhinoscript_python_code", {"code": PANEL}).get("output") or "").strip()
     ids, visible, locked, count = read(send)
-    lines.append(f"roof layer: visible {visible} locked {locked}, {count} roof(s)")
+    lines.append(f"roof layer: visible {visible} locked {locked}, {count} roof(s); Layers panel open {panel}")
     if not locked:
         fail("A-ROOF is not locked")
     send("execute_rhinoscript_python_code", {"code": SHOW % "True"})

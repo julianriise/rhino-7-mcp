@@ -68,7 +68,7 @@ public partial class RhinoMCPFunctions
             // The daylight mesh and the floor slabs are locked. A rebuild that
             // lists them has to unlock them to delete them, then lock what remains.
             var clearsMap = kindSet.Contains("analysis");
-            var clearsFloors = kindSet.Contains("floor");
+            var clearsFloors = kindSet.Contains("floor") || kindSet.Contains("roof");
             if (clearsMap) UnlockAnalysis(doc);
             if (clearsFloors) UnlockFloors(doc);
             try
