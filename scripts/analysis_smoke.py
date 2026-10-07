@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""AN.2 smoke: live areas and daylight after a wall edit, on the sample house.
+"""AN.2 smoke: live areas and daylight after a wall edit, on the garage.
 
-Run on the sample house after first_run.py. Switches daylight and areas
-live (the menu's file strings), moves the south wall out 300 mm (the
-first live daylight run stores each room's mean) and back in, and checks
-the second edit's result carries a live line naming a room's area and its
-daylight change, within 2 s. Then puts the switches back to the defaults.
+Run on the garage after the garage smoke has built it. Switches daylight and areas
+live (the menu's file strings), moves the south wall out 300 mm (the live
+line names the room's new area; the live daylight run stores each room's
+mean), then lowers the window's sill to 800 (the line names the room's
+daylight change, within 2 s). Then puts the window, the wall and the
+switches back.
 Stdout at most 25 lines; exit 0 when all pass.
 
 Usage:
@@ -34,6 +35,34 @@ print("ok")
 """
 
 
+SOUTH_WALL = """
+import scriptcontext as sc
+walls = [o for o in sc.doc.Objects if o.Attributes.GetUserString("forsk:kind") == "wall" and o.Attributes.GetUserString("forsk:generated") == "1"]
+south = min(walls, key=lambda o: o.Geometry.GetBoundingBox(True).Min.Y)
+print(south.Id)
+"""
+
+
+WINDOW = """
+import scriptcontext as sc
+import Rhino
+settings = Rhino.DocObjects.ObjectEnumeratorSettings()
+settings.HiddenObjects = True
+settings.LockedObjects = True
+for o in sc.doc.Objects.GetObjectList(settings):
+    a = o.Attributes
+    if a.GetUserString("forsk:kind") == "opening_marker" and a.GetUserString("forsk:opening_kind") == "window":
+        print("WIN %s %s" % (o.Id, a.GetUserString("forsk:sill") or ""))
+        break
+"""
+
+
+STORED = """
+import scriptcontext as sc
+print("; ".join(k + "=" + str(sc.doc.Strings.GetValue("forsk.analysis", k)) for k in ("live.daylight", "last.daylight", "daylight.rooms")))
+"""
+
+
 def run(send) -> tuple[list[str], bool]:
     lines: list[str] = []
     ok = True
@@ -44,24 +73,40 @@ def run(send) -> tuple[list[str], bool]:
         ok = False
 
     send("execute_rhinoscript_python_code", {"code": SET_LIVE % ("1", "1")})
+    wall = str(send("execute_rhinoscript_python_code", {"code": SOUTH_WALL}).get("output") or "").strip()
+    found = str(send("execute_rhinoscript_python_code", {"code": WINDOW}).get("output") or "")
+    window, sill = "", ""
+    for row in found.splitlines():
+        if row.startswith("WIN "):
+            window, sill = (row.split() + ["", "", ""])[1:3]
+    if not window:
+        fail("no window marker: " + found.strip()[:160])
     try:
-        out = send("move_wall", {"side": "south", "toward": "south", "distance_mm": 300})
-        lines.append(f"out 300: live {out.get('live')!r}")
-        if not out.get("live"):
-            fail(f"no live line after the first move: {out.get('message')}")
+        out = send("move_wall", {"id": wall, "side": "south", "toward": "south", "distance_mm": 300})
+        lines.append(f"wall out 300: live {out.get('live')!r}")
+        if " m²" not in str(out.get("live") or ""):
+            fail(f"no area in the live line after a wall move: {out.get('message')}")
+        if "Live: " not in str(out.get("message", "")):
+            fail("the edit's message does not carry the live line")
         start = time.monotonic()
-        back = send("move_wall", {"side": "south", "toward": "north", "distance_mm": 300})
+        lower = send("set_opening", {"id": window, "sill": 800})
         seconds = time.monotonic() - start
-        live = str(back.get("live") or "")
-        lines.append(f"back 300: {seconds:.2f} s · live {live!r}")
-        if " m²" not in live or "daylight " not in live or "→" not in live:
-            fail(f"the live line names no room's area and daylight change: {back.get('message')}")
+        live = str(lower.get("live") or "")
+        lines.append(f"window sill {sill} -> 800: {seconds:.2f} s · live {live!r}")
+        if "daylight " not in live or "→" not in live:
+            fail(f"no daylight change in the live line: {lower.get('message')}")
+            stored = send("execute_rhinoscript_python_code", {"code": STORED})
+            lines.append("  stored: " + str(stored.get("output") or stored.get("message") or "").strip()[:200])
         if seconds > LIMIT_S:
             fail(f"the edit with both live took {seconds:.2f} s, over {LIMIT_S:.0f} s")
-        if "Live: " not in str(back.get("message", "")):
-            fail("the edit's message does not carry the live line")
     finally:
         send("execute_rhinoscript_python_code", {"code": SET_LIVE % ("", "")})
+        try:
+            if window and sill:
+                send("set_opening", {"id": window, "sill": float(sill)})
+        except ValueError:
+            lines.append(f"FAIL could not put the sill back: {sill!r}")
+        send("move_wall", {"id": wall, "side": "south", "toward": "north", "distance_mm": 300})
     return lines[:24], ok
 
 
