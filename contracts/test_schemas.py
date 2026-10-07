@@ -377,6 +377,8 @@ def test_new_commands():
         }),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf"}),
         ("commands/export_pdf.json", {"path": "/tmp/forsk-plan.pdf", "layout": "plan"}),
+        ("commands/export_pdf.json", {"path": "/tmp/forsk-analysis.pdf", "set": "analysis"}),
+        ("commands/layout_pack.json", {"set": "analysis"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DWG"}),
         ("commands/export_sheets.json", {"folder": "/tmp/forsk-export-garage/Garage DXF", "format": "dxf"}),
         ("commands/details.json", {"action": "add"}),

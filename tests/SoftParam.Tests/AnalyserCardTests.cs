@@ -12,10 +12,10 @@ public class AnalyserCardTests
     static string[] Pills(string fixture) => ForskCards.Analyser(Docs.Facts(fixture)).Pills.Select(p => p.Id).ToArray();
 
     [Theory]
-    [InlineData("house", new[] { "daylight.run", "area.stats", "done" })]
-    [InlineData("map shown", new[] { "daylight.hide", "area.stats", "done" })]
-    [InlineData("map hidden", new[] { "daylight.show", "area.stats", "done" })]
-    [InlineData("map stale", new[] { "daylight.again", "area.stats", "done" })]
+    [InlineData("house", new[] { "daylight.run", "area.stats", "analysis.print", "done" })]
+    [InlineData("map shown", new[] { "daylight.hide", "area.stats", "analysis.print", "done" })]
+    [InlineData("map hidden", new[] { "daylight.show", "area.stats", "analysis.print", "done" })]
+    [InlineData("map stale", new[] { "daylight.again", "area.stats", "analysis.print", "done" })]
     [InlineData("walls only", new[] { "daylight.rooms", "done" })]
     public void TheCard_ListsTheAnalysesTheFileCanRun(string fixture, string[] expected)
     {

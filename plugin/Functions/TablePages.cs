@@ -13,7 +13,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// The one-page sheets of tables: the front sheet (v3 P5, A-00-001: the
-/// Tegningsliste and the Arealtabell) and the Mengdeliste (v3 P7, A-00-050).
+/// Tegningsliste and the Arealtabell), the Mengdeliste (v3 P7, A-00-050)
+/// and the Analysis set's sheets (AN.3, A-80-00n: daylight per room, areas).
 /// Each is drawn on the lists' path (Schedules.Flow, DrawSchedules) with the
 /// title block and no scale or north arrow, and export draws its tables
 /// again from the model, as it does the lists. The Tegningsliste reads each
@@ -26,6 +27,7 @@ public partial class RhinoMCPFunctions
 
     private static string TablePageName(string view)
     {
+        if (Analysis.TryAnalysis(view, out _)) return LayoutPagePrefix + SheetSet.Title(view, 0) + " analysis";
         return view == SheetSet.TakeoffId ? TakeoffPageName : FrontPageName;
     }
 
@@ -95,6 +97,10 @@ public partial class RhinoMCPFunctions
         var tables = new List<Schedules.Table>();
         if (view == SheetSet.TakeoffId)
             tables.Add(Takeoff.Table(ReadTakeoff(doc)));
+        else if (view == Analysis.SheetId(Analysis.Daylight))
+            tables.Add(Analysis.DaylightTable(LiveRooms(doc), ReadAnalysis(doc)));
+        else if (view == Analysis.SheetId(Analysis.Areas))
+            tables.Add(Schedules.AreaTable(ReadAreaStats(doc)));
         else
         {
             tables.Add(Schedules.DrawingList(PrintedSheets(doc)));

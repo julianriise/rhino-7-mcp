@@ -113,6 +113,20 @@ namespace RhinoMCPPlugin.Forsk
                 + (dropped.Length > 0 ? " · " + dropped : "");
         }
 
+        /// <summary>AN.3: "✓ Printed the analysis set: 2 sheets on A3 · Holmen Analysis.pdf".</summary>
+        public static string AnalysisPrintLine(int sheets, string written, string paper)
+        {
+            return Done + "Printed the analysis set: " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + (sheets == 1 ? " sheet" : " sheets") + " on " + (string.IsNullOrWhiteSpace(paper) ? PrintTemplate.DefaultPaper : paper.Trim())
+                + " · " + System.IO.Path.GetFileName(written ?? "");
+        }
+
+        /// <summary>The analysis set's PDF beside the drawings': "&lt;project&gt; Analysis.pdf". stem is the file-safe project name.</summary>
+        public static string AnalysisPdfName(string stem)
+        {
+            return string.IsNullOrWhiteSpace(stem) ? "forsk-analysis.pdf" : stem.Trim() + " Analysis.pdf";
+        }
+
         /// <summary>"✓ Exported 7 sheets as DWG · Holmen DWG/ + CSV": the folder's name, never its path. csv as PrintLine's.</summary>
         public static string ExportLine(int sheets, string format, string folder, string csv = null)
         {

@@ -218,6 +218,9 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("daylight.show", Runs.Run, "group.daylight", f => f.Map == MapState.Hidden),
             new ForskAction("daylight.room", Runs.Run, "group.daylight", f => f.Picked == Picked.Room),
             new ForskAction("daylight.quality", Runs.Card, "group.daylight", f => f.HasWalls),
+            // AN.3: the analysis that just ran goes into the Analysis set; AN.4 picks the set's analyses and prints it.
+            new ForskAction("analysis.add", Runs.Run, "group.daylight", f => f.Analysed != null && !(f.Analysis?.InSet(f.Analysed) ?? false)),
+            new ForskAction("analysis.print", Runs.Card, "group.daylight", f => f.HasWalls && f.HasRooms),
             new ForskAction("section.add", Runs.Run, "group.sections", f => f.HasWalls),
             new ForskAction("section.room", Runs.Run, "group.sections", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("section.remove", Runs.Card, "group.sections", f => f.Sections > 0),
@@ -283,6 +286,7 @@ namespace RhinoMCPPlugin.Forsk
         static IEnumerable<ForskAction> Candidates(FileFacts f, ForskAction slot1)
         {
             if (f.JustPrinted && f.Picked == Picked.None) yield return Find("export.dwg");
+            if (f.Picked == Picked.None) yield return Find("analysis.add");
             if (f.OfferArea && f.HasRooms && f.Picked == Picked.None) yield return Find("area.stats");
             // Walls with doors and windows: Add detail is the one thing for them all.
             if (f.Picked == Picked.Other) yield return Find("detail.add");

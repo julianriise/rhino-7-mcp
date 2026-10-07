@@ -237,6 +237,15 @@ namespace RhinoMCPPlugin.Forsk
             ["furniture.add.picked"] = "The picked room",
             ["furniture.add.note"] = "Forsk stands it against the longest free wall, or in the middle for tables and chairs.",
             ["area.stats"] = "Area summary",
+            ["analysis.add"] = "Add to analysis set",
+            ["analysis.added"] = "{name} is in the analysis set. Print it from the Analyses menu.",
+            ["analysis.print"] = "Print analysis set",
+            ["analysis.print.ask"] = "Analyses in the set. It prints as its own PDF.",
+            ["analysis.saved"] = "Analysis set: {names}.",
+            ["analysis.set.empty"] = "Nothing in the analysis set yet. Tick an analysis first.",
+            ["analysis.check"] = "{name}: {about}",
+            ["analysis.about.daylight"] = "the daylight factor in each room, from the last run",
+            ["analysis.about.areas"] = "net, gross and usable area by floor and use",
             ["area.summary.note"] = "Estimate. Not measured to NS 3940.",
 
             // One-time cards: the question, then the pills.

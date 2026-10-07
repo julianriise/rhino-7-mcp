@@ -1275,6 +1275,32 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return line;
         }
 
+        /// <summary>
+        /// AN.3: the Analysis set as its own PDF. Its sheets are laid out, a save
+        /// dialog named "&lt;project&gt; Analysis.pdf" opens, and export_pdf writes
+        /// those pages alone. The Sheets set's pages stay as they are.
+        /// </summary>
+        public static string RunAnalysis(Action<string> progress, Window parent)
+        {
+            var units = UnitsProblem();
+            if (units != null)
+                return "Print analysis set · error · " + units;
+            var pack = Call("layout_pack", new JObject { ["set"] = "analysis" });
+            if (!Ok(pack)) return FailLine(pack);
+            Report(progress, "Analysis sheets ready — choose where to save.");
+            var path = PickPathFromBackground(parent, ForskReceipt.AnalysisPdfName(Sanitize(StoredMeta("project"))));
+            if (string.IsNullOrEmpty(path))
+                return "Print analysis set · cancelled";
+            SettleAfterDialog();
+            var exported = Call("export_pdf", new JObject { ["path"] = path, ["set"] = "analysis" });
+            if (!Ok(exported)) return FailLine(exported);
+            var result = exported["result"] as JObject;
+            var written = result?["path"]?.ToString();
+            if (string.IsNullOrWhiteSpace(written)) written = path;
+            var sheets = (pack["result"] as JObject)?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
+            return ForskReceipt.AnalysisPrintLine(sheets, written, (pack["result"] as JObject)?["paper"]?.ToString());
+        }
+
         /// <summary>export_csv at path: "" when written, else why not. A failed CSV never fails the Print or the export.</summary>
         static string WriteCsv(string path)
         {
@@ -1456,14 +1482,14 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             return PickPathFromBackground(null);
         }
 
-        public static string PickPathFromBackground(Window parent)
+        public static string PickPathFromBackground(Window parent, string fileName = null)
         {
             string path = null;
             using (var done = new System.Threading.ManualResetEvent(false))
             {
                 Application.Instance.AsyncInvoke(() =>
                 {
-                    try { path = PickPath(parent); }
+                    try { path = PickPath(parent, fileName); }
                     finally { done.Set(); }
                 });
                 done.WaitOne();
@@ -1488,12 +1514,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             }));
         }
 
-        public static string PickPath(Window parent)
+        public static string PickPath(Window parent, string fileName = null)
         {
             var dialog = new Eto.Forms.SaveFileDialog
             {
                 Title = "Print PDF",
-                FileName = DefaultFileName(),
+                FileName = fileName ?? DefaultFileName(),
                 CheckFileExists = false
             };
             dialog.Filters.Add(new FileFilter("PDF", ".pdf"));

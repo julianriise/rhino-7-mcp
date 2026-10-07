@@ -278,6 +278,16 @@ public partial class RhinoMCPFunctions
     /// </summary>
     private static List<string> ReadLayoutViews(RhinoDoc doc, JObject parameters, out List<string> off)
     {
+        if (IsAnalysisSet(parameters) && !(parameters?["views"] is JArray))
+        {
+            // AN.3: the Analysis set's sheets; those taken out of it lose their old pages.
+            var analysis = Analysis.SetSheets(ReadAnalysis(doc));
+            off = analysis.Where(s => !s.On).Select(s => s.Id).ToList();
+            var on = analysis.Where(s => s.On).Select(s => s.Id).ToList();
+            if (on.Count == 0)
+                throw new InvalidOperationException(NoAnalysisOnMessage);
+            return on;
+        }
         var views = new List<string>();
         off = new List<string>();
         if (parameters?["views"] is JArray requested)
@@ -1186,7 +1196,12 @@ public partial class RhinoMCPFunctions
         return mm * RhinoMath.UnitScale(UnitSystem.Millimeters, pageUnits);
     }
 
-    private static List<RhinoPageView> MatchingForskPages(RhinoDoc doc, string layout)
+    /// <summary>
+    /// The Forsk pages: the one layout asked for, else the Sheets set's pages,
+    /// or with analysis the Analysis set's (AN.3). The two sets never print,
+    /// export or list together.
+    /// </summary>
+    private static List<RhinoPageView> MatchingForskPages(RhinoDoc doc, string layout, bool analysis = false)
     {
         var pages = new List<RhinoPageView>();
         var all = doc.Views.GetPageViews();
@@ -1194,12 +1209,19 @@ public partial class RhinoMCPFunctions
         foreach (var page in all)
         {
             if (!IsForskLayoutPage(page)) continue;
-            if (!string.IsNullOrWhiteSpace(layout) && !LayoutNameMatches(page, layout))
+            if (!string.IsNullOrWhiteSpace(layout))
+            {
+                if (!LayoutNameMatches(page, layout)) continue;
+            }
+            else if (SheetSet.IsAnalysisSheet(ViewKeyForPage(page)) != analysis)
                 continue;
             pages.Add(page);
         }
         return pages;
     }
+
+    private static bool IsAnalysisSet(JObject parameters) =>
+        string.Equals(parameters?["set"]?.ToString()?.Trim(), AnalysisSetName, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The pages in set order, a flowing list's pages first to last. Rhino
@@ -1209,7 +1231,8 @@ public partial class RhinoMCPFunctions
     {
         var byPage = pages.OrderBy(p => IsSchedulesPage(p) ? SchedulesPageNumber(p) : 0).ToList();
         var ids = byPage.Select(p => ViewKeyForPage(p) ?? "").ToList();
-        return SheetSet.Order(ids, PrintSet(doc)).Select(i => byPage[i]).ToList();
+        var set = PrintSet(doc).Concat(Analysis.SetSheets(ReadAnalysis(doc))).ToList();
+        return SheetSet.Order(ids, set).Select(i => byPage[i]).ToList();
     }
 
     private static bool IsForskLayoutPage(RhinoPageView page)

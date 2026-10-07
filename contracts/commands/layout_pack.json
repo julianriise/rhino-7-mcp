@@ -59,6 +59,14 @@
       },
       "minItems": 1,
       "uniqueItems": true
+    },
+    "set": {
+      "type": "string",
+      "enum": [
+        "sheets",
+        "analysis"
+      ],
+      "description": "Which set: sheets (default) or analysis, the Analysis set's own sheets (A-80-00n: daylight per room, areas). With no views, lays out the analyses in the Analysis set."
     }
   },
   "additionalProperties": false

@@ -308,6 +308,17 @@ namespace RhinoMCPPlugin.Forsk
             return ifc ? "ifc" : dwg ? "dwg" : dxf ? "dxf" : "csv";
         }
 
+        /// <summary>
+        /// AN.3: the Analysis set's PDF asked for: "print the analysis set",
+        /// "skriv ut analysene", "analysis pdf". Not a question.
+        /// </summary>
+        public static bool AnalysisPrint(string text)
+        {
+            var t = Normalize(text);
+            if (t.Length == 0 || t.Length > 160 || Question(t) || !t.Contains("analys")) return false;
+            return HasWord(t, "print") || HasWord(t, "pdf") || t.Contains("skriv ut");
+        }
+
         /// <summary>A DXF asked for: import plan.dxf, import a DXF. It comes before the plan image import, which "plan" would match.</summary>
         static bool IsDxf(string t)
         {

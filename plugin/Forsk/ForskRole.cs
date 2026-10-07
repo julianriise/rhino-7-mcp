@@ -127,6 +127,8 @@ namespace RhinoMCPPlugin.Forsk
                 case "daylight.show":
                 case "daylight.room":
                 case "area.stats":
+                case "analysis.add":
+                case "analysis.print":
                     return ForskRole.Analyser;
                 default:
                     return ForskRole.None;

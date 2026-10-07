@@ -206,6 +206,7 @@ namespace RhinoMCPPlugin.Forsk
             input.JustPrinted = Tracker.Was("file.print", doc.RuntimeSerialNumber);
             input.OfferArea = Tracker.Was("file.generate", doc.RuntimeSerialNumber)
                 || Tracker.Was("area.stats", doc.RuntimeSerialNumber);
+            input.Analysed = Tracker.Current?.Doc == doc.RuntimeSerialNumber ? Functions.Analysis.JustRan(Tracker.Current.Kind) : null;
             input.GuideOff = FirstRunGate.Off();
             input.UpdateVersion = ForskUpdate.Latest;
             input.Build = ForskBuild.Line();

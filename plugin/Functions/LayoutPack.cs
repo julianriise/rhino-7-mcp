@@ -59,6 +59,9 @@ public partial class RhinoMCPFunctions
     private const string NoLayoutsMessage = "No layouts to print. Call layout_pack first.";
     private const string PrintScaleEntry = "print_scale";
     private const string NoSheetOnMessage = "Every sheet in the set is off. Turn one on with Choose sheets.";
+    private const string NoAnalysisOnMessage = "Nothing in the analysis set yet. Run an analysis and tap Add to analysis set, or tick one in Print analysis set.";
+    /// <summary>layout_pack and export_pdf's set: the Analysis set (AN.3). Anything else is the Sheets set.</summary>
+    private const string AnalysisSetName = "analysis";
     private const string PdfWriteFailedMessage = "PDF write failed.";
     private const string LayoutDetailFailedMessage = "Layout detail failed.";
     private const string EmptyDetailMessage = "Layout detail is empty. The sheet does not show the drawing.";
@@ -128,6 +131,12 @@ public partial class RhinoMCPFunctions
                 spec = LayoutSpec(key, TablePageName(key), Vector3d.Zero, Vector3d.ZAxis);
                 return true;
             default:
+                if (SheetSet.IsAnalysisSheet(view))
+                {
+                    var analysis = view.Trim().ToLowerInvariant();
+                    spec = LayoutSpec(analysis, TablePageName(analysis), Vector3d.Zero, Vector3d.ZAxis);
+                    return true;
+                }
                 if (Details.TrySheetId(view, out var detailScale, out var detailSheet))
                 {
                     spec = LayoutSpec(Details.SheetId(detailScale, detailSheet), Details.PageName(detailScale, detailSheet),
@@ -223,10 +232,10 @@ public partial class RhinoMCPFunctions
         var views = ReadLayoutViews(doc, parameters, out var offViews);
         var includeExisting = ReadBoolParam(parameters, "include_existing", true);
         var replace = ReadBoolParam(parameters, "replace", true);
-        // The schedules and the front sheet are pages of tables, not drawing views.
+        // The schedules, the front sheet, the Mengdeliste and the analysis sheets are pages of tables, not drawing views.
         var withSchedules = views.RemoveAll(v => string.Equals(v, SchedulesView, StringComparison.OrdinalIgnoreCase)) > 0;
-        var withFront = views.RemoveAll(v => string.Equals(v, SheetSet.FrontId, StringComparison.OrdinalIgnoreCase)) > 0;
-        var withTakeoff = views.RemoveAll(v => string.Equals(v, SheetSet.TakeoffId, StringComparison.OrdinalIgnoreCase)) > 0;
+        var tablePages = views.Where(SheetSet.IsTablePage).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToList();
+        views.RemoveAll(SheetSet.IsTablePage);
         var scheduleKinds = ReadScheduleKinds(parameters);
 
         var clay = CollectLayoutClay(doc, includeExisting, out var hasWall);
@@ -514,9 +523,8 @@ public partial class RhinoMCPFunctions
         }
 
         // The front sheet last: its Tegningsliste reads every page laid out before it.
-        foreach (var (with, view) in new[] { (withTakeoff, SheetSet.TakeoffId), (withFront, SheetSet.FrontId) })
+        foreach (var view in tablePages.OrderBy(v => v == SheetSet.FrontId ? 1 : 0))
         {
-            if (!with) continue;
             if (replace)
                 RemoveLayoutPages(doc, view, false);
             pages.Add(AddTablePage(doc, view, pages.Count + 1, wallLevel));
@@ -622,10 +630,12 @@ public partial class RhinoMCPFunctions
         RestorePrintColors(doc);
         ApplyDocumentPrintInk(doc);
         var layout = parameters?["layout"]?.ToString();
-        var pages = InSetOrder(doc, MatchingForskPages(doc, layout));
+        var analysisSet = IsAnalysisSet(parameters);
+        var pages = InSetOrder(doc, MatchingForskPages(doc, layout, analysisSet));
         if (pages.Count == 0)
         {
-            var message = string.IsNullOrWhiteSpace(layout) ? NoLayoutsMessage : "Unknown layout.";
+            var message = !string.IsNullOrWhiteSpace(layout) ? "Unknown layout."
+                : analysisSet ? NoAnalysisOnMessage : NoLayoutsMessage;
             return ExportPdfResult("", new JArray(), message);
         }
 

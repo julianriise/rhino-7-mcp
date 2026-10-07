@@ -6,7 +6,10 @@ live (the menu's file strings), moves the south wall out 300 mm (the live
 line names the room's new area; the live daylight run stores each room's
 mean), then lowers the window's sill to 800 (the line names the room's
 daylight change, within 2 s). Then puts the window, the wall and the
-switches back.
+switches back. AN.3: puts daylight and areas in the Analysis set (what Add
+to analysis set and the Choose analyses ticks store), prints it as its own
+PDF (A-80-001 and A-80-002), and prints the plan alone to check the Sheets
+set's PDF leaves the analysis pages out.
 Stdout at most 25 lines; exit 0 when all pass.
 
 Usage:
@@ -55,6 +58,18 @@ for o in sc.doc.Objects.GetObjectList(settings):
         print("WIN %s %s" % (o.Id, a.GetUserString("forsk:sill") or ""))
         break
 """
+
+
+SET_ANALYSIS = """
+import scriptcontext as sc
+for key in ("set.daylight", "set.areas"):
+    if "%s": sc.doc.Strings.SetString("forsk.analysis", key, "1")
+    else: sc.doc.Strings.Delete("forsk.analysis", key)
+print("ok")
+"""
+
+ANALYSIS_PDF = "/tmp/forsk-smoke-analysis.pdf"
+SHEETS_PDF = "/tmp/forsk-smoke-sheets.pdf"
 
 
 STORED = """
@@ -107,7 +122,32 @@ def run(send) -> tuple[list[str], bool]:
         except ValueError:
             lines.append(f"FAIL could not put the sill back: {sill!r}")
         send("move_wall", {"id": wall, "side": "south", "toward": "north", "distance_mm": 300})
+    print_sets(send, lines, fail)
     return lines[:24], ok
+
+
+def print_sets(send, lines: list[str], fail) -> None:
+    """AN.3: the Analysis set prints alone, and the Sheets set's PDF leaves it out."""
+    send("execute_rhinoscript_python_code", {"code": SET_ANALYSIS % "1"})
+    try:
+        pack = send("layout_pack", {"set": "analysis"})
+        numbers = [p.get("number") for p in pack.get("pages", [])]
+        lines.append(f"analysis set laid out: {numbers} · {str(pack.get('message'))[:80]}")
+        if numbers != ["A-80-001", "A-80-002"]:
+            fail(f"analysis sheets are {numbers}, not A-80-001 and A-80-002")
+        pdf = send("export_pdf", {"path": ANALYSIS_PDF, "set": "analysis"})
+        pages = pdf.get("pages", [])
+        lines.append(f"analysis PDF: {pdf.get('count')} page(s) {pages} -> {ANALYSIS_PDF}")
+        if pdf.get("count") != 2 or not os.path.exists(ANALYSIS_PDF):
+            fail(f"analysis PDF: {pdf.get('message')}")
+        send("layout_pack", {"views": ["plan"]})
+        sheets = send("export_pdf", {"path": SHEETS_PDF})
+        names = [str(p) for p in sheets.get("pages", [])]
+        lines.append(f"sheets PDF: {sheets.get('count')} page(s) -> {SHEETS_PDF}")
+        if not names or any("analysis" in n.lower() for n in names):
+            fail(f"the sheets PDF holds {names}")
+    finally:
+        send("execute_rhinoscript_python_code", {"code": SET_ANALYSIS % ""})
 
 
 def main() -> int:

@@ -28,6 +28,38 @@ public static class Analysis
 
     public static string LiveKey(string id) => "live." + id;
     public static string LastKey(string id) => "last." + id;
+    /// <summary>AN.3: the analysis is in the Analysis set ("1"), or not ("0"). Nothing stored is not.</summary>
+    public static string SetKey(string id) => "set." + id;
+
+    /// <summary>The analysis's own table sheet in the Analysis set.</summary>
+    public static string SheetId(string id) => SheetPrefix + id;
+    public const string SheetPrefix = "analysis_";
+
+    /// <summary>The analysis an analysis sheet is of.</summary>
+    public static bool TryAnalysis(string sheetId, out string id)
+    {
+        var key = (sheetId ?? "").Trim().ToLowerInvariant();
+        id = key.StartsWith(SheetPrefix, StringComparison.Ordinal) ? key.Substring(SheetPrefix.Length) : null;
+        if (id != null && Array.IndexOf(All, id) >= 0) return true;
+        id = null;
+        return false;
+    }
+
+    /// <summary>The analysis a window job just ran, by its action id, or null.</summary>
+    public static string JustRan(string kind)
+    {
+        switch (kind)
+        {
+            case "daylight.run":
+            case "daylight.again":
+            case "daylight.room":
+                return Daylight;
+            case "area.stats":
+                return Areas;
+            default:
+                return null;
+        }
+    }
 
     /// <summary>Areas live by default; daylight takes seconds, so it is off until switched on.</summary>
     public static bool LiveDefault(string id) => id == Areas;
@@ -38,8 +70,11 @@ public static class Analysis
         public readonly Dictionary<string, bool> Live = new Dictionary<string, bool>(StringComparer.Ordinal);
         public readonly Dictionary<string, string> Last = new Dictionary<string, string>(StringComparer.Ordinal);
         public readonly Dictionary<string, double> RoomDf = new Dictionary<string, double>(StringComparer.Ordinal);
+        public readonly HashSet<string> Set = new HashSet<string>(StringComparer.Ordinal);
 
         public bool IsLive(string id) => Live.TryGetValue(id, out var on) ? on : LiveDefault(id);
+
+        public bool InSet(string id) => Set.Contains(id);
 
         public bool AnyLive => All.Any(IsLive);
     }
@@ -53,6 +88,7 @@ public static class Analysis
             if (live == "1" || live == "0") state.Live[id] = live == "1";
             var last = get?.Invoke(LastKey(id));
             if (!string.IsNullOrWhiteSpace(last)) state.Last[id] = last.Trim();
+            if (get?.Invoke(SetKey(id)) == "1") state.Set.Add(id);
         }
         foreach (var pair in (get?.Invoke(RoomsKey) ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
         {
@@ -76,6 +112,55 @@ public static class Analysis
         areaM2.ToString("0.0", CultureInfo.InvariantCulture) + " m² in " + Rooms(rooms);
 
     static string Rooms(int n) => n.ToString(CultureInfo.InvariantCulture) + (n == 1 ? " room" : " rooms");
+
+    /// <summary>The Analysis set: a sheet per analysis in the menu's order, on when it is in the set.</summary>
+    public static List<SheetSet.Sheet> SetSheets(State state) =>
+        All.Select(id => new SheetSet.Sheet(SheetId(id), state != null && state.InSet(id))).ToList();
+
+    /// <summary>The Choose analyses card's ticks as the keys to store: "1" in the set, "0" out.</summary>
+    public static List<(string Key, string Value)> SetChoice(Func<string, string> values)
+    {
+        var choice = new List<(string, string)>();
+        foreach (var id in All)
+        {
+            var value = values?.Invoke(SetKey(id));
+            if (value == "1" || value == "0") choice.Add((SetKey(id), value));
+        }
+        return choice;
+    }
+
+    /// <summary>
+    /// The daylight sheet's table: each room with its last daylight mean, a
+    /// dash for a room the last run did not trace, and the run's line under it.
+    /// </summary>
+    public static Schedules.Table DaylightTable(IList<Room> rooms, State state, bool norwegian = false)
+    {
+        var table = new Schedules.Table
+        {
+            Kind = "daylight",
+            Title = SheetLang.Pick(norwegian, "Daylight factor", "Dagslysfaktor"),
+            Heads = norwegian ? new[] { "Rom", "DF snitt" } : new[] { "Room", "DF mean" },
+            Right = new[] { false, true },
+            ContinuedSuffix = norwegian ? " (forts.)" : " (cont.)"
+        };
+        var df = state?.RoomDf ?? new Dictionary<string, double>();
+        foreach (var room in rooms ?? new List<Room>())
+        {
+            if (room?.Id == null) continue;
+            table.Ids.Add(room.Id);
+            table.Rows.Add(new[]
+            {
+                Name(room),
+                df.TryGetValue(room.Id, out var mean) ? mean.ToString("0.0", CultureInfo.InvariantCulture) + " %" : "–"
+            });
+        }
+        if (state != null && state.Last.TryGetValue(Daylight, out var last))
+            table.Note = last + SheetLang.Pick(norwegian, ". A room with – has not been traced.", ". Rom med – er ikke beregnet.");
+        else
+            table.Note = SheetLang.Pick(norwegian, "Daylight has not run. Run Daylight from the Analyses menu.",
+                "Dagslys er ikke kjørt. Kjør Dagslys i Analyser-menyen.");
+        return Schedules.Fit(table, null);
+    }
 
     /// <summary>A room as a live edit sees it: its record id, name and floor area.</summary>
     public sealed class Room

@@ -18,6 +18,8 @@ _UNKNOWN_VIEW = "Unknown view. Use plan, north, east, south, west, schedules, a 
 def _known_view(view: Any) -> bool:
     return isinstance(view, str) and (view in _VIEWS or bool(_SECTION.match(view)) or bool(_DETAIL.match(view)))
 _PAPERS = ("A4", "A3", "A2", "A1")
+_SETS = ("sheets", "analysis")
+_UNKNOWN_SET = "Unknown set. Use sheets or analysis."
 _UNKNOWN_PAPER = "Unknown paper. Use A4, A3, A2 or A1."
 
 
@@ -30,6 +32,7 @@ def layout_pack(
     replace: bool = True,
     include_existing: bool = True,
     schedule_kinds: Optional[List[str]] = None,
+    set: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create A3 Layout pages of a greyscale HiddenLineDrawing.
@@ -60,11 +63,16 @@ def layout_pack(
     - include_existing: Include X-EXIST in the greyscale drawing (default true)
     - schedule_kinds: Which lists the schedules page shows: door, window,
       room. Omit for all three.
+    - set: sheets (default) or analysis. analysis lays out the Analysis
+      set's own sheets (daylight per room, areas) the user added or ticked;
+      print them with export_pdf set=analysis, as their own PDF.
 
     Returns:
     Dictionary with pages, count, scale, and message.
     """
     try:
+        if set is not None and set not in _SETS:
+            return {"success": False, "message": _UNKNOWN_SET}
         if paper is not None and (not isinstance(paper, str) or paper not in _PAPERS):
             return {"success": False, "message": _UNKNOWN_PAPER}
         if views is not None and not isinstance(views, list):
@@ -97,6 +105,8 @@ def layout_pack(
             params["scale"] = scale
         if schedule_kinds is not None:
             params["schedule_kinds"] = schedule_kinds
+        if set == "analysis":
+            params["set"] = set
 
         result = rhino.send_command("layout_pack", params)
         message = result.get("message", "")

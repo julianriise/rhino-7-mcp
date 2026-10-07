@@ -4114,6 +4114,26 @@ class TestSectionTools:
         assert mock_conn.send_command.call_args[0][1]["views"] == ["plan", "section_a", "section_b"]
         assert layout_pack(ctx=None, views=["section_ab"])["success"] is False
 
+    @patch("rhinomcp.tools.export_pdf.get_rhino_connection")
+    @patch("rhinomcp.tools.layout_pack.get_rhino_connection")
+    def test_the_analysis_set_lays_out_and_prints_on_its_own(self, pack_conn, pdf_conn):
+        from rhinomcp.tools.export_pdf import export_pdf
+        from rhinomcp.tools.layout_pack import layout_pack
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"pages": [], "count": 1, "scale": 50, "message": "ok", "path": "/tmp/a.pdf"}
+        pack_conn.return_value = mock_conn
+        pdf_conn.return_value = mock_conn
+
+        assert layout_pack(ctx=None, set="analysis")["success"] is True
+        assert mock_conn.send_command.call_args[0][1]["set"] == "analysis"
+        assert export_pdf(ctx=None, path="/tmp/a.pdf", set="analysis")["success"] is True
+        assert mock_conn.send_command.call_args[0] == ("export_pdf", {"path": "/tmp/a.pdf", "set": "analysis"})
+        layout_pack(ctx=None)
+        assert "set" not in mock_conn.send_command.call_args[0][1]
+        assert layout_pack(ctx=None, set="drawings")["success"] is False
+        assert export_pdf(ctx=None, path="/tmp/a.pdf", set="drawings")["success"] is False
+
     @patch("rhinomcp.tools.section_pick.get_rhino_connection")
     def test_section_pick_has_no_parameters(self, mock_get_conn):
         from rhinomcp.tools.section_pick import section_pick

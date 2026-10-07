@@ -130,7 +130,8 @@ public static class SheetSet
     /// storey), facades A-40-001 to 004, section A A-40-101 and on by letter,
     /// the lists A-00-002 and one more per page they flow onto (page is
     /// 0-based), the detail sheets A-50-001 and on in the order of
-    /// detailSheets. A-10-001 is kept for the site plan. Empty for an id that is
+    /// detailSheets, the Analysis set's sheets A-80-001 and on in the analyses
+    /// menu's order. A-10-001 is kept for the site plan. Empty for an id that is
     /// no sheet.
     /// </summary>
     public static string Number(string id, int level, int page = 0, IEnumerable<string> detailSheets = null)
@@ -146,6 +147,8 @@ public static class SheetSet
         if (Sections.TryLetter(key, out var letter))
             return Format(40, 101 + (letter[0] - 'A'));
         if (key == SchedulesId) return Format(0, 2 + Math.Max(0, page));
+        // AN.3: the Analysis set's own sheets, in the analyses menu's order.
+        if (Analysis.TryAnalysis(key, out var analysis)) return Format(80, Array.IndexOf(Analysis.All, analysis) + 1);
         return "";
     }
 
@@ -162,6 +165,8 @@ public static class SheetSet
                 ? SheetLang.Pick(norwegian, "Drawing list and areas", "Tegningsliste og arealer")
                 : SheetLang.Pick(norwegian, "Drawing list", "Tegningsliste");
         if (key == TakeoffId) return SheetLang.Pick(norwegian, "Quantities", "Mengdeliste");
+        if (key == Analysis.SheetId(Analysis.Daylight)) return SheetLang.Pick(norwegian, "Daylight", "Dagslys");
+        if (key == Analysis.SheetId(Analysis.Areas)) return SheetLang.Pick(norwegian, "Areas", "Arealer");
         if (key == SchedulesId)
             return Schedules.SheetTitle(listKinds ?? ListKinds.ToList(), norwegian);
         if (Details.TrySheetId(key, out var scale, out _)) return Details.SheetTitle(scale, norwegian);
@@ -232,11 +237,24 @@ public static class SheetSet
         return text + ", " + list + " off" + takeoff + ".";
     }
 
-    /// <summary>A sheet of tables and no detail: the front sheet and the lists. It has no scale.</summary>
+    /// <summary>A sheet of tables and no detail: the front sheet, the lists and the analysis sheets. It has no scale.</summary>
     public static bool IsListSheet(string id)
     {
         var key = (id ?? "").Trim().ToLowerInvariant();
-        return key == FrontId || key == SchedulesId || key == TakeoffId;
+        return key == FrontId || key == SchedulesId || key == TakeoffId || IsAnalysisSheet(key);
+    }
+
+    /// <summary>
+    /// AN.3: a sheet of the Analysis set. It prints in its own PDF and never
+    /// with the Sheets set, nor on its Tegningsliste.
+    /// </summary>
+    public static bool IsAnalysisSheet(string id) => Analysis.TryAnalysis(id, out _);
+
+    /// <summary>One page drawn as tables alone (TablePages): the front sheet, the Mengdeliste and the analysis sheets.</summary>
+    public static bool IsTablePage(string id)
+    {
+        var key = (id ?? "").Trim().ToLowerInvariant();
+        return key == FrontId || key == TakeoffId || IsAnalysisSheet(key);
     }
 
     /// <summary>

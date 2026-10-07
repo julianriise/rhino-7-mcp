@@ -16,6 +16,7 @@ def export_pdf(
     ctx: Context,
     path: str = "",
     layout: Optional[str] = None,
+    set: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Write a vector PDF of Forsk Layout pages.
@@ -23,7 +24,8 @@ def export_pdf(
     path is required and must be an absolute file ending in .pdf.
     This tool does not open a save dialog. Call layout_pack first.
     layout may be a page name or a view token (plan, north, east, south, west, schedules).
-    Omit layout to export every Forsk page.
+    Omit layout to export every page of the set: sheets (default), or
+    analysis for the Analysis set's own PDF (layout_pack set=analysis first).
 
     Returns:
     Dictionary with path, count, pages, and message.
@@ -36,11 +38,15 @@ def export_pdf(
             return {"success": False, "message": _NEEDS_PDF}
         if layout is not None and not isinstance(layout, str):
             return {"success": False, "message": "layout must be a string."}
+        if set is not None and set not in ("sheets", "analysis"):
+            return {"success": False, "message": "Unknown set. Use sheets or analysis."}
 
         rhino = get_rhino_connection()
         params: Dict[str, Any] = {"path": path}
         if layout is not None:
             params["layout"] = layout
+        if set == "analysis":
+            params["set"] = set
 
         result = rhino.send_command("export_pdf", params)
         message = result.get("message", "")

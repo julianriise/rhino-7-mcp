@@ -233,6 +233,13 @@ namespace RhinoMCPPlugin.Forsk
                 case "area.stats":
                     Job(thread, action.Id, label, sink => sink.Tool("area_stats", new JObject()));
                     return;
+                case "analysis.add":
+                    // AN.3: the analysis that just ran goes into the Analysis set, on the file.
+                    var added = facts.Analysed;
+                    if (added == null) return;
+                    RhinoMCPFunctions.WriteAnalysis(doc, Functions.Analysis.SetKey(added), "1");
+                    Job(thread, action.Id, label, sink => sink.Line(ForskText.Format("analysis.added", "name", ForskText.Get("analysis." + added))));
+                    return;
                 case "takeoff":
                     Job(thread, action.Id, label, sink => sink.Tool(ForskToolPacks.TakeoffTool, new JObject()));
                     return;
@@ -556,6 +563,20 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
+                    break;
+                case "analysis.print":
+                    // AN.4: the ticks are kept on the file; Print then writes the Analysis set's own PDF.
+                    var setNames = SaveAnalysisSet(values);
+                    if (pill.Id == "save" || setNames.Count == 0)
+                        Job(thread, kind, ForskText.Label(kind), sink => sink.Line(setNames.Count == 0
+                            ? ForskText.Get("analysis.set.empty")
+                            : ForskText.Format("analysis.saved", "names", string.Join(", ", setNames))), userText: pill.Label);
+                    else
+                        Job(thread, kind, ForskText.Label(kind), sink =>
+                        {
+                            sink.Step(ForskText.Format("line.printing", "i", "1", "n", "2", "what", ForskText.Get("line.printing.layout")));
+                            sink.Line(ForskPrint.RunAnalysis(status => sink.Step(ForskText.Format("line.printing", "i", "2", "n", "2", "what", status)), this));
+                        }, userText: pill.Label);
                     break;
                 case "detail.list":
                     var unticked = ForskCards.Unticked(values);
@@ -979,6 +1000,12 @@ namespace RhinoMCPPlugin.Forsk
                 Export(thread, text, exportFormat, TurnMark(thread, text));
                 return;
             }
+            // AN.3: the Analysis set prints as its own PDF, from its card.
+            if (ForskIntentRouter.AnalysisPrint(text))
+            {
+                Fire("analysis.print", false);
+                return;
+            }
             if (ForskPrint.IsRequest(text))
             {
                 Print(thread, text, mark: TurnMark(thread, text));
@@ -1188,6 +1215,17 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
+        /// <summary>AN.4: the Choose analyses ticks onto the file. The names of the analyses now in the set.</summary>
+        static List<string> SaveAnalysisSet(JObject values)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc == null) return new List<string>();
+            foreach (var (key, value) in Functions.Analysis.SetChoice(k => values?[k]?.ToString()))
+                RhinoMCPFunctions.WriteAnalysis(doc, key, value);
+            var state = RhinoMCPFunctions.ReadAnalysis(doc);
+            return Functions.Analysis.All.Where(state.InSet).Select(id => ForskText.Get("analysis." + id)).ToList();
+        }
+
         static void SaveLive(JObject values)
         {
             var doc = RhinoDoc.ActiveDoc;

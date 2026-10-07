@@ -94,6 +94,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool JustPrinted;
         /// <summary>The last action was Generate 3D or area statistics, and nothing changed since.</summary>
         public bool OfferArea;
+        /// <summary>AN.3: the analysis the last action ran (daylight, areas), and nothing changed since. Null for none.</summary>
+        public string Analysed;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
@@ -181,6 +183,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool JustPrinted;
         /// <summary>Generate 3D or area statistics just ran: the bar offers Area summary.</summary>
         public bool OfferArea;
+        /// <summary>An analysis just ran: the bar offers Add to analysis set.</summary>
+        public string Analysed;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
@@ -226,6 +230,7 @@ namespace RhinoMCPPlugin.Forsk
                 UndoNewest = input.UndoNewest,
                 JustPrinted = input.JustPrinted,
                 OfferArea = input.OfferArea,
+                Analysed = input.Analysed,
                 GuideOff = input.GuideOff,
                 UpdateVersion = input.UpdateVersion,
                 Build = input.Build,

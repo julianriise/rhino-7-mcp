@@ -388,7 +388,7 @@ public partial class RhinoMCPFunctions
                 if (stale != null) return stale;
                 continue;
             }
-            if (view == SheetSet.FrontId || view == SheetSet.TakeoffId)
+            if (SheetSet.IsTablePage(view))
             {
                 RefreshTablePage(doc, page, view);
                 continue;
@@ -447,7 +447,8 @@ public partial class RhinoMCPFunctions
             return SchedulesView;
         if (Details.TryPage(page.PageName, out var detailScale, out var detailSheet))
             return Details.SheetId(detailScale, detailSheet);
-        foreach (var name in new[] { SheetSet.FrontId, SheetSet.TakeoffId, "plan", "north", "east", "south", "west" })
+        foreach (var name in new[] { SheetSet.FrontId, SheetSet.TakeoffId, "plan", "north", "east", "south", "west" }
+                     .Concat(Analysis.All.Select(Analysis.SheetId)))
         {
             if (!TryGetLayoutView(name, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))

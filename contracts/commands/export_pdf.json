@@ -13,6 +13,14 @@
     "layout": {
       "type": "string",
       "description": "Optional page name (Forsk — Plan) or view token (plan, north, east, south, west, schedules). Omit to export every Forsk layout."
+    },
+    "set": {
+      "type": "string",
+      "enum": [
+        "sheets",
+        "analysis"
+      ],
+      "description": "Which set: sheets (default) or analysis, the Analysis set's own sheets (A-80-00n: daylight per room, areas). Its pages print as their own PDF; the Sheets set never includes them."
     }
   },
   "required": ["path"],
