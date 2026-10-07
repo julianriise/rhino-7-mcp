@@ -82,6 +82,8 @@ public static class Furnish
         public int Index;
         public bool HasDoor, HasWindow;
         public double DoorDist;
+        /// <summary>The middle of each window on this wall, along it from A.</summary>
+        public readonly List<double> Windows = new List<double>();
         public Pt Mid => new Pt((A.X + B.X) / 2, (A.Y + B.Y) / 2);
     }
 
@@ -323,8 +325,8 @@ public static class Furnish
     {
         if (!have.Contains("kitchen_base") && !have.Contains("sink") && !have.Contains("hob"))
         {
-            // The run along the longest wall without a door, a wall without a window first.
-            var walls = ctx.Edges.Where(e => !e.HasDoor).OrderBy(e => e.HasWindow).ThenByDescending(e => e.Len).ToList();
+            // The run along the longest wall without a door; a window on it takes the sink.
+            var walls = ctx.Edges.Where(e => !e.HasDoor).OrderByDescending(e => e.Len).ToList();
             if (skip > 0 && walls.Count > 1) walls = walls.Skip(1).Concat(walls.Take(1)).ToList();
             var placed = false;
             foreach (var wall in walls)
@@ -345,17 +347,40 @@ public static class Furnish
     }
 
     /// <summary>
-    /// Fridge at the end, then (as the wall allows) a base unit, the sink, the
-    /// dishwasher next to it, a base unit and the hob, base units to the
-    /// wall's end, on the 600 module, with a wall unit over each base unit
-    /// clear of the windows.
+    /// The run on one wall: with a window on it, the sink under the window
+    /// and the rest around it; else fridge at the end, then (as the wall
+    /// allows) a base unit, the sink, the dishwasher next to it, a base unit
+    /// and the hob. Then base units wherever the wall is free, on the 600
+    /// module, and a wall unit over each base unit clear of the windows.
     /// </summary>
     static bool Run(Ctx ctx, Edge wall)
     {
         var before = ctx.Out.Items.Count;
-        var bodies = ctx.Bodies.Count;
-        var zones = ctx.Zones.Count;
-        // The longest run the wall takes, from the wall's start, skipping what is in the way.
+        if (!(wall.Windows.Count > 0 && WindowRun(ctx, wall)) && !LineRun(ctx, wall)) return false;
+        var basePiece = P("kitchen.base.60");
+        for (var s = 0.0; s + basePiece.W <= wall.Len + 1e-6; s += 100)
+            if (TryAt(ctx, basePiece, OnEdge(wall, s + basePiece.W / 2), UnitZone(ctx, basePiece)) != null) s += basePiece.W - 100;
+        var wallUnit = P("kitchen.wall.60");
+        foreach (var item in ctx.Out.Items.Skip(before).Where(i => i.Piece.Id == "kitchen.base.60").ToList())
+            TryAt(ctx, wallUnit, item.Frame, new Zone[0]);
+        return true;
+    }
+
+    static Zone[] UnitZone(Ctx ctx, Furniture.Piece piece) =>
+        new[] { new Zone(-piece.W / 2, piece.D, piece.W / 2, piece.D + Front(ctx.Density)) };
+
+    /// <summary>A unit centred at s along the wall, if it fits.</summary>
+    static Item Unit(Ctx ctx, Edge wall, string id, double s)
+    {
+        var piece = P(id);
+        if (s < piece.W / 2 - 1e-6 || s > wall.Len - piece.W / 2 + 1e-6) return null;
+        return TryAt(ctx, piece, OnEdge(wall, s), UnitZone(ctx, piece));
+    }
+
+    /// <summary>The run from the wall's start, the units one after another, skipping what is in the way.</summary>
+    static bool LineRun(Ctx ctx, Edge wall)
+    {
+        var mark = Mark(ctx);
         var order = wall.Len >= 3800
             ? new List<string> { "kitchen.fridge.60", "kitchen.base.60", "kitchen.sink.80", "kitchen.dishwasher.60", "kitchen.base.60", "kitchen.hob.60" }
             : wall.Len >= 3200
@@ -364,41 +389,60 @@ public static class Furnish
                     ? new List<string> { "kitchen.fridge.60", "kitchen.sink.80", "kitchen.dishwasher.60", "kitchen.hob.60" }
                     : new List<string> { "kitchen.fridge.60", "kitchen.sink.80", "kitchen.hob.60" };
         var s = 0.0;
-        var core = new HashSet<string> { "kitchen.fridge.60", "kitchen.hob.60", "kitchen.sink.80" };
         var got = new HashSet<string>();
         foreach (var id in order)
         {
             var piece = P(id);
-            var ok = false;
             for (; s + piece.W <= wall.Len + 1e-6; s += 100)
-            {
-                var frame = OnEdge(wall, s + piece.W / 2);
-                var zone = new[] { new Zone(-piece.W / 2, piece.D, piece.W / 2, piece.D + Front(ctx.Density)) };
-                if (TryAt(ctx, piece, frame, zone) != null) { ok = true; s += piece.W; break; }
-            }
-            if (ok) got.Add(id);
-            else if (core.Contains(id)) break;
+                if (Unit(ctx, wall, id, s + piece.W / 2) != null) { got.Add(id); s += piece.W; break; }
+            if (!got.Contains(id) && Core.Contains(id)) break;
         }
-        if (!core.All(got.Contains))
-        {
-            // Undo the partial run.
-            ctx.Out.Items.RemoveRange(before, ctx.Out.Items.Count - before);
-            ctx.Bodies.RemoveRange(bodies, ctx.Bodies.Count - bodies);
-            ctx.Zones.RemoveRange(zones, ctx.Zones.Count - zones);
-            return false;
-        }
-        // Base units fill what is left of the wall.
-        var basePiece = P("kitchen.base.60");
-        for (; s + basePiece.W <= wall.Len + 1e-6; s += 100)
-        {
-            var frame = OnEdge(wall, s + basePiece.W / 2);
-            if (TryAt(ctx, basePiece, frame, new[] { new Zone(-300, 600, 300, 600 + Front(ctx.Density)) }) != null) s += basePiece.W - 100;
-        }
-        // A wall unit over every base unit, clear of the windows.
-        var wallUnit = P("kitchen.wall.60");
-        foreach (var item in ctx.Out.Items.Skip(before).Where(i => i.Piece.Id == "kitchen.base.60").ToList())
-            TryAt(ctx, wallUnit, item.Frame, new Zone[0]);
-        return true;
+        return Core.All(got.Contains) || Undo(ctx, mark);
+    }
+
+    /// <summary>
+    /// The sink centred under the window nearest the wall's middle, the
+    /// dishwasher beside it, the fridge at the end farther from the sink and
+    /// the hob at least one base unit away from the sink.
+    /// </summary>
+    static bool WindowRun(Ctx ctx, Edge wall)
+    {
+        var mark = Mark(ctx);
+        var window = wall.Windows.OrderBy(w => Math.Abs(w - wall.Len / 2)).First();
+        var sink = P("kitchen.sink.80");
+        var c = Math.Max(sink.W / 2, Math.Min(wall.Len - sink.W / 2, window));
+        if (Unit(ctx, wall, sink.Id, c) == null) return Undo(ctx, mark);
+        var dishwasher = P("kitchen.dishwasher.60");
+        if (Unit(ctx, wall, dishwasher.Id, c + sink.W / 2 + dishwasher.W / 2) == null)
+            Unit(ctx, wall, dishwasher.Id, c - sink.W / 2 - dishwasher.W / 2);
+        var fridge = P("kitchen.fridge.60");
+        var ends = new[] { fridge.W / 2, wall.Len - fridge.W / 2 }.OrderByDescending(e => Math.Abs(e - c));
+        var fridgeAt = double.NaN;
+        foreach (var e in ends)
+            if (Unit(ctx, wall, fridge.Id, e) != null) { fridgeAt = e; break; }
+        if (double.IsNaN(fridgeAt)) return Undo(ctx, mark);
+        var hob = P("kitchen.hob.60");
+        var gap = sink.W / 2 + 600 + hob.W / 2;
+        var spots = new List<double>();
+        for (var s = hob.W / 2; s <= wall.Len - hob.W / 2 + 1e-6; s += 100)
+            if (Math.Abs(s - c) >= gap - 1e-6) spots.Add(s);
+        // The hob away from the fridge first: the sink sits between them.
+        foreach (var s in spots.OrderByDescending(s => Math.Abs(s - fridgeAt)))
+            if (Unit(ctx, wall, hob.Id, s) != null) return true;
+        return Undo(ctx, mark);
+    }
+
+    static readonly HashSet<string> Core = new HashSet<string> { "kitchen.fridge.60", "kitchen.hob.60", "kitchen.sink.80" };
+
+    static int[] Mark(Ctx ctx) => new[] { ctx.Out.Items.Count, ctx.Bodies.Count, ctx.Zones.Count };
+
+    /// <summary>Takes back what was placed since mark. Always false, so a failed run returns it.</summary>
+    static bool Undo(Ctx ctx, int[] mark)
+    {
+        ctx.Out.Items.RemoveRange(mark[0], ctx.Out.Items.Count - mark[0]);
+        ctx.Bodies.RemoveRange(mark[1], ctx.Bodies.Count - mark[1]);
+        ctx.Zones.RemoveRange(mark[2], ctx.Zones.Count - mark[2]);
+        return false;
     }
 
     static void Bathroom(Ctx ctx, HashSet<string> have, int skip, bool full)
@@ -685,6 +729,7 @@ public static class Furnish
         else
         {
             edge.HasWindow = true;
+            edge.Windows.Add(s);
             ctx.Zones.Add(new Furniture.Footprint
             {
                 Corners = new[] { frame.ToWorld(-half, 0), frame.ToWorld(half, 0), frame.ToWorld(half, WindowZoneMm), frame.ToWorld(-half, WindowZoneMm) },

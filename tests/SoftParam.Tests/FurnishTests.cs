@@ -112,6 +112,27 @@ public class FurnishTests
     }
 
     [Fact]
+    public void AKitchenRunOnAWindowWall_PutsTheSinkUnderTheWindow()
+    {
+        var room = Box(4200, 3000);
+        var openings = new[] { Door(700, 0), Window(2600, 3000, 1000) };
+        var layout = Plan(RoomTypes.Kitchen, room, openings);
+        Sound(layout, room, openings);
+        var sink = layout.Items.Single(i => i.Piece.Type == "sink");
+        var centre = Furniture.CentreOf(sink.Piece, sink.Frame);
+        Assert.Equal(2600, centre.X, 6);
+        Assert.True(centre.Y > 2000, "the sink is on the window wall");
+        foreach (var type in new[] { "fridge", "hob", "dishwasher" })
+            Assert.Contains(layout.Items, i => i.Piece.Type == type);
+        // The hob keeps a base unit's width from the sink.
+        var hob = layout.Items.Single(i => i.Piece.Type == "hob");
+        Assert.True(Math.Abs(Furniture.CentreOf(hob.Piece, hob.Frame).X - 2600) >= 400 + 600 + 300 - 1e-6);
+        // No wall unit hangs in front of the window.
+        Assert.DoesNotContain(layout.Items, i => i.Piece.Type == "kitchen_wall"
+            && Math.Abs(Furniture.CentreOf(i.Piece, i.Frame).X - 2600) < 500 + 300);
+    }
+
+    [Fact]
     public void ABathroom_GetsAShowerAWcAndABasin_WithTheWcSideSpaceKept()
     {
         var room = Box(2000, 2400);
