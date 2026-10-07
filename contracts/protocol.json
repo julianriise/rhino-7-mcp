@@ -74,6 +74,7 @@
             "delete_furniture",
             "furnish_room",
             "jump_inside",
+            "show_view",
             "room_push_pull",
             "add_room_area",
             "rebuild_host_wall",

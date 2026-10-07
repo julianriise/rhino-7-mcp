@@ -979,6 +979,31 @@
     });
   }
 
+  /* The view picker: the viewport's view is checked. A pick shows it in the active viewport. */
+  function renderView(model) {
+    var view = model && model.view;
+    var button = document.getElementById('view');
+    var menu = document.getElementById('view-menu');
+    if (!button || !menu) return;
+    var label = (view && view.label) || 'View';
+    button.title = 'View: ' + label;
+    button.setAttribute('aria-label', 'View, ' + label);
+    if (!menu.hidden) return;
+    while (menu.firstChild) menu.removeChild(menu.firstChild);
+    ((view && view.options) || []).forEach(function (option) {
+      var item = el('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', view && option.id === view.value ? 'true' : 'false');
+      item.appendChild(document.createTextNode(option.label));
+      item.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'view', view: option.id });
+      });
+      menu.appendChild(item);
+    });
+  }
+
   function attentionOn(list, id) {
     for (var i = 0; i < list.length; i++) {
       if (!list[i] || !list[i].needs) continue;
@@ -1338,6 +1363,7 @@
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
     renderRole(model);
+    renderView(model);
     renderSettings(model);
     renderSheet(model.help);
     applyPrefill(model.prefill);
@@ -1382,6 +1408,8 @@
     if (roleMenu && !roleMenu.hidden) return roleMenu;
     var moreMenu = document.getElementById('more-menu');
     if (moreMenu && !moreMenu.hidden) return moreMenu;
+    var viewMenu = document.getElementById('view-menu');
+    if (viewMenu && !viewMenu.hidden) return viewMenu;
     var slotMenu = document.getElementById('slot-menu');
     if (slotMenu && !slotMenu.hidden) return slotMenu;
     return null;
@@ -1395,6 +1423,10 @@
   function closeMenus(back) {
     document.getElementById('role-menu').hidden = true;
     document.getElementById('more-menu').hidden = true;
+    var viewBox = document.getElementById('view-menu');
+    if (viewBox) viewBox.hidden = true;
+    var viewButton = document.getElementById('view');
+    if (viewButton) viewButton.setAttribute('aria-expanded', 'false');
     var slotMenu = document.getElementById('slot-menu');
     if (slotMenu) slotMenu.hidden = true;
     document.getElementById('role-pill').setAttribute('aria-expanded', 'false');
@@ -1501,6 +1533,11 @@
       if (document.getElementById('more-menu').hidden) openMenu('more-menu', more);
       else closeMenus(true);
     });
+    var viewPick = document.getElementById('view');
+    viewPick.addEventListener('click', function () {
+      if (document.getElementById('view-menu').hidden) openMenu('view-menu', viewPick);
+      else closeMenus(true);
+    });
     pill.addEventListener('keydown', function (e) {
       if (e.key !== 'ArrowDown') return;
       e.preventDefault();
@@ -1511,7 +1548,7 @@
       if (model && model.help && Forsk.closesSheet(holds('sheet', e.target), holds('help', e.target), holds('slot-menu', e.target)))
         sender.send({ kind: 'help' });
       if (!openMenuEl()) return;
-      if (holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
+      if (holds('view-menu', e.target) || holds('view', e.target) || holds('role-menu', e.target) || holds('role-pill', e.target) || holds('more-menu', e.target) || holds('more', e.target) || holds('slot-menu', e.target) || holds('help', e.target)) return;
       closeMenus(false);
     });
     document.addEventListener('pointerdown', function () {

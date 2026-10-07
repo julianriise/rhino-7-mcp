@@ -121,6 +121,18 @@ internal static class ForskWhiteHost
         }
     }
 
+    /// <summary>
+    /// The mode a view picked in the view picker takes: Forsk Technical for a
+    /// plan or an elevation, Forsk White for the rest; Shaded with Forsk White off.
+    /// </summary>
+    internal static DisplayModeDescription ModeFor(RhinoDoc doc, ForskTechnical.Look look)
+    {
+        if (!Enabled()) return Shaded();
+        if (look != ForskTechnical.Look.Model && ForskTechnicalHost.Enabled())
+            return ForskTechnicalHost.Ensure(doc) ?? Ensure();
+        return Ensure();
+    }
+
     static DisplayModeDescription Shaded()
     {
         return DisplayModeDescription.GetDisplayMode(DisplayModeDescription.ShadedId);

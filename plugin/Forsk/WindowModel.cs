@@ -363,6 +363,7 @@ namespace RhinoMCPPlugin.Forsk
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
             model["role"] = ForskRoles.Control(thread.Override);
+            model["view"] = Functions.ViewPicker.Control(facts.View);
             model["settings"] = Settings(facts);
             model["attention"] = Attention(facts);
             if (!string.IsNullOrEmpty(facts.Build)) model["build"] = facts.Build;

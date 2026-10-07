@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "show_view.json",
+  "title": "ShowView Command",
+  "description": "The view picker: the active model viewport shows Perspective, the Plan, or the North, East, South or West elevation (looking as the sheets do), zoomed to the selection, else the building. A plan or elevation takes Forsk Technical and the rest Forsk White; a plan view gets the 1.2 m plan cut. The viewport layout never changes.",
+  "type": "object",
+  "properties": {
+    "view": {
+      "type": "string",
+      "enum": ["perspective", "plan", "north", "east", "south", "west"],
+      "description": "The view to show."
+    }
+  },
+  "required": ["view"],
+  "additionalProperties": false
+}

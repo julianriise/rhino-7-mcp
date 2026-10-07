@@ -548,6 +548,8 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.delete_furniture"] = "Furniture",
             ["tool.furnish_room"] = "Furniture",
             ["tool.jump_inside"] = "View",
+            ["tool.show_view"] = "View",
+            ["view.show"] = "Show view",
             // FU.7: the two furnish layouts as ghosts, picked on a card.
             ["furnish.pick.ask"] = "Two layouts for {room}. Which one goes in?",
             ["furnish.pick.one"] = "One layout for {room}, shown in blue.",

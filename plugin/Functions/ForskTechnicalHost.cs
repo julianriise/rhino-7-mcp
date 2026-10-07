@@ -382,8 +382,8 @@ internal static class ForskTechnicalHost
                 if (view == null || view is RhinoPageView) continue;
                 var viewport = view.MainViewport;
                 if (viewport == null || !IsTechnical(viewport)) continue;
+                // Every plan view, as the plan cut: the picker's Plan in any viewport.
                 if (LookOf(viewport) != ForskTechnical.Look.Plan) continue;
-                if (!ForskPlanCut.IsTopName(viewport.Name)) continue;
                 want.Add(viewport.Id);
             }
         }

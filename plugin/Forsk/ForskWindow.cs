@@ -171,6 +171,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "analyser":
                         AnalyserCard();
                         return;
+                    case "view":
+                        PickView(message["view"]?.ToString());
+                        return;
                 }
             }
             catch (Exception e)
@@ -225,7 +228,19 @@ namespace RhinoMCPPlugin.Forsk
                 var stale = Active()?.StaleCards(_facts) ?? 0;
                 if (stale > 0) Log("cards: " + stale + " went stale");
             }
+            // The view picker follows the viewport, which moves without a document event.
+            _facts.View = CurrentView(doc);
             return _facts;
+        }
+
+        /// <summary>The picker's view the active model viewport shows, or null (a layout, or a tilted parallel view).</summary>
+        static string CurrentView(RhinoDoc doc)
+        {
+            var view = doc?.Views.ActiveView;
+            if (view == null || view is Rhino.Display.RhinoPageView) return null;
+            var vp = view.MainViewport;
+            var dir = vp.CameraDirection;
+            return Functions.ViewPicker.Current(vp.IsParallelProjection, dir.X, dir.Y, dir.Z);
         }
 
         void Render()

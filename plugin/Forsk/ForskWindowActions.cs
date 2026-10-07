@@ -1000,6 +1000,14 @@ namespace RhinoMCPPlugin.Forsk
                 Export(thread, text, exportFormat, TurnMark(thread, text));
                 return;
             }
+            // The view picker from chat: "show the south elevation".
+            var viewPick = ForskIntentRouter.ViewPick(text);
+            if (viewPick != null)
+            {
+                Job(thread, "view.show", ForskText.Get("view.show"), sink => sink.Tool("show_view", new JObject { ["view"] = viewPick }),
+                    userText: text, mark: TurnMark(thread, text));
+                return;
+            }
             // AN.3: the Analysis set prints as its own PDF, from its card.
             if (ForskIntentRouter.AnalysisPrint(text))
             {
@@ -1216,6 +1224,17 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>The analysis menu's Live ticks, on the file.</summary>
         /// <summary>AN.4: the Choose analyses ticks onto the file. The names of the analyses now in the set.</summary>
+        /// <summary>The view picker: the active viewport shows the view. Quiet unless it fails.</summary>
+        void PickView(string id)
+        {
+            if (!Functions.ViewPicker.Known(id)) return;
+            var envelope = ForskTools.CommandOnUi("show_view", new JObject { ["view"] = id });
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view did not change.");
+            MarkDirty();
+            Render();
+        }
+
         static List<string> SaveAnalysisSet(JObject values)
         {
             var doc = RhinoDoc.ActiveDoc;

@@ -210,7 +210,8 @@ internal static class ForskPlanCutHost
             slots.Add(new ForskPlanCut.ViewSlot(
                 viewport.Id.ToString("D"),
                 viewport.Name,
-                view.GetType().Name));
+                view.GetType().Name,
+                ForskTechnicalHost.LookOf(viewport) == ForskTechnical.Look.Plan));
         }
         var ids = ForskPlanCut.TopIds(slots);
         var guids = new List<Guid>(ids.Count);

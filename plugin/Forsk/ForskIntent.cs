@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace RhinoMCPPlugin.Forsk
@@ -306,6 +307,43 @@ namespace RhinoMCPPlugin.Forsk
                 || HasWord(t, "send") || HasWord(t, "save") || HasWord(t, "lagre");
             if (!verb) return null;
             return ifc ? "ifc" : dwg ? "dwg" : dxf ? "dxf" : "csv";
+        }
+
+        /// <summary>
+        /// The view picker from chat: "show the south elevation", "vis
+        /// sørfasaden", "plan view", "3d view". A view word with a show verb,
+        /// or a short phrase that is only the view. Null for anything else:
+        /// "add a window to the south facade" is an edit, "print the plan" a print.
+        /// </summary>
+        public static string ViewPick(string text)
+        {
+            var t = Normalize(text);
+            if (t.Length == 0 || t.Length > 80 || Question(t)) return null;
+            var words = t.Split(' ');
+            var verb = HasWord(t, "show") || HasWord(t, "see") || HasWord(t, "look") || HasWord(t, "vis") || HasWord(t, "se")
+                || t.Contains("go to") || t.Contains("switch to") || t.Contains("gå til") || t.Contains("bytt til");
+            var view = HasWord(t, "view") || HasWord(t, "visning");
+            string Side(string w)
+            {
+                if (w.StartsWith("north") || w.StartsWith("nord")) return "north";
+                if (w.StartsWith("east") || w.StartsWith("øst")) return "east";
+                if (w.StartsWith("south") || w.StartsWith("sør")) return "south";
+                if (w.StartsWith("west") || w.StartsWith("vest")) return "west";
+                return null;
+            }
+            bool Facade(string w) => w.Contains("elevation") || w.Contains("facade") || w.Contains("façade") || w.Contains("fasade") || w.Contains("oppriss");
+            if (words.Any(Facade))
+            {
+                var side = words.Select(Side).FirstOrDefault(x => x != null);
+                if (side != null && (verb || view || words.Length <= 3)) return side;
+                return null;
+            }
+            if (words.Any(w => w == "perspective" || w.StartsWith("perspektiv") || w == "3d"))
+                return verb || view || words.Length == 1 ? Functions.ViewPicker.Perspective : null;
+            var plan = words.Any(w => w == "plan" || w.StartsWith("plantegning") || w == "planet");
+            if ((plan && (verb || view && words.Length <= 2)) || (view && HasWord(t, "top") && words.Length <= 2))
+                return Functions.ViewPicker.Plan;
+            return null;
         }
 
         /// <summary>

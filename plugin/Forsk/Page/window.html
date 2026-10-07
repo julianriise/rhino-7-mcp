@@ -146,6 +146,7 @@ header.top {
 }
 #role-menu { top: 100%; left: 50%; transform: translateX(-50%); }
 #more-menu { top: 46px; right: 14px; }
+#view-menu { top: 46px; left: 14px; }
 .menu button {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px;
@@ -406,8 +407,11 @@ textarea::placeholder { color: var(--faint); }
 </head>
 <body>
 <header class="top">
-  <!-- v4: the floor picker goes in this spot (ROADMAP v4, multiple storeys). Empty until then, so the role stays centred. -->
-  <span class="top-left" aria-hidden="true"></span>
+  <!-- The view picker (Julian, 2026-10-07): the active viewport shows Perspective, Plan or an elevation. Floors may join it in v3. -->
+  <button id="view" class="round" type="button" tabindex="0" aria-label="View" title="View" aria-haspopup="menu" aria-expanded="false" aria-controls="view-menu">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+  </button>
+  <div id="view-menu" class="menu" role="menu" aria-label="View" hidden></div>
   <div class="identity">
     <div id="avatar" class="avatar" aria-hidden="true"></div>
     <button id="role-pill" class="role-pill" type="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="role-menu">

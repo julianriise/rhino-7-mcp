@@ -185,6 +185,8 @@ namespace RhinoMCPPlugin.Forsk
         public bool OfferArea;
         /// <summary>An analysis just ran: the bar offers Add to analysis set.</summary>
         public string Analysed;
+        /// <summary>The view picker's view the active viewport shows (ViewPicker.Current), or null. The window sets it on every read.</summary>
+        public string View;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>

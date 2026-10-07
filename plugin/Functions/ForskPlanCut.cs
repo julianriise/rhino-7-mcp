@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// The Top plan cut: floor top plus 1200 mm, normal (0,0,-1), and only
-/// viewports whose name is Top. A layout page and a detail are out even
+/// The Top plan cut: floor top plus 1200 mm, normal (0,0,-1), in viewports
+/// named Top and in any parallel view looking straight down (the view
+/// picker's Plan). A layout page and a detail are out even
 /// when they are named Top. The stamp is not forsk:generated and the name
 /// misses the clear_generated prefixes, so a rebuild leaves the plane.
 /// White fill, the black outline, and the hidden widget are the Forsk White
@@ -44,16 +45,19 @@ public static class ForskPlanCut
 
     public readonly struct ViewSlot
     {
-        public ViewSlot(string id, string name, string typeName)
+        public ViewSlot(string id, string name, string typeName, bool plan = false)
         {
             Id = id;
             Name = name;
             TypeName = typeName;
+            Plan = plan;
         }
 
         public string Id { get; }
         public string Name { get; }
         public string TypeName { get; }
+        /// <summary>A parallel view looking straight down: the view picker's Plan, whatever the viewport is named.</summary>
+        public bool Plan { get; }
     }
 
     /// <summary>Highest floor top, or 0 when the file has no floor, plus 1200 mm.</summary>
@@ -82,9 +86,9 @@ public static class ForskPlanCut
         return next == ' ' || (next >= '0' && next <= '9');
     }
 
-    public static bool Clips(string name, string typeName)
+    public static bool Clips(string name, string typeName, bool plan = false)
     {
-        return ForskWhite.AssignsDisplayMode(typeName) && IsTopName(name);
+        return ForskWhite.AssignsDisplayMode(typeName) && (plan || IsTopName(name));
     }
 
     public static IReadOnlyList<string> TopIds(IEnumerable<ViewSlot> views)
@@ -94,7 +98,7 @@ public static class ForskPlanCut
         foreach (var view in views)
         {
             if (string.IsNullOrEmpty(view.Id)) continue;
-            if (!Clips(view.Name, view.TypeName)) continue;
+            if (!Clips(view.Name, view.TypeName, view.Plan)) continue;
             if (ids.Contains(view.Id)) continue;
             ids.Add(view.Id);
         }

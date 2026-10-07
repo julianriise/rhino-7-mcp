@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "show_view_result.json",
+  "title": "ShowViewResult",
+  "type": "object",
+  "properties": {
+    "view": { "type": "string", "enum": ["perspective", "plan", "north", "east", "south", "west"] },
+    "label": { "type": "string" },
+    "viewport": { "type": "string" },
+    "display": { "type": "string" },
+    "zoom": { "type": "string", "enum": ["selection", "building", "everything"] },
+    "message": { "type": "string" }
+  },
+  "required": ["view", "label", "viewport", "display", "zoom", "message"]
+}

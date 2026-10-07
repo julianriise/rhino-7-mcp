@@ -69,6 +69,7 @@ namespace RhinoMCPPlugin.Forsk
             "delete_furniture",
             "furnish_room",
             "jump_inside",
+            "show_view",
             "rooms_set_type",
             "rooms_colors"
         };
@@ -630,6 +631,12 @@ namespace RhinoMCPPlugin.Forsk
                     {
                         ["room"] = Str("Room id, name or type. Omit for the picked room, else the only one.")
                     }),
+                Fn("show_view",
+                    "Show a view in the active viewport: perspective, plan, or the north, east, south or west elevation, zoomed to the selection else the building, with the line look for plans and elevations. The viewport layout never changes.",
+                    new JObject
+                    {
+                        ["view"] = new JObject { ["type"] = "string", ["enum"] = new JArray("perspective", "plan", "north", "east", "south", "west"), ["description"] = "The view." }
+                    }, "view"),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",
                     new JObject
