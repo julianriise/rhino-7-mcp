@@ -61,6 +61,7 @@
     <Compile Include="..\..\plugin\Functions\OfficeLogo.cs" Link="OfficeLogo.cs" />
     <Compile Include="..\..\plugin\Functions\Stairs.cs" Link="Stairs.cs" />
     <Compile Include="..\..\plugin\Functions\Furniture.cs" Link="Furniture.cs" />
+    <Compile Include="..\..\plugin\Functions\Furnish.cs" Link="Furnish.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />
     <Compile Include="..\..\plugin\Forsk\FieldInk.cs" Link="FieldInk.cs" />

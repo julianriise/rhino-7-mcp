@@ -58,3 +58,16 @@ def test_delete_sends_the_target(mock_get_conn):
     conn.send_command.assert_called_with("delete_furniture", {"room": "kitchen"})
     delete_furniture(ctx=None, all=True)
     conn.send_command.assert_called_with("delete_furniture", {"all": True})
+
+
+@patch("rhinomcp.tools.furnish_room.get_rhino_connection")
+def test_furnish_sends_the_room_and_refuses_bad_words(mock_get_conn):
+    from rhinomcp.tools.furnish_room import furnish_room
+
+    conn = _conn(mock_get_conn, {"rooms": [], "count": 0, "message": "ok"})
+    assert furnish_room(ctx=None, density="tight")["success"] is False
+    assert furnish_room(ctx=None, variant="random")["success"] is False
+    conn.send_command.assert_not_called()
+    furnish_room(ctx=None, room="all", density="compact", variant="creative", replace=True)
+    conn.send_command.assert_called_once_with(
+        "furnish_room", {"room": "all", "density": "compact", "variant": "creative", "replace": True})

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "furnish_result.json",
+  "title": "FurnishResult",
+  "type": "object",
+  "properties": {
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "forsk_id": {
+                  "type": "string",
+                  "pattern": "^F[0-9]{2,}$"
+                },
+                "catalog_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "forsk_id",
+                "catalog_id"
+              ]
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "why": {
+            "type": "string",
+            "description": "Empty when furnished, else why not."
+          }
+        },
+        "required": [
+          "room",
+          "type",
+          "added",
+          "skipped",
+          "why"
+        ]
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "density": {
+      "type": "string"
+    },
+    "variant": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "rooms",
+    "count",
+    "message"
+  ]
+}

@@ -410,6 +410,9 @@ def test_new_commands():
         ("commands/delete_furniture.json", {"id": "F02"}),
         ("commands/delete_furniture.json", {"room": "R03"}),
         ("commands/delete_furniture.json", {"all": True}),
+        ("commands/furnish_room.json", {}),
+        ("commands/furnish_room.json", {"room": "bedroom"}),
+        ("commands/furnish_room.json", {"room": "all", "density": "compact", "variant": "creative", "replace": True}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -997,6 +1000,15 @@ def test_responses():
     }
     if not validate("responses/furniture_result.json", piece):
         all_passed = False
+    furnished = {
+        "rooms": [{"room": "R02", "type": "bedroom", "added": [{"id": piece["id"], "forsk_id": "F01", "catalog_id": "bed.double.160x200"}],
+                   "skipped": ["a wardrobe (no free wall for it)"], "why": ""},
+                  {"room": "R03", "type": "bathroom", "added": [], "skipped": [], "why": "no wall holds an 80 shower with 0.7 m in front of it"}],
+        "count": 1, "density": "relaxed", "variant": "consistent",
+        "message": "Furnished the bedroom: double bed 160. Did not furnish the bathroom: no wall holds an 80 shower.",
+    }
+    if not validate("responses/furnish_result.json", furnished):
+        all_passed = False
     if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
         all_passed = False
 
@@ -1522,6 +1534,9 @@ def test_invalid_examples():
         ("commands/move_furniture.json", {"id": "F01"}, "move_furniture nothing to change"),
         ("commands/move_furniture.json", {"to": [1]}, "move_furniture one coordinate"),
         ("commands/delete_furniture.json", {"kind": "bed"}, "delete_furniture unknown field"),
+        ("commands/furnish_room.json", {"density": "tight"}, "furnish_room unknown density"),
+        ("commands/furnish_room.json", {"variant": "random"}, "furnish_room unknown variant"),
+        ("commands/furnish_room.json", {"room": "R01", "style": "modern"}, "furnish_room unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),
         ("commands/details.json", {"action": "move"}, "details unknown action"),
         ("commands/details.json", {"action": "add", "refs": []}, "details no refs"),

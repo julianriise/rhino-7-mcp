@@ -515,6 +515,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.add_furniture"] = "Furniture",
             ["tool.move_furniture"] = "Furniture",
             ["tool.delete_furniture"] = "Furniture",
+            ["tool.furnish_room"] = "Furniture",
             ["receipt.ok"] = "done",
         };
 

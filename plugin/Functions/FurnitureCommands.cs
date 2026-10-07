@@ -58,7 +58,15 @@ public partial class RhinoMCPFunctions
             if (spot == null) throw new InvalidOperationException(Refusal(piece, room, why));
         }
 
-        var floor = StairFloorTop(doc);
+        var (id, forskId) = AddFurniturePiece(doc, piece, spot.Frame, room, StairFloorTop(doc));
+        doc.Views.Redraw();
+        return FurnitureResult(id, forskId, piece, room, spot.Frame,
+            Furniture.Receipt(piece, RoomWords(room), spot.Where));
+    }
+
+    /// <summary>One instance of the piece's block at frame, standing on floor, with its record. Throws when Rhino will not add it.</summary>
+    private (Guid Id, string ForskId) AddFurniturePiece(RhinoDoc doc, Furniture.Piece piece, Furniture.Frame frame, PlanRoom room, double floor)
+    {
         var index = FurnitureDefinition(doc, piece);
         var forskId = Furniture.NextId(FurnitureObjects(doc).Select(o => o.Attributes.GetUserString("forsk:id")));
         var layer = EnsureLayer(doc, Furniture.LayerFor(piece), FurnitureColour(piece));
@@ -71,12 +79,10 @@ public partial class RhinoMCPFunctions
         };
         StampForskTags(attr, new ForskStamp { Kind = Furniture.Kind, Level = "0", Id = forskId });
         attr.SetUserString(Furniture.CatalogKey, piece.Id);
-        attr.SetUserString(Furniture.RoomKey, room.ScheduleId);
-        var id = doc.Objects.AddInstanceObject(index, FurnitureXform(spot.Frame, floor), attr);
+        attr.SetUserString(Furniture.RoomKey, room?.ScheduleId ?? "");
+        var id = doc.Objects.AddInstanceObject(index, FurnitureXform(frame, floor), attr);
         if (id == Guid.Empty) throw new InvalidOperationException("Could not add the " + piece.Name.ToLowerInvariant() + ".");
-        doc.Views.Redraw();
-        return FurnitureResult(id, forskId, piece, room, spot.Frame,
-            Furniture.Receipt(piece, RoomWords(room), spot.Where));
+        return (id, forskId);
     }
 
     [McpCommand("move_furniture", ModelView = true)]

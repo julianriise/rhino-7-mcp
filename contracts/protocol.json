@@ -72,6 +72,7 @@
             "add_furniture",
             "move_furniture",
             "delete_furniture",
+            "furnish_room",
             "room_push_pull",
             "add_room_area",
             "rebuild_host_wall",
