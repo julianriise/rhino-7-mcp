@@ -192,7 +192,7 @@ namespace RhinoMCPPlugin.Forsk
         static readonly HashSet<string> ForskLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "wall", "door", "window", "room", "plan", "label", "space_divider",
-            "A-WALL", "A-FLOR", "A-ROOF", "A-OPEN", "A-ROOM", "A-ANALYSE", "A-ANNO", "A-STAIR",
+            "A-WALL", "A-FLOR", "A-ROOF", "A-OPEN", "A-ROOM", "A-ANALYSE", "A-ANNO", "A-STAIR", "A-FURN", "A-FURN-FIXD", "A-FURN-PLAY",
             "X-PLAN", "X-EXIST"
         };
 

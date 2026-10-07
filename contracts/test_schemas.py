@@ -398,6 +398,18 @@ def test_new_commands():
         ("commands/edit_stair.json", {"flip": True}),
         ("commands/delete_stair.json", {}),
         ("commands/delete_stair.json", {"id": "S02"}),
+        ("commands/add_furniture.json", {"item": "double bed"}),
+        ("commands/add_furniture.json", {"item": "bed.double.160x200", "room": "R02"}),
+        ("commands/add_furniture.json", {"item": "sofa", "seats": 3, "room": "living"}),
+        ("commands/add_furniture.json", {"item": "bed", "width": 180, "at": [2500, 1200]}),
+        ("commands/add_furniture.json", {"item": "dining table", "at": [4000, 3000], "rotation": 90}),
+        ("commands/move_furniture.json", {"id": "F01", "to": [3000, 2000]}),
+        ("commands/move_furniture.json", {"by": [-500, 0]}),
+        ("commands/move_furniture.json", {"id": GUID, "rotate": 90}),
+        ("commands/delete_furniture.json", {}),
+        ("commands/delete_furniture.json", {"id": "F02"}),
+        ("commands/delete_furniture.json", {"room": "R03"}),
+        ("commands/delete_furniture.json", {"all": True}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -977,6 +989,17 @@ def test_responses():
     if not validate("responses/delete_stair_result.json", {"deleted": [stair["id"]], "count": 1, "message": "Removed the stair."}):
         all_passed = False
 
+    print("  furniture_result:")
+    piece = {
+        "id": "12345678-1234-1234-1234-123456789012", "forsk_id": "F01", "catalog_id": "bed.double.160x200",
+        "name": "Double bed 160", "room": "R02", "centre": [1500.0, 2000.0], "rotation": 90.0, "size": [1600, 2000, 900],
+        "message": "Added a double bed 160 to the bedroom, against the east wall.",
+    }
+    if not validate("responses/furniture_result.json", piece):
+        all_passed = False
+    if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
+        all_passed = False
+
     print("  export_ifc_result:")
     ifc_written = {
         "path": "/tmp/forsk-ifc-garage.ifc", "walls": 4, "doors": 1, "windows": 1, "slabs": 1, "roofs": 1,
@@ -1492,6 +1515,13 @@ def test_invalid_examples():
         ("commands/edit_stair.json", {"id": "S01"}, "edit_stair id only"),
         ("commands/edit_stair.json", {"going": 80}, "edit_stair going too short"),
         ("commands/delete_stair.json", {"all": True}, "delete_stair unknown field"),
+        ("commands/add_furniture.json", {}, "add_furniture missing item"),
+        ("commands/add_furniture.json", {"item": "bed", "rotation": 90}, "add_furniture rotation without at"),
+        ("commands/add_furniture.json", {"item": "bed", "seats": 0}, "add_furniture no seats"),
+        ("commands/add_furniture.json", {"item": "bed", "colour": "red"}, "add_furniture unknown field"),
+        ("commands/move_furniture.json", {"id": "F01"}, "move_furniture nothing to change"),
+        ("commands/move_furniture.json", {"to": [1]}, "move_furniture one coordinate"),
+        ("commands/delete_furniture.json", {"kind": "bed"}, "delete_furniture unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),
         ("commands/details.json", {"action": "move"}, "details unknown action"),
         ("commands/details.json", {"action": "add", "refs": []}, "details no refs"),

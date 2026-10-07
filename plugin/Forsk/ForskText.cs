@@ -512,6 +512,9 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.add_stair"] = "Stair",
             ["tool.edit_stair"] = "Stair",
             ["tool.delete_stair"] = "Stair",
+            ["tool.add_furniture"] = "Furniture",
+            ["tool.move_furniture"] = "Furniture",
+            ["tool.delete_furniture"] = "Furniture",
             ["receipt.ok"] = "done",
         };
 

@@ -354,6 +354,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Add a wall is add_wall: from and to [x, y], or line_id for a drawn line. "
                     + "Push or pull a side of the selected room is room_push_pull: side, distance_mm, way out or in. "
                     + "A stair (trapp) is add_stair: from and to, along_wall for the picked wall, or nothing. Change it with edit_stair: make the stair 1000 wide is width, steps 170 high is riser_max, going 280 is going, flip the stair is flip. Delete it with delete_stair. Never draw a stair with other tools. "
+                    + "Furniture (møbler) is add_furniture, one piece per call: put a double bed in the bedroom is item double bed, room bedroom. Furnish a room by adding its pieces one by one. Move or turn a piece with move_furniture, remove it with delete_furniture. A refusal says why; tell the user. No lamps, rugs, plants or decor. "
                     + "A successful move, delete or add updates the floor, the flat roof and the rooms, and the status line is the tool message. "
                     + "A shown daylight map is hidden as out of date. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "

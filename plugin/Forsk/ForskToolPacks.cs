@@ -64,6 +64,9 @@ namespace RhinoMCPPlugin.Forsk
             "add_stair",
             "edit_stair",
             "delete_stair",
+            "add_furniture",
+            "move_furniture",
+            "delete_furniture",
             "rooms_set_type",
             "rooms_colors"
         };
@@ -579,6 +582,35 @@ namespace RhinoMCPPlugin.Forsk
                     new JObject
                     {
                         ["id"] = Str("Stair GUID or S01. Omit for the picked stairs.")
+                    }),
+                Fn("add_furniture",
+                    "Add one piece of furniture from Forsk's catalogue: a 3D block that plan sheets draw as its 2D symbol. One piece per call. Bedroom: bed (single 90/120, double 140/160/180), bedside table, wardrobe 50/100, desk. Living: sofa 2/3 seats, armchair, coffee table, TV bench, bookshelf. Dining: dining table 4/6/8 seats or round 4/6, chair. Kitchen: base, tall and wall unit, sink unit, hob, fridge, dishwasher, worktop 120/240, island. Bathroom: WC, basin, shower 80/90, bath, washing machine. Office chair, shelf, shoe cabinet, coat rack, bench. A wall piece stands back to the longest free wall; tables, chairs and the island stand in the middle. A piece that does not fit is refused with the reason.",
+                    new JObject
+                    {
+                        ["item"] = Str("A catalogue id or words: double bed, sofa, toilet."),
+                        ["width"] = Num("Nominal width, cm under 300 else mm: picks the nearest size."),
+                        ["seats"] = new JObject { ["type"] = "integer", ["description"] = "Seats, for sofas and tables: picks the nearest size." },
+                        ["room"] = Str("The room's id, name, or type when one room has it. Omit for the room holding at, else the picked room, else the only one."),
+                        ["at"] = Pair("[x, y] in mm: the wall or spot nearest to it first."),
+                        ["rotation"] = Num("Degrees of the back edge from x. With at: the piece's centre goes exactly at.")
+                    },
+                    "item"),
+                Fn("move_furniture",
+                    "Move or turn the picked piece of furniture, or the only one: to a centre [x, y], by [dx, dy], or rotate in degrees. It must stay inside a room and clear of other pieces.",
+                    new JObject
+                    {
+                        ["id"] = Str("Piece GUID or F01. Omit for the picked piece."),
+                        ["to"] = Pair("New centre [x, y] in mm."),
+                        ["by"] = Pair("Move [dx, dy] in mm."),
+                        ["rotate"] = Num("Turn about the centre, degrees counter-clockwise.")
+                    }),
+                Fn("delete_furniture",
+                    "Delete furniture: the id, every piece in room, every piece with all, else the picked pieces, else the only one.",
+                    new JObject
+                    {
+                        ["id"] = Str("Piece GUID or F01."),
+                        ["room"] = Str("Every piece in this room."),
+                        ["all"] = Bool("Every piece in the file.")
                     }),
                 Fn("add_wall",
                     "Add one straight wall on its centreline: from and to, or line_id for a straight line the user drew (make this line a wall). Ends short of a wall face by up to 300 mm run on to it. It joins the wall it touches (a partition across a room splits it), or stands as a new wall of its own: on its own, or joined to two or more separate walls it touches. Refused when it would run across an opening. The floor slab and flat roof from that record are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date.",

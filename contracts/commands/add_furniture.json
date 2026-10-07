@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "add_furniture.json",
+  "title": "AddFurniture Command",
+  "description": "Add one piece from the furniture catalogue (forsk.furniture.v1): a block FORSK_FU_<catalog_id> on A-FURN (fixed kitchen and bathroom pieces on A-FURN-FIXD) with forsk:kind=furniture, forsk:id F01, forsk:catalog_id and forsk:room. item is a catalogue id or words (double bed, sofa, toilet); width (cm under 300, else mm) and seats pick the nearest size. room names the room (id, name, or a room type with one room); else the room holding at, else the picked room, else the only room. A wall piece stands back to the longest free wall, centred, sliding along it; a free piece (tables, chairs, island) stands in the middle, turned along the longest wall. at with rotation places its centre exactly. A piece that does not fit is refused with the reason. Plan sheets draw its 2D symbol.",
+  "type": "object",
+  "properties": {
+    "item": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Catalogue id (bed.double.160x200) or words (double bed, sofa, WC)."
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Nominal width: cm under 300, else mm. Picks the nearest size."
+    },
+    "seats": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Seats, for sofas and tables. Picks the nearest size."
+    },
+    "room": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The room: its id (R01), its name, or a room type when only one room has it."
+    },
+    "at": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in mm: the wall or spot nearest to it first; with rotation, the piece's centre."
+    },
+    "rotation": {
+      "type": "number",
+      "description": "Degrees, counter-clockwise, of the piece's back edge from world x. Only with at."
+    }
+  },
+  "required": [
+    "item"
+  ],
+  "dependentRequired": {
+    "rotation": [
+      "at"
+    ]
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "move_furniture.json",
+  "title": "MoveFurniture Command",
+  "description": "Move or turn one piece of furniture: to puts its centre at [x, y], by moves it [dx, dy], rotate turns it about its centre (degrees, counter-clockwise). It must stay inside a room and clear of other pieces, else it is refused with the reason. forsk:room follows it. The piece is the id, else the picked one, else the only one.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The piece's GUID or its forsk:id (F01)."
+    },
+    "to": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "New centre [x, y], mm."
+    },
+    "by": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Move [dx, dy], mm."
+    },
+    "rotate": {
+      "type": "number",
+      "description": "Turn about the centre, degrees counter-clockwise."
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "to"
+      ]
+    },
+    {
+      "required": [
+        "by"
+      ]
+    },
+    {
+      "required": [
+        "rotate"
+      ]
+    }
+  ],
+  "additionalProperties": false
+}

@@ -30,7 +30,10 @@ public static class Furniture
     public const string SchemaKey = "forsk:schema";
     public const string RevKey = "forsk:catalog_rev";
     public const string RoomKey = "forsk:room";
+    /// <summary>The 2D symbol's block in a DWG sheet (FU.2).</summary>
     public const string BlockPrefix = "FORSK_FU_";
+    /// <summary>The 3D block in the model: another name, so a sheet export can add its 2D block beside it.</summary>
+    public const string ModelBlockPrefix = "FORSK_FU3D_";
     /// <summary>The plan symbol adds its detail lines at this scale and finer (1:50).</summary>
     public const int DetailScale = 50;
 
@@ -184,6 +187,8 @@ public static class Furniture
         id == null ? null : all.FirstOrDefault(p => string.Equals(p.Id, id.Trim(), StringComparison.OrdinalIgnoreCase));
 
     public static string BlockName(Piece piece) => BlockPrefix + piece.Id;
+
+    public static string ModelBlockName(Piece piece) => ModelBlockPrefix + piece.Id;
 
     public static string LayerFor(Piece piece) => piece.Fixed ? FixedLayerName : LayerName;
 

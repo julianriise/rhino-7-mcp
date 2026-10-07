@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delete_furniture.json",
+  "title": "DeleteFurniture Command",
+  "description": "Delete furniture: the id, else every piece in room, else every piece with all, else the picked pieces, else the only one. The block definition stays for the next piece of that kind.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The piece's GUID or its forsk:id (F01)."
+    },
+    "room": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Every piece in this room (id, name or type)."
+    },
+    "all": {
+      "type": "boolean",
+      "description": "Every piece in the file."
+    }
+  },
+  "additionalProperties": false
+}

@@ -25,7 +25,8 @@ public class FurnitureTests
             Assert.Equal(Furniture.Schema, record["schema"]!.ToString());
             Assert.Equal(piece.Id, record["id"]!.ToString());
             Assert.NotEmpty(record["room_tags"]!);
-            Assert.StartsWith(Furniture.BlockPrefix, Furniture.BlockName(piece));
+            Assert.Equal("FORSK_FU_" + piece.Id, Furniture.BlockName(piece));
+            Assert.NotEqual(Furniture.BlockName(piece), Furniture.ModelBlockName(piece));
         }
 
         // The starting set by room (roadmap FU.1).
