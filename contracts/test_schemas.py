@@ -418,6 +418,7 @@ def test_new_commands():
         ("commands/furnish_room.json", {"room": "R02", "preview": True}),
         ("commands/jump_inside.json", {}),
         ("commands/jump_inside.json", {"room": "bedroom"}),
+        ("commands/jump_inside.json", {"room": "bedroom", "direction": "east"}),
         ("commands/show_view.json", {"view": "south"}),
         ("commands/save_option.json", {}),
         ("commands/save_option.json", {"name": "A"}),
@@ -1028,7 +1029,7 @@ def test_responses():
     }
     if not validate("responses/furnish_result.json", preview):
         all_passed = False
-    if not validate("responses/jump_inside_result.json", {"view": "Interior: Bedroom", "room": "R02", "eye": [1000, 300, 1200], "target": [1000, 5000, 1200], "lens_mm": 24, "message": "Perspective is inside the bedroom."}):
+    if not validate("responses/jump_inside_result.json", {"view": "Bedroom", "room": "R02", "eye": [2000, 300, 1200], "target": [2000, 5000, 1200], "lens_mm": 24, "direction": "north", "message": "Perspective is inside the bedroom."}):
         all_passed = False
     if not validate("responses/save_option_result.json", {"name": "A", "path": "/tmp/garage.forsk/options/A.json", "walls": 4, "openings": 5, "rooms": 1, "message": "Saved option A beside the file."}):
         all_passed = False
@@ -1563,6 +1564,7 @@ def test_invalid_examples():
         ("commands/delete_furniture.json", {"kind": "bed"}, "delete_furniture unknown field"),
         ("commands/furnish_room.json", {"density": "tight"}, "furnish_room unknown density"),
         ("commands/jump_inside.json", {"lens": 24}, "jump_inside unknown field"),
+        ("commands/jump_inside.json", {"direction": "up"}, "jump_inside unknown direction"),
         ("commands/show_view.json", {"view": "section_a"}, "show_view unknown view"),
         ("commands/show_view.json", {}, "show_view needs a view"),
         ("commands/save_option.json", {"name": "A/B"}, "save_option bad name"),

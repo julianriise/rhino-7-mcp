@@ -8,9 +8,10 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// jump_inside: the Perspective view moves into a room (InteriorCamera) at
-/// 1.2 m above its floor with a 24 mm lens, and the shot is kept as the
-/// named view "Interior: &lt;room&gt;", replaced when asked again.
+/// jump_inside: the Perspective view moves into a room (InteriorCamera),
+/// looking north, east, south or west (north by default), level at 1.2 m
+/// above its floor with a 24 mm lens, and the shot is kept as a named view
+/// called after the room, replaced when asked again.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -20,7 +21,8 @@ public partial class RhinoMCPFunctions
         var doc = RhinoDoc.ActiveDoc;
         if (doc == null) throw new InvalidOperationException("No active document.");
         var room = PickFurnitureRoom(doc, FurnitureRooms(doc), parameters?["room"]?.ToString(), null);
-        var shot = InteriorCamera.For(room.Outline, FurnishOpenings(doc))
+        var direction = parameters?["direction"]?.ToString();
+        var shot = InteriorCamera.For(room.Outline, direction)
             ?? throw new InvalidOperationException("That room has no outline to stand in.");
         var view = doc.Views.GetViewList(true, false)
             .FirstOrDefault(v => v.ActiveViewport.IsPerspectiveProjection && v.ActiveViewport.Name == "Perspective")
@@ -36,7 +38,7 @@ public partial class RhinoMCPFunctions
         doc.Views.ActiveView = view;
         view.Redraw();
 
-        var name = InteriorCamera.ViewPrefix + (string.IsNullOrEmpty(room.Name) ? room.ScheduleId : room.Name);
+        var name = string.IsNullOrEmpty(room.Name) ? room.ScheduleId : room.Name;
         var old = doc.NamedViews.FindByName(name);
         if (old >= 0) doc.NamedViews.Delete(old);
         doc.NamedViews.Add(name, vp.Id);
@@ -47,6 +49,7 @@ public partial class RhinoMCPFunctions
             ["eye"] = new JArray(Math.Round(shot.Eye.X, 1), Math.Round(shot.Eye.Y, 1), Math.Round(z, 1)),
             ["target"] = new JArray(Math.Round(shot.Target.X, 1), Math.Round(shot.Target.Y, 1), Math.Round(z, 1)),
             ["lens_mm"] = InteriorCamera.LensMm,
+            ["direction"] = shot.From.Substring("looking ".Length),
             ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m, saved as the named view "
                 + name + ". Orbit or walk to adjust before a render."
         };

@@ -303,9 +303,6 @@ namespace RhinoMCPPlugin.Forsk
                 case "stair.add":
                     Job(thread, action.Id, label, sink => sink.Tool("add_stair", new JObject { ["along_wall"] = true }));
                     return;
-                case "room.inside":
-                    Job(thread, action.Id, label, sink => sink.Tool("jump_inside", new JObject()));
-                    return;
                 case "furniture.furnish":
                     // The picked room, else every room: both layouts as ghosts, and the card to place one.
                     var picked = facts.Picked == Picked.Room;
@@ -566,6 +563,10 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
+                    break;
+                case "room.inside":
+                    var way = pill.Id;
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("jump_inside", new JObject { ["direction"] = way }), userText: pill.Label);
                     break;
                 case "option.compare":
                     var optionName = pill.Id;

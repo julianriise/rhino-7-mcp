@@ -628,10 +628,11 @@ namespace RhinoMCPPlugin.Forsk
                         ["preview"] = Bool("Show both layouts as ghosts with a card to pick one; nothing is placed yet.")
                     }),
                 Fn("jump_inside",
-                    "Jump inside a room: the Perspective view stands just inside its door at 1.2 m, looking across the room with a 24 mm lens, saved as the named view Interior: <room>. A first interior shot to adjust before a render.",
+                    "Jump inside a room: a level, straight-on shot like interior photography, looking north, east, south or west across the room at 1.2 m with a 24 mm lens, saved as a named view called after the room.",
                     new JObject
                     {
-                        ["room"] = Str("Room id, name or type. Omit for the picked room, else the only one.")
+                        ["room"] = Str("Room id, name or type. Omit for the picked room, else the only one."),
+                        ["direction"] = new JObject { ["type"] = "string", ["enum"] = new JArray("north", "east", "south", "west"), ["description"] = "Which way the camera looks. Default north." }
                     }),
                 Fn("show_view",
                     "Show a view in the active viewport: perspective, plan, or the north, east, south or west elevation, zoomed to the selection else the building, with the line look for plans and elevations. The viewport layout never changes.",

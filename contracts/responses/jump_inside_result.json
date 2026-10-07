@@ -31,6 +31,15 @@
     },
     "message": {
       "type": "string"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "north",
+        "east",
+        "south",
+        "west"
+      ]
     }
   },
   "required": [

@@ -115,3 +115,6 @@ def test_jump_inside_sends_the_room(mock_get_conn):
     conn.send_command.assert_called_with("jump_inside", {})
     jump_inside(ctx=None, room="bedroom")
     conn.send_command.assert_called_with("jump_inside", {"room": "bedroom"})
+    jump_inside(ctx=None, room="bedroom", direction="east")
+    conn.send_command.assert_called_with("jump_inside", {"room": "bedroom", "direction": "east"})
+    assert jump_inside(ctx=None, direction="up")["success"] is False

@@ -2,13 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "jump_inside.json",
   "title": "JumpInside Command",
-  "description": "Jump inside a room for a first interior shot: the Perspective view stands just inside the room's door (of several, the one with the longest view; with none, a corner along the longest diagonal), 1.2 m above the floor, looking across to the far wall with a 24 mm lens. The shot is saved as the named view \"Interior: <room>\", replaced when asked again.",
+  "description": "Jump inside a room for an interior shot like interior photography: the Perspective view stands just inside the wall behind it, on the line through the room's middle, and looks level and square to the room's walls across to the far wall, the chosen way (north by default), 1.2 m above the floor with a 24 mm lens. The shot is saved as a named view called after the room, replaced when asked again.",
   "type": "object",
   "properties": {
     "room": {
       "type": "string",
       "minLength": 1,
       "description": "The room's id, name or type. Omit for the picked room, else the only one."
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "north",
+        "east",
+        "south",
+        "west"
+      ],
+      "description": "Which way the camera looks. Default north."
     }
   },
   "additionalProperties": false

@@ -68,6 +68,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.pages": return Pages(f);
                 case "analysis.print": return AnalysisSet(f);
                 case "option.compare": return OptionPick(f);
+                case "room.inside": return JumpInside(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
@@ -298,6 +299,16 @@ namespace RhinoMCPPlugin.Forsk
             // The saved quality is the filled pill: a filled Low read as "it went back to Low".
             foreach (var quality in DaylightQuality.All)
                 card.Pills.Add(new CardPill(quality, ForskText.Get("daylight.quality." + quality)) { Primary = quality == now });
+            return card;
+        }
+
+        /// <summary>Jump inside: which way to look, north first and filled.</summary>
+        public static CardSpec JumpInside(FileFacts f)
+        {
+            var card = new CardSpec { Kind = "room.inside", Question = ForskText.Get("room.inside.ask"), Depends = "selection" };
+            foreach (var way in Functions.InteriorCamera.Directions)
+                card.Pills.Add(new CardPill(way, ForskText.Get("room.inside." + way)) { Primary = way == "north" });
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
             return card;
         }
 
