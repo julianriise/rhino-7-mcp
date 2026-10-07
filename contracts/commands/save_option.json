@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "save_option.json",
+  "title": "SaveOption Command",
+  "description": "Save the model as an option (AN.5): its walls, doors and windows, tagged rooms, project info and analysis settings as forsk.option.v1 JSON in <project>.forsk/options/<name>.json beside the saved 3dm. The model does not change.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The option's name. Omit for the first free letter: A, B, …"
+    }
+  },
+  "additionalProperties": false
+}

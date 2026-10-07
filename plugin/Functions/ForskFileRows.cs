@@ -132,6 +132,8 @@ public partial class RhinoMCPFunctions
         input.DetailNames = DetailNames(doc, Details.Read(input.Details));
         input.DetailSheets = DetailSheetIds(doc);
         input.Layouts = MatchingForskPages(doc, null).Count;
+        input.Saved = !string.IsNullOrEmpty(doc.Path);
+        input.Options = OptionNames(doc.Path);
         foreach (var def in ReadSectionDefs(doc))
             if (!string.IsNullOrEmpty(def.Letter)) input.SectionLetters.Add(def.Letter);
         foreach (var key in ProjectInfo.Keys.Concat(new[] { ProjectInfo.AskedKey, "scale_label", OfficeLogo.NameKey, PrintTemplate.PaperKey }))

@@ -357,6 +357,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Furniture (møbler) is add_furniture, one piece per call: put a double bed in the bedroom is item double bed, room bedroom. Furnish the bedroom or furnish the house is one furnish_room with preview true (room all for the house): the window shows both layouts and the user places one from the card, so do not call it again to place. Only when the user says to place it now, call it without preview. Move or turn a piece with move_furniture, remove it with delete_furniture. A refusal says why; tell the user. No lamps, rugs, plants or decor. "
                     + "Jump inside, view from inside or an interior shot of a room is jump_inside. "
                     + "Show the south elevation, the plan or the perspective is show_view. "
+                    + "Save as option A is save_option; compare with A is compare_option. "
                     + "A successful move, delete or add updates the floor, the flat roof and the rooms, and the status line is the tool message. "
                     + "A shown daylight map is hidden as out of date. "
                     + "Do not call clear_generated. Do not call delete_object for an opening. "

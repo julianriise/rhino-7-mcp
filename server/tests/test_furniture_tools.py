@@ -82,6 +82,20 @@ def test_furnish_preview_is_sent(mock_get_conn):
     conn.send_command.assert_called_once_with("furnish_room", {"room": "R02", "preview": True})
 
 
+@patch("rhinomcp.tools.options.get_rhino_connection")
+def test_options_send_the_name(mock_get_conn):
+    from rhinomcp.tools.options import compare_option, save_option
+
+    conn = _conn(mock_get_conn, {"name": "A", "message": "ok"})
+    save_option(ctx=None)
+    conn.send_command.assert_called_with("save_option", {})
+    save_option(ctx=None, name="B")
+    conn.send_command.assert_called_with("save_option", {"name": "B"})
+    compare_option(ctx=None, name="A")
+    conn.send_command.assert_called_with("compare_option", {"name": "A"})
+    assert save_option(ctx=None, name="../x")["success"] is False
+
+
 @patch("rhinomcp.tools.show_view.get_rhino_connection")
 def test_show_view_sends_the_view(mock_get_conn):
     from rhinomcp.tools.show_view import show_view

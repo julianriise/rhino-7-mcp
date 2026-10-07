@@ -221,6 +221,9 @@ namespace RhinoMCPPlugin.Forsk
             // AN.3: the analysis that just ran goes into the Analysis set; AN.4 picks the set's analyses and prints it.
             new ForskAction("analysis.add", Runs.Run, "group.daylight", f => f.Analysed != null && !(f.Analysis?.InSet(f.Analysed) ?? false)),
             new ForskAction("analysis.print", Runs.Card, "group.daylight", f => f.HasWalls && f.HasRooms),
+            // AN.5 and AN.6: the model saved as option A, B, … beside the 3dm, and an option against the model now.
+            new ForskAction("option.save", Runs.Run, "group.daylight", f => f.HasWalls && f.Saved),
+            new ForskAction("option.compare", Runs.Card, "group.daylight", f => f.Options != null && f.Options.Count > 0),
             new ForskAction("section.add", Runs.Run, "group.sections", f => f.HasWalls),
             new ForskAction("section.room", Runs.Run, "group.sections", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("section.remove", Runs.Card, "group.sections", f => f.Sections > 0),

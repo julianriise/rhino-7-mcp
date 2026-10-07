@@ -121,6 +121,7 @@
     <Compile Include="..\..\plugin\Functions\ForskChrome.cs" Link="ForskChrome.cs" />
     <Compile Include="..\..\plugin\Functions\ForskPlanCut.cs" Link="ForskPlanCut.cs" />
     <Compile Include="..\..\plugin\Functions\ViewPicker.cs" Link="ViewPicker.cs" />
+    <Compile Include="..\..\plugin\Functions\OptionCompare.cs" Link="OptionCompare.cs" />
     <Compile Include="..\..\plugin\Functions\ForskWallHatch.cs" Link="ForskWallHatch.cs" />
   </ItemGroup>
 

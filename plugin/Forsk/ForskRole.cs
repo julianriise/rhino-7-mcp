@@ -129,6 +129,8 @@ namespace RhinoMCPPlugin.Forsk
                 case "area.stats":
                 case "analysis.add":
                 case "analysis.print":
+                case "option.save":
+                case "option.compare":
                     return ForskRole.Analyser;
                 default:
                     return ForskRole.None;

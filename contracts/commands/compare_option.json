@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "compare_option.json",
+  "title": "CompareOption Command",
+  "description": "Compare a saved option with the model now (AN.6): what changed in one line, and side by side the net area, each room's area, each room's daylight mean (the higher marked better), and the door and window counts.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$",
+      "description": "The saved option: A, B, …"
+    }
+  },
+  "required": ["name"],
+  "additionalProperties": false
+}

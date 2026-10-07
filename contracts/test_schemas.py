@@ -419,6 +419,9 @@ def test_new_commands():
         ("commands/jump_inside.json", {}),
         ("commands/jump_inside.json", {"room": "bedroom"}),
         ("commands/show_view.json", {"view": "south"}),
+        ("commands/save_option.json", {}),
+        ("commands/save_option.json", {"name": "A"}),
+        ("commands/compare_option.json", {"name": "A"}),
         ("commands/clear_layouts.json", {}),
         ("commands/clear_layouts.json", {"views": ["plan"], "dry_run": True}),
         ("commands/set_layer_material.json", {"layer_name": "A-WALL", "preset": "plaster"}),
@@ -1027,6 +1030,10 @@ def test_responses():
         all_passed = False
     if not validate("responses/jump_inside_result.json", {"view": "Interior: Bedroom", "room": "R02", "eye": [1000, 300, 1200], "target": [1000, 5000, 1200], "lens_mm": 24, "message": "Perspective is inside the bedroom."}):
         all_passed = False
+    if not validate("responses/save_option_result.json", {"name": "A", "path": "/tmp/garage.forsk/options/A.json", "walls": 4, "openings": 5, "rooms": 1, "message": "Saved option A beside the file."}):
+        all_passed = False
+    if not validate("responses/compare_option_result.json", {"name": "A", "summary": "1 wall moved.", "rows": [{"label": "Net area", "option": "27.4 m²", "now": "28.6 m²", "better": ""}], "message": "Option A against now: 1 wall moved."}):
+        all_passed = False
     if not validate("responses/show_view_result.json", {"view": "south", "label": "South elevation", "viewport": "Perspective", "display": "Forsk Technical", "zoom": "building", "message": "South elevation in the Perspective viewport, zoomed to the building."}):
         all_passed = False
     if not validate("responses/delete_furniture_result.json", {"deleted": [piece["id"]], "count": 1, "message": "Removed the double bed 160."}):
@@ -1558,6 +1565,8 @@ def test_invalid_examples():
         ("commands/jump_inside.json", {"lens": 24}, "jump_inside unknown field"),
         ("commands/show_view.json", {"view": "section_a"}, "show_view unknown view"),
         ("commands/show_view.json", {}, "show_view needs a view"),
+        ("commands/save_option.json", {"name": "A/B"}, "save_option bad name"),
+        ("commands/compare_option.json", {}, "compare_option needs a name"),
         ("commands/furnish_room.json", {"variant": "random"}, "furnish_room unknown variant"),
         ("commands/furnish_room.json", {"room": "R01", "style": "modern"}, "furnish_room unknown field"),
         ("commands/export_ifc.json", {"path": "/tmp/a.ifc", "format": "ifc2x3"}, "export_ifc unknown field"),

@@ -96,6 +96,10 @@ namespace RhinoMCPPlugin.Forsk
         public bool OfferArea;
         /// <summary>AN.3: the analysis the last action ran (daylight, areas), and nothing changed since. Null for none.</summary>
         public string Analysed;
+        /// <summary>The 3dm is saved: options sit beside it (AN.5).</summary>
+        public bool Saved;
+        /// <summary>The saved options' names, from &lt;project&gt;.forsk/options.</summary>
+        public List<string> Options = new List<string>();
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
@@ -185,6 +189,10 @@ namespace RhinoMCPPlugin.Forsk
         public bool OfferArea;
         /// <summary>An analysis just ran: the bar offers Add to analysis set.</summary>
         public string Analysed;
+        /// <summary>The 3dm is saved, so an option can be saved beside it.</summary>
+        public bool Saved;
+        /// <summary>The saved options' names (AN.5).</summary>
+        public List<string> Options = new List<string>();
         /// <summary>The view picker's view the active viewport shows (ViewPicker.Current), or null. The window sets it on every read.</summary>
         public string View;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
@@ -233,6 +241,8 @@ namespace RhinoMCPPlugin.Forsk
                 JustPrinted = input.JustPrinted,
                 OfferArea = input.OfferArea,
                 Analysed = input.Analysed,
+                Saved = input.Saved,
+                Options = input.Options ?? new List<string>(),
                 GuideOff = input.GuideOff,
                 UpdateVersion = input.UpdateVersion,
                 Build = input.Build,

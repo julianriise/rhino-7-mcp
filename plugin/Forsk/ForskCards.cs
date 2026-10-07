@@ -67,6 +67,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "print.one": return PrintOne(f);
                 case "print.pages": return Pages(f);
                 case "analysis.print": return AnalysisSet(f);
+                case "option.compare": return OptionPick(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
@@ -300,6 +301,52 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>AN.6: which saved option to compare with the model now, newest first, at most four.</summary>
+        public static CardSpec OptionPick(FileFacts f)
+        {
+            var card = new CardSpec { Kind = "option.compare", Question = ForskText.Get("option.compare.ask"), Depends = "model" };
+            foreach (var name in (f?.Options ?? new List<string>()).AsEnumerable().Reverse().Take(4))
+                card.Pills.Add(new CardPill(name, ForskText.Format("option.name", "name", name)));
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
+            return card;
+        }
+
+        /// <summary>The compare card from compare_option's result. Null when it failed.</summary>
+        public static CardSpec OptionCompareFrom(JObject envelope)
+        {
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase)) return null;
+            var result = envelope?["result"] as JObject;
+            if (result == null) return null;
+            var rows = (result["rows"] as JArray ?? new JArray()).OfType<JObject>().Select(r => new Functions.OptionCompare.Row
+            {
+                Label = r["label"]?.ToString() ?? "",
+                Option = r["option"]?.ToString() ?? "",
+                Now = r["now"]?.ToString() ?? "",
+                Better = r["better"]?.ToString() ?? ""
+            }).ToList();
+            return OptionCompare(result["name"]?.ToString() ?? "", result["summary"]?.ToString(), rows);
+        }
+
+        /// <summary>AN.6: an option against the model now, one line per row, the better daylight named.</summary>
+        public static CardSpec OptionCompare(string name, string summary, IList<Functions.OptionCompare.Row> rows)
+        {
+            var card = new CardSpec
+            {
+                Kind = "option.compare.done",
+                Question = ForskText.Format("option.compare.title", "name", name, "summary", (summary ?? "").TrimEnd('.')),
+                Rows = new List<string>()
+            };
+            foreach (var row in rows ?? new List<Functions.OptionCompare.Row>())
+            {
+                var line = ForskText.Format("option.row", "label", row.Label, "option", row.Option, "now", row.Now).Replace("A " + row.Option, name + " " + row.Option);
+                if (row.Better == "now") line += " · now is better";
+                else if (row.Better == "option") line += " · " + name + " is better";
+                card.Rows.Add(line);
+            }
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         /// <summary>
         /// AN.4 Choose analyses: a tick per analysis with what its sheet holds,
         /// ticked when it is in the Analysis set. Print stores the ticks on the
@@ -367,8 +414,11 @@ namespace RhinoMCPPlugin.Forsk
             if (daylight != null) card.Pills.Add(new CardPill(daylight.Id, ForskText.Label(daylight.Id)));
             var area = ForskRegistry.Find("area.stats");
             if (area != null && area.Shows(f)) card.Pills.Add(new CardPill(area.Id, ForskText.Label(area.Id)));
-            var print = ForskRegistry.Find("analysis.print");
-            if (print != null && print.Shows(f)) card.Pills.Add(new CardPill(print.Id, ForskText.Label(print.Id)));
+            foreach (var id in new[] { "analysis.print", "option.save", "option.compare" })
+            {
+                var action = ForskRegistry.Find(id);
+                if (action != null && action.Shows(f)) card.Pills.Add(new CardPill(action.Id, ForskText.Label(action.Id)));
+            }
             if (card.Pills.Count == 0) card.Note = ForskText.Get("analyser.none");
             card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
             return card;

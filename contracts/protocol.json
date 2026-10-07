@@ -75,6 +75,8 @@
             "furnish_room",
             "jump_inside",
             "show_view",
+            "save_option",
+            "compare_option",
             "room_push_pull",
             "add_room_area",
             "rebuild_host_wall",

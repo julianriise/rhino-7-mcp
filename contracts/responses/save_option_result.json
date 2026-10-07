@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "save_option_result.json",
+  "title": "SaveOptionResult",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "path": { "type": "string" },
+    "walls": { "type": "integer", "minimum": 0 },
+    "openings": { "type": "integer", "minimum": 0 },
+    "rooms": { "type": "integer", "minimum": 0 },
+    "message": { "type": "string" }
+  },
+  "required": ["name", "path", "walls", "openings", "rooms", "message"]
+}

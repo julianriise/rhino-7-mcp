@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "compare_option_result.json",
+  "title": "CompareOptionResult",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "summary": { "type": "string" },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "option": { "type": "string" },
+          "now": { "type": "string" },
+          "better": { "type": "string", "enum": ["", "option", "now"] }
+        },
+        "required": ["label", "option", "now", "better"]
+      }
+    },
+    "message": { "type": "string" }
+  },
+  "required": ["name", "summary", "rows", "message"]
+}

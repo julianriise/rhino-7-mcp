@@ -233,6 +233,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "area.stats":
                     Job(thread, action.Id, label, sink => sink.Tool("area_stats", new JObject()));
                     return;
+                case "option.save":
+                    Job(thread, action.Id, label, sink => sink.Tool("save_option", new JObject()));
+                    return;
                 case "analysis.add":
                     // AN.3: the analysis that just ran goes into the Analysis set, on the file.
                     var added = facts.Analysed;
@@ -563,6 +566,10 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case "print.clear":
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("clear_layouts", new JObject()), userText: pill.Label);
+                    break;
+                case "option.compare":
+                    var optionName = pill.Id;
+                    Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("compare_option", new JObject { ["name"] = optionName }), userText: pill.Label);
                     break;
                 case "analysis.print":
                     // AN.4: the ticks are kept on the file; Print then writes the Analysis set's own PDF.
@@ -1266,6 +1273,11 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             var facts = doc == null ? null : ReadFacts(doc);
             if (review != null) thread.AddCard(review, facts);
+            if (string.Equals(tool, "compare_option", StringComparison.Ordinal))
+            {
+                var compare = ForskCards.OptionCompareFrom(envelope);
+                if (compare != null) thread.AddCard(compare, facts);
+            }
             if (string.Equals(tool, "area_stats", StringComparison.Ordinal))
             {
                 var rooms = ForskCards.AreaSummary(envelope);
