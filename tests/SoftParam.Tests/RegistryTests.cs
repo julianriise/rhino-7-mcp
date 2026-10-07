@@ -259,7 +259,7 @@ public class RegistryTests
         Assert.Equal(new[] { "file.sample", "file.import", "file.draw", "wall.draw" }, Ids("empty"));
         Assert.Equal(new[] { "file.import", "file.draw", "file.generate", "wall.draw" }, Ids("plan curves"));
         // Grouped by the work: model, rooms, analyses, print and export. Settings stay in the gear's menu.
-        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "room.draw", "room.inside", "furniture.add", "furniture.furnish", "daylight.run", "area.stats", "analysis.print", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "export.csv", "takeoff", "section.add" },
+        Assert.Equal(new[] { "file.rebuild", "wall.draw", "stair.draw", "opening.type", "rooms.list", "room.draw", "room.inside", "furniture.add", "furniture.furnish", "analysis.menu", "daylight.run", "area.stats", "analysis.print", "file.print", "print.one", "print.pages", "export.dwg", "export.ifc", "export.csv", "takeoff", "section.add" },
             Ids("house"));
     }
 

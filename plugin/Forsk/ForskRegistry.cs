@@ -218,6 +218,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("meta.title", Runs.Card, "group.settings", f => true),
             new ForskAction("print.clear", Runs.Card, "group.print", f => f.Layouts > 0),
             new ForskAction("sheets.clear", Runs.Card, "group.print", f => f.HasSheetCache),
+            // The Analyses menu (Live switches, last results) from More actions in every role; the Analyser face opens it too.
+            new ForskAction("analysis.menu", Runs.Card, "group.analyses", f => f.HasWalls),
             new ForskAction("daylight.run", Runs.Run, "group.analyses", f => f.HasWalls && f.HasRooms && f.HasWindows && f.Map == MapState.None),
             new ForskAction("daylight.again", Runs.Run, "group.analyses", f => f.Map == MapState.Stale),
             new ForskAction("daylight.hide", Runs.Run, "group.analyses", f => f.Map == MapState.Shown),

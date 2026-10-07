@@ -498,6 +498,7 @@ namespace RhinoMCPPlugin.Forsk
             ["group.analyses"] = "Analyses",
             ["group.print"] = "Print and export",
             ["options"] = "Options",
+            ["analysis.menu"] = "Analyses menu",
             ["options.ask"] = "Options of this model, kept beside the saved file.",
 
             // One sentence where a neighbour would expect a dead control.

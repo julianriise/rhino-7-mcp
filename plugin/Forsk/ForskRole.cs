@@ -130,6 +130,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "analysis.add":
                 case "analysis.print":
                 case "options":
+                case "analysis.menu":
                 case "option.save":
                 case "option.compare":
                 case "option.restore":

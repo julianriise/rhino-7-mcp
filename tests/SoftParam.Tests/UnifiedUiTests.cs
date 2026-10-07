@@ -36,7 +36,7 @@ public class UnifiedUiTests
     {
         var facts = Docs.Facts("saved, two options");
         var analyses = ForskRegistry.Card(facts).Groups.Single(g => g.Title == "Analyses").Actions.Select(a => a.Id).ToArray();
-        Assert.Equal(new[] { "daylight.run", "area.stats", "analysis.print", "options" }, analyses);
+        Assert.Equal(new[] { "analysis.menu", "daylight.run", "area.stats", "analysis.print", "options" }, analyses);
         Assert.DoesNotContain("area.stats", ForskRegistry.Card(facts).Groups.Single(g => g.Title == "Rooms").Actions.Select(a => a.Id));
     }
 
@@ -58,5 +58,18 @@ public class UnifiedUiTests
     {
         var pills = ForskCards.Analyser(Docs.Facts("saved, two options")).Pills.Select(p => p.Id).ToArray();
         Assert.Equal(new[] { "daylight.run", "area.stats", "analysis.print", "options", "done" }, pills);
+    }
+
+    /// <summary>Pass 3: the Analyses menu (Live switches, last results) opens from More actions in every role, not only from the Analyser's face.</summary>
+    [Fact]
+    public void TheAnalysesMenu_OpensFromMoreActions_InEveryRole()
+    {
+        var house = Docs.Facts("house");
+        Assert.Equal("Analyses menu", ForskRegistry.Find("analysis.menu")!.Label);
+        Assert.Equal("analysis.menu", ForskRegistry.Card(house).Groups.Single(g => g.Title == "Analyses").Actions[0].Id);
+        var card = ForskCards.For("analysis.menu", house)!;
+        Assert.Equal("analyser", card.Kind);
+        Assert.Contains(card.Fields!, f => f.Key == "live.daylight");
+        Assert.False(ForskRegistry.Find("analysis.menu")!.Shows(Docs.Facts("empty")));
     }
 }

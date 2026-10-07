@@ -79,6 +79,7 @@ namespace RhinoMCPPlugin.Forsk
                     return OptionPick(f, actionId);
                 case "room.inside": return JumpInside(f);
                 case "options": return OptionsMenu(f);
+                case "analysis.menu": return Analyser(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
                 case "sheets.clear": return Confirm("sheets.clear", "sheets.clear.ask");
                 case "rooms.list": return Rooms(f);
