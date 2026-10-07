@@ -62,6 +62,17 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>WF: click a face of a wall and drag it. Release runs edit_wall_face.</summary>
+    public class ForskEditWallFaceCommand : Command
+    {
+        public override string EnglishName => ForskFaceDrag.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            return ForskFaceDrag.Run(doc);
+        }
+    }
+
     /// <summary>Draw walls in Top by clicking their corners. One add_wall per segment, one undo record.</summary>
     public class ForskDrawWallCommand : Command
     {

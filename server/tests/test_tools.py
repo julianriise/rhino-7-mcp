@@ -3087,6 +3087,52 @@ class TestMoveWallTool:
         assert "destructiveHint=True" in src
 
 
+class TestEditWallFaceTool:
+    """WF: an end changes the length, a side the place or thickness; the wire carries at and one amount."""
+
+    @patch("rhinomcp.tools.edit_wall_face.get_rhino_connection")
+    def test_end_and_thickness_pass_through(self, mock_get_conn):
+        from rhinomcp.tools.edit_wall_face import edit_wall_face
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "host_id": "h1",
+            "face": "end",
+            "length_mm": 4800,
+            "ok": True,
+            "message": "Lengthened the wall at (2000, 100) of w01 by 800 mm, now 4800 mm long. Floor and roof updated.",
+        }
+        mock_get_conn.return_value = mock_conn
+
+        result = edit_wall_face(ctx=None, at=[4000, 100], distance_mm=800)
+        assert mock_conn.send_command.call_args[0] == ("edit_wall_face", {"at": [4000, 100], "distance_mm": 800})
+        assert result["success"] is True
+        assert result["length_mm"] == 4800
+
+        edit_wall_face(ctx=None, at=[2000, 3800], thickness_mm=250, face="side", id="g1")
+        assert mock_conn.send_command.call_args[0] == (
+            "edit_wall_face", {"at": [2000, 3800], "thickness_mm": 250, "face": "side", "id": "g1"}
+        )
+
+    @patch("rhinomcp.tools.edit_wall_face.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.edit_wall_face import edit_wall_face
+
+        assert edit_wall_face(ctx=None, at=[0, 0])["success"] is False
+        assert edit_wall_face(ctx=None, at=[0, 0], distance_mm=100, thickness_mm=250)["success"] is False
+        assert edit_wall_face(ctx=None, at=[0, 0, 0], distance_mm=100)["success"] is False
+        assert edit_wall_face(ctx=None, at=[0, 0], thickness_mm=0)["success"] is False
+        assert edit_wall_face(ctx=None, at=[0, 0], thickness_mm=250, face="end")["success"] is False
+        assert edit_wall_face(ctx=None, at=[0, 0], distance_mm=100, face="top")["success"] is False
+        mock_get_conn.assert_not_called()
+
+    def test_marked_destructive(self):
+        from pathlib import Path
+
+        src = (Path(__file__).parent.parent / "src" / "rhinomcp" / "tools" / "edit_wall_face.py").read_text()
+        assert "destructiveHint=True" in src
+
+
 class TestDeleteWallTool:
     """F3.2: one wall run and its openings go; the wire carries side or at."""
 

@@ -49,13 +49,6 @@ namespace RhinoMCPPlugin.Forsk
                     return Opening("opening.move.prefill", f, nb, "500");
                 case "opening.resize":
                     return Opening("opening.resize.prefill", f, nb, f?.PickedOpeningKind == "door" ? "900" : "1200");
-                case "wall.move":
-                    // A one-run wall is named: "Move the east wall 500 mm east".
-                    var wall = ForskPick.OneRunWall(f?.Selected);
-                    if (wall == null || string.IsNullOrEmpty(wall.RunToward))
-                        return Fill(ForskText.Get(nb ? "wall.move.prefill.nb" : "wall.move.prefill"), "", "500");
-                    return Fill(ForskText.Format(nb ? "wall.move.prefill.run.nb" : "wall.move.prefill.run",
-                        "wall", ForskPick.InSentence(wall.RunName, nb), "toward", ForskPick.Compass(wall.RunToward, nb)), "", "500");
                 case "room.push_pull":
                     return Fill(ForskText.Get(nb ? "room.push_pull.prefill.nb" : "room.push_pull.prefill"), "", "500");
                 default:

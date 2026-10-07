@@ -106,10 +106,11 @@ public class OpeningBlockSourceTests
             body.IndexOf("HideOpeningMarker", StringComparison.Ordinal) > body.IndexOf("Objects.Replace", StringComparison.Ordinal),
             "hide the marker after replace");
 
-        foreach (var file in new[] { "FacadeOpenings.cs", "WallEditCommands.cs", "SoftParam.cs" })
+        // Wall edits carry their openings in CommitWallEdit (WallFaceCommands.cs).
+        foreach (var file in new[] { "FacadeOpenings.cs", "WallEditCommands.cs", "WallFaceCommands.cs", "SoftParam.cs" })
         {
             var source = File.ReadAllText(Path.Combine(FunctionsDir(), file));
-            Assert.Contains("ReplaceOpeningMarker", source, StringComparison.Ordinal);
+            if (file != "WallEditCommands.cs") Assert.Contains("ReplaceOpeningMarker", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Objects.Replace(rec.MarkerId", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Objects.Replace(item.Marker.Id", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Objects.Replace(id, copy)", source, StringComparison.Ordinal);

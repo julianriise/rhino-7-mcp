@@ -189,7 +189,7 @@ public class ComposerTests
         var p = ForskPrefill.For("opening.move", Docs.Facts("house, door selected"), "skriv ut planen")!;
         Assert.Equal("Flytt døra 500 mm langs veggen", p.Text);
         Assert.Equal("500", p.Text.Substring(p.Start, p.Length));
-        Assert.Equal("Flytt veggen i nord 500 mm mot nord", ForskPrefill.For("wall.move", Docs.Facts("house, wall selected"), "flytt veggen")!.Text);
+        Assert.Null(ForskPrefill.For("wall.move", Docs.Facts("house, wall selected"), "flytt veggen"));
     }
 
     [Theory]

@@ -60,67 +60,19 @@ public partial class RhinoMCPFunctions
             || !WallJoins.TryMove(pick.Records, pick.Graph, pick.Run, by, tol, out var moved, out why))
             throw new InvalidOperationException(why);
 
-        // The openings on the run go with it, from every record in the cluster. One on
-        // a wall that meets the run stays, and the run must not land on it or leave it
-        // past the end of its wall.
-        var onRun = new List<(int Wall, RhinoObject Marker)>();
-        foreach (var i in pick.Graph.Records)
-        {
-            var wall = pick.Walls[i];
-            foreach (var marker in MarkersOnHost(doc, wall.Id, wall.Attributes?.GetUserString("forsk:id")))
-            {
-                var box = marker.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
-                if (!box.IsValid) continue;
-                if (WallEdit.InBand(pick.Run, new RoomDetect.Pt(box.Center.X, box.Center.Y), tol))
-                    onRun.Add((i, marker));
-                else if (!WallEdit.Clear(moved.Shape, pick.Run, by, new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), tol))
-                    throw new InvalidOperationException("Not moved: " + MarkerLabel(marker)
-                        + " would sit in the moved wall or past the end of its own.");
-            }
-        }
-
-        // The record the run stands in names it; else the wall picked.
-        var owner = pick.Graph.Records.FindIndex(i => WallEdit.InRegion(pick.Records[i], WallJoins.Middle(pick.Run)));
-        var named = owner >= 0 ? pick.Walls[pick.Graph.Records[owner]].Id : pick.Host.Id;
-        var forskId = doc.Objects.FindId(named)?.Attributes?.GetUserString("forsk:id");
-        var touched = new List<int>(moved.Records.Keys);
-        foreach (var item in onRun)
-            if (!touched.Contains(item.Wall)) touched.Add(item.Wall);
-
+        // The openings on the run go with it. One on a wall that meets the run stays,
+        // and the run must not land on it or leave it past the end of its wall.
         var shift = new Vector3d(pick.Run.Normal.X * by, pick.Run.Normal.Y * by, 0);
-        var sourceLayer = pick.Host.Attributes?.GetUserString("forsk:source_layer");
-        var undos = new List<HostUndo>();
-        var carried = new JArray();
-        var rebuiltIds = new Dictionary<Guid, Guid>();
-        JObject rebuilt = null;
-        string followed;
-        try
-        {
-            foreach (var i in touched) undos.Add(SnapshotWholeHost(doc, pick.Walls[i].Id));
-            foreach (var record in moved.Records)
-                WriteWallPath(doc, pick.Walls[record.Key].Id, WallEdit.Path(record.Value));
-            foreach (var item in onRun)
-            {
-                var brep = GetBrepFromObject(item.Marker)?.DuplicateBrep();
-                if (brep == null || !brep.Translate(shift) || !ReplaceOpeningMarker(doc, item.Marker.Id, brep))
-                    throw new InvalidOperationException("Opening marker not found.");
-                carried.Add(item.Marker.Id.ToString());
-            }
-            foreach (var undo in undos)
-            {
-                var result = RebuildUnder(undo);
-                rebuiltIds[undo.HostBefore] = undo.HostAfter;
-                if (undo.HostBefore == named) rebuilt = result;
-            }
-            followed = FollowNeighbours(doc, sourceLayer, pick.Graph.Shape, moved.Shape);
-        }
-        catch (Exception ex)
-        {
-            for (var i = undos.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, undos[i]);
-            throw new InvalidOperationException("Wall not moved. " + ex.Message, ex);
-        }
-
-        var hostId = rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
+        var commit = CommitWallEdit(doc, pick, moved, shift, (marker, box, onRun) =>
+            onRun || WallEdit.Clear(moved.Shape, pick.Run, by, box, tol)
+                ? null
+                : "Not moved: " + MarkerLabel(marker) + " would sit in the moved wall or past the end of its own.",
+            "Wall not moved. ");
+        var hostId = commit.HostId;
+        var forskId = commit.ForskId;
+        var rebuilt = commit.Rebuilt;
+        var carried = commit.Carried;
+        var followed = commit.Followed;
         var heading = WallEdit.Heading(pick.Run, by);
         var nb = ForskSpeech.Norwegian;
         var with = OpeningsWith(carried.Count, nb);

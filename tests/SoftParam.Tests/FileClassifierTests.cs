@@ -217,11 +217,12 @@ public class FileClassifierTests
     }
 
     [Fact]
-    public void AOneRunWall_MovePrefillNamesTheRun_AndNoSplitIsOffered()
+    public void AOneRunWall_MoveIsADrag_NotACompassPrefill_AndNoSplitIsOffered()
     {
         var f = Docs.Facts("house, wall selected");
-        Assert.Equal("Move the north wall 500 mm north", ForskPrefill.For("wall.move", f, null).Text);
-        Assert.Equal("Flytt veggen i nord 500 mm mot nord", ForskPrefill.For("wall.move", f, "flytt veggen").Text);
+        // WF.4: Move drags the wall; no Move path asks for a compass direction.
+        Assert.Null(ForskPrefill.For("wall.move", f, null));
+        Assert.Equal(Runs.Run, ForskRegistry.Find("wall.move").Runs);
         Assert.DoesNotContain(ForskRegistry.Card(f).Actions, a => a.Id == "wall.split");
         Assert.Equal("North wall · 200 mm", ForskPick.Line(f.Selected, false));
     }

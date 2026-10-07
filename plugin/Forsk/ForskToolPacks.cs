@@ -57,6 +57,7 @@ namespace RhinoMCPPlugin.Forsk
             "set_opening_type",
             "delete_opening",
             "move_wall",
+            "edit_wall_face",
             "delete_wall",
             "add_wall",
             "split_walls",
@@ -537,6 +538,17 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the only one.")
                     },
                     "toward", "distance_mm"),
+                Fn("edit_wall_face",
+                    "Edit one straight wall by a face, then rebuild the records it changed. at picks the nearest face: an end face where the wall stands free, or a side face. distance_mm on an end lengthens it (below 0 shortens); the other end and the openings keep their place, and a wall too short for an opening is refused. distance_mm on a side moves the wall out through that face (below 0: in), as move_wall. thickness_mm on a side makes the wall that thick by moving that face alone; the face across stays, and walls meeting the moved face follow. Floor, roof and rooms follow. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["at"] = Pair("[x, y] in mm on the face, within 300 mm."),
+                        ["face"] = new JObject { ["type"] = "string", ["enum"] = new JArray("end", "side"), ["description"] = "Only this kind of face." },
+                        ["distance_mm"] = Num("Signed mm out through the face. Exclusive with thickness_mm."),
+                        ["thickness_mm"] = Num("The new thickness in mm; a side face only."),
+                        ["id"] = Str("Wall GUID. Omit to use the selected wall, or the wall nearest at.")
+                    },
+                    "at"),
                 Fn("delete_wall",
                     "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point; omit both when the selected wall is one run. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole, and so does a record of its own that the run covers. Refused when a wall record left would stand in two pieces. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
                     new JObject

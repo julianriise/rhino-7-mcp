@@ -350,6 +350,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     + "Two or more selected windows are one delete_opening with no id. "
                     + "Status line for that call: Removed Door D02., or Removed 2 windows. Do not repeat a marker id. "
                     + "Move a wall is move_wall: side for an outer wall or at [x, y], toward, distance_mm. With neither, ask which wall. "
+                    + "Make a wall longer, shorter, thicker or thinner is edit_wall_face: at [x, y] on its end or side face; distance_mm for an end (below 0 shortens), thickness_mm for a side (the face across stays). "
                     + "Delete a wall is delete_wall, named the same way; its openings go with it. "
                     + "Add a wall is add_wall: from and to [x, y], or line_id for a drawn line. "
                     + "Push or pull a side of the selected room is room_push_pull: side, distance_mm, way out or in. "

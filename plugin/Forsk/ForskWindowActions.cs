@@ -290,8 +290,14 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.split":
                     Job(thread, action.Id, label, sink => sink.Tool("split_walls", new JObject()));
                     return;
+                case "wall.move":
+                    // WF.4: Move is a drag, never a compass question. One run drags at once;
+                    // a whole record asks for a click on the side to move first.
+                    if (ForskPick.OneRunWall(facts.Selected) != null) DragWall(thread);
+                    else FaceDrag(thread, "wall.move", WallFace.Kind.Side);
+                    return;
                 case "wall.drag":
-                    DragWall(thread);
+                    FaceDrag(thread, "wall.drag", null);
                     return;
                 case "wall.draw":
                     DrawPick(thread, label, "wall.draw", "prompt.wall", "add_wall", ForskDrawWall.RunOnUi);
@@ -1986,15 +1992,15 @@ namespace RhinoMCPPlugin.Forsk
             TakeKeyboard();
         }
 
-        /// <summary>The wall is dragged in the view. Release runs move_wall inside this pill's one record.</summary>
+        /// <summary>Move on one run: the wall is dragged in the view. Release runs move_wall inside this pill's one record.</summary>
         void DragWall(DocThread thread)
         {
             if (Refuse(thread)) return;
             var doc = RhinoDoc.ActiveDoc;
             var nb = ForskPrefill.Language(thread.LastUserText()) == "nb";
-            var shown = ForskText.Get(nb ? "wall.drag.nb" : "wall.drag");
+            var shown = ForskText.Get(nb && ForskText.Has("wall.move.nb") ? "wall.move.nb" : "wall.move");
             thread.Add("user", shown);
-            thread.BeginReply(ForskRoles.MarkForAction("wall.drag"));
+            thread.BeginReply(ForskRoles.MarkForAction("wall.move"));
             thread.Add("line", ForskText.Get(nb ? "wall.drag.prompt.nb" : "wall.drag.prompt"));
             Render();
             HandToRhino();
@@ -2019,11 +2025,54 @@ namespace RhinoMCPPlugin.Forsk
                 TakeKeyboard();
                 return;
             }
-            Job(thread, "wall.drag", shown, sink => sink.Tool("move_wall", new JObject
+            Job(thread, "wall.move", shown, sink => sink.Tool("move_wall", new JObject
             {
                 ["toward"] = outcome.Toward,
                 ["distance_mm"] = outcome.Mm
             }, envelope => ForskDragWall.Words(outcome, envelope)), userText: shown, noteUser: false, after: TakeKeyboard);
+        }
+
+        /// <summary>
+        /// WF: a click on a face of the wall, then a drag. The bubble and the
+        /// prompt show before Rhino takes the mouse. Release runs edit_wall_face
+        /// inside this pill's one record; Esc adds nothing.
+        /// </summary>
+        void FaceDrag(DocThread thread, string actionId, WallFace.Kind? only)
+        {
+            if (Refuse(thread)) return;
+            var doc = RhinoDoc.ActiveDoc;
+            var nb = ForskPrefill.Language(thread.LastUserText()) == "nb";
+            var shown = ForskText.Get(nb && ForskText.Has(actionId + ".nb") ? actionId + ".nb" : actionId);
+            var pick = only == WallFace.Kind.Side ? "wall.face.pick.side" : "wall.face.pick";
+            thread.Add("user", shown);
+            thread.BeginReply(ForskRoles.MarkForAction(actionId));
+            thread.Add("line", ForskText.Get(nb ? pick + ".nb" : pick));
+            Render();
+            HandToRhino();
+            _busy = true;
+            ForskFaceDrag.Outcome outcome = null;
+            ForskSpeech.Use(nb ? "dra veggen" : "drag");
+            try
+            {
+                outcome = ForskFaceDrag.Pick(doc, only);
+            }
+            finally
+            {
+                ForskSpeech.Clear();
+            }
+            if (outcome?.Args == null)
+            {
+                _busy = false;
+                if (!string.IsNullOrEmpty(outcome?.Line)) thread.Add("line", outcome.Line);
+                thread.EndReply();
+                Models.Persist(thread);
+                Render();
+                TakeKeyboard();
+                return;
+            }
+            var args = outcome.Args;
+            Job(thread, actionId, shown, sink => sink.Tool("edit_wall_face", args, ForskFaceDrag.Words),
+                userText: shown, noteUser: false, after: TakeKeyboard);
         }
 
         static string SelectedRoom(RhinoDoc doc)

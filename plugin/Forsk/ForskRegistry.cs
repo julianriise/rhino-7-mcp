@@ -169,7 +169,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("plan.show", Runs.Run, "group.model", f => f.PlanHidden),
             new ForskAction("plan.hide", Runs.Run, "group.model", f => f.PlanRecall && !f.PlanHidden),
             new ForskAction("wall.split", Runs.Run, "group.model", f => f.WholeWalls),
-            new ForskAction("wall.move", Runs.Prefill, "group.model", f => f.Picked == Picked.Wall),
+            new ForskAction("wall.move", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             // Draw tools: click the walls or the stair in the Top view.
@@ -319,7 +319,7 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Picked == Picked.Stair) yield return Find("stair.edit");
             if (f.Picked == Picked.Stair) yield return Find("stair.delete");
             if (f.Picked == Picked.Wall) yield return Find("wall.move");
-            // One straight run: Drag wall is the next suggestion, so the bar shows it.
+            // One straight run: Drag a face is the next suggestion, so the bar shows it.
             // A whole record is not one run, and the bar stays Move, then Add a door.
             if (ForskPick.OneRunWall(f.Selected) != null) yield return Find("wall.drag");
             // Two or more walls: Move, then Add detail (Add a door is a one-wall act).

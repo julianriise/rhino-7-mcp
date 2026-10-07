@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edit_wall_face_result.json",
+  "title": "EditWallFaceResult",
+  "description": "One wall run edited by an end or side face and the records it changed rebuilt. A side moved as a whole returns move_wall's result with face side.",
+  "type": "object",
+  "properties": {
+    "host_id": {
+      "type": "string"
+    },
+    "forsk_id": {
+      "type": "string"
+    },
+    "wall": {
+      "type": "string",
+      "description": "The run as the receipt names it."
+    },
+    "face": {
+      "type": "string",
+      "enum": [
+        "end",
+        "side"
+      ]
+    },
+    "length_before": {
+      "type": "number"
+    },
+    "length_mm": {
+      "type": "number"
+    },
+    "thickness_before": {
+      "type": "number"
+    },
+    "thickness": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "path_points": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "openings_moved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Marker GUIDs of the openings kept in the middle of a thicker or thinner run."
+    },
+    "followed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": {
+            "type": "string"
+          },
+          "wall": {
+            "type": "string"
+          },
+          "change_mm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "forsk_id",
+          "wall",
+          "change_mm"
+        ]
+      }
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rebuilt": {
+      "type": "string"
+    },
+    "host_openings": {
+      "type": "integer"
+    },
+    "host_voids": {
+      "type": "integer"
+    },
+    "warnings": {
+      "type": "array"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "host_id",
+    "face",
+    "ok",
+    "message"
+  ]
+}

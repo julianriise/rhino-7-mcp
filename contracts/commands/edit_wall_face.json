@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edit_wall_face.json",
+  "title": "EditWallFace Command",
+  "description": "WF: edit one straight wall run by one of its faces, then rebuild the wall records it changed from their paths. at picks the nearest face within 300 mm: an end face where the wall stands free (at a corner or a tee the end is the other wall's side), or a side face. distance_mm on an end lengthens the wall (below 0 shortens); the other end and every opening keep their place, and a wall left too short for an opening, or no longer than it is thick, is refused. distance_mm on a side moves the whole run out through that face (below 0: in), exactly as move_wall. thickness_mm on a side makes the run that thick by moving that face alone; the face across stays, and the walls that meet the moved face slide along their own lines. The floor slab and flat roof from those records are rebuilt, and rooms are detected again. A refused rebuild leaves the document unchanged. Id omitted uses the one selected wall, else the wall nearest at. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID. Omit to use the selected wall, else the wall nearest at."
+    },
+    "at": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in mm on the face: the nearest face within 300 mm."
+    },
+    "face": {
+      "type": "string",
+      "enum": [
+        "end",
+        "side"
+      ],
+      "description": "Only this kind of face. thickness_mm implies side."
+    },
+    "distance_mm": {
+      "type": "number",
+      "description": "Signed mm out through the face. On an end: longer (below 0 shorter). On a side: the run moves. Exclusive with thickness_mm."
+    },
+    "thickness_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The run's new thickness in mm, by moving the picked side face alone. Exclusive with distance_mm."
+    }
+  },
+  "required": [
+    "at"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "distance_mm"
+      ]
+    },
+    {
+      "required": [
+        "thickness_mm"
+      ]
+    }
+  ],
+  "additionalProperties": false
+}

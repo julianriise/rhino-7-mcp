@@ -63,6 +63,7 @@
             "set_opening",
             "set_opening_type",
             "move_wall",
+            "edit_wall_face",
             "delete_wall",
             "add_wall",
             "split_walls",
