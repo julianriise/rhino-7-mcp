@@ -95,4 +95,26 @@ public class ForskWhatsNewTests
         }
         throw new FileNotFoundException(relative);
     }
+
+    [Fact]
+    public void AnItemsIcon_IsALucideIconTheWindowHas_ElseSparkles()
+    {
+        var notes = ForskWhatsNew.Parse(@"{""version"":""1.1.0"",""items"":[
+            {""title"":""A"",""how"":""a"",""icon"":""armchair""},
+            {""title"":""B"",""how"":""b"",""icon"":""rocket""},
+            {""title"":""C"",""how"":""c""}]}")!;
+        Assert.Equal(new[] { "armchair", "sparkles", "sparkles" }, notes.Items.Select(i => i.Icon));
+        var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.html"));
+        foreach (var icon in ForskWhatsNew.Icons)
+            Assert.Contains("<div id=\"icon-" + icon + "\"><svg", html);
+    }
+
+    [Fact]
+    public void TheShippedNotes_GiveEveryItemAnIcon()
+    {
+        var root = AppContext.BaseDirectory;
+        while (root != null && !Directory.Exists(Path.Combine(root, "plugin", "Forsk"))) root = Path.GetDirectoryName(root);
+        var notes = ForskWhatsNew.Parse(File.ReadAllText(Path.Combine(root!, "plugin", "Forsk", "whats_new.json")))!;
+        Assert.All(notes.Items, i => Assert.NotEqual(ForskWhatsNew.DefaultIcon, i.Icon));
+    }
 }

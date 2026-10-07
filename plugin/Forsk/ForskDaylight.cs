@@ -20,20 +20,41 @@ namespace RhinoMCPPlugin.Forsk
         public const string ToolName = ForskToolPacks.DaylightTool;
         const int TimeoutMs = 180000;
 
-        /// <summary>The daylight grid saved on this Mac (plug-in settings). Low when unset.</summary>
+        /// <summary>
+        /// The daylight grid saved on this Mac: ~/.forsk/daylight_quality, which
+        /// a Rhino that quits without saving its plug-in settings keeps too
+        /// (Julian, 2026-10-07), then the plug-in settings. Low when unset.
+        /// </summary>
         public static string Quality
         {
             get
             {
+                try
+                {
+                    var path = QualityFile();
+                    if (File.Exists(path)) return DaylightQuality.Normal(File.ReadAllText(path).Trim());
+                }
+                catch (Exception) { /* unreadable: the plug-in settings answer */ }
                 try { return DaylightQuality.Normal(global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.GetString(DaylightQuality.Setting, DaylightQuality.Low)); }
                 catch (Exception) { return DaylightQuality.Low; }
             }
             set
             {
-                try { global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.SetString(DaylightQuality.Setting, DaylightQuality.Normal(value)); }
-                catch (Exception) { /* settings unavailable: the run stays at low */ }
+                var quality = DaylightQuality.Normal(value);
+                try
+                {
+                    var path = QualityFile();
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    File.WriteAllText(path, quality);
+                }
+                catch (Exception) { /* no home folder: the plug-in settings keep it for this session */ }
+                try { global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings.SetString(DaylightQuality.Setting, quality); }
+                catch (Exception) { /* settings unavailable */ }
             }
         }
+
+        static string QualityFile() =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".forsk", "daylight_quality");
 
         /// <summary>call runs one bridge command and returns its envelope. quality overrides the saved one (a live run is Low).</summary>
         public static JObject Run(string target, Func<string, JObject, JObject> call, string quality = null)

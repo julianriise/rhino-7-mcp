@@ -10,6 +10,8 @@ namespace RhinoMCPPlugin.Forsk
     {
         public string Title;
         public string How;
+        /// <summary>A Lucide icon the window has (ForskWhatsNew.Icons). Sparkles when unset or unknown.</summary>
+        public string Icon;
     }
 
     /// <summary>whats_new.json: the release it describes and its 2 to 4 items.</summary>
@@ -32,6 +34,9 @@ namespace RhinoMCPPlugin.Forsk
         public const string Kind = "whats.new";
         /// <summary>The embedded copy of plugin/Forsk/whats_new.json.</summary>
         public const string Resource = "rhinomcp.Forsk.whats_new.json";
+        public const string DefaultIcon = "sparkles";
+        /// <summary>The Lucide icons the window carries for the card's items.</summary>
+        public static readonly string[] Icons = { "sparkles", "armchair", "activity", "link" };
         public const int MinItems = 2;
         public const int MaxItems = 4;
 
@@ -44,7 +49,15 @@ namespace RhinoMCPPlugin.Forsk
                 var body = JObject.Parse(json);
                 var notes = new WhatsNewNotes { Version = body["version"]?.ToString().Trim() };
                 foreach (var token in body["items"] as JArray ?? new JArray())
-                    notes.Items.Add(new WhatsNewItem { Title = token["title"]?.ToString().Trim(), How = token["how"]?.ToString().Trim() });
+                {
+                    var icon = token["icon"]?.ToString().Trim();
+                    notes.Items.Add(new WhatsNewItem
+                    {
+                        Title = token["title"]?.ToString().Trim(),
+                        How = token["how"]?.ToString().Trim(),
+                        Icon = Icons.Contains(icon) ? icon : DefaultIcon
+                    });
+                }
                 if (string.IsNullOrEmpty(notes.Version) || !ForskUpdate.IsVersion(notes.Version)) return null;
                 if (notes.Items.Count < MinItems || notes.Items.Count > MaxItems) return null;
                 if (notes.Items.Any(i => string.IsNullOrEmpty(i.Title) || string.IsNullOrEmpty(i.How))) return null;

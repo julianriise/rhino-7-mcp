@@ -160,7 +160,7 @@ namespace RhinoMCPPlugin.Forsk
             }
             if (spec.Rows != null) item["rows"] = new JArray(spec.Rows);
             if (spec.Features != null)
-                item["features"] = new JArray(spec.Features.Select(f => new JObject { ["title"] = f.Title ?? "", ["how"] = f.How ?? "" }));
+                item["features"] = new JArray(spec.Features.Select(f => new JObject { ["title"] = f.Title ?? "", ["how"] = f.How ?? "", ["icon"] = f.Icon ?? ForskWhatsNew.DefaultIcon }));
             if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
             if (spec.Data != null) item["data"] = spec.Data.DeepClone();
             return Push(item);
@@ -420,18 +420,34 @@ namespace RhinoMCPPlugin.Forsk
             _store = store;
         }
 
-        /// <summary>The thread for a document. A saved file's thread comes back from the store the first time.</summary>
+        /// <summary>Files whose thread this Rhino session already began. Static: a session is the Rhino process.</summary>
+        static readonly HashSet<string> Begun = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>A new Rhino session, as Rhino's start gives one. Tests call it; the plug-in never needs to.</summary>
+        public static void NewSession() => Begun.Clear();
+
+        /// <summary>
+        /// The thread for a document. Each Rhino session starts every file's
+        /// chat fresh (Julian, 2026-10-07), so What's new and the first notes
+        /// sit at the top. Within the session, a file closed and opened again
+        /// gets its thread back from the store.
+        /// </summary>
         public DocThread For(uint serial, string file, string path)
         {
             if (!_byDoc.TryGetValue(serial, out var thread))
             {
                 thread = new DocThread { Serial = serial };
                 _byDoc[serial] = thread;
-                if (!string.IsNullOrEmpty(path) && _store != null)
+                if (!string.IsNullOrEmpty(path) && _store != null && !Begun.Add(path))
                     thread.Restore(_store.Load(path));
             }
             if (!string.IsNullOrWhiteSpace(file)) thread.File = file;
-            if (!string.IsNullOrEmpty(path)) thread.Path = path;
+            if (!string.IsNullOrEmpty(path))
+            {
+                thread.Path = path;
+                // A file saved for the first time this session has begun too.
+                Begun.Add(path);
+            }
             return thread;
         }
 

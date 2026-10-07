@@ -22,6 +22,16 @@
   --paper: #FFFFFF;
   --focus: rgba(41, 72, 245, 0.55);
   --brand-ring: rgba(41, 72, 245, 0.35);
+  /* The crew's colours (the avatars' gradients), for the What's new card. */
+  --crew-planner: #3b93f0;
+  --crew-modeller: #3ecf8e;
+  --crew-analyser: #8b5cf6;
+  --crew-render: #f0b429;
+  --news-wash-a: rgba(59, 147, 240, 0.10);
+  --news-wash-b: rgba(139, 92, 246, 0.10);
+  --news-wash-c: rgba(240, 180, 41, 0.10);
+  --news-ring: rgba(139, 92, 246, 0.22);
+  --news-rule: rgba(139, 92, 246, 0.16);
   --menu-shadow: 0 8px 28px rgba(26, 26, 26, 0.12), 0 0 0 1px rgba(26, 26, 26, 0.05);
   --thumb: rgba(102, 112, 122, 0.45);
   --thumb-hover: rgba(102, 112, 122, 0.75);
@@ -47,6 +57,15 @@
   --paper: #FFFFFF;
   --focus: rgba(112, 136, 255, 0.7);
   --brand-ring: rgba(112, 136, 255, 0.45);
+  --crew-planner: #62a9f3;
+  --crew-modeller: #65d9a5;
+  --crew-analyser: #a27df8;
+  --crew-render: #f3c354;
+  --news-wash-a: rgba(98, 169, 243, 0.16);
+  --news-wash-b: rgba(162, 125, 248, 0.16);
+  --news-wash-c: rgba(243, 195, 84, 0.12);
+  --news-ring: rgba(162, 125, 248, 0.35);
+  --news-rule: rgba(162, 125, 248, 0.22);
   --menu-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(236, 237, 239, 0.1);
   --thumb: rgba(163, 169, 177, 0.45);
   --thumb-hover: rgba(163, 169, 177, 0.75);
@@ -268,6 +287,31 @@ html[data-kbd] .card .move:focus-visible { background: var(--page); color: var(-
 .card .features { margin: 0 0 8px; padding: 0; list-style: none; }
 .card .features li { padding: 6px 0; }
 .card .features li + li { border-top: 1px solid var(--line); }
+/* What's new: the Support crew's card, in the crew's colours. Each item has its own tinted Lucide icon. */
+.card.news {
+  position: relative; overflow: hidden; padding: 14px 14px 12px;
+  background: linear-gradient(135deg, var(--news-wash-a) 0%, var(--news-wash-b) 55%, var(--news-wash-c) 100%), var(--card);
+  box-shadow: 0 0 0 1px var(--news-ring), var(--shadow);
+}
+.card.news::before {
+  content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--crew-planner), var(--crew-modeller), var(--crew-analyser), var(--crew-render));
+}
+.card.news .news-head { display: flex; align-items: center; gap: 10px; margin: 2px 0 10px; }
+.card.news .news-face { width: 34px; height: 34px; flex: none; }
+.card.news .news-face svg { width: 100%; height: 100%; display: block; }
+.card.news .question { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.card.news .news-spark { width: 16px; height: 16px; color: var(--crew-analyser); flex: none; margin-left: auto; }
+.card.news .features li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; }
+.card.news .features li + li { border-top: 1px solid var(--news-rule); }
+.card.news .feature-icon { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--on-brand); }
+.card.news .feature-icon svg { width: 16px; height: 16px; display: block; }
+.card.news .tint-0 { background: var(--crew-planner); }
+.card.news .tint-1 { background: var(--crew-analyser); }
+.card.news .tint-2 { background: var(--crew-modeller); }
+.card.news .tint-3 { background: var(--crew-render); }
+.card.news .feature-title { font-weight: 600; }
+.card.news .feature-how { color: var(--meta); font-size: 13px; line-height: 1.4; margin-top: 1px; }
 .card .feature-title { color: var(--ink); font-size: 14px; font-weight: 600; }
 .card .feature-how { color: var(--meta); font-size: 13px; margin-top: 2px; }
 nav.bar { padding: 4px 16px 0; }
@@ -396,6 +440,10 @@ textarea::placeholder { color: var(--faint); }
     <div id="icon-minus"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></div>
     <div id="icon-arrow-up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></div>
     <div id="icon-arrow-down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></div>
+    <div id="icon-sparkles"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg></div>
+    <div id="icon-armchair"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3"/><path d="M3 16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V11a2 2 0 0 0-4 0z"/><path d="M5 18v2"/><path d="M19 18v2"/></svg></div>
+    <div id="icon-activity"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg></div>
+    <div id="icon-link"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
     <div id="icon-ellipsis"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></div>
     <div id="icon-door.hinged_single"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V4M6 4A12 12 0 0 1 18 16"/></svg></div>
     <div id="icon-door.hinged_double"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V10M6 10A6 6 0 0 1 12 16M18 16V10M18 10A6 6 0 0 0 12 16"/></svg></div>

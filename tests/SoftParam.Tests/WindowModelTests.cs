@@ -65,6 +65,22 @@ public class WindowModelTests : IDisposable
     }
 
     [Fact]
+    public void ANewRhinoSession_StartsTheFilesChatFresh_AndTheSameSessionGetsItBack()
+    {
+        var store = new ThreadStore(_root);
+        WindowModels.NewSession();
+        var first = new WindowModels(store).For(4, "house.3dm", "/p/house.3dm");
+        first.Add("user", "earlier session");
+        new WindowModels(store).Persist(first);
+
+        // Rhino quits and opens again: the file's chat starts empty, so What's new sits on top.
+        WindowModels.NewSession();
+        Assert.Empty(new WindowModels(store).For(5, "house.3dm", "/p/house.3dm").Items);
+        // Closed and opened again in the same session, it comes back from the store.
+        Assert.Equal("earlier session", new WindowModels(store).For(6, null, "/p/house.3dm").Items.Single()["text"]!.ToString());
+    }
+
+    [Fact]
     public void ACard_IsAnsweredOnce()
     {
         var thread = new DocThread();

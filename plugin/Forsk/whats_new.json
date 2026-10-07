@@ -1,18 +1,21 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now.",
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link (Lucide).",
   "version": "1.1.0",
   "items": [
     {
       "title": "Furnish a room",
-      "how": "Ask in chat: furnish the bedroom. Pick the blue or orange layout on the card."
+      "how": "Ask in chat: furnish the bedroom. Pick the blue or orange layout on the card.",
+      "icon": "armchair"
     },
     {
       "title": "Live analyses",
-      "how": "Tap the purple Analyser face at the top, then switch Live on for Daylight or Areas."
+      "how": "Tap the purple Analyser face at the top, then switch Live on for Daylight or Areas.",
+      "icon": "activity"
     },
     {
       "title": "Connect Rhino to your account",
-      "how": "Settings → Set up Forsk → Account → Connect, then confirm the code in your browser."
+      "how": "Settings → Set up Forsk → Account → Connect, then confirm the code in your browser.",
+      "icon": "link"
     }
   ]
 }

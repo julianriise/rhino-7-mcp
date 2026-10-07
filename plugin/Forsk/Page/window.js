@@ -648,22 +648,40 @@
       done.textContent = Forsk.cardLine(item);
       return done;
     }
-    var box = el('div', 'card');
-    box.appendChild(el('div', 'question', item.question));
+    var news = item.kind === 'whats.new';
+    var box = el('div', news ? 'card news' : 'card');
+    if (news) {
+      // The Support crew's face, the title and a spark: the card reads as a celebration, not a notice.
+      var head = el('div', 'news-head');
+      var face = el('span', 'news-face');
+      var drawn = avatarNode('support');
+      if (drawn) face.appendChild(drawn);
+      head.appendChild(face);
+      head.appendChild(el('div', 'question', item.question));
+      var spark = iconNode('sparkles');
+      if (spark) { spark.setAttribute('class', 'news-spark'); head.appendChild(spark); }
+      box.appendChild(head);
+    } else box.appendChild(el('div', 'question', item.question));
     if (item.rows && item.rows.length) {
       var list = el('ul', 'rows');
       item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
       box.appendChild(list);
     }
     if (item.features && item.features.length) {
-      var news = el('ul', 'features');
-      item.features.forEach(function (feature) {
+      var featureList = el('ul', 'features');
+      item.features.forEach(function (feature, index) {
         var li = el('li');
-        li.appendChild(el('div', 'feature-title', feature.title));
-        li.appendChild(el('div', 'feature-how', feature.how));
-        news.appendChild(li);
+        var chip = el('span', 'feature-icon tint-' + (index % 4));
+        var symbol = iconNode(feature.icon || 'sparkles');
+        if (symbol) chip.appendChild(symbol);
+        li.appendChild(chip);
+        var words = el('div');
+        words.appendChild(el('div', 'feature-title', feature.title));
+        words.appendChild(el('div', 'feature-how', feature.how));
+        li.appendChild(words);
+        featureList.appendChild(li);
       });
-      box.appendChild(news);
+      box.appendChild(featureList);
     }
     var inputs = [];
     var order = Forsk.orderKeys(item.fields);
