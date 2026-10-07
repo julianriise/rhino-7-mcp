@@ -99,7 +99,8 @@ internal static class ForskPlanCutHost
         var wanted = Wanted(doc);
         if (wanted.Count == 0)
         {
-            if (keep != null) changed |= doc.Objects.Delete(keep.Id, true);
+            // No plan view now: the cut clips none. It stays (it is locked, and Delete refuses a locked object).
+            if (keep != null) changed |= SyncViews(doc, keep, wanted);
             return changed;
         }
 
