@@ -1,21 +1,21 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket (Lucide).",
-  "version": "1.1.1",
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, eye, camera, git-compare (Lucide).",
+  "version": "1.2.0",
   "items": [
     {
-      "title": "Forsk opens ready",
-      "how": "Type Forsk in Rhino and start. No mcpstart: the bridge is only for outside AI apps.",
-      "icon": "rocket"
+      "title": "View picker",
+      "how": "Tap the eye at the top left of the Forsk window for Perspective, Plan or an elevation.",
+      "icon": "eye"
     },
     {
-      "title": "Release notes",
-      "how": "Settings → Release notes shows this card again whenever you want.",
-      "icon": "book-open"
+      "title": "Jump inside",
+      "how": "Click a room's floor, then More actions → Jump inside. The view shows the materials and is saved after the room.",
+      "icon": "camera"
     },
     {
-      "title": "Furniture in More actions",
-      "how": "Open More actions and pick Add furniture or Furnish rooms.",
-      "icon": "armchair"
+      "title": "Saved options",
+      "how": "Analyses menu → Options: save the model as option A, B, …, then compare or restore it.",
+      "icon": "git-compare"
     }
   ]
 }

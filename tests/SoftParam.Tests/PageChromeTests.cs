@@ -51,6 +51,9 @@ public class PageChromeTests
         var html = Html();
         var headerAt = html.IndexOf("<header", StringComparison.Ordinal);
         var headerEnd = html.IndexOf("</header>", headerAt, StringComparison.Ordinal);
+        // The hidden icon holder sits in the header too; its icons (git-compare's circles) are not header buttons.
+        var holderAt = html.IndexOf("<div id=\"icons\"", headerAt, StringComparison.Ordinal);
+        if (holderAt > headerAt && holderAt < headerEnd) headerEnd = holderAt;
         var header = html.Substring(headerAt, headerEnd - headerAt);
         var buttonAt = header.IndexOf("id=\"more\"", StringComparison.Ordinal);
         var buttonEnd = header.IndexOf("</button>", buttonAt, StringComparison.Ordinal);
