@@ -98,11 +98,7 @@ public static class DaylightPrint
         // A gap clear all round; under the tag that box just touches the area line's own.
         double hw = width / 2 + gap, hh = height / 2 + gap;
         var row = (tag.MinY + tag.MaxY) / 2;
-        var pieces = (taken ?? new RoomDetect.Box[0]).Select(b => new[]
-        {
-            new RoomDetect.Pt(b.MinX, b.MinY), new RoomDetect.Pt(b.MaxX, b.MinY),
-            new RoomDetect.Pt(b.MaxX, b.MaxY), new RoomDetect.Pt(b.MinX, b.MaxY)
-        }).ToList();
+        var pieces = (taken ?? new RoomDetect.Box[0]).Select(Furniture.Corners).ToList();
         if (Furniture.TagClear(under, room, hw, hh, pieces)) return under;
         // On the area line's row the label is as tall as that line, a word space (one text height) off it.
         var rowHh = Math.Min(hh, (tag.MaxY - tag.MinY) / 2);

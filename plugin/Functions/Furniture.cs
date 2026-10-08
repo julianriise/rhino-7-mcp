@@ -818,13 +818,29 @@ public static class Furniture
         var reach = Math.Max(
             ring.Max(p => p.X) - ring.Min(p => p.X),
             ring.Max(p => p.Y) - ring.Min(p => p.Y));
-        foreach (var offset in Spiral(Math.Max(step, 1), reach))
+        // The spiral walks square rings; nearest means by straight distance.
+        foreach (var offset in Spiral(Math.Max(step, 1), reach).OrderBy(o => o.X * o.X + o.Y * o.Y))
         {
             var c = new Pt(start.X + offset.X, start.Y + offset.Y);
             if (TagClear(c, ring, hw, hh, blocks)) return c;
         }
         return null;
     }
+
+    /// <summary>
+    /// Where a room tag's middle goes on the plan: the nearest spot clear of
+    /// the furniture and the door swings, else, in a room too small for
+    /// both, the nearest spot clear of the furniture alone. Null when even
+    /// that is not clear.
+    /// </summary>
+    public static Pt? RoomTagSpot(Pt start, IList<Pt> room, double hw, double hh, IList<Pt[]> furniture, IList<Pt[]> swings, double step) =>
+        TagSpot(start, room, hw, hh, furniture.Concat(swings), step) ?? TagSpot(start, room, hw, hh, furniture, step);
+
+    /// <summary>A box's corners, counter-clockwise: an obstacle as TagClear reads one.</summary>
+    public static Pt[] Corners(RoomDetect.Box b) => new[]
+    {
+        new Pt(b.MinX, b.MinY), new Pt(b.MaxX, b.MinY), new Pt(b.MaxX, b.MaxY), new Pt(b.MinX, b.MaxY)
+    };
 
     /// <summary>A tag's box about c (half sizes hw, hh) is inside the room and off every piece.</summary>
     public static bool TagClear(Pt c, IList<Pt> room, double hw, double hh, IEnumerable<Pt[]> pieces)

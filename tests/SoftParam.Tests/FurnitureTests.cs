@@ -210,6 +210,38 @@ public class FurnitureTests
     }
 
     [Fact]
+    public void ARoomTag_StepsOffADoorSwing_AsLittleAsItCan_AndStaysInTheRoom()
+    {
+        // A 900 door hinged at (1000, 0) swings into the room over the tag point.
+        var swing = Furniture.Corners(new RoomDetect.Box(100, 0, 1000, 900));
+        var start = new Pt(1000, 700);
+        var spot = Furniture.RoomTagSpot(start, Room3x4, 600, 200, new Pt[0][], new[] { swing }, 125);
+        Assert.NotNull(spot);
+        var c = spot!.Value;
+        Assert.True(Furniture.TagClear(c, Room3x4, 600, 200, new[] { swing }));
+        // The nearest clear spot: just over the swing, not across the room.
+        Assert.Equal(1000, c.X, 1);
+        Assert.InRange(c.Y, 1100, 1250);
+        // Nothing in the way: the tag point stays.
+        Assert.Equal(start, Furniture.RoomTagSpot(start, Room3x4, 600, 200, new Pt[0][], new Pt[0][], 125));
+    }
+
+    [Fact]
+    public void ARoomTooSmallToClearItsDoorSwing_KeepsTheTagOffTheFurnitureOnly()
+    {
+        var cupboard = new[] { new Pt(0, 0), new Pt(1400, 0), new Pt(1400, 900), new Pt(0, 900) };
+        var swing = Furniture.Corners(new RoomDetect.Box(0, 0, 900, 900));
+        var shelf = Furniture.Corners(new RoomDetect.Box(1000, 0, 1400, 300));
+        var start = new Pt(700, 450);
+        // No furniture: today's spot.
+        Assert.Equal(start, Furniture.RoomTagSpot(start, cupboard, 600, 200, new Pt[0][], new[] { swing }, 125));
+        // Furniture too: off the shelf, as before the swings counted.
+        Assert.Equal(
+            Furniture.TagSpot(start, cupboard, 600, 200, new[] { shelf }, 125),
+            Furniture.RoomTagSpot(start, cupboard, 600, 200, new[] { shelf }, new[] { swing }, 125));
+    }
+
+    [Fact]
     public void Ids_CountUpFromF01_AndTheReceiptNamesThePiece()
     {
         Assert.Equal("F01", Furniture.NextId(new string[0]));

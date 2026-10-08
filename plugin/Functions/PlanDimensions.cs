@@ -215,14 +215,16 @@ public partial class RhinoMCPFunctions
     /// What is already on the plan layer, as PlanDims sees it: tags and marks
     /// are text, symbols and leaders lines nothing may touch, the roof outline
     /// and lines beyond the cut lines only text keeps off. The poché and its
-    /// cut outline are the wall rings instead.
+    /// cut outline are the wall rings instead. only, when given, keeps just
+    /// the objects it passes.
     /// </summary>
-    private static List<PlanDims.Obstacle> PlanObstacles(RhinoDoc doc, Layer layer)
+    private static List<PlanDims.Obstacle> PlanObstacles(RhinoDoc doc, Layer layer, Func<ObjectAttributes, bool> only = null)
     {
         var list = new List<PlanDims.Obstacle>();
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (obj?.Attributes == null || obj.Attributes.LayerIndex != layer.Index) continue;
+            if (only != null && !only(obj.Attributes)) continue;
             var role = obj.Attributes.GetUserString("forsk:role") ?? "";
             if (role == "section_fill" || role == "cut") continue;
             var bbox = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;

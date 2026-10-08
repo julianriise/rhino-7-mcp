@@ -32,8 +32,18 @@ public partial class RhinoMCPFunctions
         var texts = new List<string>();
         var height = OpeningTypes.PlanAnnotationHeight(scale);
         var loose = new List<PlanRoom>();
-        // FU.2: a tag keeps off the furniture symbols.
+        // FU.2: a tag keeps off the furniture symbols, and off the door swings
+        // drawn already when its room has the space. Both are read in world space.
         var pieces = FurnitureFootprints(doc, null).Select(f => f.Corners).ToList();
+        var toWorld = worldToHld.IsValid && !worldToHld.IsIdentity ? InverseOf(worldToHld) : Transform.Identity;
+        var swings = PlanObstacles(doc, layer, IsDoorSwing)
+            .Select(o => Furniture.Corners(o.Box).Select(p =>
+            {
+                var world = new Point3d(p.X - delta.X, p.Y - delta.Y, 0);
+                world.Transform(toWorld);
+                return new RoomDetect.Pt(world.X, world.Y);
+            }).ToArray())
+            .ToList();
         foreach (var planRoom in rooms)
         {
             var roomId = planRoom.RoomId;
@@ -53,13 +63,13 @@ public partial class RhinoMCPFunctions
                 continue;
             }
             var inside = planRoom.Inside;
-            if (pieces.Count > 0 && planRoom.Outline != null)
+            if ((pieces.Count > 0 || swings.Count > 0) && planRoom.Outline != null)
             {
                 // The tag box: the name 1.15 heights over the area line, both centred.
                 var line0 = OpeningTypes.RoomTag(planRoom.Area);
                 var hw = Math.Max(TextWidthOf(doc, name, height), TextWidthOf(doc, line0, height)) / 2 + 0.25 * height;
                 var lift = 0.575 * height;
-                var spot = Furniture.TagSpot(new RoomDetect.Pt(inside.X, inside.Y + lift), planRoom.Outline, hw, 1.25 * height, pieces, height);
+                var spot = Furniture.RoomTagSpot(new RoomDetect.Pt(inside.X, inside.Y + lift), planRoom.Outline, hw, 1.25 * height, pieces, swings, height);
                 if (spot.HasValue) inside = new RoomDetect.Pt(spot.Value.X, spot.Value.Y - lift);
                 else stats.TagsOnFurniture++;
             }
@@ -101,6 +111,14 @@ public partial class RhinoMCPFunctions
         if (texts.Count > 0)
             stats.RoomText = string.Join(" | ", texts.ToArray());
         return added;
+    }
+
+    /// <summary>A door's leaf or swing arc as the plan draws it.</summary>
+    private static bool IsDoorSwing(ObjectAttributes attr)
+    {
+        if (attr.GetUserString("forsk:role") != "symbol") return false;
+        var part = attr.GetUserString("forsk:symbol");
+        return part == "arc" || part == "leaf";
     }
 
     private static Dictionary<string, string> RoomStamps(string roomId)
