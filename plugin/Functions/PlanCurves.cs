@@ -241,7 +241,12 @@ public partial class RhinoMCPFunctions
             {
                 var fromExtrusion = extrusion.ToBrep();
                 if (fromExtrusion != null && fromExtrusion.IsValid)
+                {
+                    var box = fromExtrusion.GetBoundingBox(true);
+                    var shift = ExtrudeSide.Shift(oriented.PointAtStart.Z, height, box.Min.Z, box.Max.Z, tol);
+                    if (shift != 0) fromExtrusion.Translate(0, 0, shift);
                     return fromExtrusion;
+                }
             }
         }
         catch
