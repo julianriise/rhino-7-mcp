@@ -344,6 +344,8 @@ namespace RhinoMCPPlugin.Forsk
                     }
                     var spec = ForskCards.For(action.Id, facts);
                     if (spec == null) return;
+                    if ((action.Id == "room.inside" || action.Id == "view.exterior") && Functions.ForskInteriorHost.TakeRestartNote())
+                        spec.Note = ForskText.Get("render.restart") + " " + spec.Note;
                     thread.Add("user", action.Label);
                     thread.BeginReply(ForskRoles.MarkForAction(action.Id));
                     thread.AddCard(spec, facts);
@@ -1316,6 +1318,8 @@ namespace RhinoMCPPlugin.Forsk
             MarkDirty();
             var facts = Facts(doc);
             var spec = ForskCards.For(action.Id, facts);
+            if (spec != null && Functions.ForskInteriorHost.TakeRestartNote())
+                spec.Note = ForskText.Get("render.restart") + " " + spec.Note;
             if (spec != null) thread.AddCard(spec, facts);
             thread.EndReply();
             Models.Persist(thread);

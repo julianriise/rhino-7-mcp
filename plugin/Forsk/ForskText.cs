@@ -237,6 +237,7 @@ namespace RhinoMCPPlugin.Forsk
             ["room.inside.nopick"] = "No room clicked. Choose Interior render again when you are ready.",
             ["room.inside.held"] = "Looking {way}. Confirm saves it as a named view.",
             ["view.exterior"] = "Exterior render",
+            ["render.restart"] = "The render look is new in this Rhino session: restart Rhino once to see it cleanly, with soft shadows.",
             ["view.exterior.ask"] = "Which side should the camera stand on?",
             ["view.exterior.held"] = "From the {way}. Confirm saves it as a named view.",
             ["furniture.add"] = "Add furniture",

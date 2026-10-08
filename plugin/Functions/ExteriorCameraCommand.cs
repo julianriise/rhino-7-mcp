@@ -64,6 +64,7 @@ public partial class RhinoMCPFunctions
             ["look"] = vp.DisplayMode?.EnglishName,
             ["message"] = "Perspective looks at the building " + shot.From + " at eye height"
                 + (save ? ", saved as the named view " + name + ". Orbit or walk to adjust before a render." : ".")
+                + (ForskInteriorHost.TakeRestartNote() ? " " + global::RhinoMCPPlugin.Forsk.ForskText.Get("render.restart") : "")
         };
     }
 

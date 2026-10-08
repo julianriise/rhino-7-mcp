@@ -68,6 +68,7 @@ public partial class RhinoMCPFunctions
             ["look"] = vp.DisplayMode?.EnglishName,
             ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m"
                 + (save ? ", saved as the named view " + name + ". Orbit or walk to adjust before a render." : ".")
+                + (ForskInteriorHost.TakeRestartNote() ? " " + global::RhinoMCPPlugin.Forsk.ForskText.Get("render.restart") : "")
         };
     }
 
