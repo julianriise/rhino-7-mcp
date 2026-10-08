@@ -173,6 +173,12 @@ public class RegistryTests
         Assert.Contains("wall.drag", card);
         Assert.True(card.IndexOf("wall.move") < card.IndexOf("wall.drag"));
         Assert.True(card.IndexOf("wall.drag") < card.IndexOf("wall.delete"));
+        // Change thickness is a pill of its own, after Drag a face, for one wall.
+        Assert.True(card.IndexOf("wall.drag") < card.IndexOf("wall.thickness"));
+        Assert.True(card.IndexOf("wall.thickness") < card.IndexOf("wall.delete"));
+        Assert.Equal("Change thickness", ForskText.Label("wall.thickness"));
+        Assert.Equal("Endre tykkelse", ForskText.Get("wall.thickness.nb"));
+        Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("wall.thickness"));
         Assert.Contains(card, id => id == "opening.add_door");
         Assert.Equal(new[] { "file.print", "wall.move", "wall.drag", "detail.add" }, ForskRegistry.Bar(one).Slots.Select(a => a.Id));
         foreach (var role in Enum.GetValues(typeof(ForskRole)).Cast<ForskRole>())
@@ -201,6 +207,8 @@ public class RegistryTests
         Assert.Equal(2, two.PickedCount);
         Assert.Null(ForskPick.OneRunWall(two.Selected));
         Assert.DoesNotContain(ForskRegistry.Card(two).Actions, a => a.Id == "wall.drag");
+        Assert.DoesNotContain(ForskRegistry.Card(two).Actions, a => a.Id == "wall.thickness");
+        Assert.DoesNotContain(ForskRegistry.Card(Docs.Facts("house")).Actions, a => a.Id == "wall.thickness");
         Assert.DoesNotContain(ForskRegistry.Bar(two).Slots, a => a.Id == "wall.drag");
     }
 

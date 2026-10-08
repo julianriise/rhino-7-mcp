@@ -275,4 +275,16 @@ public class WallFaceTests
         Assert.StartsWith("Drag the end", WallFace.Prompt(end, false));
         Assert.Contains("Thickness", WallFace.Prompt(side, false));
     }
+
+    [Fact]
+    public void ThicknessPill_PromptNamesTheThicknessNow()
+    {
+        var g = Graph(new() { Straight() });
+        var side = Pick(g, 2000, 200);
+        Assert.Equal("Type the new thickness (now 200 mm), or drag the face. Click or Enter places it. Esc cancels.",
+            WallFace.ThicknessPrompt(side, false));
+        Assert.StartsWith("Skriv ny tykkelse (nå 200 mm)", WallFace.ThicknessPrompt(side, true));
+        // Typing 250 on the pill is a 50 mm move of the clicked side.
+        Assert.Equal(50, WallFace.Typed(side, 250, true));
+    }
 }

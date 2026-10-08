@@ -299,6 +299,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.drag":
                     FaceDrag(thread, "wall.drag", null);
                     return;
+                case "wall.thickness":
+                    FaceDrag(thread, "wall.thickness", WallFace.Kind.Side, thickness: true);
+                    return;
                 case "wall.draw":
                     DrawPick(thread, label, "wall.draw", "prompt.wall", "add_wall", ForskDrawWall.RunOnUi);
                     return;
@@ -2037,13 +2040,13 @@ namespace RhinoMCPPlugin.Forsk
         /// prompt show before Rhino takes the mouse. Release runs edit_wall_face
         /// inside this pill's one record; Esc adds nothing.
         /// </summary>
-        void FaceDrag(DocThread thread, string actionId, WallFace.Kind? only)
+        void FaceDrag(DocThread thread, string actionId, WallFace.Kind? only, bool thickness = false)
         {
             if (Refuse(thread)) return;
             var doc = RhinoDoc.ActiveDoc;
             var nb = ForskPrefill.Language(thread.LastUserText()) == "nb";
             var shown = ForskText.Get(nb && ForskText.Has(actionId + ".nb") ? actionId + ".nb" : actionId);
-            var pick = only == WallFace.Kind.Side ? "wall.face.pick.side" : "wall.face.pick";
+            var pick = thickness ? "wall.thickness.pick" : only == WallFace.Kind.Side ? "wall.face.pick.side" : "wall.face.pick";
             thread.Add("user", shown);
             thread.BeginReply(ForskRoles.MarkForAction(actionId));
             thread.Add("line", ForskText.Get(nb ? pick + ".nb" : pick));
@@ -2054,7 +2057,7 @@ namespace RhinoMCPPlugin.Forsk
             ForskSpeech.Use(nb ? "dra veggen" : "drag");
             try
             {
-                outcome = ForskFaceDrag.Pick(doc, only);
+                outcome = ForskFaceDrag.Pick(doc, only, thickness);
             }
             finally
             {

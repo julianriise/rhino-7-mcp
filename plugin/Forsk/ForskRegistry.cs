@@ -171,6 +171,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.split", Runs.Run, "group.model", f => f.WholeWalls),
             new ForskAction("wall.move", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
+            // Thickness as a pill: click the side that moves, type the new thickness. The side across stays.
+            new ForskAction("wall.thickness", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             // Draw tools: click the walls or the stair in the Top view.
             new ForskAction("wall.draw", Runs.Run, "group.model", f => true),
