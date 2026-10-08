@@ -1,5 +1,5 @@
 name: forsk
-version: 1.2.0
+version: 1.3.0
 authors:
   - Julian Riise
 description: "The Rhino plugin for architects. Floor plan in, drawing set out, from one chat window. Forsk turns a floor plan into a 3D model and a full drawing set in Rhino 7 for Mac. Generate walls, doors, windows and rooms from 2D curves, a DXF or a PDF (AI detection), then print a numbered set on A4 to A1 with plans, facades, sections, areas and schedules to PDF and DWG/DXF. Chat uses your own xAI Grok key, pasted once in Settings."
