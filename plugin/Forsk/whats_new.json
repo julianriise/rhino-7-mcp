@@ -3,24 +3,19 @@
   "version": "1.2.0",
   "items": [
     {
-      "title": "Analysis set",
-      "how": "After Daylight or Area summary, tap Add to analysis set. Print analysis set prints them as their own PDF.",
+      "title": "Interior and exterior render",
+      "how": "Pick a room's floor for More actions → Interior render, or More actions → Exterior render: materials, soft shadows, any side. Then Export viewport saves it as a PNG.",
+      "icon": "camera"
+    },
+    {
+      "title": "Daylight map in the analysis set",
+      "how": "Print analysis set now adds a top-view daylight map, and runs daylight for you if it hasn't run.",
       "icon": "activity"
     },
     {
       "title": "Info panel",
-      "how": "Click a room, door, window, wall or piece of furniture: the top of the window says what it is. Change a door's width or a room's type right there.",
+      "how": "Click a room, door, window or wall: the top of the window shows its sizes, and you can change them right there.",
       "icon": "info"
-    },
-    {
-      "title": "Interior and exterior render",
-      "how": "Click a room's floor, then More actions → Interior render; or More actions → Exterior render. Pick north, east, south or west, then Confirm.",
-      "icon": "camera"
-    },
-    {
-      "title": "Render views in the view picker",
-      "how": "Tap the cube at the top left: Interior and Exterior list your saved renders, one click shows one.",
-      "icon": "box"
     }
   ]
 }
