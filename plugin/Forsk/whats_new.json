@@ -1,11 +1,16 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare (Lucide).",
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
   "version": "1.2.0",
   "items": [
     {
       "title": "Analysis set",
       "how": "After Daylight or Area summary, tap Add to analysis set. Print analysis set prints them as their own PDF.",
       "icon": "activity"
+    },
+    {
+      "title": "Info panel",
+      "how": "Click a room, door, window, wall or piece of furniture: the top of the window says what it is. Change a door's width or a room's type right there.",
+      "icon": "info"
     },
     {
       "title": "Interior and exterior render",
