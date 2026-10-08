@@ -141,10 +141,11 @@ public static class Analysis
 
     /// <summary>
     /// Print runs daylight first: daylight is in the set, and no room mean is
-    /// stored or no map is drawn (never run, or the map was cleared since).
+    /// stored or no map is drawn (never run, or the map was cleared since), or
+    /// the model changed after the map was made, so the page would print an old one.
     /// </summary>
-    public static bool NeedsDaylightRun(State state, bool hasMap) =>
-        state != null && state.InSet(Daylight) && (!hasMap || state.RoomDf.Count == 0);
+    public static bool NeedsDaylightRun(State state, bool hasMap, bool mapStale = false) =>
+        state != null && state.InSet(Daylight) && (!hasMap || state.RoomDf.Count == 0 || mapStale);
 
     /// <summary>The Choose analyses card's ticks as the keys to store: "1" in the set, "0" out.</summary>
     public static List<(string Key, string Value)> SetChoice(Func<string, string> values)

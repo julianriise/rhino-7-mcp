@@ -77,6 +77,8 @@ public class DaylightMapTests
         // A map with no room means stored (an older file): the table would be dashes.
         Assert.True(Analysis.NeedsDaylightRun(never, true));
         Assert.False(Analysis.NeedsDaylightRun(Stored(("set.areas", "1")), false));
+        // A map the model has moved on from prints old colours: Print runs daylight again.
+        Assert.True(Analysis.NeedsDaylightRun(ran, true, mapStale: true));
         Assert.False(Analysis.NeedsDaylightRun(null, false));
     }
 

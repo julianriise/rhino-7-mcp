@@ -26,9 +26,10 @@ public partial class RhinoMCPFunctions
     /// <summary>A daylight mesh with faces is on the file, shown or hidden.</summary>
     internal static bool HasDaylightMap(RhinoDoc doc) => DaylightMeshes(doc).Count > 0;
 
-    /// <summary>Print runs daylight first: it is in the Analysis set and never ran (Analysis.NeedsDaylightRun).</summary>
+    /// <summary>Print runs daylight first: it is in the Analysis set and never ran, or its map is out of date (Analysis.NeedsDaylightRun).</summary>
     internal static bool DaylightMissing(RhinoDoc doc) =>
-        doc != null && Analysis.NeedsDaylightRun(ReadAnalysis(doc), HasDaylightMap(doc));
+        doc != null && Analysis.NeedsDaylightRun(ReadAnalysis(doc), HasDaylightMap(doc),
+            AnalysisOverlays(doc).Any(o => o?.Attributes?.GetUserString(DaylightStaleKey) == "1"));
 
     private static List<Mesh> DaylightMeshes(RhinoDoc doc)
     {
