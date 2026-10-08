@@ -215,7 +215,7 @@ internal static class ForskWhiteHost
         }
         catch (Exception ex)
         {
-            Report(ex);
+            Report(ex, name);
             return false;
         }
     }
@@ -306,8 +306,9 @@ internal static class ForskWhiteHost
         return name.ToLowerInvariant().Replace(' ', '-');
     }
 
-    static void Report(Exception ex)
+    /// <summary>One line in Rhino's command history, naming the mode that failed (Forsk White, Technical or Interior).</summary>
+    static void Report(Exception ex, string mode = ForskWhite.ModeName)
     {
-        RhinoApp.WriteLine("Forsk White did not load: " + (ex?.Message ?? "unknown error"));
+        RhinoApp.WriteLine(mode + " did not load: " + (ex?.Message ?? "unknown error"));
     }
 }

@@ -3,6 +3,11 @@
   "version": "1.2.0",
   "items": [
     {
+      "title": "Analysis set",
+      "how": "After Daylight or Area summary, tap Add to analysis set. Print analysis set prints them as their own PDF.",
+      "icon": "activity"
+    },
+    {
       "title": "View picker",
       "how": "Tap the cube at the top left of the Forsk window for Perspective, Plan or an elevation.",
       "icon": "box"
