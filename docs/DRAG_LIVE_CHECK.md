@@ -2,7 +2,7 @@
 
 Rhino was not opened for these slices. They are local commits on `grok` and are not pushed. D1 to D3 are headless. D4 to D5 need a model with straight walls and at least one room.
 
-Start from one selected straight Forsk wall. **Drag wall** is a suggestion pill beside Move. It is the same command as `ForskDragWall`, and it is also on “What can I do here?”.
+Start from one selected straight Forsk wall. Move on that wall is the drag itself, the same command as `ForskDragWall`. **Drag a face** is the suggestion pill beside Move. It is the same command as `ForskEditWallFace` (an end changes the length, a side moves the wall or, with Thickness, changes its thickness), and it is also on “What can I do here?”.
 
 ## D1 — the distance
 
@@ -50,11 +50,11 @@ Select the north wall. Drag it outward.
 
 One wall is selected.
 
-- One straight wall: the suggestion pills are Print, Move, Drag wall. Drag wall is not slot 1. Add a door stays on “What can I do here?”.
+- One straight wall: the suggestion pills are Print, Move, Drag a face. Drag a face is not slot 1. Add a door stays on “What can I do here?”.
 - It is on “What can I do here?” for that one wall, in Model, after Move and before Delete. It is hidden with no wall, with two or more walls, with a room, and with an opening. A whole record that is one selected object still shows it there, and the suggestions stay Print, Move, Add a door. The command then refuses it, as in D2.
-- The pill writes “Drag wall”, then “Drag the wall in the view, or type a distance. Click or Enter places it. Esc cancels.” Rhino takes the click.
+- Move writes “Move”, then “Drag the wall in the view, or type a distance. Click or Enter places it. Esc cancels.” Rhino takes the drag at once, with no compass sentence. Drag a face writes “Drag a face”, then “Click a face of the wall: an end changes its length, a side moves it or changes its thickness.”
 - A click places the wall at the distance the dimension shows. Enter and right-click do the same. Esc cancels. The point is not constrained to a line: that constraint swallows the mouse-up, so the click never returned and the preview was never applied.
-- Release uses the same joined move as a typed move: one undo record, the D3 sentence as the receipt, the wall review card under it when neighbours followed, and a stale daylight map when one was showing. The undo name is `Forsk: Drag wall`. The Undo pill appears and undoes that record.
+- Release uses the same joined move as a typed move: one undo record, the D3 sentence as the receipt, the wall review card under it when neighbours followed, and a stale daylight map when one was showing. The undo name is `Forsk: Move`, or `Forsk: Drag a face` for the pill. The Undo pill appears and undoes that record.
 - A refusal or Esc is one chat line. It does not replace the Undo pill.
 - Write a Norwegian line first, for example “dra veggen”, then use the pill. The bubble is “Dra vegg”. The prompt is “Dra veggen i visningen, eller skriv en avstand. Klikk eller Enter plasserer den. Esc avbryter.” The dimension says “300 mm ut” or “300 mm inn”. The receipt is the Norwegian D3 sentence. Esc says “Avbrutt.”
 
