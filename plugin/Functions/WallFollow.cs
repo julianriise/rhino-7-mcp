@@ -29,14 +29,23 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// <paramref name="before"/> is the record's rings before the edit.
     /// <paramref name="after"/> is the rings now, or null when the record was deleted.
+    /// <paramref name="doorsBefore"/> is the doors' plan boxes before the edit moved
+    /// any; null reads them now. A door gap in the outline is closed at its door
+    /// (WallFollowPlan.CloseDoorGaps) before the slabs are matched and rebuilt.
     /// </summary>
-    private string FollowNeighbours(RhinoDoc doc, string sourceLayer, List<List<RoomDetect.Pt>> before, List<List<RoomDetect.Pt>> after)
+    private string FollowNeighbours(RhinoDoc doc, string sourceLayer, List<List<RoomDetect.Pt>> before, List<List<RoomDetect.Pt>> after,
+        List<RoomDetect.Box> doorsBefore = null)
     {
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         var outlineTol = Math.Max(tol, 5.0);
+        var doorsNow = DoorGapBoxes(doc);
         var outer = before != null && before.Count > 0 ? before[0] : null;
-        var floor = outer == null ? null : ChooseSlab(doc, sourceLayer, outer, roof: false, outlineTol);
-        var roof = outer == null ? null : ChooseSlab(doc, sourceLayer, outer, roof: true, outlineTol);
+        var closed = outer == null ? null : WallFollowPlan.CloseDoorGaps(outer, doorsBefore ?? doorsNow, tol);
+        // A slab built before gaps were closed still has the open outline.
+        var floor = outer == null ? null : ChooseSlab(doc, sourceLayer, closed, roof: false, outlineTol)
+            ?? ChooseSlab(doc, sourceLayer, outer, roof: false, outlineTol);
+        var roof = outer == null ? null : ChooseSlab(doc, sourceLayer, closed, roof: true, outlineTol)
+            ?? ChooseSlab(doc, sourceLayer, outer, roof: true, outlineTol);
         var daylight = DaylightShown(doc);
         var snaps = new List<SlabUndo>();
         // The slab is locked. Unlock it for the replace, then lock it again.
@@ -54,8 +63,9 @@ public partial class RhinoMCPFunctions
                 }
                 else if (after.Count > 0 && after[0] != null && after[0].Count >= 3)
                 {
-                    floorDone = RebuildFloor(doc, floor, after[0], tol, snaps);
-                    roofDone = RebuildRoof(doc, roof, after[0], tol, snaps);
+                    var outline = WallFollowPlan.CloseDoorGaps(after[0], doorsNow, tol);
+                    floorDone = RebuildFloor(doc, floor, outline, tol, snaps);
+                    roofDone = RebuildRoof(doc, roof, outline, tol, snaps);
                 }
                 var rooms = RoomsDetect(new JObject());
                 var count = rooms?["count"]?.ToObject<int>() ?? 0;
@@ -208,6 +218,44 @@ public partial class RhinoMCPFunctions
                 // The wall rollback still runs. A slab that will not go back is named by the error above.
             }
         }
+    }
+
+    /// <summary>
+    /// Plan boxes of the doors: each door marker, and each curve on the 2D door
+    /// layer (Generate 3D builds the floor before the doors are cut).
+    /// </summary>
+    private static List<RoomDetect.Box> DoorGapBoxes(RhinoDoc doc)
+    {
+        var boxes = new List<RoomDetect.Box>();
+        if (doc == null) return boxes;
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(obj.Attributes?.GetUserString("forsk:opening_kind"), "door", StringComparison.OrdinalIgnoreCase)) continue;
+            AddPlanBox(boxes, obj);
+        }
+        foreach (var obj in ObjectsOnLayer(doc, "door"))
+            if (obj?.Geometry is Curve) AddPlanBox(boxes, obj);
+        return boxes;
+    }
+
+    private static void AddPlanBox(List<RoomDetect.Box> boxes, RhinoObject obj)
+    {
+        var box = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Unset;
+        if (box.IsValid) boxes.Add(new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y));
+    }
+
+    /// <summary>A plan outline with its door gaps closed; the curve itself when none closes.</summary>
+    private static Curve CloseDoorGaps(Curve outline, List<RoomDetect.Box> doors, double tol)
+    {
+        if (outline == null || doors == null || doors.Count == 0) return outline;
+        if (!outline.TryGetPolyline(out Polyline poly) || poly == null || poly.Count < 4) return outline;
+        var ring = new List<RoomDetect.Pt>();
+        var last = poly.Count - 1;
+        if (poly[0].DistanceTo(poly[last]) < 0.1) last--;
+        for (var i = 0; i <= last; i++) ring.Add(new RoomDetect.Pt(poly[i].X, poly[i].Y));
+        var closed = WallFollowPlan.CloseDoorGaps(ring, doors, Math.Max(tol, 1.0));
+        return closed.Count == ring.Count ? outline : RingCurve(closed, poly[0].Z);
     }
 
     private static Curve RingCurve(List<RoomDetect.Pt> ring, double z)

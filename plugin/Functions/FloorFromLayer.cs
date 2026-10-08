@@ -59,7 +59,9 @@ public partial class RhinoMCPFunctions
 
         var skipped = profiles.Skipped;
         var warnings = profiles.Warnings;
-        var footprints = OutermostClosedCurves(profiles.Closed, profiles.Tol);
+        // A door drawn as a gap in the outer wall opens the outline: close it at the door.
+        var doors = DoorGapBoxes(doc);
+        var footprints = OutermostClosedCurves(profiles.Closed, profiles.Tol).ConvertAll(c => CloseDoorGaps(c, doors, profiles.Tol));
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(150, 145, 138));
         var ids = new JArray();
         var index = 1;

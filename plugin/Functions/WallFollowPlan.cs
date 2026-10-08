@@ -290,6 +290,112 @@ public static class WallFollowPlan
         return Math.Sqrt(x * x + y * y);
     }
 
+    /// <summary>Longest wall end (the jamb edge) a door gap is bridged from.</summary>
+    const double MaxEndMm = 600;
+    /// <summary>Widest door gap that is bridged.</summary>
+    const double MaxGapMm = 2500;
+
+    /// <summary>
+    /// The wall's outer outline with each door gap closed. A front door drawn
+    /// as a gap leaves the wall in one piece whose outer loop runs in through
+    /// the gap and round the inner walls, so a floor built from it covered only
+    /// the walls. Two wall ends facing each other across a gap with a door box
+    /// in it are bridged on the outside face, and the inner part is dropped.
+    /// A gap without a door stays open. The ring comes back unchanged when
+    /// nothing is bridged.
+    /// </summary>
+    public static List<RoomDetect.Pt> CloseDoorGaps(IList<RoomDetect.Pt> ring, IList<RoomDetect.Box> doors, double tol)
+    {
+        var loop = ring == null ? new List<RoomDetect.Pt>() : new List<RoomDetect.Pt>(ring);
+        if (loop.Count < 6 || doors == null || doors.Count == 0) return loop;
+        var slack = Math.Max(tol, 1e-6);
+        while (TryBridge(loop, doors, slack, out var a, out var b))
+        {
+            // a and b are the jamb edges: ring[a] to ring[a+1] and ring[b] to ring[b+1].
+            var n = loop.Count;
+            var outer = new List<RoomDetect.Pt>();
+            for (var k = (b + 1) % n; ; k = (k + 1) % n)
+            {
+                outer.Add(loop[k]);
+                if (k == a) break;
+            }
+            var inner = new List<RoomDetect.Pt>();
+            for (var k = (a + 1) % n; ; k = (k + 1) % n)
+            {
+                inner.Add(loop[k]);
+                if (k == b) break;
+            }
+            var next = Math.Abs(RoomDetect.Area(outer)) >= Math.Abs(RoomDetect.Area(inner)) ? outer : inner;
+            if (next.Count < 3 || next.Count >= loop.Count) break;
+            loop = next;
+        }
+        return loop;
+    }
+
+    static bool TryBridge(List<RoomDetect.Pt> ring, IList<RoomDetect.Box> doors, double tol, out int a, out int b)
+    {
+        a = b = -1;
+        var n = ring.Count;
+        var sign = Math.Sign(RoomDetect.Area(ring));
+        if (sign == 0) return false;
+        var ends = new List<int>();
+        for (var i = 0; i < n; i++)
+        {
+            var p = ring[i];
+            var q = ring[(i + 1) % n];
+            var len = Dist(p, q);
+            if (len <= tol || len > MaxEndMm) continue;
+            if (Turn(ring[(i - 1 + n) % n], p, q) * sign <= tol * len) continue;
+            if (Turn(p, q, ring[(i + 2) % n]) * sign <= tol * len) continue;
+            ends.Add(i);
+        }
+        var best = double.MaxValue;
+        foreach (var i in ends)
+            foreach (var j in ends)
+            {
+                if (i == j) continue;
+                var pa = ring[i];
+                var qa = ring[(i + 1) % n];
+                var pb = ring[j];
+                var qb = ring[(j + 1) % n];
+                var l1 = Dist(pa, qb);
+                var l2 = Dist(qa, pb);
+                if (l1 <= tol || l2 <= tol || l1 > MaxGapMm || l2 > MaxGapMm) continue;
+                if (Math.Abs(l1 - l2) > Math.Max(50.0, 0.05 * l1)) continue;
+                var ux = (qb.X - pa.X) / l1;
+                var uy = (qb.Y - pa.Y) / l1;
+                if (ux * (pb.X - qa.X) / l2 + uy * (pb.Y - qa.Y) / l2 < 0.99) continue;
+                var jamb = Dist(pa, qa);
+                if (Math.Abs(ux * (qa.X - pa.X) / jamb + uy * (qa.Y - pa.Y) / jamb) > 0.2) continue;
+                if (!DoorBetween(doors, pa, qa, pb, qb)) continue;
+                if (l1 < best)
+                {
+                    best = l1;
+                    a = i;
+                    b = j;
+                }
+            }
+        return a >= 0;
+    }
+
+    static bool DoorBetween(IList<RoomDetect.Box> doors, RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Pt c, RoomDetect.Pt d)
+    {
+        var minX = Math.Min(Math.Min(a.X, b.X), Math.Min(c.X, d.X));
+        var maxX = Math.Max(Math.Max(a.X, b.X), Math.Max(c.X, d.X));
+        var minY = Math.Min(Math.Min(a.Y, b.Y), Math.Min(c.Y, d.Y));
+        var maxY = Math.Max(Math.Max(a.Y, b.Y), Math.Max(c.Y, d.Y));
+        foreach (var box in doors)
+            if (box.MaxX > minX && box.MinX < maxX && box.MaxY > minY && box.MinY < maxY)
+                return true;
+        return false;
+    }
+
+    static double Turn(RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Pt c) =>
+        (b.X - a.X) * (c.Y - b.Y) - (b.Y - a.Y) * (c.X - b.X);
+
+    static double Dist(RoomDetect.Pt a, RoomDetect.Pt b) =>
+        Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
     static string Capital(string word)
     {
         if (string.IsNullOrEmpty(word) || !char.IsLetter(word[0])) return word;

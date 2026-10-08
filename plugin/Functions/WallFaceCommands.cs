@@ -164,6 +164,7 @@ public partial class RhinoMCPFunctions
         Func<RhinoObject, RoomDetect.Box, bool, string> refuse, string failed)
     {
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var doorsBefore = DoorGapBoxes(doc);
         var onRun = new List<(int Wall, RhinoObject Marker)>();
         foreach (var i in pick.Graph.Records)
         {
@@ -210,7 +211,7 @@ public partial class RhinoMCPFunctions
                 rebuiltIds[undo.HostBefore] = undo.HostAfter;
                 if (undo.HostBefore == named) commit.Rebuilt = result;
             }
-            commit.Followed = FollowNeighbours(doc, sourceLayer, pick.Graph.Shape, moved.Shape);
+            commit.Followed = FollowNeighbours(doc, sourceLayer, pick.Graph.Shape, moved.Shape, doorsBefore);
         }
         catch (Exception ex)
         {

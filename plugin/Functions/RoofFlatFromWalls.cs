@@ -70,7 +70,8 @@ public partial class RhinoMCPFunctions
 
         var skipped = profiles.Skipped;
         var warnings = profiles.Warnings;
-        var footprints = OutermostClosedCurves(profiles.Closed, profiles.Tol);
+        var doors = DoorGapBoxes(doc);
+        var footprints = OutermostClosedCurves(profiles.Closed, profiles.Tol).ConvertAll(c => CloseDoorGaps(c, doors, profiles.Tol));
         var topZ = elevation ?? MaxWallTopZ(walls);
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(70, 72, 76));
         var ids = new JArray();
