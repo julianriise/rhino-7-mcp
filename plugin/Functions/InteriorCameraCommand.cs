@@ -37,6 +37,7 @@ public partial class RhinoMCPFunctions
         vp.CameraUp = Vector3d.ZAxis;
         // The materials as they are, not Forsk White's white with black lines (Julian, 2026-10-08).
         InteriorMaterials(doc);
+        ShowRoofForRender(doc);
         var look = ForskInteriorHost.Ensure();
         if (look != null) vp.DisplayMode = look;
         doc.Views.ActiveView = view;

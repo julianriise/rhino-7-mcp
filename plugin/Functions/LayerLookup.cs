@@ -154,6 +154,46 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    /// <summary>Set while a render showed the roof: picking a normal view hides it again.</summary>
+    private const string RoofShownKey = "forsk:roof_shown_for_render";
+
+    /// <summary>
+    /// Renders show the roof (Julian, 2026-10-08): A-ROOF is hidden by default so the
+    /// house can be seen into and picked from above, and an Interior or Exterior render
+    /// needs it on. It stays locked. A roof already on is left as it is.
+    /// </summary>
+    internal static void ShowRoofForRender(RhinoDoc doc)
+    {
+        foreach (var layer in RoofLayers(doc))
+        {
+            if (layer.IsVisible) continue;
+            layer.IsVisible = true;
+            doc.Layers.Modify(layer, layer.Index, true);
+            doc.Strings.SetString(RoofShownKey, "1");
+        }
+    }
+
+    /// <summary>A normal view again: the roof a render turned on goes back to hidden. One the user turned on stays.</summary>
+    internal static void HideRoofAfterRender(RhinoDoc doc)
+    {
+        if (doc == null || doc.Strings.GetValue(RoofShownKey) != "1") return;
+        doc.Strings.Delete(RoofShownKey);
+        foreach (var layer in RoofLayers(doc))
+        {
+            if (!layer.IsVisible) continue;
+            layer.IsVisible = false;
+            doc.Layers.Modify(layer, layer.Index, true);
+        }
+    }
+
+    private static IEnumerable<Layer> RoofLayers(RhinoDoc doc)
+    {
+        if (doc == null) yield break;
+        foreach (var layer in doc.Layers)
+            if (layer != null && !layer.IsDeleted && layer.Name.Equals(RoofLayerName, StringComparison.OrdinalIgnoreCase))
+                yield return layer;
+    }
+
     private const string RoofLayerName = "A-ROOF";
 
     private static void ApplyDefaultLayerVisibility(RhinoDoc doc, Layer layer, string name)

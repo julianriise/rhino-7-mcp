@@ -30,7 +30,7 @@ public static class ForskInterior
 
     /// <summary>
     /// The layers a render gives a material when they have none, and the
-    /// preset: loose furniture is wood, fixed fittings white, stairs wood.
+    /// preset: loose furniture is wood, fixed fittings white, stairs wood, the roof plaster.
     /// Walls (plaster), floors (concrete), doors and windows (wood, glass)
     /// already get theirs when they are made.
     /// </summary>
@@ -39,6 +39,8 @@ public static class ForskInterior
         new KeyValuePair<string, string>(Furniture.LayerName, "wood"),
         new KeyValuePair<string, string>(Furniture.FixedLayerName, "white"),
         new KeyValuePair<string, string>(Stairs.LayerName, "wood"),
+        // The roof shows in renders now: its underside is the ceiling inside, and from eye height outside only its edge shows.
+        new KeyValuePair<string, string>("A-ROOF", "plaster"),
     };
 
     /// <summary>The ceiling drawn from the hidden roof: a warm white plaster.</summary>

@@ -83,6 +83,6 @@ public class ForskInteriorTests
     public void FurnitureAndStairs_GetAMaterial_WallsAndFloorsKeepTheirs()
     {
         var layers = ForskInterior.LayerMaterials.Select(p => p.Key + "=" + p.Value);
-        Assert.Equal(new[] { "A-FURN=wood", "A-FURN-FIXD=white", "A-STAIR=wood" }, layers);
+        Assert.Equal(new[] { "A-FURN=wood", "A-FURN-FIXD=white", "A-STAIR=wood", "A-ROOF=plaster" }, layers);
     }
 }

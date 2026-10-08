@@ -35,6 +35,7 @@ public partial class RhinoMCPFunctions
         vp.CameraUp = Vector3d.ZAxis;
         // The materials as they are, the roof shown and soft shadows (Julian, 2026-10-08).
         InteriorMaterials(doc);
+        ShowRoofForRender(doc);
         var look = ForskInteriorHost.Ensure(exterior: true);
         if (look != null) vp.DisplayMode = look;
         doc.Views.ActiveView = view;

@@ -219,6 +219,7 @@ internal static class ForskInteriorHost
         var vp = view.ActiveViewport;
         if (!doc.NamedViews.Restore(index, vp)) return "The view did not change.";
         vp.DisplayMode = Ensure(exterior);
+        RhinoMCPFunctions.ShowRoofForRender(doc);
         doc.Views.ActiveView = view;
         view.Redraw();
         return null;

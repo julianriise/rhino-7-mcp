@@ -35,6 +35,8 @@ public partial class RhinoMCPFunctions
 
         var mode = ForskWhiteHost.ModeFor(doc, ForskTechnicalHost.LookOf(vp));
         if (mode != null) vp.DisplayMode = mode;
+        // Back from a render: the roof it turned on is hidden again.
+        HideRoofAfterRender(doc);
 
         var zoom = "selection";
         var box = BoundingBox.Empty;
