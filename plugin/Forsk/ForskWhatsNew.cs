@@ -47,7 +47,7 @@ namespace RhinoMCPPlugin.Forsk
         public const string Resource = "rhinomcp.Forsk.whats_new.json";
         public const string DefaultIcon = "sparkles";
         /// <summary>The Lucide icons the window carries for the card's items.</summary>
-        public static readonly string[] Icons = { "sparkles", "armchair", "activity", "link", "book-open", "rocket", "box", "camera", "git-compare", "info" };
+        public static readonly string[] Icons = { "sparkles", "armchair", "activity", "link", "book-open", "rocket", "box", "camera", "git-compare", "info", "file-up" };
         /// <summary>The slider's arrows. Not item icons; the window carries them too.</summary>
         public static readonly string[] SlideIcons = { "chevron-left", "chevron-right" };
         public const int MinItems = 2;

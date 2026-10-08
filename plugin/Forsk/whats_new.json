@@ -5,6 +5,11 @@
       "version": "1.3.0",
       "items": [
         {
+          "title": "Guided AI detection",
+          "how": "Tap + in an empty file: one card walks you through choosing a PDF or scan, setting the scale, reviewing and generating 3D.",
+          "icon": "file-up"
+        },
+        {
           "title": "Interior and exterior render",
           "how": "Pick a room's floor for More actions → Interior render, or More actions → Exterior render: materials, soft shadows, any side. Then Export viewport saves it as a PNG.",
           "icon": "camera"
