@@ -684,6 +684,102 @@
     return node;
   }
 
+  /* What's new: its slides, one per release, newest first. No DOM, so it tests headless. */
+  Forsk.newsSlides = function (item) {
+    return ((item && item.slides) || []).filter(function (slide) { return slide && slide.features && slide.features.length; });
+  };
+
+  /* The slide an arrow lands on. The ends hold: the newest has no newer, the oldest no older. */
+  Forsk.slideStep = function (at, count, delta) {
+    return Math.max(0, Math.min(count - 1, at + delta));
+  };
+
+  /* Left and Right on a focused card button step the slides: -1 back to newer, +1 on to older, 0 for any other key. */
+  Forsk.slideKey = function (e) {
+    if (!e || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return 0;
+    return e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+  };
+
+  /* One release's items: a tinted Lucide icon, the title, and where to click under it. */
+  function featureList(features) {
+    var list = el('ul', 'features');
+    features.forEach(function (feature, index) {
+      var li = el('li');
+      var chip = el('span', 'feature-icon tint-' + (index % 4));
+      var symbol = iconNode(feature.icon || 'sparkles');
+      if (symbol) chip.appendChild(symbol);
+      li.appendChild(chip);
+      var words = el('div');
+      words.appendChild(el('div', 'feature-title', feature.title));
+      words.appendChild(el('div', 'feature-how', feature.how));
+      li.appendChild(words);
+      list.appendChild(li);
+    });
+    return list;
+  }
+
+  /*
+   * What's new after skipped releases (1.0.0 to 1.3.0): arrows and a dot per
+   * release. A step is page-only and immediate, with no round trip to Rhino;
+   * a step never marks the card touched, so a render keeps the slide shown.
+   */
+  function slider(box, title, slides) {
+    var nav = el('div', 'news-nav');
+    var at = 0;
+    function arrow(icon, label, delta) {
+      var button = el('button', 'news-arrow');
+      button.type = 'button';
+      button.setAttribute('aria-label', label);
+      var drawn = iconNode(icon);
+      if (drawn) button.appendChild(drawn);
+      button.addEventListener('click', function () { show(Forsk.slideStep(at, slides.length, delta)); });
+      return button;
+    }
+    var newer = arrow('chevron-left', 'Newer release', -1);
+    var older = arrow('chevron-right', 'Older release', 1);
+    var dots = el('span', 'slide-dots');
+    slides.forEach(function (slide, i) {
+      // The arrows take the keyboard; a dot is a shortcut for the mouse.
+      var dot = el('button', 'slide-dot');
+      dot.type = 'button';
+      dot.tabIndex = -1;
+      dot.setAttribute('aria-label', slide.title);
+      dot.addEventListener('click', function () { show(i); });
+      dots.appendChild(dot);
+    });
+    nav.appendChild(newer);
+    nav.appendChild(dots);
+    nav.appendChild(older);
+    title.setAttribute('aria-live', 'polite');
+    box.addEventListener('keydown', function (e) {
+      var delta = Forsk.slideKey(e);
+      if (!delta || !e.target || e.target.tagName !== 'BUTTON') return;
+      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      show(Forsk.slideStep(at, slides.length, delta));
+    });
+    function show(index) {
+      if (index !== at) {
+        at = index;
+        title.textContent = slides[at].title;
+        var list = box.querySelector('ul.features');
+        var fresh = featureList(slides[at].features);
+        fresh.className += ' fade';
+        if (list) box.replaceChild(fresh, list);
+      }
+      // aria-disabled, not disabled: the focused arrow keeps the focus at the last slide.
+      newer.setAttribute('aria-disabled', at === 0 ? 'true' : 'false');
+      older.setAttribute('aria-disabled', at === slides.length - 1 ? 'true' : 'false');
+      for (var i = 0; i < dots.childNodes.length; i++) {
+        dots.childNodes[i].className = 'slide-dot' + (i === at ? ' on' : '');
+        if (i === at) dots.childNodes[i].setAttribute('aria-current', 'true');
+        else dots.childNodes[i].removeAttribute('aria-current');
+      }
+    }
+    show(0);
+    return nav;
+  }
+
   function card(item, opts) {
     if (item.state !== 'open') {
       var done = el('div', 'card ' + (item.state === 'stale' ? 'stale' : 'done'));
@@ -692,6 +788,7 @@
     }
     var news = item.kind === 'whats.new';
     var box = el('div', news ? 'card news' : 'card');
+    var slides = news ? Forsk.newsSlides(item) : [];
     if (news) {
       // The Support crew's face, the title and a spark: the card reads as a celebration, not a notice.
       var head = el('div', 'news-head');
@@ -699,9 +796,14 @@
       var drawn = avatarNode('support');
       if (drawn) face.appendChild(drawn);
       head.appendChild(face);
-      head.appendChild(el('div', 'question', item.question));
-      var spark = iconNode('sparkles');
-      if (spark) { spark.setAttribute('class', 'news-spark'); head.appendChild(spark); }
+      var title = el('div', 'question', item.question);
+      head.appendChild(title);
+      // Several releases: the arrows and dots sit in the head, so they stay put while slides differ in length.
+      if (slides.length > 1) head.appendChild(slider(box, title, slides));
+      else {
+        var spark = iconNode('sparkles');
+        if (spark) { spark.setAttribute('class', 'news-spark'); head.appendChild(spark); }
+      }
       box.appendChild(head);
     } else box.appendChild(el('div', 'question', item.question));
     if (item.rows && item.rows.length) {
@@ -709,22 +811,7 @@
       item.rows.forEach(function (row) { list.appendChild(el('li', null, row)); });
       box.appendChild(list);
     }
-    if (item.features && item.features.length) {
-      var featureList = el('ul', 'features');
-      item.features.forEach(function (feature, index) {
-        var li = el('li');
-        var chip = el('span', 'feature-icon tint-' + (index % 4));
-        var symbol = iconNode(feature.icon || 'sparkles');
-        if (symbol) chip.appendChild(symbol);
-        li.appendChild(chip);
-        var words = el('div');
-        words.appendChild(el('div', 'feature-title', feature.title));
-        words.appendChild(el('div', 'feature-how', feature.how));
-        li.appendChild(words);
-        featureList.appendChild(li);
-      });
-      box.appendChild(featureList);
-    }
+    if (slides.length) box.appendChild(featureList(slides[0].features));
     var inputs = [];
     var order = Forsk.orderKeys(item.fields);
     var wraps = {};

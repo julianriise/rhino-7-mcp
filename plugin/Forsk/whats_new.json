@@ -1,21 +1,65 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
-  "version": "1.2.0",
-  "items": [
+  "_edit": "One entry per release, newest first; add the new release at the top and keep the older ones (a Mac that skipped releases steps back through them on the card). version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
+  "releases": [
     {
-      "title": "Interior and exterior render",
-      "how": "Pick a room's floor for More actions → Interior render, or More actions → Exterior render: materials, soft shadows, any side. Then Export viewport saves it as a PNG.",
-      "icon": "camera"
+      "version": "1.3.0",
+      "items": [
+        {
+          "title": "Interior and exterior render",
+          "how": "Pick a room's floor for More actions → Interior render, or More actions → Exterior render: materials, soft shadows, any side. Then Export viewport saves it as a PNG.",
+          "icon": "camera"
+        },
+        {
+          "title": "Daylight map in the analysis set",
+          "how": "Print analysis set now adds a top-view daylight map, and runs daylight for you if it hasn't run.",
+          "icon": "activity"
+        },
+        {
+          "title": "Info panel",
+          "how": "Click a room, door, window or wall: the top of the window shows its sizes, and you can change them right there.",
+          "icon": "info"
+        }
+      ]
     },
     {
-      "title": "Daylight map in the analysis set",
-      "how": "Print analysis set now adds a top-view daylight map, and runs daylight for you if it hasn't run.",
-      "icon": "activity"
+      "version": "1.2.0",
+      "items": [
+        {
+          "title": "View picker",
+          "how": "Tap the cube at the top left of the Forsk window for Perspective, Plan or an elevation.",
+          "icon": "box"
+        },
+        {
+          "title": "Interior render",
+          "how": "Click a room's floor, then More actions → Interior render. The view shows the materials and is saved after the room.",
+          "icon": "camera"
+        },
+        {
+          "title": "Saved options",
+          "how": "Analyses menu → Options: save the model as option A, B, …, then compare or restore it.",
+          "icon": "git-compare"
+        }
+      ]
     },
     {
-      "title": "Info panel",
-      "how": "Click a room, door, window or wall: the top of the window shows its sizes, and you can change them right there.",
-      "icon": "info"
+      "version": "1.1.0",
+      "items": [
+        {
+          "title": "Furnish a room",
+          "how": "Ask in chat: furnish the bedroom. Pick the blue or orange layout on the card.",
+          "icon": "armchair"
+        },
+        {
+          "title": "Live analyses",
+          "how": "Tap the purple Analyser face at the top, then switch Live on for Daylight or Areas.",
+          "icon": "activity"
+        },
+        {
+          "title": "Connect Rhino to your account",
+          "how": "Settings → Set up Forsk → Account → Connect, then confirm the code in your browser.",
+          "icon": "link"
+        }
+      ]
     }
   ]
 }

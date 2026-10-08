@@ -1242,7 +1242,7 @@ namespace RhinoMCPPlugin.Forsk
             catch (Exception) { return ""; }
         }
 
-        /// <summary>Settings → Release notes: this version's What's new card again, from Support, under the chat.</summary>
+        /// <summary>Settings → Release notes: the What's new card again, every release, from Support, under the chat.</summary>
         void ReleaseNotes()
         {
             var thread = Active();

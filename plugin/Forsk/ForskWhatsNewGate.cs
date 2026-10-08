@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace RhinoMCPPlugin.Forsk
@@ -12,7 +13,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         public const string SeenKey = "forsk.whatsnew.seen";
 
-        static WhatsNewNotes _pending;
+        static List<WhatsNewNotes> _pending;
 
         /// <summary>
         /// At plug-in load, before the window can write window.txt: decide once.
@@ -25,8 +26,8 @@ namespace RhinoMCPPlugin.Forsk
                 var current = ForskUpdate.Current;
                 var seen = Seen();
                 if (seen == current) return;
-                var notes = ForskWhatsNew.Parse(Read());
-                if (ForskWhatsNew.Show(notes, current, seen, File.Exists(WindowTxt()))) _pending = notes;
+                var due = ForskWhatsNew.Due(ForskWhatsNew.Parse(Read()), current, seen, File.Exists(WindowTxt()));
+                if (due.Count > 0) _pending = due;
                 else MarkSeen(current);
             }
             catch (Exception)
@@ -35,21 +36,21 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>Settings → Release notes: this version's notes, whenever asked. Null when they don't read.</summary>
-        public static WhatsNewNotes Notes()
+        /// <summary>Settings → Release notes: every release in the file, newest first, whenever asked. Null when they don't read.</summary>
+        public static List<WhatsNewNotes> Notes()
         {
             try { return ForskWhatsNew.Parse(Read()); }
             catch (Exception) { return null; }
         }
 
-        /// <summary>The card to add now, once. The version counts as seen when it is taken.</summary>
-        public static WhatsNewNotes Take()
+        /// <summary>The releases to show now, once. The running version counts as seen when they are taken.</summary>
+        public static List<WhatsNewNotes> Take()
         {
-            var notes = _pending;
-            if (notes == null) return null;
+            var due = _pending;
+            if (due == null) return null;
             _pending = null;
-            MarkSeen(notes.Version);
-            return notes;
+            MarkSeen(ForskUpdate.Current);
+            return due;
         }
 
         static string Read()

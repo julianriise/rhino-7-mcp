@@ -297,7 +297,7 @@ namespace RhinoMCPPlugin.Forsk
             thread.AddCard(ForskWhatsNew.Card(notes), null);
             thread.EndReply();
             Models.Persist(thread);
-            Log("whats new · " + notes.Version);
+            Log("whats new · " + string.Join(", ", notes.ConvertAll(n => n.Version)));
         }
 
         /// <summary>

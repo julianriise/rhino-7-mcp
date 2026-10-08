@@ -162,8 +162,13 @@ namespace RhinoMCPPlugin.Forsk
                 item["fields"] = fields;
             }
             if (spec.Rows != null) item["rows"] = new JArray(spec.Rows);
-            if (spec.Features != null)
-                item["features"] = new JArray(spec.Features.Select(f => new JObject { ["title"] = f.Title ?? "", ["how"] = f.How ?? "", ["icon"] = f.Icon ?? ForskWhatsNew.DefaultIcon }));
+            if (spec.Slides != null)
+                item["slides"] = new JArray(spec.Slides.Select(s => new JObject
+                {
+                    ["version"] = s.Version ?? "",
+                    ["title"] = s.Title ?? "",
+                    ["features"] = new JArray(s.Items.Select(f => new JObject { ["title"] = f.Title ?? "", ["how"] = f.How ?? "", ["icon"] = f.Icon ?? ForskWhatsNew.DefaultIcon }))
+                }));
             if (!string.IsNullOrEmpty(spec.Note)) item["note"] = spec.Note;
             if (spec.Data != null) item["data"] = spec.Data.DeepClone();
             return Push(item);
