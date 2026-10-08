@@ -149,8 +149,7 @@ public partial class RhinoMCPFunctions
         if (doc == null) return input;
         input.StoredFingerprint = doc.Strings.GetValue(LayoutMetaSection, SheetFingerprintKey);
         input.Details = doc.Strings.GetValue(Details.Section, Details.Entry);
-        input.DetailNames = DetailNames(doc, Details.Read(input.Details));
-        input.DetailSheets = DetailSheetIds(doc);
+        ReadDetailFacts(doc, input);
         input.Layouts = MatchingForskPages(doc, null).Count;
         input.Saved = !string.IsNullOrEmpty(doc.Path);
         input.Options = OptionNames(doc.Path);
@@ -177,6 +176,40 @@ public partial class RhinoMCPFunctions
     /// strings, so a move, a resize, a new type or a renamed room changes it.
     /// The daylight flag is not part of the model.
     /// </summary>
+    /// <summary>
+    /// The stored details' names and sheets. Working them out reads the whole
+    /// model (an IFC model, 645 ms on the office file, twice per refresh), so it
+    /// runs once and is kept until the model or the details change.
+    /// </summary>
+    private static void ReadDetailFacts(RhinoDoc doc, DocInput input)
+    {
+        var records = Details.Read(input.Details);
+        if (records.Count == 0)
+        {
+            input.DetailNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            input.DetailSheets = new List<string>();
+            return;
+        }
+        var key = doc.RuntimeSerialNumber + "|" + SheetFingerprint.Of(input.Rows, input.Details);
+        lock (DetailLock)
+        {
+            if (key != _detailKey)
+            {
+                var model = ReadIfcModel(doc);
+                _detailNames = DetailNames(doc, records, model);
+                _detailSheets = DetailSheetIds(doc, model);
+                _detailKey = key;
+            }
+            input.DetailNames = new Dictionary<string, string>(_detailNames, StringComparer.OrdinalIgnoreCase);
+            input.DetailSheets = new List<string>(_detailSheets);
+        }
+    }
+
+    static readonly object DetailLock = new object();
+    static string _detailKey;
+    static Dictionary<string, string> _detailNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    static List<string> _detailSheets = new List<string>();
+
     private static string EditStamp(RhinoObject obj)
     {
         uint crc = 0;

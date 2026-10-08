@@ -27,12 +27,12 @@ public partial class RhinoMCPFunctions
     /// records and the model as it is now, and how many details dropped.
     /// The one source for the set, the pages card, the sheets and the callouts.
     /// </summary>
-    private static List<DetailSheet.Sheet> DetailSheetPlan(RhinoDoc doc, out int dropped)
+    private static List<DetailSheet.Sheet> DetailSheetPlan(RhinoDoc doc, out int dropped, IfcExport.Model model = null)
     {
         dropped = 0;
         var records = Details.Read(doc?.Strings.GetValue(Details.Section, Details.Entry));
         if (records.Count == 0) return new List<DetailSheet.Sheet>();
-        var model = ReadIfcModel(doc);
+        model = model ?? ReadIfcModel(doc);
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
         var facts = new List<Details.Facts>();
         foreach (var record in records)
@@ -44,7 +44,7 @@ public partial class RhinoMCPFunctions
         return DetailSheet.Plan(DetailSheet.Items(facts));
     }
 
-    private static List<string> DetailSheetIds(RhinoDoc doc) => DetailSheetPlan(doc, out _).Select(s => s.Id).ToList();
+    private static List<string> DetailSheetIds(RhinoDoc doc, IfcExport.Model model = null) => DetailSheetPlan(doc, out _, model).Select(s => s.Id).ToList();
 
     private GreyscaleDrawing BakeDetailSheet(RhinoDoc doc, int scale, int n, bool includeExisting)
     {
