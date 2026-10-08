@@ -1372,6 +1372,20 @@ namespace RhinoMCPPlugin.Forsk
             Render();
         }
 
+        /// <summary>
+        /// An edit typed or picked in the info panel: the same tool the chat runs
+        /// (ForskInfo.Edit), with no chat line. A refusal or a failed edit is one
+        /// line in the chat; the panel shows the record as it now is either way.
+        /// </summary>
+        void InfoEdit(string id, string field, string value)
+        {
+            var edit = ForskInfo.Edit(id, field, value, out var error);
+            if (edit.HasValue) error = QuietTool(edit.Value.Tool, edit.Value.Args);
+            if (error != null) Active()?.AddLine(error);
+            MarkDirty();
+            Render();
+        }
+
         static List<string> SaveAnalysisSet(JObject values)
         {
             var doc = RhinoDoc.ActiveDoc;

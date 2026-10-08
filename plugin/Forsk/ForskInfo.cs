@@ -1,0 +1,335 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using Newtonsoft.Json.Linq;
+using RhinoMCPPlugin.Functions;
+
+namespace RhinoMCPPlugin.Forsk
+{
+    /// <summary>
+    /// The info panel (2.0 UX.5): pick anything Forsk made and the top of the
+    /// window says what it is, without asking in chat. A room: type, net area,
+    /// ceiling height, floor, daylight. A door or window: type, width, height,
+    /// sill, head, hand and swing, host wall, mark. A wall: thickness, height,
+    /// length. A stair: steps, riser, going, total rise. A piece of furniture:
+    /// what it is and its size. Several things: how many of each kind, the walls'
+    /// total length and the rooms' total area. A field that can change runs the
+    /// same tool as the chat would: set_opening, set_opening_type, rooms_set_type.
+    /// Built from the picked rows' records (ChipRow.Info). No RhinoCommon.
+    /// </summary>
+    public static class ForskInfo
+    {
+        /// <summary>Computed by the row reader beside the forsk:* strings.</summary>
+        public const string CeilingKey = "info:ceiling";
+        public const string HeightKey = "info:height";
+        public const string HostKey = "info:host";
+
+        public sealed class Option
+        {
+            public string Id;
+            public string Label;
+        }
+
+        public sealed class Row
+        {
+            public string Label;
+            public string Value;
+            /// <summary>The field an edit sends (width, sill, head, type, room_type), or null when the row only reads.</summary>
+            public string Field;
+            /// <summary>"mm" for a number typed in millimetres.</summary>
+            public string Unit;
+            /// <summary>A choice instead of a typed value; Value is then the chosen id.</summary>
+            public List<Option> Options;
+        }
+
+        public sealed class Panel
+        {
+            public string Title;
+            public string Subtitle;
+            /// <summary>The object an edit goes to: the opening's marker or the room's marker.</summary>
+            public string Id;
+            public List<Row> Rows = new List<Row>();
+
+            public JObject ToJson()
+            {
+                var rows = new JArray();
+                foreach (var row in Rows)
+                {
+                    var item = new JObject { ["label"] = row.Label, ["value"] = row.Value ?? "" };
+                    if (row.Field != null) item["field"] = row.Field;
+                    if (row.Unit != null) item["unit"] = row.Unit;
+                    if (row.Options != null)
+                        item["options"] = new JArray(row.Options.Select(o => new JObject { ["id"] = o.Id, ["label"] = o.Label }));
+                    rows.Add(item);
+                }
+                var json = new JObject { ["title"] = Title, ["rows"] = rows };
+                if (!string.IsNullOrEmpty(Subtitle)) json["subtitle"] = Subtitle;
+                if (!string.IsNullOrEmpty(Id)) json["id"] = Id;
+                return json;
+            }
+        }
+
+        /// <summary>The panel for what is picked, or null: nothing picked, or nothing Forsk made.</summary>
+        public static Panel For(FileFacts facts)
+        {
+            var things = (facts?.Selected ?? new List<ChipRow>()).Where(r => r != null && r.Generated && !r.Existing && KindOf(r) != null).ToList();
+            if (things.Count == 0) return null;
+            var df = facts.Analysis?.RoomDf ?? new Dictionary<string, double>();
+            if (things.Count == 1)
+            {
+                var row = things[0];
+                switch (KindOf(row))
+                {
+                    case "room": return Room(row, df);
+                    case "door":
+                    case "window": return Opening(row);
+                    case "wall": return Wall(row);
+                    case "stair": return Stair(row);
+                    case "furniture": return Piece(row);
+                }
+            }
+            return Several(things);
+        }
+
+        /// <summary>room, door, window, wall, stair, furniture, or null for anything else.</summary>
+        public static string KindOf(ChipRow row)
+        {
+            var kind = (row?.Kind ?? "").ToLowerInvariant();
+            switch (kind)
+            {
+                case "room":
+                case "room_plate": return "room";
+                case "opening_marker":
+                case "opening":
+                    var opening = (row.OpeningKind ?? "").ToLowerInvariant();
+                    return opening == "door" || opening == "window" ? opening : null;
+                case "wall":
+                case "stair":
+                case "furniture": return kind;
+                default: return null;
+            }
+        }
+
+        static Panel Room(ChipRow row, Dictionary<string, double> df)
+        {
+            var id = Get(row, "forsk:room_id") ?? row.ForskId;
+            var panel = new Panel
+            {
+                Title = string.IsNullOrWhiteSpace(row.Name) ? "Room" : row.Name,
+                Subtitle = string.IsNullOrEmpty(id) ? "Room" : "Room " + id,
+                Id = string.IsNullOrEmpty(row.Marker) ? row.Id : row.Marker
+            };
+            panel.Rows.Add(new Row
+            {
+                Label = "Type",
+                Value = RoomTypes.Read(row.RoomType),
+                Field = "room_type",
+                Options = RoomTypes.All.Select(k => new Option { Id = k, Label = RoomTypes.English(k) }).ToList()
+            });
+            panel.Rows.Add(new Row { Label = "Net area", Value = SquareMetres(Mm(row.Area)) });
+            var ceiling = Mm(Get(row, CeilingKey));
+            if (ceiling.HasValue) panel.Rows.Add(new Row { Label = "Ceiling height", Value = Millimetres(ceiling) });
+            panel.Rows.Add(new Row { Label = "Floor", Value = Floor(Get(row, "forsk:level")) });
+            panel.Rows.Add(new Row
+            {
+                Label = "Daylight",
+                Value = !string.IsNullOrEmpty(id) && df.TryGetValue(id, out var mean)
+                    ? mean.ToString("0.0", CultureInfo.InvariantCulture) + " % mean"
+                    : "Not run yet"
+            });
+            return panel;
+        }
+
+        static Panel Opening(ChipRow row)
+        {
+            var kind = KindOf(row);
+            var type = Get(row, OpeningTypes.TypeKey);
+            OpeningTypes.TypeDef def = null;
+            if (!OpeningTypes.TryGet(type, out def)) def = OpeningTypes.All.FirstOrDefault(t => t.Kind == kind);
+            var name = kind == "door" ? "Door" : "Window";
+            var mark = !string.IsNullOrEmpty(row.Mark) ? row.Mark : row.ForskId;
+            var panel = new Panel
+            {
+                Title = string.IsNullOrEmpty(mark) ? name : name + " " + mark,
+                Subtitle = def?.Label,
+                Id = row.Id
+            };
+            panel.Rows.Add(new Row
+            {
+                Label = "Type",
+                Value = def?.Id,
+                Field = "type",
+                Options = OpeningTypes.All.Where(t => t.Kind == kind).Select(t => new Option { Id = t.Id, Label = t.Label }).ToList()
+            });
+            var sill = Mm(row.Sill);
+            var head = Mm(row.Head);
+            panel.Rows.Add(new Row { Label = "Width", Value = Number(Mm(row.Width)), Field = "width", Unit = "mm" });
+            panel.Rows.Add(new Row { Label = "Height", Value = sill.HasValue && head.HasValue ? Millimetres(head - sill) : "–" });
+            panel.Rows.Add(new Row { Label = "Sill", Value = Number(sill), Field = "sill", Unit = "mm" });
+            panel.Rows.Add(new Row { Label = "Head", Value = Number(head), Field = "head", Unit = "mm" });
+            var hang = Hang(def, Get(row, OpeningTypes.HandKey), Get(row, OpeningTypes.SwingKey));
+            if (hang != null) panel.Rows.Add(new Row { Label = "Hand and swing", Value = hang });
+            var host = Get(row, HostKey);
+            if (!string.IsNullOrEmpty(host)) panel.Rows.Add(new Row { Label = "In wall", Value = host });
+            return panel;
+        }
+
+        static Panel Wall(ChipRow row)
+        {
+            var panel = new Panel
+            {
+                Title = string.IsNullOrEmpty(row.ForskId) ? "Wall" : "Wall " + row.ForskId,
+                Subtitle = string.IsNullOrEmpty(row.RunName) ? null : Capital(row.RunName)
+            };
+            panel.Rows.Add(new Row { Label = "Thickness", Value = Millimetres(Mm(row.Thickness)) });
+            panel.Rows.Add(new Row { Label = "Height", Value = Millimetres(Mm(Get(row, "forsk:height") ?? Get(row, HeightKey))) });
+            panel.Rows.Add(new Row { Label = "Length", Value = Metres(WallLength(row)) });
+            return panel;
+        }
+
+        static Panel Stair(ChipRow row)
+        {
+            var panel = new Panel { Title = string.IsNullOrEmpty(row.ForskId) ? "Stair" : "Stair " + row.ForskId };
+            panel.Rows.Add(new Row { Label = "Steps", Value = string.IsNullOrEmpty(row.Risers) ? "–" : row.Risers });
+            panel.Rows.Add(new Row { Label = "Riser", Value = Millimetres(Mm(Get(row, Stairs.RiserKey))) });
+            panel.Rows.Add(new Row { Label = "Going", Value = Millimetres(Mm(row.Going)) });
+            panel.Rows.Add(new Row { Label = "Total rise", Value = Millimetres(Mm(Get(row, Stairs.RiseKey))) });
+            return panel;
+        }
+
+        static Panel Piece(ChipRow row)
+        {
+            var piece = Furniture.Find(Get(row, Furniture.CatalogKey));
+            var panel = new Panel
+            {
+                Title = piece?.Name ?? "Furniture",
+                Subtitle = piece == null ? null : (piece.Fixed ? "Fixed fitting" : "Furniture")
+            };
+            if (piece != null)
+                panel.Rows.Add(new Row
+                {
+                    Label = "Size",
+                    Value = Number(piece.W) + " × " + Number(piece.D) + " × " + Number(piece.H) + " mm"
+                });
+            var room = Get(row, Furniture.RoomKey);
+            if (!string.IsNullOrEmpty(room)) panel.Rows.Add(new Row { Label = "Room", Value = room });
+            panel.Rows.Add(new Row { Label = "Catalogue", Value = Get(row, Furniture.CatalogKey) ?? "–" });
+            return panel;
+        }
+
+        static readonly string[] Order = { "wall", "door", "window", "room", "stair", "furniture" };
+
+        static Panel Several(List<ChipRow> things)
+        {
+            var kinds = things.GroupBy(KindOf).OrderBy(g => Array.IndexOf(Order, g.Key)).ToList();
+            var panel = new Panel { Title = kinds.Count == 1 ? Count(kinds[0].Key, things.Count) : things.Count + " things" };
+            if (kinds.Count == 1 && (kinds[0].Key == "door" || kinds[0].Key == "window"))
+            {
+                // Two doors: one line each, so they can be told apart.
+                foreach (var row in things)
+                {
+                    OpeningTypes.TypeDef def;
+                    OpeningTypes.TryGet(Get(row, OpeningTypes.TypeKey), out def);
+                    var size = Number(Mm(row.Width)) + " × " + Number(Mm(row.Head) - Mm(row.Sill));
+                    panel.Rows.Add(new Row
+                    {
+                        Label = !string.IsNullOrEmpty(row.Mark) ? row.Mark : row.ForskId ?? KindOf(row),
+                        Value = (def == null ? "" : def.Label + " · ") + size + " mm"
+                    });
+                }
+                return panel;
+            }
+            if (kinds.Count > 1)
+                foreach (var kind in kinds)
+                    panel.Rows.Add(new Row { Label = Capital(Plural(kind.Key)), Value = kind.Count().ToString(CultureInfo.InvariantCulture) });
+            var walls = things.Where(r => KindOf(r) == "wall").ToList();
+            if (walls.Count > 0)
+                panel.Rows.Add(new Row { Label = "Wall length", Value = Metres(walls.Sum(r => WallLength(r) ?? 0)) });
+            var rooms = things.Where(r => KindOf(r) == "room").ToList();
+            if (rooms.Count > 0)
+                panel.Rows.Add(new Row { Label = "Net area", Value = SquareMetres(rooms.Sum(r => Mm(r.Area) ?? 0)) });
+            return panel;
+        }
+
+        /// <summary>
+        /// The tool and arguments a panel edit runs, the same as asking in chat,
+        /// or null with the reason. Width, sill and head are millimetres.
+        /// </summary>
+        public static (string Tool, JObject Args)? Edit(string id, string field, string value, out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(id)) { error = "Pick it again, then change it."; return null; }
+            value = (value ?? "").Trim();
+            switch (field)
+            {
+                case "width":
+                case "sill":
+                case "head":
+                    var number = Mm(value.Replace("mm", "").Trim());
+                    if (!number.HasValue || number.Value < 0 || (field == "width" && number.Value <= 0))
+                    {
+                        error = "Type a size in millimetres, like 900.";
+                        return null;
+                    }
+                    return ("set_opening", new JObject { ["id"] = id, [field] = number.Value });
+                case "type":
+                    if (!OpeningTypes.TryGet(value, out _)) { error = "Pick a type from the list."; return null; }
+                    return ("set_opening_type", new JObject { ["id"] = id, ["type"] = value });
+                case "room_type":
+                    if (!RoomTypes.All.Contains(value)) { error = "Pick a room type from the list."; return null; }
+                    return ("rooms_set_type", new JObject { ["id"] = id, ["room_type"] = value });
+                default:
+                    error = "That cannot be changed here.";
+                    return null;
+            }
+        }
+
+        /// <summary>The wall's length along its run: its footprint area over its thickness.</summary>
+        public static double? WallLength(ChipRow row)
+        {
+            var thickness = Mm(row?.Thickness);
+            var rings = WallEdit.Rings(Get(row, "forsk:path"));
+            if (rings == null || rings.Count == 0 || !thickness.HasValue || thickness.Value <= 0) return null;
+            var area = Math.Abs(RoomDetect.Area(rings[0]));
+            for (var i = 1; i < rings.Count; i++) area -= Math.Abs(RoomDetect.Area(rings[i]));
+            return area / thickness.Value;
+        }
+
+        static string Hang(OpeningTypes.TypeDef def, string hand, string swing)
+        {
+            if (def == null || (!def.HasHand && !def.HasSwing)) return null;
+            var parts = new List<string>();
+            if (def.HasHand && !string.IsNullOrEmpty(hand)) parts.Add(Capital(hand) + " hand");
+            if (def.HasSwing && !string.IsNullOrEmpty(swing)) parts.Add("opens " + swing);
+            return parts.Count == 0 ? null : Capital(string.Join(", ", parts));
+        }
+
+        static string Floor(string level)
+        {
+            if (string.IsNullOrEmpty(level) || level == "0") return "Ground floor";
+            return "Floor " + level;
+        }
+
+        static string Count(string kind, int n) => n + " " + (n == 1 ? kind : Plural(kind));
+
+        static string Plural(string kind) => kind == "furniture" ? "furniture" : kind + "s";
+
+        static string Get(ChipRow row, string key) =>
+            row?.Info != null && row.Info.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
+
+        static double? Mm(string text) =>
+            double.TryParse((text ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : (double?)null;
+
+        static string Number(double? mm) => mm.HasValue ? Math.Round(mm.Value, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) : "–";
+
+        /// <summary>Whole millimetres, or one decimal when the record has one (a 178.5 mm riser).</summary>
+        static string Millimetres(double? mm) => mm.HasValue ? Math.Round(mm.Value, 1).ToString("0.#", CultureInfo.InvariantCulture) + " mm" : "–";
+
+        static string Metres(double? mm) => mm.HasValue ? (mm.Value / 1000).ToString("0.00", CultureInfo.InvariantCulture) + " m" : "–";
+
+        static string SquareMetres(double? mm2) => mm2.HasValue ? (mm2.Value / 1e6).ToString("0.0", CultureInfo.InvariantCulture) + " m²" : "–";
+
+        static string Capital(string text) => string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text.Substring(1);
+    }
+}

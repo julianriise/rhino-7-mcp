@@ -168,6 +168,18 @@ html[data-kbd] .menu button:focus-visible { background: var(--page); }
   -webkit-overflow-scrolling: touch;
 }
 #pin .card { margin-bottom: 8px; }
+/* The info panel sits above the chat while something is picked. It appears at once: no rise. */
+#info { flex: none; padding: 0 20px; background: var(--page); position: relative; z-index: 1; }
+#info .card { margin: 0 0 8px; animation: none; padding: 10px 14px; }
+#info .info-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; min-width: 0; }
+#info .info-title { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+#info .info-sub { color: var(--meta); font-size: 12px; overflow-wrap: anywhere; }
+#info .info-row { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+#info .info-label { flex: none; width: 118px; min-width: 0; color: var(--meta); font-size: 12px; overflow-wrap: anywhere; }
+#info .info-value { flex: 1; min-width: 0; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#info input { width: 96px; margin: 0; padding: 4px 10px; font-variant-numeric: tabular-nums; }
+#info select { padding: 4px 10px; }
+#info .pending { opacity: 0.55; }
 /* The frame holds the list. The indicator is absolute, so it never reserves a gutter. */
 #thread-frame {
   flex: 1; min-height: 64px; min-width: 0; position: relative;
@@ -477,6 +489,8 @@ textarea::placeholder { color: var(--faint); }
     <div id="icon-window.top_hung"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16h12M12 16V10M9.5 10h5"/></svg></div>
   </div>
 </header>
+<!-- The info panel (UX.5): what the picked thing is, shown while something Forsk made is picked. -->
+<div id="info" hidden></div>
 <div id="pin" hidden></div>
 <div id="thread-frame">
 <main id="thread" aria-live="polite"></main>

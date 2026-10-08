@@ -91,6 +91,7 @@
     <Compile Include="..\..\plugin\Forsk\WindowModel.cs" Link="WindowModel.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskText.cs" Link="ForskText.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskPick.cs" Link="ForskPick.cs" />
+    <Compile Include="..\..\plugin\Forsk\ForskInfo.cs" Link="ForskInfo.cs" />
     <Compile Include="..\..\plugin\Forsk\OpeningResolve.cs" Link="OpeningResolve.cs" />
     <Compile Include="..\..\plugin\Forsk\ForskFile.cs" Link="ForskFile.cs" />
     <Compile Include="..\..\plugin\Forsk\FirstRun.cs" Link="FirstRun.cs" />

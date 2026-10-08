@@ -371,6 +371,9 @@ namespace RhinoMCPPlugin.Forsk
                 ((JArray)model["thread"]).Add(new JObject { ["role"] = "line", ["id"] = "state", ["text"] = ForskRegistry.StateSentence(facts) });
             // The pick line: what is selected, in words (selection S4).
             model["target"] = ForskPick.Line(facts.Selected, ForskPrefill.Language(thread.LastUserText()) == "nb");
+            // The info panel (UX.5): what the picked thing is, at the top of the window.
+            var info = ForskInfo.For(facts);
+            if (info != null) model["info"] = info.ToJson();
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
             model["role"] = ForskRoles.Control(thread.Override);

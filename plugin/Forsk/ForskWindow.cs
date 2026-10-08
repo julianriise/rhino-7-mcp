@@ -174,6 +174,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "view":
                         PickView(message["view"]?.ToString());
                         return;
+                    case "info":
+                        InfoEdit(message["id"]?.ToString(), message["field"]?.ToString(), message["value"]?.ToString());
+                        return;
                 }
             }
             catch (Exception e)

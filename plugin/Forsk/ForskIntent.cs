@@ -830,6 +830,12 @@ namespace RhinoMCPPlugin.Forsk
         public string Risers;
         public string RiserMax;
         public string Going;
+        /// <summary>
+        /// The info panel's record (ForskInfo): the object's forsk:* strings and a few
+        /// read from the model (info:height, info:host, info:ceiling). Picked things
+        /// and their markers only; null for every other row.
+        /// </summary>
+        public Dictionary<string, string> Info;
 
         /// <summary>This row as a selected thing. The source row's Selected flag stays as read.</summary>
         public ChipRow SelectedCopy()

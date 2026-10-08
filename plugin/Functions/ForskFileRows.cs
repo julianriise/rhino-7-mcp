@@ -103,6 +103,7 @@ public partial class RhinoMCPFunctions
             if (marker != null) row.Mark = marker.Mark;
         }
         NameSelectedRuns(walls, Math.Max(doc.ModelAbsoluteTolerance, 1.0));
+        ReadPickedInfo(doc, rows);
         return rows;
     }
 

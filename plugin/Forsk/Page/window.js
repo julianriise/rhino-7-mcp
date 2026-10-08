@@ -1450,6 +1450,7 @@
     }, 0);
     else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
     renderPin(forms);
+    renderInfo(model.info);
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
     renderRole(model);
@@ -1458,6 +1459,78 @@
     renderSheet(model.help);
     applyPrefill(model.prefill);
   };
+
+  /*
+   * The info panel (UX.5): what the picked thing is. A field with a value can be
+   * changed: Enter or leaving the field sends it, Esc puts it back. The field
+   * dims the moment it is sent; the next render shows the record as it now is.
+   * A field being typed in is never redrawn under the cursor.
+   */
+  function renderInfo(info) {
+    var box = document.getElementById('info');
+    var active = document.activeElement;
+    if (active && box.contains(active) && active.getAttribute('data-dirty')) return;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    box.hidden = !info;
+    if (!info) return;
+    var card = el('section', 'card');
+    card.setAttribute('aria-label', info.title);
+    var head = el('div', 'info-head');
+    head.appendChild(el('span', 'info-title', info.title));
+    if (info.subtitle) head.appendChild(el('span', 'info-sub', info.subtitle));
+    card.appendChild(head);
+    (info.rows || []).forEach(function (row) {
+      var line = el('div', 'info-row');
+      var label = el('label', 'info-label', row.label);
+      line.appendChild(label);
+      if (row.field && info.id) {
+        var field = infoField(info, row);
+        field.id = 'info-' + row.field;
+        label.htmlFor = field.id;
+        line.appendChild(field);
+        if (row.unit) line.appendChild(el('span', 'unit', row.unit));
+      } else {
+        line.appendChild(el('span', 'info-value', row.value));
+      }
+      card.appendChild(line);
+    });
+    box.appendChild(card);
+  }
+
+  function infoField(info, row) {
+    var was = String(row.value == null ? '' : row.value);
+    function commit(node, value) {
+      node.removeAttribute('data-dirty');
+      if (value === was) return;
+      was = value;
+      node.classList.add('pending');
+      sender.send({ kind: 'info', id: info.id, field: row.field, value: value });
+    }
+    if (row.options) {
+      var select = el('select');
+      row.options.forEach(function (option) {
+        var item = el('option', null, option.label);
+        item.value = option.id;
+        if (option.id === was) item.selected = true;
+        select.appendChild(item);
+      });
+      select.addEventListener('change', function () { commit(select, select.value); });
+      return select;
+    }
+    var input = el('input');
+    input.type = 'text';
+    input.setAttribute('inputmode', 'decimal');
+    input.setAttribute('autocomplete', 'off');
+    input.value = was;
+    input.addEventListener('input', function () { input.setAttribute('data-dirty', '1'); });
+    input.addEventListener('keydown', function (e) {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') { e.preventDefault(); commit(input, input.value.trim()); input.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); input.value = was; input.removeAttribute('data-dirty'); input.blur(); }
+    });
+    input.addEventListener('change', function () { commit(input, input.value.trim()); });
+    return input;
+  }
 
   Forsk.focus = function () {
     var q = document.getElementById('q');
