@@ -15,6 +15,9 @@ sheet. A page fails when:
 
 --expect-meta also needs the document Info's Title and Creator.
 
+layer_paths() and furniture_paths() count the paths in each layer's marked
+content, stdlib only: the furniture smokes use them to see the symbols printed.
+
 Output: at most one line per failing page, then `ok N pages vector` when
 every page passes. Exit 0 or 1.
 
@@ -33,6 +36,49 @@ from pathlib import Path
 IMAGE_SHARE = 0.25
 SHEET_NO = re.compile(r"A-\d\d-\d\d\d")
 PATH_OPS = {b"m", b"l", b"c", b"re"}
+FURNITURE_LAYERS = ("A-FURN", "A-FURN-FIXD")
+_FLATE_STREAM = re.compile(rb"/FlateDecode\s*>>\s*stream\r?\n")
+
+
+def layer_paths(path) -> dict[str, int]:
+    """Path operators per marked-content layer (SheetPdf writes `/A-FURN BMC ... EMC`).
+
+    Stdlib only, so a smoke without pypdf can ask whether the furniture
+    printed: it inflates each Flate stream and counts m, l, c and re inside
+    each named run.
+    """
+    import zlib
+
+    data = Path(path).read_bytes()
+    counts: dict[str, int] = {}
+    for match in _FLATE_STREAM.finditer(data):
+        end = data.find(b"endstream", match.end())
+        if end < 0:
+            continue
+        try:
+            # A decompressor stops at the stream's end: the EOL before endstream is left over.
+            content = zlib.decompressobj().decompress(data[match.end():end])
+        except zlib.error:
+            continue
+        stack: list[str] = []
+        tokens = content.split()
+        for i, token in enumerate(tokens):
+            if token == b"BMC" and i and tokens[i - 1].startswith(b"/"):
+                stack.append(tokens[i - 1][1:].decode("latin-1"))
+            elif token == b"BDC":
+                stack.append("")
+            elif token == b"EMC":
+                if stack:
+                    stack.pop()
+            elif token in PATH_OPS and stack and stack[-1]:
+                counts[stack[-1]] = counts.get(stack[-1], 0) + 1
+    return counts
+
+
+def furniture_paths(path) -> int:
+    """Path operators the PDF draws on the furniture layers."""
+    counts = layer_paths(path)
+    return sum(counts.get(layer, 0) for layer in FURNITURE_LAYERS)
 
 
 def _mul(m, n):

@@ -38,6 +38,8 @@ public static class SheetPdf
         public double WidthMm;
         /// <summary>0 black … 1 white.</summary>
         public double Grey;
+        /// <summary>Its DWG layer: the stroke is marked content of that name (A-FURN BMC … EMC). Null for none.</summary>
+        public string Layer;
     }
 
     /// <summary>A filled region: outer rings and holes, in paper mm.</summary>
@@ -201,9 +203,17 @@ public static class SheetPdf
         Op("0 J 0 j\n");
         double? width = null;
         double? strokeGrey = null;
+        string marked = null;
         foreach (var stroke in page.Strokes)
         {
             if (stroke?.Points == null || stroke.Points.Count < 2) continue;
+            var tag = MarkName(stroke.Layer);
+            if (tag != marked)
+            {
+                if (marked != null) Op("EMC\n");
+                if (tag != null) Op("/" + tag + " BMC\n");
+                marked = tag;
+            }
             if (width != stroke.WidthMm) Op(Num(Math.Max(0, stroke.WidthMm) * PtPerMm) + " w\n");
             width = stroke.WidthMm;
             if (strokeGrey != stroke.Grey) Op(Num(Clamp(stroke.Grey)) + " G\n");
@@ -212,6 +222,7 @@ public static class SheetPdf
             for (var i = 1; i < stroke.Points.Count; i++) Op(Pt2(stroke.Points[i]) + " l\n");
             Op(stroke.Closed ? "s\n" : "S\n");
         }
+        if (marked != null) Op("EMC\n");
 
         Images(false);
 
@@ -374,6 +385,15 @@ public static class SheetPdf
             output.Add(b);
         }
         return output.ToArray();
+    }
+
+    /// <summary>A layer as a marked-content tag: letters, digits, '-', '_' and '.' only, else null (unmarked).</summary>
+    public static string MarkName(string layer)
+    {
+        if (string.IsNullOrEmpty(layer)) return null;
+        foreach (var c in layer)
+            if (!(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.')) return null;
+        return layer;
     }
 
     static string Pt2(Pt p) => Num(p.X * PtPerMm) + " " + Num(p.Y * PtPerMm);

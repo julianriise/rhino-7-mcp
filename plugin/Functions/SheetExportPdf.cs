@@ -15,8 +15,10 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// v3 N3: the Print PDF from the flat sheets the DWG is written from, so the
 /// two cannot drift. Curves become polylines at 0.05 paper mm, solid hatches
-/// fills, patterned hatches their exploded lines at the piece's weight, and
-/// texts real Helvetica text at their plane's angle and justification.
+/// fills, patterned hatches their exploded lines at the piece's weight,
+/// furniture symbols their block's curves at the plan's pen, and texts real
+/// Helvetica text at their plane's angle and justification. Each stroke is
+/// marked content named by its DWG layer.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -97,6 +99,19 @@ public partial class RhinoMCPFunctions
             var grey = Grey(piece.Color);
             var width = piece.Weight ?? SheetFlat.Def(piece.Layer).WeightMm;
             if (width <= 0) width = SheetFlat.Def(piece.Layer).WeightMm;
+            if (piece.BlockCurves != null)
+            {
+                // A furniture symbol: one block insert in the DWG, its curves where the insert puts them here.
+                foreach (var curve in piece.BlockCurves)
+                {
+                    using (var placed = curve?.DuplicateCurve())
+                    {
+                        if (placed == null || !placed.Transform(piece.BlockXform)) continue;
+                        AddStroke(result.Strokes, placed, width, grey, piece.Layer);
+                    }
+                }
+                continue;
+            }
             if (piece.Geometry == null)
             {
                 if (string.IsNullOrEmpty(piece.Text)) continue;
@@ -137,7 +152,7 @@ public partial class RhinoMCPFunctions
                 try
                 {
                     foreach (var part in hatch.Explode() ?? new GeometryBase[0])
-                        if (part is Curve segment) AddStroke(lines, segment, width, grey);
+                        if (part is Curve segment) AddStroke(lines, segment, width, grey, piece.Layer);
                 }
                 catch (Exception)
                 {
@@ -148,25 +163,25 @@ public partial class RhinoMCPFunctions
                     // The hatch's boundary stands in, at the piece's weight.
                     sheets.HatchFallback++;
                     foreach (var curve in (hatch.Get3dCurves(true) ?? new Curve[0]).Concat(hatch.Get3dCurves(false) ?? new Curve[0]))
-                        AddStroke(lines, curve, width, grey);
+                        AddStroke(lines, curve, width, grey, piece.Layer);
                 }
                 result.Strokes.AddRange(lines);
                 continue;
             }
             if (piece.Geometry is Curve line)
-                AddStroke(result.Strokes, line, width, grey);
+                AddStroke(result.Strokes, line, width, grey, piece.Layer);
         }
         return result;
     }
 
-    private static void AddStroke(List<SheetPdf.Stroke> strokes, Curve curve, double widthMm, double grey)
+    private static void AddStroke(List<SheetPdf.Stroke> strokes, Curve curve, double widthMm, double grey, string layer)
     {
         var points = PolylinePoints(curve);
         if (points.Count < 2) return;
         var closed = curve.IsClosed && points.Count > 2;
         if (closed && points[0].X == points[points.Count - 1].X && points[0].Y == points[points.Count - 1].Y)
             points.RemoveAt(points.Count - 1);
-        strokes.Add(new SheetPdf.Stroke { Points = points, Closed = closed, WidthMm = widthMm, Grey = grey });
+        strokes.Add(new SheetPdf.Stroke { Points = points, Closed = closed, WidthMm = widthMm, Grey = grey, Layer = layer });
     }
 
     /// <summary>A curve as its polyline at 0.05 paper mm: a polyline as it is, anything else through ToPolyline.</summary>

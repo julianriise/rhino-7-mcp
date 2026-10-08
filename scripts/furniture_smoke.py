@@ -25,6 +25,9 @@ import socket
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pdf_check import furniture_paths  # noqa: E402
+
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "300"))
@@ -133,6 +136,11 @@ def run(send, pdf_path: Path = PDF_PATH, dxf_dir: Path = DXF_DIR, dxf=check_dxf)
     if not pdf_path.is_file():
         fail(f"pdf: {printed.get('message')}")
     else:
+        # The symbols must be in the page, not only on the plan: A-FURN marked content.
+        printed_paths = furniture_paths(pdf_path)
+        lines.append(f"pdf: {printed_paths} furniture path(s)")
+        if printed_paths < 4 * len(PIECES):
+            fail(f"pdf: {printed_paths} furniture paths for {len(PIECES)} pieces")
         lines.append(f"  {pdf_path}")
 
     if dxf_dir.exists():

@@ -246,4 +246,53 @@ public class SheetPdfTests
         Assert.DoesNotContain("DrawBitmap", File.ReadAllText(Path.Combine(functions, "SheetExportPdf.cs")));
         Assert.Contains("DrawBitmap", File.ReadAllText(Path.Combine(functions, "LayoutPackMac.cs")));
     }
+
+    /// <summary>
+    /// FU.2 made each furniture symbol one block insert on the flat sheet (no
+    /// geometry, no text), and the PDF page skipped every piece without
+    /// either: the furniture never printed. The page draws the block's
+    /// curves through the insert's transform, before that skip, and the piece
+    /// carries the plan's pen. RhinoCommon does not run headless, so this
+    /// reads the source.
+    /// </summary>
+    [Fact]
+    public void AFurnitureInsert_PrintsItsBlockCurves_AtThePlansPen()
+    {
+        var functions = Path.Combine(ProjectInfoTests.PluginDir(), "Functions");
+        var pdf = File.ReadAllText(Path.Combine(functions, "SheetExportPdf.cs"));
+        var start = pdf.IndexOf("SheetPdf.Page PdfPage(", StringComparison.Ordinal);
+        var end = pdf.IndexOf("private static void AddStroke(", start, StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start);
+        var page = pdf.Substring(start, end - start);
+        var block = page.IndexOf("piece.BlockCurves", StringComparison.Ordinal);
+        var skip = page.IndexOf("if (piece.Geometry == null)", StringComparison.Ordinal);
+        Assert.True(block > 0 && skip > block, "the PDF page draws a block piece before it skips pieces with no geometry");
+        Assert.Contains(".Transform(piece.BlockXform)", page);
+        var furniture = File.ReadAllText(Path.Combine(functions, "SheetExportFurniture.cs"));
+        Assert.Contains("ForskTechnical.PenFor(Furniture.RoleFor(piece)", furniture);
+        Assert.Contains("Weight = pen.Mm", furniture);
+    }
+
+    /// <summary>Each stroke is marked content named by its DWG layer, so a check can find the furniture in a page.</summary>
+    [Fact]
+    public void Strokes_AreMarkedContentByLayer_OneRunPerLayerChange()
+    {
+        var page = new SheetPdf.Page();
+        page.Strokes.Add(new SheetPdf.Stroke { Points = { new Pt(10, 10), new Pt(20, 10) }, WidthMm = 0.5, Layer = "A-WALL" });
+        page.Strokes.Add(new SheetPdf.Stroke { Points = { new Pt(30, 10), new Pt(40, 10) }, WidthMm = 0.13, Layer = "A-FURN" });
+        page.Strokes.Add(new SheetPdf.Stroke { Points = { new Pt(30, 20), new Pt(40, 20), new Pt(40, 30) }, WidthMm = 0.13, Layer = "A-FURN" });
+        page.Strokes.Add(new SheetPdf.Stroke { Points = { new Pt(50, 10), new Pt(60, 10) }, WidthMm = 0.13 });
+        page.Strokes.Add(new SheetPdf.Stroke { Points = { new Pt(70, 10), new Pt(80, 10) }, WidthMm = 0.13, Layer = "bad name" });
+        var unmapped = 0;
+        var content = Encoding.Latin1.GetString(SheetPdf.Content(page, ref unmapped));
+        var furn = content.IndexOf("/A-FURN BMC\n", StringComparison.Ordinal);
+        Assert.True(content.IndexOf("/A-WALL BMC\n", StringComparison.Ordinal) is var wall && wall >= 0 && wall < furn);
+        var run = content.Substring(furn, content.IndexOf("EMC\n", furn, StringComparison.Ordinal) - furn);
+        Assert.Equal(2, Regex.Matches(run, @" m\n").Count);
+        Assert.Equal(3, Regex.Matches(run, @" l\n").Count);
+        Assert.Equal(2, Regex.Matches(content, "BMC\n").Count);
+        Assert.Equal(2, Regex.Matches(content, "EMC\n").Count);
+        Assert.Null(SheetPdf.MarkName("bad name"));
+        Assert.Null(SheetPdf.MarkName(null));
+    }
 }

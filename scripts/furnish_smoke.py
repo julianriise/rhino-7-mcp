@@ -24,6 +24,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pdf_check import furniture_paths  # noqa: E402
+
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "600"))
@@ -153,7 +156,11 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
         pdf_path.unlink()
     send("export_pdf", {"path": str(pdf_path), "layout": "plan"})
     if pdf_path.is_file():
-        lines.append(f"  {pdf_path}")
+        # The symbols must be in the page, not only on the plan: A-FURN marked content.
+        printed = furniture_paths(pdf_path)
+        lines.append(f"  {pdf_path} · {printed} furniture paths")
+        if printed < 4 * max(drawn, 1):
+            fail(f"pdf: {printed} furniture paths for {drawn} symbols")
     else:
         fail("no furnished plan PDF")
 

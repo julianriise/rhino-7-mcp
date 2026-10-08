@@ -65,9 +65,13 @@ public partial class RhinoMCPFunctions
                 curves.Add(new ArcCurve(arc));
             }
         }
+        // The plan's pen for the symbol: the PDF strokes at it; a DWG insert takes its layer's.
+        var pen = ForskTechnical.PenFor(Furniture.RoleFor(piece), null, PrintProfiles.Active);
         return new FlatPiece
         {
             Layer = SheetFlat.LayerFor(Furniture.RoleFor(piece)),
+            Weight = pen.Mm,
+            Color = pen.Color,
             BlockName = Furniture.BlockName(piece),
             BlockCurves = curves,
             BlockXform = Flat(map * Transform.Translation(dx, dy, 0) * frame),
