@@ -1,11 +1,11 @@
 {
-  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, eye, camera, git-compare (Lucide).",
+  "_edit": "Edit each release: version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare (Lucide).",
   "version": "1.2.0",
   "items": [
     {
       "title": "View picker",
-      "how": "Tap the eye at the top left of the Forsk window for Perspective, Plan or an elevation.",
-      "icon": "eye"
+      "how": "Tap the cube at the top left of the Forsk window for Perspective, Plan or an elevation.",
+      "icon": "box"
     },
     {
       "title": "Jump inside",
