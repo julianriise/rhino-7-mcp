@@ -12,7 +12,7 @@ using Rhino.PlugIns;
 [assembly: PlugInDescription(DescriptionType.Fax, "")]
 [assembly: PlugInDescription(DescriptionType.Organization, "Forsk")]
 [assembly: PlugInDescription(DescriptionType.UpdateUrl, "")]
-[assembly: PlugInDescription(DescriptionType.WebSite, "https://forsk.app")]
+[assembly: PlugInDescription(DescriptionType.WebSite, "https://docs.forsk.app")]
 
 // Icons should be Windows .ico files and contain 32-bit images in the following sizes: 16, 24, 32, 48, and 256.
 [assembly: PlugInDescription(DescriptionType.Icon, "rhinomcp.EmbeddedResources.plugin-utility.ico")]

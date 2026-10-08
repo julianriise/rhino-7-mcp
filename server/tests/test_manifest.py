@@ -35,5 +35,6 @@ def test_version_name_url_and_authors():
     csproj = (MANIFEST.parent / "rhinomcp.csproj").read_text(encoding="utf-8")
     assert f"<Version>{fields['version']}</Version>" in csproj
     assert fields["name"] == "forsk"
-    assert unquote(fields["url"]) == "https://forsk.app"
+    # Package Manager's website link is where help lives: the docs.
+    assert unquote(fields["url"]) == "https://docs.forsk.app"
     assert "Julian Riise" in MANIFEST.read_text(encoding="utf-8")
