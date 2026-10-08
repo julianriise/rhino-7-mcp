@@ -47,6 +47,38 @@ public class ForskInteriorTests
         Assert.False(ForskInterior.SameCamera(eye, new[] { 3000.0, 9000, 1500 }, eye, target));
     }
 
+    const string RenderedExport = "[DisplayMode\\cae60bae-2d51-4299-abf7-a339fca86f3b]\nName=Rendered\n"
+        + "[DisplayMode\\cae60bae-2d51-4299-abf7-a339fca86f3b\\Lighting]\nShadowBlur=0\nShadowIntensity=100\nShadowColor=0,0,0\n"
+        + "NumSamples=4\nShadowMapSize=2048\nCastShadows=n\nTransparencyTolerance=40\nShowLights=n\n"
+        + "[DisplayMode\\cae60bae-2d51-4299-abf7-a339fca86f3b\\Objects\\Curves]\nShowCurves=y\n"
+        + "[DisplayMode\\cae60bae-2d51-4299-abf7-a339fca86f3b\\Objects\\Surfaces]\nShowIsocurves=y\nShowEdges=n\n";
+
+    [Fact]
+    public void ThePatch_TurnsSubtleShadowsOn_AndTheLinesOff()
+    {
+        var ini = ForskInterior.Patch(RenderedExport);
+        Assert.Equal("Forsk Interior", ForskWhite.Read(ini, "", "Name"));
+        Assert.Equal("y", ForskWhite.Read(ini, "Lighting", "CastShadows"));
+        Assert.Equal("25", ForskWhite.Read(ini, "Lighting", "ShadowIntensity"));
+        Assert.Equal("5", ForskWhite.Read(ini, "Lighting", "ShadowBlur"));
+        Assert.Equal("1", ForskWhite.Read(ini, "Lighting", "NumSamples"));
+        Assert.Equal("1024", ForskWhite.Read(ini, "Lighting", "ShadowMapSize"));
+        // Glass casts no shadow.
+        Assert.Equal("0", ForskWhite.Read(ini, "Lighting", "TransparencyTolerance"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Curves", "ShowCurves"));
+        Assert.Equal("n", ForskWhite.Read(ini, "Objects\\Surfaces", "ShowIsocurves"));
+        // A key the export lacks stays absent.
+        Assert.Null(ForskWhite.Read(ini, "View settings", "DrawGrid"));
+    }
+
+    [Fact]
+    public void TheFirstCut_IsReplacedByTheShadowedMode()
+    {
+        Assert.Equal(1, ForskInterior.ModeRevision);
+        Assert.True(ForskInterior.NeedsReimport(0));
+        Assert.False(ForskInterior.NeedsReimport(ForskInterior.ModeRevision));
+    }
+
     [Fact]
     public void FurnitureAndStairs_GetAMaterial_WallsAndFloorsKeepTheirs()
     {

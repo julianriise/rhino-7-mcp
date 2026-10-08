@@ -6,8 +6,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Forsk Interior, the look of a Jump inside view (Julian, 2026-10-08): Rhino's
-/// Rendered mode with the materials on, and no curves, points, text, lights,
-/// grid or edges. The room-type pastel stays off it, the hidden roof is drawn
+/// Rendered mode with the materials on, subtle shadows, and no curves, points,
+/// text, lights, grid or edges. The room-type pastel stays off it, the hidden roof is drawn
 /// as a ceiling, and the look comes back when its named view is restored
 /// (Rhino 7 named views keep no display mode). No RhinoCommon.
 /// </summary>
@@ -38,6 +38,55 @@ public static class ForskInterior
 
     /// <summary>The ceiling drawn from the hidden roof: a warm white plaster.</summary>
     public static readonly (int R, int G, int B) Ceiling = (238, 235, 230);
+
+    /// <summary>
+    /// 1: the import from a patched Rendered export, with subtle shadows
+    /// (Julian, 2026-10-08). The first cut was a copy changed through
+    /// RhinoCommon, which cannot reach the shadow settings; a missing plugin
+    /// setting is 0, so that copy is replaced.
+    /// </summary>
+    public const int ModeRevision = 1;
+
+    /// <summary>Shadows on and subtle, as Julian tuned them: 25 % black, soft-edged, glass casts none.</summary>
+    public const int ShadowIntensity = 25;
+    public const int ShadowBlur = 5;
+    public const int ShadowSamples = 1;
+    /// <summary>Julian tried 576; 1024 keeps the contact shadow under furniture crisper and stays quick on an M1.</summary>
+    public const int ShadowMapSize = 1024;
+    /// <summary>0: a transparent object (glass) casts no shadow.</summary>
+    public const int ShadowTransparency = 0;
+
+    /// <summary>A stored revision below <see cref="ModeRevision"/> is an older mode.</summary>
+    public static bool NeedsReimport(int storedRevision) => storedRevision < ModeRevision;
+
+    /// <summary>A Rendered export as Forsk Interior. A key the export lacks stays absent.</summary>
+    public static string Patch(string exported) => ForskWhite.PatchWith(exported, Rules);
+
+    static readonly Dictionary<string, ForskWhite.Rule> Rules = ForskWhite.RuleMap(new[]
+    {
+        ForskWhite.Text("", "Name", ModeName),
+        ForskWhite.Bool("Objects\\Curves", "ShowCurves", false),
+        ForskWhite.Bool("Objects\\Points", "ShowPoints", false),
+        ForskWhite.Bool("Objects\\Annotations", "ShowText", false),
+        ForskWhite.Bool("Objects\\Annotations", "ShowAnnotations", false),
+        ForskWhite.Bool("Objects\\Surfaces", "ShowIsocurves", false),
+        ForskWhite.Bool("Objects\\Surfaces", "ShowEdges", false),
+        ForskWhite.Bool("Objects\\Surfaces", "ShowTangentEdges", false),
+        ForskWhite.Bool("Objects\\Surfaces", "ShowTangentSeams", false),
+        ForskWhite.Bool("View settings", "DrawGrid", false),
+        ForskWhite.Bool("View settings", "DrawAxes", false),
+        ForskWhite.Bool("View settings", "DrawWorldAxes", false),
+        ForskWhite.Bool("View settings", "DrawZAxis", false),
+        ForskWhite.Bool("View settings", "ShowClippingPlanes", false),
+        ForskWhite.Bool("Lighting", "ShowLights", false),
+        ForskWhite.Bool("Lighting", "CastShadows", true),
+        ForskWhite.Int("Lighting", "ShadowIntensity", ShadowIntensity),
+        ForskWhite.Rgb("Lighting", "ShadowColor", 0, 0, 0),
+        ForskWhite.Int("Lighting", "ShadowBlur", ShadowBlur),
+        ForskWhite.Int("Lighting", "NumSamples", ShadowSamples),
+        ForskWhite.Int("Lighting", "ShadowMapSize", ShadowMapSize),
+        ForskWhite.Int("Lighting", "TransparencyTolerance", ShadowTransparency),
+    });
 
     /// <summary>A mode that shows materials as they are: Forsk Interior, Rendered, Raytraced.</summary>
     public static bool IsRealistic(string modeName)

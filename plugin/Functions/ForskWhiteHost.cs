@@ -187,7 +187,7 @@ internal static class ForskWhiteHost
 
     /// <summary>
     /// Same import, copied from <paramref name="parent"/> (Wireframe for
-    /// Forsk Technical). No shaded embed: a failed copy must not install Shaded.
+    /// Forsk Technical, Rendered for Forsk Interior). No shaded embed: a failed copy must not install Shaded.
     /// </summary>
     internal static bool Import(string name, Func<string, string> patch, Guid parent)
     {
@@ -290,7 +290,8 @@ internal static class ForskWhiteHost
     {
         return id == Guid.Empty
             || id == DisplayModeDescription.ShadedId
-            || id == DisplayModeDescription.WireframeId;
+            || id == DisplayModeDescription.WireframeId
+            || id == DisplayModeDescription.RenderedId;
     }
 
     static bool Named(DisplayModeDescription mode, string name)

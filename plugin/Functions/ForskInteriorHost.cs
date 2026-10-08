@@ -9,8 +9,8 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Forsk Interior on the views Jump inside makes (ForskInterior): a copy of
-/// Rendered with the lines off, a ceiling drawn from the hidden roof, and the
+/// Forsk Interior on the views Jump inside makes (ForskInterior): Rendered
+/// with subtle shadows and the lines off, a ceiling drawn from the hidden roof, and the
 /// look put back when a saved interior view is restored, since a Rhino 7
 /// named view keeps no display mode.
 /// </summary>
@@ -43,30 +43,39 @@ internal static class ForskInteriorHost
         _conduit = null;
     }
 
-    /// <summary>Forsk Interior, made from Rendered the first time. Rendered itself if the copy fails.</summary>
+    const string RevisionKey = "ForskInteriorRevision";
+    static int _sessionRevision;
+
+    /// <summary>
+    /// Forsk Interior, imported from a patched Rendered export (ForskInterior.Patch);
+    /// an earlier revision is replaced. Rendered itself if the import fails.
+    /// </summary>
     internal static DisplayModeDescription Ensure()
     {
-        var existing = DisplayModeDescription.FindByName(ForskInterior.ModeName);
-        if (existing != null && ForskInterior.IsMode(existing.EnglishName))
-            return DisplayModeDescription.GetDisplayMode(existing.Id) ?? existing;
-        var id = DisplayModeDescription.CopyDisplayMode(DisplayModeDescription.RenderedId, ForskInterior.ModeName);
-        var mode = id == Guid.Empty ? null : DisplayModeDescription.GetDisplayMode(id);
-        if (mode == null) return DisplayModeDescription.GetDisplayMode(DisplayModeDescription.RenderedId);
-        var attrs = mode.DisplayAttributes;
-        attrs.ShowCurves = false;
-        attrs.ShowPoints = false;
-        attrs.ShowAnnotations = false;
-        attrs.ShowText = false;
-        attrs.ShowLights = false;
-        attrs.ShowClippingPlanes = false;
-        attrs.ShowIsoCurves = false;
-        attrs.ShowSurfaceEdges = false;
-        attrs.ShowTangentEdges = false;
-        attrs.ShowTangentSeams = false;
-        attrs.ViewSpecificAttributes.DrawGrid = false;
-        attrs.ViewSpecificAttributes.DrawWorldAxes = false;
-        DisplayModeDescription.UpdateDisplayMode(mode);
-        return DisplayModeDescription.GetDisplayMode(id) ?? mode;
+        var existing = ForskWhiteHost.Find(ForskInterior.ModeName);
+        if (existing != null && !ForskInterior.NeedsReimport(StoredRevision())) return existing;
+        if (ForskWhiteHost.Import(ForskInterior.ModeName, ForskInterior.Patch, DisplayModeDescription.RenderedId))
+            StoreRevision();
+        return ForskWhiteHost.Find(ForskInterior.ModeName)
+            ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.RenderedId);
+    }
+
+    static int StoredRevision()
+    {
+        if (_sessionRevision >= ForskInterior.ModeRevision) return _sessionRevision;
+        var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
+        if (settings == null) return 0;
+        try { return settings.GetInteger(RevisionKey, 0); }
+        catch (Exception) { return 0; }
+    }
+
+    static void StoreRevision()
+    {
+        _sessionRevision = ForskInterior.ModeRevision;
+        var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
+        if (settings == null) return;
+        try { settings.SetInteger(RevisionKey, ForskInterior.ModeRevision); }
+        catch (Exception) { }
     }
 
     /// <summary>
