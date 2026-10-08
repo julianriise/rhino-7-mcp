@@ -176,7 +176,7 @@ public partial class RhinoMCPFunctions
         var clock = Stopwatch.StartNew();
         var doc = page.Document ?? RhinoDoc.ActiveDoc;
         var view = ViewKeyForPage(page);
-        if (doc != null && !SheetSet.IsListSheet(view) && CountPrintDrawings(doc, view) == 0)
+        if (doc != null && !SheetSet.IsListSheet(view) && CountPrintDrawings(doc, SheetSet.DrawingOf(view)) == 0)
             EnsureGreyscaleDrawings(doc, new List<RhinoPageView> { page });
         ApplyPageDrawingDisplay(doc, page);
         var other = page.MainViewport.Id == _lastPreviewPage ? OtherPage(doc, page) : null;
@@ -393,6 +393,8 @@ public partial class RhinoMCPFunctions
                 RefreshTablePage(doc, page, view);
                 continue;
             }
+            // The daylight map's page draws the plan's drawing.
+            view = SheetSet.DrawingOf(view);
             var plan = view.Equals("plan", StringComparison.OrdinalIgnoreCase);
             // A type swap must show on the next export without a new layout_pack.
             if (!plan && CountPrintDrawings(doc, view) > 0) continue;
@@ -448,7 +450,7 @@ public partial class RhinoMCPFunctions
         if (Details.TryPage(page.PageName, out var detailScale, out var detailSheet))
             return Details.SheetId(detailScale, detailSheet);
         foreach (var name in new[] { SheetSet.FrontId, SheetSet.TakeoffId, "plan", "north", "east", "south", "west" }
-                     .Concat(Analysis.All.Select(Analysis.SheetId)))
+                     .Concat(Analysis.All.Select(Analysis.SheetId)).Concat(new[] { Analysis.MapSheetId }))
         {
             if (!TryGetLayoutView(name, out var spec)) continue;
             if (string.Equals(page.PageName, spec.PageName, StringComparison.OrdinalIgnoreCase))

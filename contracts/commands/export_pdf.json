@@ -20,7 +20,7 @@
         "sheets",
         "analysis"
       ],
-      "description": "Which set: sheets (default) or analysis, the Analysis set's own sheets (A-80-00n: daylight per room, areas). Its pages print as their own PDF; the Sheets set never includes them."
+      "description": "Which set: sheets (default) or analysis, the Analysis set's own sheets (A-80-00n: daylight per room, areas; A-80-101: the plan with the daylight map). Its pages print as their own PDF; the Sheets set never includes them."
     }
   },
   "required": ["path"],

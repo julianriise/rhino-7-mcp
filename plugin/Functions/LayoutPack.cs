@@ -130,6 +130,10 @@ public partial class RhinoMCPFunctions
                 var key = view.Trim().ToLowerInvariant();
                 spec = LayoutSpec(key, TablePageName(key), Vector3d.Zero, Vector3d.ZAxis);
                 return true;
+            case Analysis.MapSheetId:
+                // The plan's drawing, looked at as the plan sheet looks at it.
+                spec = LayoutSpec(Analysis.MapSheetId, LayoutPagePrefix + SheetSet.Title(Analysis.MapSheetId, 0), -Vector3d.ZAxis, Vector3d.YAxis);
+                return true;
             default:
                 if (SheetSet.IsAnalysisSheet(view))
                 {
@@ -281,7 +285,9 @@ public partial class RhinoMCPFunctions
         string cutNote = null;
         var planCutZ = FloorTopZ(clay) + ForskDefaults.PlanCutHeightMm;
         var planClip = new Plane(new Point3d(0, 0, planCutZ), -Vector3d.ZAxis);
-        var detailSpan = new SheetScale.Span(detailW, detailH);
+        // The daylight map keeps a column for its legend: the set's scale fits the narrower detail.
+        var legendMm = views.Any(Analysis.IsMapSheet) ? DaylightPrint.ColumnMm : 0;
+        var detailSpan = new SheetScale.Span(detailW - legendMm, detailH);
         var sheets = new List<PackSheet>();
         // Detail sheets keep their own scale and take no part in the set's.
         var detailViews = new List<string>();
@@ -300,10 +306,12 @@ public partial class RhinoMCPFunctions
             if (replace)
                 RemoveLayoutPages(doc, spec.View, false);
             var plan = string.Equals(spec.View, "plan", StringComparison.OrdinalIgnoreCase);
-            var sheet = new PackSheet { Spec = spec, Plan = plan, Section = section, Clip = plan ? planClip : (Plane?)null };
+            // The daylight map draws the plan's drawing, cut as the plan is.
+            var planDrawing = SheetSet.DrawingOf(spec.View) == SheetSet.PlanId;
+            var sheet = new PackSheet { Spec = spec, Plan = plan, Section = section, Clip = planDrawing ? planClip : (Plane?)null };
             // Tags, marks, dimensions and level marks are drawn at the sheet's scale.
             sheet.Stroke = requestedScale;
-            sheet.Drawn = BakeGreyscaleDrawing(doc, spec.View, includeExisting, sheet.Clip, sheet.Stroke);
+            sheet.Drawn = BakeGreyscaleDrawing(doc, SheetSet.DrawingOf(spec.View), includeExisting, sheet.Clip, sheet.Stroke);
             sheets.Add(sheet);
         }
 
@@ -319,7 +327,7 @@ public partial class RhinoMCPFunctions
                 var sheet = sheets[i];
                 if (picked.Scales[i] == sheet.Stroke || !sheet.Drawn.Box.IsValid) continue;
                 sheet.Stroke = picked.Scales[i];
-                sheet.Drawn = BakeGreyscaleDrawing(doc, sheet.Spec.View, includeExisting, sheet.Clip, sheet.Stroke);
+                sheet.Drawn = BakeGreyscaleDrawing(doc, SheetSet.DrawingOf(sheet.Spec.View), includeExisting, sheet.Clip, sheet.Stroke);
                 again = true;
             }
             if (!again) break;
@@ -359,7 +367,8 @@ public partial class RhinoMCPFunctions
             try
             {
                 detail = AddClayDetail(
-                    doc, page, spec, drawn.Box, scale, drawn.Layer, out scaleLocked);
+                    doc, page, spec, drawn.Box, scale, drawn.Layer, out scaleLocked,
+                    Analysis.IsMapSheet(spec.View) ? DaylightPrint.ColumnMm : 0);
             }
             catch
             {
@@ -476,6 +485,11 @@ public partial class RhinoMCPFunctions
                     + "."
                     + (string.IsNullOrEmpty(drawn.SymbolNote) ? "" : " " + drawn.SymbolNote);
                 RhinoApp.WriteLine("Forsk " + cutNote.Trim());
+            }
+            if (Analysis.IsMapSheet(spec.View))
+            {
+                pageRecord["view_title"] = viewTitle;
+                pageRecord["daylight_map"] = AddDaylightMapParts(doc, page, spec, stableId, sheetNo, ids);
             }
             if (drawn.Facade != null)
             {

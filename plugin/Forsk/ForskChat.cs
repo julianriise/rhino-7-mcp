@@ -1281,13 +1281,22 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         /// <summary>
         /// AN.3: the Analysis set as its own PDF. Its sheets are laid out, a save
         /// dialog named "&lt;project&gt; Analysis.pdf" opens, and export_pdf writes
-        /// those pages alone. The Sheets set's pages stay as they are.
+        /// those pages alone. The Sheets set's pages stay as they are. With
+        /// daylight in the set and never run, it runs first as the Daylight
+        /// action runs it; when it cannot, the rest prints and the line says why.
         /// </summary>
         public static string RunAnalysis(Action<string> progress, Window parent)
         {
             var units = UnitsProblem();
             if (units != null)
                 return "Print analysis set · error · " + units;
+            string daylight = null;
+            if (DaylightMissing())
+            {
+                Report(progress, "Running daylight first.");
+                var run = ForskDaylight.Run("floor", ForskTools.CommandOnUi);
+                daylight = ForskReceipt.DaylightFirst(Ok(run), Ok(run) ? null : ForskTools.Clip(run?["message"]?.ToString() ?? ""));
+            }
             var pack = Call("layout_pack", new JObject { ["set"] = "analysis" });
             if (!Ok(pack)) return FailLine(pack);
             Report(progress, "Analysis sheets ready — choose where to save.");
@@ -1301,7 +1310,18 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             var written = result?["path"]?.ToString();
             if (string.IsNullOrWhiteSpace(written)) written = path;
             var sheets = (pack["result"] as JObject)?["sheets"]?.Value<int>() ?? result?["count"]?.Value<int>() ?? 0;
-            return ForskReceipt.AnalysisPrintLine(sheets, written, (pack["result"] as JObject)?["paper"]?.ToString());
+            return ForskReceipt.AnalysisPrintLine(sheets, written, (pack["result"] as JObject)?["paper"]?.ToString(), daylight);
+        }
+
+        /// <summary>The Analysis set needs a daylight run before it prints, read on the UI thread.</summary>
+        static bool DaylightMissing()
+        {
+            var missing = false;
+            RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                missing = RhinoMCPFunctions.DaylightMissing(RhinoDoc.ActiveDoc);
+            }));
+            return missing;
         }
 
         /// <summary>export_csv at path: "" when written, else why not. A failed CSV never fails the Print or the export.</summary>

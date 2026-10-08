@@ -198,19 +198,19 @@ public static class TitleBlock
         return new LogoBox { CellMm = cell, X0 = cx - w / 2, Y0 = cy - h / 2, X1 = cx + w / 2, Y1 = cy + h / 2 };
     }
 
-    /// <summary>The north arrow is on the plans.</summary>
+    /// <summary>The north arrow is on the plans: the plan sheet and the daylight map.</summary>
     public static bool NorthArrow(string sheetId)
     {
-        return string.Equals((sheetId ?? "").Trim(), SheetSet.PlanId, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(SheetSet.DrawingOf((sheetId ?? "").Trim()), SheetSet.PlanId, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
     /// The scale bar is on every drawing sheet whose detail locked its scale:
-    /// the plan, the facades, the sections and the detail sheets. The lists have no scale.
+    /// the plan, the facades, the sections, the detail sheets and the daylight map. The lists have no scale.
     /// </summary>
     public static bool ScaleBar(string sheetId, int pageScale)
     {
-        var id = (sheetId ?? "").Trim().ToLowerInvariant();
+        var id = SheetSet.DrawingOf((sheetId ?? "").Trim().ToLowerInvariant());
         var drawing = id == SheetSet.PlanId || SheetSet.Facades.Contains(id) || Sections.TryLetter(id, out _)
             || Details.TrySheetId(id, out _, out _);
         return drawing && pageScale > 0;

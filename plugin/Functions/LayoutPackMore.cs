@@ -281,7 +281,7 @@ public partial class RhinoMCPFunctions
         if (IsAnalysisSet(parameters) && !(parameters?["views"] is JArray))
         {
             // AN.3: the Analysis set's sheets; those taken out of it lose their old pages.
-            var analysis = Analysis.SetSheets(ReadAnalysis(doc));
+            var analysis = Analysis.SetSheets(ReadAnalysis(doc), HasDaylightMap(doc));
             off = analysis.Where(s => !s.On).Select(s => s.Id).ToList();
             var on = analysis.Where(s => s.On).Select(s => s.Id).ToList();
             if (on.Count == 0)
@@ -482,12 +482,14 @@ public partial class RhinoMCPFunctions
         BoundingBox bbox,
         int scale,
         string drawLayerPath,
-        out bool scaleLocked)
+        out bool scaleLocked,
+        double rightInsetMm = 0)
     {
         scaleLocked = false;
         var left = MmToPage(doc, LayoutMarginMm);
         var bottom = MmToPage(doc, LayoutMarginMm + FooterReserveMm);
-        var right = MmToPage(doc, SheetWidthMm - LayoutMarginMm);
+        // A column kept clear at the right: the daylight map's legend.
+        var right = MmToPage(doc, SheetWidthMm - LayoutMarginMm - rightInsetMm);
         var top = MmToPage(doc, SheetHeightMm - LayoutMarginMm);
         var detail = page.AddDetailView(
             spec.View,
@@ -769,7 +771,7 @@ public partial class RhinoMCPFunctions
                 if (ScheduleObjects(doc, page).Count == 0) return false;
                 continue;
             }
-            var bbox = PrintDrawingBounds(doc, view);
+            var bbox = PrintDrawingBounds(doc, SheetSet.DrawingOf(view));
             if (!bbox.IsValid) return false;
             var details = page?.GetDetailViews();
             if (details == null || details.Length == 0) return false;

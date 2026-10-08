@@ -48,6 +48,8 @@ public partial class RhinoMCPFunctions
             var pieces = FlattenPage(doc, page, misc);
             var pdfPage = PdfPage(doc, page, pieces, sheets);
             if (logo != null) pdfPage.Images.AddRange(LogoImages(doc, page, logo));
+            // The daylight map sheet: the map under the plan's lines, and its legend's ramp.
+            pdfPage.Images.AddRange(DaylightPageImages(doc, page));
             sheets.Pages.Add(pdfPage);
             sheets.Names.Add(page.PageName ?? "");
             var number = SheetNumberOf(doc, page);

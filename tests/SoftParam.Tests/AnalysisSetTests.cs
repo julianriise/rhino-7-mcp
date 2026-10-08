@@ -53,7 +53,7 @@ public class AnalysisSetTests
         Assert.False(state.InSet(Analysis.Daylight));
         Assert.False(state.InSet(Analysis.Areas));
         Assert.DoesNotContain(Analysis.SetSheets(state), s => s.On);
-        Assert.Equal(new[] { "analysis_daylight", "analysis_areas" }, Analysis.SetSheets(state).Select(s => s.Id));
+        Assert.Equal(new[] { "analysis_daylight", "analysis_daylight_map", "analysis_areas" }, Analysis.SetSheets(state).Select(s => s.Id));
     }
 
     [Fact]

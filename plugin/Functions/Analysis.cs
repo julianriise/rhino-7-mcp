@@ -35,6 +35,15 @@ public static class Analysis
     public static string SheetId(string id) => SheetPrefix + id;
     public const string SheetPrefix = "analysis_";
 
+    /// <summary>
+    /// The daylight map: the plan with the last daylight run's map under its
+    /// lines, right after the daylight table. A sheet of the set, no analysis of its own.
+    /// </summary>
+    public const string MapSheetId = SheetPrefix + "daylight_map";
+
+    public static bool IsMapSheet(string sheetId) =>
+        string.Equals((sheetId ?? "").Trim(), MapSheetId, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The analysis an analysis sheet is of.</summary>
     public static bool TryAnalysis(string sheetId, out string id)
     {
@@ -113,9 +122,29 @@ public static class Analysis
 
     static string Rooms(int n) => n.ToString(CultureInfo.InvariantCulture) + (n == 1 ? " room" : " rooms");
 
-    /// <summary>The Analysis set: a sheet per analysis in the menu's order, on when it is in the set.</summary>
-    public static List<SheetSet.Sheet> SetSheets(State state) =>
-        All.Select(id => new SheetSet.Sheet(SheetId(id), state != null && state.InSet(id))).ToList();
+    /// <summary>
+    /// The Analysis set: a sheet per analysis in the menu's order, on when it
+    /// is in the set, and the daylight map after the daylight table. The map is
+    /// off with no map to draw (hasMap false): the table still says daylight has not run.
+    /// </summary>
+    public static List<SheetSet.Sheet> SetSheets(State state, bool hasMap = true)
+    {
+        var sheets = new List<SheetSet.Sheet>();
+        foreach (var id in All)
+        {
+            var on = state != null && state.InSet(id);
+            sheets.Add(new SheetSet.Sheet(SheetId(id), on));
+            if (id == Daylight) sheets.Add(new SheetSet.Sheet(MapSheetId, on && hasMap));
+        }
+        return sheets;
+    }
+
+    /// <summary>
+    /// Print runs daylight first: daylight is in the set, and no room mean is
+    /// stored or no map is drawn (never run, or the map was cleared since).
+    /// </summary>
+    public static bool NeedsDaylightRun(State state, bool hasMap) =>
+        state != null && state.InSet(Daylight) && (!hasMap || state.RoomDf.Count == 0);
 
     /// <summary>The Choose analyses card's ticks as the keys to store: "1" in the set, "0" out.</summary>
     public static List<(string Key, string Value)> SetChoice(Func<string, string> values)

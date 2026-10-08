@@ -1489,7 +1489,7 @@ public partial class RhinoMCPFunctions
     private static string DrawChildName(string view)
     {
         if (string.IsNullOrEmpty(view)) return null;
-        switch (view.Trim().ToLowerInvariant())
+        switch (SheetSet.DrawingOf(view.Trim().ToLowerInvariant()))
         {
             case "plan": return "Plan";
             case "north": return "North";
@@ -1831,6 +1831,8 @@ public partial class RhinoMCPFunctions
             // shove the sheet to a second copy of the plan.
             var delta = PackDelta(curves, spec.Offset, tolerance);
             TranslateCurves(curves, delta);
+            // The daylight map sheet puts the model's daylight cells where this plan drew the model.
+            if (plan) NotePlanMap(doc, worldToHld, delta);
             if (fillGroups != null)
             {
                 foreach (var group in fillGroups)

@@ -63,11 +63,13 @@ public static class SheetPdf
         public double Grey;
     }
 
-    /// <summary>A picture (the office logo) stretched over a paper box in mm.</summary>
+    /// <summary>A picture (the office logo, the daylight map) stretched over a paper box in mm.</summary>
     public sealed class Image
     {
         public OfficeLogo.Picture Picture;
         public double X0, Y0, X1, Y1;
+        /// <summary>Drawn first, under the fills and lines: the daylight map under the plan.</summary>
+        public bool Under;
     }
 
     public sealed class Page
@@ -77,7 +79,7 @@ public static class SheetPdf
         public List<Stroke> Strokes = new List<Stroke>();
         public List<Fill> Fills = new List<Fill>();
         public List<Text> Texts = new List<Text>();
-        /// <summary>Drawn over the fills and strokes, under the text, as /Im0, /Im1, … of the page.</summary>
+        /// <summary>Drawn over the fills and strokes, under the text, as /Im0, /Im1, … of the page; an Under one before the fills.</summary>
         public List<Image> Images = new List<Image>();
     }
 
@@ -159,7 +161,7 @@ public static class SheetPdf
         return result;
     }
 
-    /// <summary>The page's drawing operators: fills, then strokes, then the text on top.</summary>
+    /// <summary>The page's drawing operators: the under images, fills, strokes, the other images, then the text on top.</summary>
     public static byte[] Content(Page page, ref int unmapped)
     {
         var ops = new MemoryStream();
@@ -168,6 +170,17 @@ public static class SheetPdf
             var bytes = Ascii(text);
             ops.Write(bytes, 0, bytes.Length);
         }
+        void Images(bool under)
+        {
+            for (var k = 0; k < page.Images.Count; k++)
+            {
+                var image = page.Images[k];
+                if (image?.Picture == null || image.Under != under || image.X1 <= image.X0 || image.Y1 <= image.Y0) continue;
+                Op("q " + Num((image.X1 - image.X0) * PtPerMm) + " 0 0 " + Num((image.Y1 - image.Y0) * PtPerMm) + " "
+                    + Num(image.X0 * PtPerMm) + " " + Num(image.Y0 * PtPerMm) + " cm /Im" + k.ToString(CultureInfo.InvariantCulture) + " Do Q\n");
+            }
+        }
+        Images(true);
         double? grey = null;
         foreach (var fill in page.Fills)
         {
@@ -200,13 +213,7 @@ public static class SheetPdf
             Op(stroke.Closed ? "s\n" : "S\n");
         }
 
-        for (var k = 0; k < page.Images.Count; k++)
-        {
-            var image = page.Images[k];
-            if (image?.Picture == null || image.X1 <= image.X0 || image.Y1 <= image.Y0) continue;
-            Op("q " + Num((image.X1 - image.X0) * PtPerMm) + " 0 0 " + Num((image.Y1 - image.Y0) * PtPerMm) + " "
-                + Num(image.X0 * PtPerMm) + " " + Num(image.Y0 * PtPerMm) + " cm /Im" + k.ToString(CultureInfo.InvariantCulture) + " Do Q\n");
-        }
+        Images(false);
 
         foreach (var text in page.Texts)
         {

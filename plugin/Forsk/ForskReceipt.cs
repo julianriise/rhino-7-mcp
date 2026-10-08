@@ -114,11 +114,22 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>AN.3: "✓ Printed the analysis set: 2 sheets on A3 · Holmen Analysis.pdf".</summary>
-        public static string AnalysisPrintLine(int sheets, string written, string paper)
+        public static string AnalysisPrintLine(int sheets, string written, string paper, string daylight = null)
         {
             return Done + "Printed the analysis set: " + sheets.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 + (sheets == 1 ? " sheet" : " sheets") + " on " + (string.IsNullOrWhiteSpace(paper) ? PrintTemplate.DefaultPaper : paper.Trim())
-                + " · " + System.IO.Path.GetFileName(written ?? "");
+                + " · " + System.IO.Path.GetFileName(written ?? "")
+                + (string.IsNullOrWhiteSpace(daylight) ? "" : " · " + daylight.Trim());
+        }
+
+        /// <summary>
+        /// Print ran daylight first, as the set needed it: it ran, or why it did
+        /// not. The rest of the set prints either way.
+        /// </summary>
+        public static string DaylightFirst(bool ran, string why)
+        {
+            if (ran) return "daylight ran first";
+            return string.IsNullOrWhiteSpace(why) ? "daylight did not run" : "daylight did not run: " + why.Trim();
         }
 
         /// <summary>The analysis set's PDF beside the drawings': "&lt;project&gt; Analysis.pdf". stem is the file-safe project name.</summary>

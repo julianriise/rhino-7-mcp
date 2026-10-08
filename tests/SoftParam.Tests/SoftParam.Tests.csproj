@@ -58,6 +58,7 @@
     <Compile Include="..\..\plugin\Functions\Takeoff.cs" Link="Takeoff.cs" />
     <Compile Include="..\..\plugin\Functions\TakeoffCsv.cs" Link="TakeoffCsv.cs" />
     <Compile Include="..\..\plugin\Functions\SheetPdf.cs" Link="SheetPdf.cs" />
+    <Compile Include="..\..\plugin\Functions\DaylightPrint.cs" Link="DaylightPrint.cs" />
     <Compile Include="..\..\plugin\Functions\OfficeLogo.cs" Link="OfficeLogo.cs" />
     <Compile Include="..\..\plugin\Functions\Stairs.cs" Link="Stairs.cs" />
     <Compile Include="..\..\plugin\Functions\Furniture.cs" Link="Furniture.cs" />
