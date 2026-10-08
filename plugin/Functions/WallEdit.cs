@@ -289,13 +289,12 @@ public static class WallEdit
 
     /// <summary>
     /// An opening that stays where it is (on a wall that meets the run) is
-    /// clear of the move when its marker still sits in the walls and the run,
+    /// clear of the move when the walls still hold it (Holds) and the run,
     /// in its new place, does not run across it.
     /// </summary>
     public static bool Clear(List<List<Pt>> moved, Run run, double by, RoomDetect.Box marker, double tol)
     {
-        var center = new Pt((marker.MinX + marker.MaxX) / 2.0, (marker.MinY + marker.MaxY) / 2.0);
-        if (!InRegion(moved, center)) return false;
+        if (!Holds(moved, marker, tol)) return false;
         return !Overlaps(run.Dir, run.Normal, run.Lo, run.Hi, run.Near + by, run.Far + by, marker, tol);
     }
 
@@ -324,16 +323,24 @@ public static class WallEdit
         return true;
     }
 
-    /// <summary>An opening that stays is still held: both ends of its marker, along its longer side, sit in the walls.</summary>
-    public static bool Holds(List<List<Pt>> rings, RoomDetect.Box marker)
+    /// <summary>
+    /// An opening that stays is still held: both ends of its marker, along its
+    /// longer side, sit in the walls, or with tol on a wall face within tol. A
+    /// door in the gap between two wall records (the sample house's) has its
+    /// middle in no wall and its ends on the two jambs.
+    /// </summary>
+    public static bool Holds(List<List<Pt>> rings, RoomDetect.Box marker, double tol = 0)
     {
         var cx = (marker.MinX + marker.MaxX) / 2.0;
         var cy = (marker.MinY + marker.MaxY) / 2.0;
         var alongX = marker.MaxX - marker.MinX >= marker.MaxY - marker.MinY;
         var a = alongX ? new Pt(marker.MinX, cy) : new Pt(cx, marker.MinY);
         var b = alongX ? new Pt(marker.MaxX, cy) : new Pt(cx, marker.MaxY);
-        return InRegion(rings, a) && InRegion(rings, b);
+        return Held(rings, a, tol) && Held(rings, b, tol);
     }
+
+    static bool Held(List<List<Pt>> rings, Pt p, double tol) =>
+        InRegion(rings, p) || (tol > 0 && Distance(rings, p, tol) <= tol);
 
     public sealed class Added
     {

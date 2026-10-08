@@ -102,7 +102,7 @@ public partial class RhinoMCPFunctions
         var commit = CommitWallEdit(doc, pick, edit, shift, (marker, box, onRun) =>
         {
             var moved = onRun && !shift.IsZero ? Shifted(box, shift) : box;
-            return WallEdit.Holds(edit.Shape, moved)
+            return WallEdit.Holds(edit.Shape, moved, tol)
                 ? null
                 : refusal + MarkerLabel(marker) + " would hang past the end of the wall. Move it or make it narrower first.";
         }, hit.Kind == WallFace.Kind.End ? "Length not changed. " : "Thickness not changed. ");

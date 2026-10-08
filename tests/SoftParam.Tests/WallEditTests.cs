@@ -206,6 +206,44 @@ public class WallEditTests
         Assert.False(WallEdit.Clear(south, run, -500, new RoomDetect.Box(7875, 3850, 7925, 3950), Tol));
     }
 
+    /// <summary>
+    /// The sample house (first_run.py): its doors stand in gaps between wall
+    /// records, the marker's ends on the two jambs. A move that leaves both
+    /// jambs where they were leaves every such door clear.
+    /// </summary>
+    [Theory]
+    [InlineData(100, 4000, "west", 500)]
+    [InlineData(14300, 4000, "east", 500)]
+    [InlineData(7000, 8100, "north", 500)]
+    [InlineData(12000, 5300, "north", 300)]
+    public void SampleHouse_AMoveThatKeepsTheJambs_LeavesEveryGapDoorClear(double x, double y, string toward, double mm)
+    {
+        var records = SampleHouse();
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.Equal(records.Count, g.Records.Count);
+        Assert.True(WallEdit.TryPick(g.Shape, new Pt(x, y), Tol, out var run, out var why), why);
+        Assert.True(WallEdit.TryToward(run, toward, mm, out var by, out why), why);
+        Assert.True(WallJoins.TryMove(records, g, run, by, Tol, out var moved, out why), why);
+        foreach (var door in SampleHouseDoors())
+        {
+            var center = new Pt((door.MinX + door.MaxX) / 2, (door.MinY + door.MaxY) / 2);
+            if (WallEdit.InBand(run, center, Tol)) continue;
+            Assert.True(WallEdit.Clear(moved.Shape, run, by, door, Tol), $"door at {door.MinX},{door.MinY}");
+        }
+    }
+
+    [Fact]
+    public void SampleHouse_AMoveThatTakesAJambAway_StillRefuses()
+    {
+        var records = SampleHouse();
+        var g = WallJoins.Build(records, WallJoins.ClusterOf(records, 0, Tol), Tol);
+        Assert.True(WallEdit.TryPick(g.Shape, new Pt(4500, 3300), Tol, out var run, out var why), why);
+        Assert.True(WallEdit.TryToward(run, "north", 300, out var by, out why), why);
+        Assert.True(WallJoins.TryMove(records, g, run, by, Tol, out var moved, out why), why);
+        // The door between w10 and the moved w12 keeps only one jamb.
+        Assert.False(WallEdit.Clear(moved.Shape, run, by, new RoomDetect.Box(2550, 3200, 3450, 3400), Tol));
+    }
+
     [Fact]
     public void DeleteNorth_OpensTheRingIntoAU()
     {
@@ -389,6 +427,27 @@ public class WallEditTests
     }
 
     static List<List<Pt>> Garage() => new() { Rect(0, 0, 8000, 4000), Rect(200, 200, 7800, 3800) };
+
+    /// <summary>The sample house's 19 wall records (/tmp/forsk-houseprobe-built.3dm), one rectangle each.</summary>
+    internal static List<List<List<Pt>>> SampleHouse() => new double[][]
+    {
+        new double[] { 10600, 5200, 14200, 5400 }, new double[] { 3450, 3200, 5800, 3400 }, new double[] { 200, 3200, 2550, 3400 },
+        new double[] { 5800, 1850, 6000, 8000 }, new double[] { 5800, 200, 6000, 950 }, new double[] { 200, 0, 7750, 200 },
+        new double[] { 8650, 0, 14200, 200 }, new double[] { 8650, 2600, 10400, 2800 }, new double[] { 6000, 2600, 7750, 2800 },
+        new double[] { 8650, 4800, 10400, 5000 }, new double[] { 6000, 4800, 7750, 5000 }, new double[] { 10400, 200, 10600, 950 },
+        new double[] { 10400, 1850, 10600, 6250 }, new double[] { 10400, 7150, 10600, 8000 }, new double[] { 10600, 3400, 11950, 3600 },
+        new double[] { 12850, 3400, 14200, 3600 }, new double[] { 0, 0, 200, 8000 }, new double[] { 0, 8000, 14400, 8200 },
+        new double[] { 14200, 0, 14400, 8000 },
+    }.Select(r => new List<List<Pt>> { Rect(r[0], r[1], r[2], r[3]) }).ToList();
+
+    /// <summary>Its eight door markers, each filling the gap between two wall ends.</summary>
+    internal static RoomDetect.Box[] SampleHouseDoors() => new[]
+    {
+        new RoomDetect.Box(2550, 3200, 3450, 3400), new RoomDetect.Box(5800, 950, 6000, 1850),
+        new RoomDetect.Box(7750, 0, 8650, 200), new RoomDetect.Box(7750, 2600, 8650, 2800),
+        new RoomDetect.Box(7750, 4800, 8650, 5000), new RoomDetect.Box(10400, 950, 10600, 1850),
+        new RoomDetect.Box(10400, 6250, 10600, 7150), new RoomDetect.Box(11950, 3400, 12850, 3600),
+    };
 
     static List<List<Pt>> TwoRooms() => new()
     {

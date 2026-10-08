@@ -231,6 +231,18 @@ public class WallFaceTests
     }
 
     [Fact]
+    public void SampleHouse_ThickeningAPartition_HoldsEveryGapDoor()
+    {
+        // The sample house's doors stand in gaps between records, their ends on the jambs.
+        var records = WallEditTests.SampleHouse();
+        var g = Graph(records);
+        Assert.True(WallFace.TryThicken(records, g, Pick(g, 12000, 5400), 300, Tol, out var edit, out _, out var why), why);
+        foreach (var door in WallEditTests.SampleHouseDoors())
+            Assert.True(WallEdit.Holds(edit.Shape, door, Tol), $"door at {door.MinX},{door.MinY}");
+        Assert.False(WallEdit.Holds(edit.Shape, WallEditTests.SampleHouseDoors()[0]));
+    }
+
+    [Fact]
     public void Middle_PicksTheSameFaceAgain()
     {
         var g = Graph(new() { WallJoinsTests.TwoRooms() });
