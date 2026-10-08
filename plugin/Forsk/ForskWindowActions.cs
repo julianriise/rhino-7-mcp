@@ -1110,7 +1110,12 @@ namespace RhinoMCPPlugin.Forsk
                     Render();
                 }),
                 DialogParent = this,
-                Role = role
+                Role = role,
+                OpenImportGuide = () => Post(() =>
+                {
+                    AddImportGuide(thread);
+                    Render();
+                })
             };
             Render();
             ThreadPool.QueueUserWorkItem(_ =>

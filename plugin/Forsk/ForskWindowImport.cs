@@ -19,17 +19,27 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>Opens the guide at step 1. An older open guide closes, so one is pinned.</summary>
         void OpenImportGuide(DocThread thread, string userText)
         {
+            thread.Add("user", userText);
+            thread.BeginReply(ForskRoles.MarkForAction("file.import"));
+            AddImportGuide(thread);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
+        /// <summary>
+        /// The pinned guide at step 1, in the reply that is open. An older open
+        /// guide closes, so one is pinned. Chat's plan_import with no file lands
+        /// here too, inside its own turn.
+        /// </summary>
+        void AddImportGuide(DocThread thread)
+        {
             foreach (var item in thread.Items)
                 if (item["kind"]?.ToString() == ForskImportGuide.Kind) thread.Close(item["id"]?.ToString());
             var doc = RhinoDoc.ActiveDoc;
             var facts = doc == null ? null : Facts(doc);
-            thread.Add("user", userText);
-            thread.BeginReply(ForskRoles.MarkForAction("file.import"));
             var card = thread.AddCard(new CardSpec { Kind = ForskImportGuide.Kind, Question = ForskText.Get("guide.title"), Pin = true, Data = ForskImportGuide.Start(facts) }, null);
             ForskImportGuide.Paint(card, facts);
-            thread.EndReply();
-            Models.Persist(thread);
-            Render();
         }
 
         /// <summary>The guide's pills. Every one but Cancel and Later waits while a job runs.</summary>

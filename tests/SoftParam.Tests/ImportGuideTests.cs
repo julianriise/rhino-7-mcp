@@ -266,4 +266,29 @@ public class ImportGuideTests
         Assert.Equal("x", engine.Evaluate("Forsk.stepMark({ n: 1, state: 'failed' })").ToString());
         Assert.Equal("3", engine.Evaluate("Forsk.stepMark({ n: 3, state: 'now' })").ToString());
     }
+    [Fact]
+    public void ChatPlanImport_WithNoFile_OpensTheCard_NotADialog()
+    {
+        // No file named: the card, when the window can show it.
+        Assert.True(ForskImportGuide.OpensGuide("plan_import", new JObject(), true));
+        Assert.True(ForskImportGuide.OpensGuide("plan_import", null, true));
+        Assert.True(ForskImportGuide.OpensGuide("plan_import", new JObject { ["pdf_path"] = "" }, true));
+        // The old panel has no card: it keeps the dialog.
+        Assert.False(ForskImportGuide.OpensGuide("plan_import", new JObject(), false));
+        // A file named runs as it stands, and a PDF with no page still asks for the page.
+        var pdf = Path.Combine(Path.GetTempPath(), "forsk-guide-" + Guid.NewGuid().ToString("N") + ".pdf");
+        File.WriteAllText(pdf, "%PDF-1.4");
+        try
+        {
+            Assert.False(ForskImportGuide.OpensGuide("plan_import", new JObject { ["pdf_path"] = pdf, ["page"] = 1 }, true));
+            Assert.False(ForskImportGuide.OpensGuide("plan_import", new JObject { ["pdf_path"] = pdf }, true));
+        }
+        finally
+        {
+            File.Delete(pdf);
+        }
+        // Other tools never open it.
+        Assert.False(ForskImportGuide.OpensGuide("dxf_import", new JObject(), true));
+        Assert.Contains("nothing was imported", ForskImportGuide.GuideOpened()["result"]["message"].ToString());
+    }
 }

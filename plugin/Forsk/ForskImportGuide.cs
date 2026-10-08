@@ -286,6 +286,45 @@ namespace RhinoMCPPlugin.Forsk
         static readonly Regex Detection = new Regex(@"\bai[- ](detection|gjenkjenning)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         /// <summary>
+        /// plan_import from chat with nothing it can open as it stands: the user
+        /// picks. A PDF with no page and more than one is asked for its page.
+        /// An image alone goes to the raster source; a plan file named with it
+        /// has to be there too. Null when nothing needs asking.
+        /// </summary>
+        public static JObject NeedsSource(JObject args)
+        {
+            var pdf = args?["pdf_path"]?.ToString();
+            if (!ForskDxf.NeedsPick(pdf))
+                return args["page"] == null ? new JObject { ["pdf_path"] = pdf, ["ask_page"] = true } : null;
+            var image = args?["image_path"]?.ToString();
+            var plan = args?["plan_path"]?.ToString();
+            if (!ForskDxf.NeedsPick(image) && (string.IsNullOrWhiteSpace(plan) || !ForskDxf.NeedsPick(plan))) return null;
+            return new JObject();
+        }
+
+        /// <summary>
+        /// True when chat's plan_import names no file it can open and the window
+        /// can show the AI detection card: the card asks for the file, not a
+        /// dialog. A PDF named without its page still asks for the page.
+        /// </summary>
+        public static bool OpensGuide(string name, JObject args, bool windowHasGuide)
+        {
+            if (!windowHasGuide || name != ForskToolPacks.ImportTool) return false;
+            var need = NeedsSource(args ?? new JObject());
+            return need != null && need["ask_page"] == null;
+        }
+
+        /// <summary>What chat's model reads back when the card opened in place of the import.</summary>
+        public static JObject GuideOpened() => new JObject
+        {
+            ["status"] = "success",
+            ["result"] = new JObject
+            {
+                ["message"] = "The AI detection card is open in the Forsk window. The user chooses the plan file there; nothing was imported yet."
+            }
+        };
+
+        /// <summary>
         /// A sentence that asks to import a plan with no file Forsk can open
         /// from it ("import a plan", "import plan.pdf", "importer plantegningen",
         /// "how do I use AI detection"): it opens the card, with no chat model call.

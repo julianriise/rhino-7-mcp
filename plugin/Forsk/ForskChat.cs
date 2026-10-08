@@ -255,7 +255,7 @@ Plan to 3D order is floor_from_layer, walls_from_layer, roof_flat_from_walls, op
 
 Import a DXF with dxf_import, not Rhino's own Import: it keeps DXF text escapes, so a label like Bøttekott names its room, and it reads the DXF's units, so the plan lands at true size in mm. Pass the absolute .dxf path the user gave. With none, call it with no path and the user picks the file.
 
-Import a floor plan with plan_import: a PDF as pdf_path (page when the user names one), or a scan or photo of the plan (PNG or JPEG) as image_path alone. With no path the user picks the file. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review, and the licence line when the raster source read the plan. When nothing was imported, pass on the reason and the next step it gives. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
+Import a floor plan with plan_import: a PDF as pdf_path (page when the user names one), or a scan or photo of the plan (PNG or JPEG) as image_path alone. With no path the AI detection card opens in the Forsk window and the user chooses the file there; say that in one short sentence and stop. It lands as a faded underlay plus 2D walls, doors, windows and rooms to review. Pass on the receipt: counts, how the scale stands, what needs review, and the licence line when the raster source read the plan. When nothing was imported, pass on the reason and the next step it gives. Set scale is plan_scale; with no points the user picks two and types the length. Nothing goes 3D until the user asks to generate.
 
 Defaults: walls 3000, floor thickness 400, roof 200, doors sill 0 head 2100 width 900, windows sill 900 head 2100 width 1200. Pass stated heights as tool params. If the user states none, use the defaults and say so once.
 
@@ -404,7 +404,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
             if (intent == ForskIntent.Dxf) return ForskDxf.Bias;
             if (intent == ForskIntent.Import)
             {
-                return "Turn bias: Import. plan_import brings in a PDF (pdf_path) or a scan or photo of the plan (image_path alone); with no path the user picks. plan_scale sets the scale. "
+                return "Turn bias: Import. plan_import brings in a PDF (pdf_path) or a scan or photo of the plan (image_path alone); with no path the AI detection card opens and the user chooses the file there. plan_scale sets the scale. "
                     + "Reply with the counts, how the scale stands, the licence line when there is one, and what needs review, from the tool message. "
                     + "When nothing was imported, give the reason and the next step from the message, such as the command that fetches the model weights. "
                     + "Set scale with no points given is plan_scale with no arguments: the user picks two points and types the length. "
@@ -575,6 +575,12 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
         public Window DialogParent;
         /// <summary>The user's role override: its tools are tried first. None keeps the pack's order.</summary>
         public ForskRole Role;
+        /// <summary>
+        /// plan_import with no file named opens the AI detection card here, the
+        /// same card as + and "import a plan", instead of a file dialog. Null
+        /// (the old panel) keeps the dialog.
+        /// </summary>
+        public Action OpenImportGuide;
     }
 
     public static class ForskGrok
@@ -687,6 +693,20 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                     var fn = call?["function"] as JObject;
                     var name = fn?["name"]?.ToString() ?? "";
                     var args = ParseArgs(fn?["arguments"]?.ToString());
+                    // No plan named: the AI detection card opens and the user chooses the file there.
+                    // The card is the receipt, so no chip shows for it.
+                    if (ForskToolPacks.Allows(intent, name) && ForskImportGuide.OpensGuide(name, args, hooks?.OpenImportGuide != null))
+                    {
+                        hooks.OpenImportGuide();
+                        history.Add(new JObject
+                        {
+                            ["role"] = "tool",
+                            ["tool_call_id"] = id,
+                            ["name"] = name,
+                            ["content"] = Slim(ForskImportGuide.GuideOpened())
+                        });
+                        continue;
+                    }
                     // Support's pack is the only list it may call. A named edit tool does not run.
                     var envelope = ForskToolPacks.Allows(intent, name)
                         ? CallOnUi(name, args, hooks?.DialogParent)
@@ -823,7 +843,7 @@ Do not call Grasshopper tools or execute code. Reply in at most two sentences: o
                 callArgs = new JObject { ["path"] = path };
             }
             // No plan to open as it stands: the user picks a PDF, an image or a DXF. A PDF of several pages asks which.
-            if (name == ForskPlanImport.ImportTool && ForskPlanImport.NeedsSource(args) != null)
+            if (name == ForskPlanImport.ImportTool && ForskImportGuide.NeedsSource(args) != null)
             {
                 callArgs = ForskPlanImport.SourceFromBackground(args, parent);
                 if (callArgs == null)

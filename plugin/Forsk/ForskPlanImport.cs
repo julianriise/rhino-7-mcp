@@ -121,27 +121,10 @@ namespace RhinoMCPPlugin.Forsk
             return items.IndexOf(chosen) + 1;
         }
 
-        /// <summary>
-        /// plan_import from chat with nothing it can open as it stands: the user
-        /// picks. A PDF with no page and more than one is asked for its page.
-        /// An image alone goes to the raster source; a plan file named with it
-        /// has to be there too. Null when nothing needs asking.
-        /// </summary>
-        public static JObject NeedsSource(JObject args)
-        {
-            var pdf = args?["pdf_path"]?.ToString();
-            if (!ForskDxf.NeedsPick(pdf))
-                return args["page"] == null ? new JObject { ["pdf_path"] = pdf, ["ask_page"] = true } : null;
-            var image = args?["image_path"]?.ToString();
-            var plan = args?["plan_path"]?.ToString();
-            if (!ForskDxf.NeedsPick(image) && (string.IsNullOrWhiteSpace(plan) || !ForskDxf.NeedsPick(plan))) return null;
-            return new JObject();
-        }
-
         /// <summary>The plan_import arguments chat should run with, asking the user what it lacks. Background thread. Null when cancelled.</summary>
         public static JObject SourceFromBackground(JObject args, Window parent = null)
         {
-            var need = NeedsSource(args);
+            var need = ForskImportGuide.NeedsSource(args);
             if (need == null) return args;
             if (need["ask_page"] == null) return PickSourceFromBackground(parent);
             var pdf = need["pdf_path"].ToString();
