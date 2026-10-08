@@ -462,10 +462,13 @@ namespace RhinoMCPPlugin.Forsk
                 Render();
                 return;
             }
-            // Show in Finder keeps Export viewport's receipt open: Done closes it.
+            // Show in Finder opens the folder and closes Export viewport's receipt, as Done does (Julian, 2026-10-08).
             if (kind == "view.exported" && pillId == "reveal")
             {
                 RevealInFinder(card["data"]?["path"]?.ToString());
+                thread.Close(cardId);
+                Models.Persist(thread);
+                Render();
                 return;
             }
             // Choose logo and Remove logo keep the Project info card open with the change shown. Save keeps it.
