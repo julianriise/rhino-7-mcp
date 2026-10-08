@@ -213,6 +213,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("export.dwg", Runs.Run, "group.print", f => f.HasWalls),
             // R4: the model as IFC4, one file.
             new ForskAction("export.ifc", Runs.Run, "group.print", f => f.HasWalls),
+            // A render view on screen: save it as an image (Julian, 2026-10-08).
+            new ForskAction("view.export", Runs.Run, "group.print", f => f.RenderView != null),
             // N2: the takeoff as one CSV table. Print and Export DWG also write it beside their files.
             new ForskAction("export.csv", Runs.Run, "group.print", f => f.HasWalls),
             // Like area.stats: the tool runs, then its receipt and the card of its lines.
@@ -304,6 +306,7 @@ namespace RhinoMCPPlugin.Forsk
 
         static IEnumerable<ForskAction> Candidates(FileFacts f, ForskAction slot1)
         {
+            if (f.RenderView != null && f.Picked == Picked.None) yield return Find("view.export");
             if (f.JustPrinted && f.Picked == Picked.None) yield return Find("export.dwg");
             if (f.Picked == Picked.None) yield return Find("analysis.add");
             if (f.OfferArea && f.HasRooms && f.Picked == Picked.None) yield return Find("area.stats");
@@ -386,6 +389,7 @@ namespace RhinoMCPPlugin.Forsk
             var print = bar.Slot1.Id == "file.print";
             if (print && f.SheetsStale) return ForskText.Get("file.print.stale");
             if (f.Map == MapState.Stale) return ForskText.Get("daylight.again.reason");
+            if (bar.Context.Any(a => a.Id == "view.export")) return ForskText.Get("view.export.reason");
             if (bar.Context.Any(a => a.Id == "wall.move"))
                 return ForskText.Get(ForskPick.OneRunWall(f.Selected) != null ? "wall.move.reason.one" : "wall.move.reason");
             if (print && f.Map == MapState.Shown) return ForskText.Get("file.print.map");

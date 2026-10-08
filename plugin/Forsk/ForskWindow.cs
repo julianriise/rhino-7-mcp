@@ -241,7 +241,17 @@ namespace RhinoMCPPlugin.Forsk
             _facts.View = CurrentView(doc);
             _facts.InteriorViews = Functions.ForskInteriorHost.Views(doc, false);
             _facts.ExteriorViews = Functions.ForskInteriorHost.Views(doc, true);
+            _facts.RenderView = RenderView(doc);
             return _facts;
+        }
+
+        /// <summary>The active model view's name when it shows a render look, else null.</summary>
+        static string RenderView(RhinoDoc doc)
+        {
+            var view = doc?.Views.ActiveView;
+            if (view == null || view is Rhino.Display.RhinoPageView) return null;
+            var vp = view.ActiveViewport;
+            return Functions.ForskInterior.IsRenderMode(vp.DisplayMode?.EnglishName) ? vp.Name : null;
         }
 
         /// <summary>The picker's view the active model viewport shows, or null (a layout, or a tilted parallel view).</summary>

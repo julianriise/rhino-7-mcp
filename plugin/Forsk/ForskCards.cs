@@ -358,6 +358,20 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>Export viewport's receipt: the file saved, Show in Finder and Done.</summary>
+        public static CardSpec ViewExported(string path, int width, int height)
+        {
+            var card = new CardSpec
+            {
+                Kind = "view.exported",
+                Question = ForskText.Format("view.exported", "file", System.IO.Path.GetFileName(path ?? ""), "width", width.ToString(System.Globalization.CultureInfo.InvariantCulture), "height", height.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                Data = new JObject { ["path"] = path }
+            };
+            card.Pills.Add(new CardPill("reveal", ForskText.Get("view.exported.reveal")) { Primary = true });
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.done")));
+            return card;
+        }
+
         /// <summary>An option pill of an open choice card: neither Confirm nor Cancel.</summary>
         /// <summary>What Interior render says when no single room is picked; null when one is.</summary>
         public static string JumpInsideNeedsPick(FileFacts f) =>

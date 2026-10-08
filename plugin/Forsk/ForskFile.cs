@@ -97,6 +97,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>AN.3: the analysis the last action ran (daylight, areas), and nothing changed since. Null for none.</summary>
         public string Analysed;
         /// <summary>The 3dm is saved: options sit beside it (AN.5).</summary>
+        /// <summary>The active view's name when it shows a render look, else null (the window reads it).</summary>
+        public string RenderView;
         public bool Saved;
         /// <summary>The saved options' names, from &lt;project&gt;.forsk/options.</summary>
         public List<string> Options = new List<string>();
@@ -198,6 +200,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The saved Interior and Exterior render views, for the view picker's lists. The window sets them with View.</summary>
         public List<string> InteriorViews = new List<string>();
         public List<string> ExteriorViews = new List<string>();
+        /// <summary>The active view's name when it shows a render look (Forsk Interior or Exterior), else null. The bar offers Export viewport.</summary>
+        public string RenderView;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>
@@ -245,6 +249,7 @@ namespace RhinoMCPPlugin.Forsk
                 OfferArea = input.OfferArea,
                 Analysed = input.Analysed,
                 Saved = input.Saved,
+                RenderView = input.RenderView,
                 Options = input.Options ?? new List<string>(),
                 GuideOff = input.GuideOff,
                 UpdateVersion = input.UpdateVersion,

@@ -77,3 +77,29 @@ public class RenderViewsTests
         Assert.Contains("exterior_render", ForskToolPacks.For(ForskIntent.Edit));
     }
 }
+
+/// <summary>Export viewport (Julian, 2026-10-08): in a render view the bar offers to save it as an image.</summary>
+public class ExportViewportTests
+{
+    [Fact]
+    public void InARenderView_TheBarOffersExportViewport_WithItsReason()
+    {
+        Assert.False(ForskRegistry.Find("view.export")!.Shows(Docs.Facts("house")));
+        var facts = Docs.Facts("house, in a render view");
+        Assert.True(ForskRegistry.Find("view.export")!.Shows(facts));
+        var bar = ForskRegistry.Bar(facts);
+        Assert.Equal("view.export", bar.Context[0].Id);
+        Assert.Equal("Export viewport", bar.Context[0].Label);
+        Assert.Equal("this view is a render", bar.Reason);
+    }
+
+    [Fact]
+    public void TheReceipt_NamesTheFile_AndOffersShowInFinder()
+    {
+        var card = ForskCards.ViewExported("/Users/jr/house/Exterior south.png", 3200, 1800);
+        Assert.Equal("view.exported", card.Kind);
+        Assert.Equal("Saved Exterior south.png, 3200 × 1800 px.", card.Question);
+        Assert.Equal(new[] { "reveal", "done" }, card.Pills.Select(p => p.Id));
+        Assert.Equal("/Users/jr/house/Exterior south.png", card.Data!["path"]!.ToString());
+    }
+}

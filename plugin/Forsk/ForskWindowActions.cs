@@ -216,6 +216,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "export.ifc":
                     Export(thread, null, "ifc");
                     return;
+                case "view.export":
+                    ExportViewport(thread);
+                    return;
                 case "export.csv":
                     Export(thread, null, "csv");
                     return;
@@ -459,6 +462,12 @@ namespace RhinoMCPPlugin.Forsk
                 thread.Settle(cardId, heldLabel ?? ForskText.Get("word.unchanged"));
                 Models.Persist(thread);
                 Render();
+                return;
+            }
+            // Show in Finder keeps Export viewport's receipt open: Done closes it.
+            if (kind == "view.exported" && pillId == "reveal")
+            {
+                RevealInFinder(card["data"]?["path"]?.ToString());
                 return;
             }
             // Choose logo and Remove logo keep the Project info card open with the change shown. Save keeps it.
@@ -1344,6 +1353,60 @@ namespace RhinoMCPPlugin.Forsk
             var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = way, ["save"] = false });
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
                 Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view did not change.");
+        }
+
+        /// <summary>
+        /// Export viewport: the active render view saved as a PNG at twice its size
+        /// with its render look, where the save dialog says (the file's folder,
+        /// named after the view). No chat line; a receipt with Show in Finder.
+        /// </summary>
+        void ExportViewport(DocThread thread)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            var view = doc?.Views.ActiveView;
+            if (thread == null || view == null || view is Rhino.Display.RhinoPageView) return;
+            var vp = view.ActiveViewport;
+            var dialog = new Eto.Forms.SaveFileDialog { Title = ForskText.Get("view.export"), FileName = FileStem(vp.Name) + ".png", CheckFileExists = false };
+            dialog.Filters.Add(new Eto.Forms.FileFilter("PNG image", ".png"));
+            var folder = string.IsNullOrEmpty(doc.Path) ? Environment.GetFolderPath(Environment.SpecialFolder.Desktop) : System.IO.Path.GetDirectoryName(doc.Path);
+            try { if (!string.IsNullOrEmpty(folder)) dialog.Directory = new Uri("file://" + folder.TrimEnd('/') + "/"); }
+            catch (Exception) { }
+            if (dialog.ShowDialog(this) != Eto.Forms.DialogResult.Ok || string.IsNullOrWhiteSpace(dialog.FileName)) return;
+            var path = dialog.FileName.Trim();
+            if (!System.IO.Path.IsPathRooted(path)) path = System.IO.Path.Combine(folder ?? "", path);
+            if (!path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) path += ".png";
+            var size = new System.Drawing.Size(vp.Size.Width * 2, vp.Size.Height * 2);
+            try
+            {
+                // The look's own attributes: a size-only capture of a render look draws it white on the Mac.
+                using (var bitmap = view.CaptureToBitmap(size, vp.DisplayMode.DisplayAttributes))
+                    bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            catch (Exception e)
+            {
+                thread.AddLine("The image was not saved: " + e.Message);
+                Render();
+                return;
+            }
+            thread.BeginReply(ForskRoles.MarkForAction("view.export"));
+            thread.AddCard(ForskCards.ViewExported(path, size.Width, size.Height), Facts(doc));
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
+        /// <summary>A view name as a file name: no slashes or colons.</summary>
+        static string FileStem(string name)
+        {
+            var stem = new string((name ?? "").Select(c => c == '/' || c == ':' || c == '\\' ? ' ' : c).ToArray()).Trim();
+            return stem.Length == 0 ? "Forsk view" : stem;
+        }
+
+        static void RevealInFinder(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
+            try { System.Diagnostics.Process.Start("open", "-R \"" + path + "\""); }
+            catch (Exception) { }
         }
 
         /// <summary>Exterior render, tried: the Perspective view takes the shot from that side, nothing saved. Quiet unless it fails.</summary>
