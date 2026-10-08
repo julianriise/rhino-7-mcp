@@ -81,6 +81,36 @@ public static class DaylightPrint
     /// <summary>"DF 2.1 %": a room's mean beside its tag.</summary>
     public static string RoomLabel(double df) => "DF " + df.ToString("0.0", CultureInfo.InvariantCulture) + " %";
 
+    /// <summary>
+    /// Where a room's DF line (width x height) has its middle, by its tag's
+    /// area line: under it when that is clear, else beside it on its row a
+    /// word space off, right then left, else the nearest clear spot
+    /// Furniture.TagSpot finds in the room. Clear is inside the room and off
+    /// what the plan draws (taken: door swings, marks, tags, dimensions) by
+    /// gap. Under the tag when nothing is clear or the room is not known.
+    /// Units are the plan drawing's.
+    /// </summary>
+    public static RoomDetect.Pt RoomLabelSpot(
+        RoomDetect.Box tag, IList<RoomDetect.Pt> room, double width, double height, double gap, IList<RoomDetect.Box> taken)
+    {
+        var under = new RoomDetect.Pt((tag.MinX + tag.MaxX) / 2, tag.MinY - gap - height / 2);
+        if (room == null || room.Count < 3) return under;
+        // A gap clear all round; under the tag that box just touches the area line's own.
+        double hw = width / 2 + gap, hh = height / 2 + gap;
+        var row = (tag.MinY + tag.MaxY) / 2;
+        var pieces = (taken ?? new RoomDetect.Box[0]).Select(b => new[]
+        {
+            new RoomDetect.Pt(b.MinX, b.MinY), new RoomDetect.Pt(b.MaxX, b.MinY),
+            new RoomDetect.Pt(b.MaxX, b.MaxY), new RoomDetect.Pt(b.MinX, b.MaxY)
+        }).ToList();
+        if (Furniture.TagClear(under, room, hw, hh, pieces)) return under;
+        // On the area line's row the label is as tall as that line, a word space (one text height) off it.
+        var rowHh = Math.Min(hh, (tag.MaxY - tag.MinY) / 2);
+        foreach (var at in new[] { new RoomDetect.Pt(tag.MaxX + height + width / 2, row), new RoomDetect.Pt(tag.MinX - height - width / 2, row) })
+            if (Furniture.TagClear(at, room, hw, rowHh, pieces)) return at;
+        return Furniture.TagSpot(under, room, hw, hh, pieces, height) ?? under;
+    }
+
     /// <summary>"0.5 %", "10 %": a legend tick.</summary>
     public static string TickLabel(double df) => df.ToString("0.#", CultureInfo.InvariantCulture) + " %";
 

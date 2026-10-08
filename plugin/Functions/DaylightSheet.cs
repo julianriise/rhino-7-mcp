@@ -14,7 +14,7 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// The Analysis set's daylight map sheet on the layout and in the PDF. The
 /// page is the plan's drawing in a detail framed as the plan sheet frames it,
-/// with a legend column at the right and each room's DF mean under its tag.
+/// with a legend column at the right and each room's DF mean by its tag.
 /// The daylight mesh never prints (it is off in every detail, and the plan
 /// drawing sits where its bake moved it, not at the model's place), so the
 /// PDF draws the mesh's cells as a picture under the lines, through the plan
@@ -150,7 +150,7 @@ public partial class RhinoMCPFunctions
     /// <summary>
     /// The daylight map page's own parts, after its footer: the legend in the
     /// column right of the detail (title, the ramp's frame, a tick and label
-    /// per DF, the last run's line) and each room's DF mean under its tag on
+    /// per DF, the last run's line) and each room's DF mean by its tag on
     /// the plan. The ramp and the map are pictures the PDF draws.
     /// </summary>
     private JObject AddDaylightMapParts(RhinoDoc doc, RhinoPageView page, LayoutViewSpec spec, string stableId, string sheetNo, JArray ids)
@@ -186,16 +186,23 @@ public partial class RhinoMCPFunctions
             AddPaperText(doc, ids, i == 0 ? note[i] : "in " + note[i], legend.TitleX, legend.NoteY - i * text * SheetPdf.LinePitch, text,
                 TextHorizontalAlignment.Left, TextVerticalAlignment.Top, Attr("daylight_legend"));
 
+        // Each room's mean by its tag, off the door swings and whatever else the plan draws there.
         var labelled = 0;
-        if (TryDrawingToPaper(doc, page, out var toPaper))
+        var drawLayer = FindDrawLayer(doc, SheetSet.PlanId);
+        if (drawLayer != null && TryDrawingToPaper(doc, page, out var toPaper) && toPaper.Scale > 0)
         {
-            foreach (var tag in PlanRoomTags(doc))
+            var taken = PlanObstacles(doc, drawLayer).Select(o => o.Box).ToList();
+            double height = text / toPaper.Scale, gap = 0.8 / toPaper.Scale;
+            foreach (var tag in PlanRoomTags(doc, drawLayer))
             {
                 if (!state.RoomDf.TryGetValue(tag.Key, out var mean)) continue;
-                var box = tag.Value;
-                toPaper.Apply((box.Min.X + box.Max.X) / 2, box.Min.Y, out var x, out var y);
-                if (AddPaperText(doc, ids, DaylightPrint.RoomLabel(mean), x, y - 0.8, text,
-                        TextHorizontalAlignment.Center, TextVerticalAlignment.Top, Attr("daylight_room")) != Guid.Empty)
+                var label = DaylightPrint.RoomLabel(mean);
+                var width = TextWidthOf(doc, label, height);
+                var at = DaylightPrint.RoomLabelSpot(tag.Value.Box, tag.Value.Ring, width, height, gap, taken);
+                taken.Add(new RoomDetect.Box(at.X - width / 2, at.Y - height / 2, at.X + width / 2, at.Y + height / 2));
+                toPaper.Apply(at.X, at.Y, out var x, out var y);
+                if (AddPaperText(doc, ids, label, x, y, text,
+                        TextHorizontalAlignment.Center, TextVerticalAlignment.Middle, Attr("daylight_room")) != Guid.Empty)
                     labelled++;
             }
         }
@@ -209,12 +216,10 @@ public partial class RhinoMCPFunctions
         };
     }
 
-    /// <summary>Each tagged room's tag on the plan drawing, by its room id: the area line's box, else the name's.</summary>
-    private static Dictionary<string, BoundingBox> PlanRoomTags(RhinoDoc doc)
+    /// <summary>Each tagged room's tag on the plan drawing, by its room id: the area line's box, else the name's, and the room it sits in.</summary>
+    private static Dictionary<string, (RoomDetect.Box Box, List<RoomDetect.Pt> Ring)> PlanRoomTags(RhinoDoc doc, Layer drawLayer)
     {
-        var tags = new Dictionary<string, BoundingBox>(StringComparer.Ordinal);
-        var drawLayer = FindDrawLayer(doc, SheetSet.PlanId);
-        if (drawLayer == null) return tags;
+        var tags = new Dictionary<string, (RoomDetect.Box Box, List<RoomDetect.Pt> Ring)>(StringComparer.Ordinal);
         var areas = new HashSet<string>(StringComparer.Ordinal);
         foreach (var obj in doc.Objects.FindByLayer(drawLayer) ?? new RhinoObject[0])
         {
@@ -225,7 +230,7 @@ public partial class RhinoMCPFunctions
             if (!area && (areas.Contains(room) || tags.ContainsKey(room))) continue;
             var box = obj.Geometry?.GetBoundingBox(true) ?? BoundingBox.Empty;
             if (!box.IsValid) continue;
-            tags[room] = box;
+            tags[room] = (new RoomDetect.Box(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y), RoomRing(obj.Attributes.GetUserString("forsk:room")));
             if (area) areas.Add(room);
         }
         return tags;

@@ -229,4 +229,69 @@ public class DaylightMapTests
         var over = ops.IndexOf("/Im0 Do", StringComparison.Ordinal);
         Assert.True(under >= 0 && line > under && over > line, ops);
     }
+
+    // The sample house's Bathroom at 1:75, drawing mm: 4.4 x 2 m, its tag in the
+    // middle and door D05's swing rising 0.9 m from the south wall under it.
+    static readonly RoomDetect.Pt[] Bathroom =
+        { new RoomDetect.Pt(0, 0), new RoomDetect.Pt(4400, 0), new RoomDetect.Pt(4400, 2000), new RoomDetect.Pt(0, 2000) };
+    static readonly RoomDetect.Box AreaLine = new RoomDetect.Box(1800, 900, 2600, 1090);
+    static readonly RoomDetect.Box NameLine = new RoomDetect.Box(1700, 1120, 2700, 1310);
+    static readonly RoomDetect.Box Swing = new RoomDetect.Box(1750, 0, 2650, 896);
+    const double LabelW = 900, LabelH = 187.5, Gap = 60;
+
+    static bool Clear(RoomDetect.Pt c, RoomDetect.Box b)
+    {
+        double hw = LabelW / 2 + Gap, hh = LabelH / 2 + Gap;
+        return c.X + hw <= b.MinX || c.X - hw >= b.MaxX || c.Y + hh <= b.MinY || c.Y - hh >= b.MaxY;
+    }
+
+    /// <summary>Julian, 2026-10-08: the Hall's "DF 0.1 %" sat on D08's swing, clear of its box by a hair.</summary>
+    [Fact]
+    public void ARoomsDf_KeepsAGapOffASwingJustUnderIt()
+    {
+        var hall = new[] { new RoomDetect.Pt(0, 0), new RoomDetect.Pt(4400, 0), new RoomDetect.Pt(4400, 2400), new RoomDetect.Pt(0, 2400) };
+        var area = new RoomDetect.Box(1800, 1100, 2600, 1290);
+        var name = new RoomDetect.Box(1900, 1320, 2500, 1510);
+        var swing = new RoomDetect.Box(1750, 0, 2650, 810);
+        var taken = new[] { area, name, swing };
+        var at = DaylightPrint.RoomLabelSpot(area, hall, LabelW, LabelH, Gap, taken);
+        Assert.All(taken, b => Assert.True(Clear(at, b), at.X + "," + at.Y));
+    }
+
+    /// <summary>Julian, 2026-10-08: D05's swing crossed the Bathroom's "DF 0.1 %".</summary>
+    [Fact]
+    public void ARoomsDf_KeepsOffADoorSwing_OnTheAreaLinesRow()
+    {
+        var taken = new[] { AreaLine, NameLine, Swing };
+        var at = DaylightPrint.RoomLabelSpot(AreaLine, Bathroom, LabelW, LabelH, Gap, taken);
+        Assert.All(taken, b => Assert.True(Clear(at, b), at.X + "," + at.Y));
+        Assert.True(at.X - LabelW / 2 > 0 && at.X + LabelW / 2 < 4400 && at.Y - LabelH / 2 > 0 && at.Y + LabelH / 2 < 2000);
+        // Beside the area line, so it still reads as the tag's, a word space off it.
+        Assert.Equal((AreaLine.MinY + AreaLine.MaxY) / 2, at.Y, 6);
+        var space = Math.Max(AreaLine.MinX - (at.X + LabelW / 2), at.X - LabelW / 2 - AreaLine.MaxX);
+        Assert.True(space >= LabelH / 2, "space " + space);
+    }
+
+    /// <summary>A name wider than its area line, as "Bathroom" over "~ 8.8 m²", still leaves the row free beside the area line.</summary>
+    [Fact]
+    public void ARoomsDf_BesideTheAreaLine_IsAsTallAsThatLine()
+    {
+        var area = new RoomDetect.Box(1800, 920, 2600, 1080);
+        var wideName = new RoomDetect.Box(1500, 1090, 2900, 1280);
+        var at = DaylightPrint.RoomLabelSpot(area, Bathroom, LabelW, LabelH, Gap, new[] { area, wideName, Swing });
+        Assert.Equal(1000, at.Y, 6);
+    }
+
+    [Fact]
+    public void ARoomsDf_StaysUnderItsTag_WhenNothingIsThere_OrNothingIsClear()
+    {
+        var under = new RoomDetect.Pt(2200, 900 - Gap - LabelH / 2);
+        var at = DaylightPrint.RoomLabelSpot(AreaLine, Bathroom, LabelW, LabelH, Gap, new[] { AreaLine, NameLine });
+        Assert.Equal(under.X, at.X, 6);
+        Assert.Equal(under.Y, at.Y, 6);
+        // A room the label cannot clear anywhere: under the tag all the same.
+        var cupboard = new[] { new RoomDetect.Pt(1700, 600), new RoomDetect.Pt(2700, 600), new RoomDetect.Pt(2700, 1400), new RoomDetect.Pt(1700, 1400) };
+        at = DaylightPrint.RoomLabelSpot(AreaLine, cupboard, LabelW, LabelH, Gap, new[] { AreaLine, NameLine, Swing });
+        Assert.Equal(under.Y, at.Y, 6);
+    }
 }

@@ -451,11 +451,11 @@ public partial class RhinoMCPFunctions
         return found;
     }
 
-    private static bool RoomHolds(BoundingBox box, string room)
+    /// <summary>A room tag's room as RoomStamp wrote it: its outline in drawing space, empty when unreadable.</summary>
+    private static List<RoomDetect.Pt> RoomRing(string room)
     {
-        if (string.IsNullOrEmpty(room)) return false;
         var ring = new List<RoomDetect.Pt>();
-        foreach (var pair in room.Split(';'))
+        foreach (var pair in (room ?? "").Split(';'))
         {
             var xy = pair.Split(',');
             if (xy.Length != 2) continue;
@@ -464,6 +464,12 @@ public partial class RhinoMCPFunctions
             if (!double.TryParse(xy[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) continue;
             ring.Add(new RoomDetect.Pt(x, y));
         }
+        return ring;
+    }
+
+    private static bool RoomHolds(BoundingBox box, string room)
+    {
+        var ring = RoomRing(room);
         if (ring.Count < 3) return false;
         var corners = new[]
         {

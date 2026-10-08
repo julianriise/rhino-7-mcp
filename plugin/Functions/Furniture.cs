@@ -821,12 +821,16 @@ public static class Furniture
         foreach (var offset in Spiral(Math.Max(step, 1), reach))
         {
             var c = new Pt(start.X + offset.X, start.Y + offset.Y);
-            var box = new[] { new Pt(c.X - hw, c.Y - hh), new Pt(c.X + hw, c.Y - hh), new Pt(c.X + hw, c.Y + hh), new Pt(c.X - hw, c.Y + hh) };
-            if (box.Any(p => !RoomDetect.Contains(ring, p))) continue;
-            if (blocks.Any(b => Overlap(box, b))) continue;
-            return c;
+            if (TagClear(c, ring, hw, hh, blocks)) return c;
         }
         return null;
+    }
+
+    /// <summary>A tag's box about c (half sizes hw, hh) is inside the room and off every piece.</summary>
+    public static bool TagClear(Pt c, IList<Pt> room, double hw, double hh, IEnumerable<Pt[]> pieces)
+    {
+        var box = new[] { new Pt(c.X - hw, c.Y - hh), new Pt(c.X + hw, c.Y - hh), new Pt(c.X + hw, c.Y + hh), new Pt(c.X - hw, c.Y + hh) };
+        return box.All(p => RoomDetect.Contains(room, p)) && !pieces.Any(b => Overlap(box, b));
     }
 
     /// <summary>Something placed, as a footprint in plan with its height range.</summary>
