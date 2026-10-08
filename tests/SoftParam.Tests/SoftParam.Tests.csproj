@@ -64,6 +64,7 @@
     <Compile Include="..\..\plugin\Functions\Furnish.cs" Link="Furnish.cs" />
     <Compile Include="..\..\plugin\Functions\Analysis.cs" Link="Analysis.cs" />
     <Compile Include="..\..\plugin\Functions\InteriorCamera.cs" Link="InteriorCamera.cs" />
+    <Compile Include="..\..\plugin\Functions\ExteriorCamera.cs" Link="ExteriorCamera.cs" />
     <Compile Include="..\..\plugin\Functions\ForskInterior.cs" Link="ForskInterior.cs" />
     <Compile Include="..\..\plugin\Functions\PrintProfiles.cs" Link="PrintProfiles.cs" />
     <Compile Include="..\..\plugin\Functions\PrintInk.cs" Link="PrintInk.cs" />

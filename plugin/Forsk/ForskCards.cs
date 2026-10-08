@@ -78,6 +78,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "option.delete":
                     return OptionPick(f, actionId);
                 case "room.inside": return JumpInside(f);
+                case "view.exterior": return ExteriorRender(f);
                 case "options": return OptionsMenu(f);
                 case "analysis.menu": return Analyser(f);
                 case "print.clear": return Confirm("print.clear", "print.clear.ask");
@@ -317,7 +318,7 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// Jump inside, a choice card: the viewport shows north as the card
+        /// Interior render, a choice card: the viewport shows north as the card
         /// opens, a direction shows at once, and Confirm keeps the shot as a
         /// named view (Julian, 2026-10-07).
         /// </summary>
@@ -337,8 +338,28 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// Exterior render, a choice card like Interior render: the viewport
+        /// shows the building from the north as the card opens, a side shows at
+        /// once, and Confirm keeps the shot as a named view (Julian, 2026-10-08).
+        /// </summary>
+        public static CardSpec ExteriorRender(FileFacts f)
+        {
+            var card = new CardSpec
+            {
+                Kind = "view.exterior",
+                Question = ForskText.Get("view.exterior.ask"),
+                Note = ForskText.Format("view.exterior.held", "way", "north"),
+                Choice = true
+            };
+            foreach (var way in Functions.InteriorCamera.Directions)
+                card.Pills.Add(new CardPill(way, ForskText.Get("room.inside." + way)) { Primary = way == "north" });
+            card.Pills.Add(new CardPill("done", ForskText.Get("word.confirm")));
+            return card;
+        }
+
         /// <summary>An option pill of an open choice card: neither Confirm nor Cancel.</summary>
-        /// <summary>What Jump inside says when no single room is picked; null when one is.</summary>
+        /// <summary>What Interior render says when no single room is picked; null when one is.</summary>
         public static string JumpInsideNeedsPick(FileFacts f) =>
             f != null && f.Picked == Picked.Room && f.PickedCount == 1 ? null : ForskText.Get("room.inside.pick");
 

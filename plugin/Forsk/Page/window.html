@@ -155,6 +155,11 @@ header.top {
 .menu button.split { margin-top: 6px; }
 html[data-kbd] .menu button:focus-visible { background: var(--page); }
 .menu button[aria-checked="true"] { font-weight: 600; }
+/* The view picker's Interior and Exterior lists: a row that opens its saved render views, indented under it. */
+.menu button.group::after { content: "›"; margin-left: 4px; color: var(--faint); transition: transform 150ms ease; }
+.menu button.group[aria-expanded="true"]::after { transform: rotate(90deg); }
+.menu button.group .count { margin-left: auto; color: var(--faint); font-size: 12px; }
+.menu button.sub { padding-left: 22px; }
 .mini { width: 20px; height: 20px; flex: none; display: block; }
 #pin {
   flex: 0 1 auto; min-height: 0; max-height: calc(100% - 248px);
@@ -406,6 +411,7 @@ textarea::placeholder { color: var(--faint); }
   .step::after { animation: none; display: none; }
   .card, .sheet { animation: none; }
   .pill, .menu button { transition: none; }
+  .menu button.group::after { transition: none; }
   .pill:active, .menu button:active { transform: none; }
   .dots span { animation: none; opacity: 0.6; }
   #thread-thumb { transition: none; }

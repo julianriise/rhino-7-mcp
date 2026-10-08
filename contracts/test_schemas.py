@@ -420,6 +420,9 @@ def test_new_commands():
         ("commands/jump_inside.json", {"room": "bedroom"}),
         ("commands/jump_inside.json", {"room": "bedroom", "direction": "east"}),
         ("commands/jump_inside.json", {"direction": "west", "save": False}),
+        ("commands/exterior_render.json", {}),
+        ("commands/exterior_render.json", {"direction": "south"}),
+        ("commands/exterior_render.json", {"direction": "east", "save": False}),
         ("commands/show_view.json", {"view": "south"}),
         ("commands/save_option.json", {}),
         ("commands/save_option.json", {"name": "A"}),
@@ -1035,6 +1038,8 @@ def test_responses():
         all_passed = False
     if not validate("responses/jump_inside_result.json", {"view": "Bedroom", "room": "R02", "eye": [2000, 300, 1200], "target": [2000, 5000, 1200], "lens_mm": 24, "direction": "north", "message": "Perspective is inside the bedroom."}):
         all_passed = False
+    if not validate("responses/exterior_render_result.json", {"view": "Exterior south", "eye": [5000, -9333, 1600], "target": [5000, 3000, 1600], "lens_mm": 24, "direction": "south", "saved": True, "active": True, "look": "Forsk Exterior", "message": "Perspective looks at the building from the south at eye height."}):
+        all_passed = False
     if not validate("responses/save_option_result.json", {"name": "A", "path": "/tmp/garage.forsk/options/A.json", "walls": 4, "openings": 5, "rooms": 1, "message": "Saved option A beside the file."}):
         all_passed = False
     if not validate("responses/compare_option_result.json", {"name": "A", "summary": "1 wall moved.", "rows": [{"label": "Net area", "option": "27.4 m²", "now": "28.6 m²", "better": ""}], "message": "Option A against now: 1 wall moved."}):
@@ -1575,6 +1580,8 @@ def test_invalid_examples():
         ("commands/furnish_room.json", {"density": "tight"}, "furnish_room unknown density"),
         ("commands/jump_inside.json", {"lens": 24}, "jump_inside unknown field"),
         ("commands/jump_inside.json", {"direction": "up"}, "jump_inside unknown direction"),
+        ("commands/exterior_render.json", {"room": "living"}, "exterior_render takes no room"),
+        ("commands/exterior_render.json", {"direction": "above"}, "exterior_render unknown direction"),
         ("commands/show_view.json", {"view": "section_a"}, "show_view unknown view"),
         ("commands/show_view.json", {}, "show_view needs a view"),
         ("commands/save_option.json", {"name": "A/B"}, "save_option bad name"),

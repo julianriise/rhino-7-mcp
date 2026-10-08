@@ -335,7 +335,7 @@ namespace RhinoMCPPlugin.Forsk
                     StartBridge(thread);
                     return;
                 default:
-                    // Jump inside with no room picked asks for one, waits for the click, then opens itself (Julian, 2026-10-07).
+                    // Interior render with no room picked asks for one, waits for the click, then opens itself (Julian, 2026-10-07).
                     var needsPick = action.Id == "room.inside" ? ForskCards.JumpInsideNeedsPick(facts) : null;
                     if (needsPick != null)
                     {
@@ -349,8 +349,9 @@ namespace RhinoMCPPlugin.Forsk
                     thread.AddCard(spec, facts);
                     thread.EndReply();
                     Models.Persist(thread);
-                    // Jump inside shows north as its card opens (Julian, 2026-10-07).
+                    // Interior render and Exterior render show north as their card opens (Julian, 2026-10-07).
                     if (action.Id == "room.inside") TryInside("north");
+                    if (action.Id == "view.exterior") TryOutside("north");
                     Render();
                     return;
             }
@@ -1261,6 +1262,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "room.inside":
                     TryInside(option);
                     return ForskText.Format("room.inside.held", "way", option);
+                case "view.exterior":
+                    TryOutside(option);
+                    return ForskText.Format("view.exterior.held", "way", option);
                 case "ink.set":
                     return QuietTool("print_profile", new JObject { ["name"] = option })
                         ?? ForskText.Format("ink.set.now", "ink", option);
@@ -1323,13 +1327,14 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>A choice card's Confirm: what the held option still needs. Quiet unless it fails.</summary>
         void ConfirmChoice(string kind, string held)
         {
-            if (kind != "room.inside") return;
-            var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = held });
+            if (kind != "room.inside" && kind != "view.exterior") return;
+            var tool = kind == "room.inside" ? "jump_inside" : "exterior_render";
+            var envelope = ForskTools.CommandOnUi(tool, new JObject { ["direction"] = held });
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
                 Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view was not saved.");
         }
 
-        /// <summary>Jump inside, tried: the Perspective view takes the shot, nothing saved. Quiet unless it fails.</summary>
+        /// <summary>Interior render, tried: the Perspective view takes the shot, nothing saved. Quiet unless it fails.</summary>
         void TryInside(string way)
         {
             var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = way, ["save"] = false });
@@ -1337,9 +1342,28 @@ namespace RhinoMCPPlugin.Forsk
                 Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view did not change.");
         }
 
-        /// <summary>The view picker: the active viewport shows the view. Quiet unless it fails.</summary>
+        /// <summary>Exterior render, tried: the Perspective view takes the shot from that side, nothing saved. Quiet unless it fails.</summary>
+        void TryOutside(string way)
+        {
+            var envelope = ForskTools.CommandOnUi("exterior_render", new JObject { ["direction"] = way, ["save"] = false });
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                Active()?.AddLine(envelope?["message"]?.ToString() ?? "The view did not change.");
+        }
+
+        /// <summary>
+        /// The view picker: the active viewport shows the view, or a saved
+        /// interior or exterior render view with its look. Quiet unless it fails.
+        /// </summary>
         void PickView(string id)
         {
+            if (Functions.ViewPicker.TryRender(id, out var renderName, out var exterior))
+            {
+                var why = Functions.ForskInteriorHost.Show(RhinoDoc.ActiveDoc, renderName, exterior);
+                if (why != null) Active()?.AddLine(why);
+                MarkDirty();
+                Render();
+                return;
+            }
             if (!Functions.ViewPicker.Known(id)) return;
             var envelope = ForskTools.CommandOnUi("show_view", new JObject { ["view"] = id });
             if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))

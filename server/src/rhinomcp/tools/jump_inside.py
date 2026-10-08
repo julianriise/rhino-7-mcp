@@ -1,4 +1,4 @@
-"""Jump inside a room: a first interior shot in the Perspective view."""
+"""Interior render (jump inside a room): a first interior shot in the Perspective view."""
 
 from typing import Any, Dict, Optional
 
@@ -9,8 +9,9 @@ from rhinomcp.server import get_rhino_connection, mcp, logger
 @mcp.tool()
 def jump_inside(ctx: Context, room: Optional[str] = None, direction: Optional[str] = None) -> Dict[str, Any]:
     """
-    Jump inside a room ("jump inside the bedroom", "show me the kitchen
-    from inside", "gå inn i stua"): a level, straight-on shot like interior
+    Interior render of a room ("interior render of the bedroom", "jump inside
+    the bedroom", "show me the kitchen from inside", "gå inn i stua"): a
+    level, straight-on shot like interior
     photography. The Perspective view stands just inside the wall behind it
     and looks across the room the chosen way at 1.2 m with a 24 mm lens.
     Saved as a named view called after the room.

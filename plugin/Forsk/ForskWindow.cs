@@ -236,6 +236,8 @@ namespace RhinoMCPPlugin.Forsk
             }
             // The view picker follows the viewport, which moves without a document event.
             _facts.View = CurrentView(doc);
+            _facts.InteriorViews = Functions.ForskInteriorHost.Views(doc, false);
+            _facts.ExteriorViews = Functions.ForskInteriorHost.Views(doc, true);
             return _facts;
         }
 

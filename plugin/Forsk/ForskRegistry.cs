@@ -176,6 +176,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.draw", Runs.Run, "group.model", f => true),
             new ForskAction("stair.draw", Runs.Run, "group.model", f => f.HasWalls),
             new ForskAction("exist.mark", Runs.Run, "group.model", f => f.Picked == Picked.Loose),
+            // Exterior render: the building from the north, east, south or west, at eye height (Julian, 2026-10-08).
+            new ForskAction("view.exterior", Runs.Card, "group.model", f => f.HasWalls),
             new ForskAction("edit.undo", Runs.Run, "group.model", f => f.UndoNewest),
             // R5: a stair along the one wall picked. With nothing picked, Draw stair is the way.
             new ForskAction("stair.add", Runs.Run, "group.model", f => f.HasWalls && f.Picked == Picked.Wall && f.PickedCount == 1),
@@ -196,7 +198,7 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("room.redraw", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             // FU: a piece from the catalogue into a room, and furnishing by rules (the picked room, else every room) with the two previews.
-            // A first interior shot of the one room picked: Perspective inside its door at 1.2 m.
+            // Interior render: a first interior shot of the one room picked, at 1.2 m.
             new ForskAction("room.inside", Runs.Card, "group.rooms", f => f.HasRooms),
             new ForskAction("furniture.add", Runs.Card, "group.rooms", f => f.HasRooms),
             new ForskAction("furniture.furnish", Runs.Run, "group.rooms", f => f.HasRooms),

@@ -53,18 +53,53 @@ public static class ViewPicker
         }
     }
 
-    /// <summary>The window's picker: the view shown now (null: none of them), its label, and every view.</summary>
-    public static JObject Control(string current)
+    public const string InteriorPrefix = "interior:";
+    public const string ExteriorPrefix = "exterior:";
+
+    /// <summary>
+    /// The window's picker: the view shown now (null: none of them), its label,
+    /// every view, and the saved Interior and Exterior render views, one list
+    /// each when there are any (Julian, 2026-10-08).
+    /// </summary>
+    public static JObject Control(string current, IList<string> interior = null, IList<string> exterior = null)
     {
         var options = new JArray();
         foreach (var id in Ids)
             options.Add(new JObject { ["id"] = id, ["label"] = Label(id) });
-        return new JObject
+        var control = new JObject
         {
             ["value"] = Known(current) ? current : "",
             ["label"] = Label(current),
             ["options"] = options
         };
+        var groups = new JArray();
+        AddGroup(groups, "Interior", InteriorPrefix, interior);
+        AddGroup(groups, "Exterior", ExteriorPrefix, exterior);
+        if (groups.Count > 0) control["groups"] = groups;
+        return control;
+    }
+
+    static void AddGroup(JArray groups, string label, string prefix, IList<string> names)
+    {
+        if (names == null || names.Count == 0) return;
+        var items = new JArray();
+        foreach (var name in names)
+            items.Add(new JObject { ["id"] = prefix + name, ["label"] = name });
+        groups.Add(new JObject { ["label"] = label, ["items"] = items });
+    }
+
+    /// <summary>A picked saved render view ("interior:Living"): its name and whether it is exterior.</summary>
+    public static bool TryRender(string id, out string name, out bool exterior)
+    {
+        name = null;
+        exterior = false;
+        if (string.IsNullOrEmpty(id)) return false;
+        if (id.StartsWith(InteriorPrefix, StringComparison.Ordinal)) name = id.Substring(InteriorPrefix.Length);
+        else if (id.StartsWith(ExteriorPrefix, StringComparison.Ordinal)) { name = id.Substring(ExteriorPrefix.Length); exterior = true; }
+        if (!string.IsNullOrWhiteSpace(name)) return true;
+        name = null;
+        exterior = false;
+        return false;
     }
 
     /// <summary>

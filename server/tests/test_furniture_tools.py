@@ -127,3 +127,15 @@ def test_jump_inside_sends_the_room(mock_get_conn):
     jump_inside(ctx=None, room="bedroom", direction="east")
     conn.send_command.assert_called_with("jump_inside", {"room": "bedroom", "direction": "east"})
     assert jump_inside(ctx=None, direction="up")["success"] is False
+
+
+@patch("rhinomcp.tools.exterior_render.get_rhino_connection")
+def test_exterior_render_sends_the_side(mock_get_conn):
+    from rhinomcp.tools.exterior_render import exterior_render
+
+    conn = _conn(mock_get_conn, {"view": "Exterior north", "message": "ok"})
+    exterior_render(ctx=None)
+    conn.send_command.assert_called_with("exterior_render", {})
+    exterior_render(ctx=None, direction="south")
+    conn.send_command.assert_called_with("exterior_render", {"direction": "south"})
+    assert exterior_render(ctx=None, direction="above")["success"] is False

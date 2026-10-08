@@ -1039,6 +1039,35 @@
       });
       menu.appendChild(item);
     });
+    // Interior and Exterior: each opens its list of saved render views; one click shows one (Julian, 2026-10-08).
+    ((view && view.groups) || []).forEach(function (group, i) {
+      var head = el('button', 'group' + (i === 0 ? ' split' : ''));
+      head.type = 'button';
+      head.setAttribute('role', 'menuitem');
+      head.setAttribute('aria-expanded', 'false');
+      head.appendChild(document.createTextNode(group.label));
+      head.appendChild(el('span', 'count', String((group.items || []).length)));
+      var list = el('div', 'sub-list');
+      list.hidden = true;
+      head.addEventListener('click', function (e) {
+        e.stopPropagation();
+        list.hidden = !list.hidden;
+        head.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+      });
+      (group.items || []).forEach(function (option) {
+        var item = el('button', 'sub');
+        item.type = 'button';
+        item.setAttribute('role', 'menuitem');
+        item.appendChild(document.createTextNode(option.label));
+        item.addEventListener('click', function () {
+          closeMenus(false);
+          sender.send({ kind: 'view', view: option.id });
+        });
+        list.appendChild(item);
+      });
+      menu.appendChild(head);
+      menu.appendChild(list);
+    });
   }
 
   function attentionOn(list, id) {
@@ -1460,7 +1489,8 @@
   function menuButtons(menu) {
     var list = [];
     var nodes = menu.getElementsByTagName('button');
-    for (var i = 0; i < nodes.length; i++) list.push(nodes[i]);
+    // A closed render list's views are not in the way of the arrow keys.
+    for (var i = 0; i < nodes.length; i++) if (!(nodes[i].parentNode && nodes[i].parentNode.hidden)) list.push(nodes[i]);
     return list;
   }
 

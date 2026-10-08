@@ -5,26 +5,31 @@ using System.Linq;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Forsk Interior, the look of a Jump inside view (Julian, 2026-10-08): Rhino's
-/// Rendered mode with the materials on, subtle shadows, and no curves, points,
-/// text, lights, grid or edges. The room-type pastel stays off it, the hidden roof is drawn
-/// as a ceiling, and the look comes back when its named view is restored
-/// (Rhino 7 named views keep no display mode). No RhinoCommon.
+/// Forsk Interior and Forsk Exterior, the looks of an Interior render and an
+/// Exterior render (Julian, 2026-10-08): Rhino's Rendered mode with the
+/// materials on, subtle shadows, and no curves, points, text, lights, grid or
+/// edges. The room-type pastel stays off them. The hidden roof is drawn: as a
+/// plaster ceiling inside, as the roof outside. The look comes back when the
+/// saved named view is restored (Rhino 7 named views keep no display mode).
+/// No RhinoCommon.
 /// </summary>
 public static class ForskInterior
 {
     public const string ModeName = "Forsk Interior";
+    public const string ExteriorModeName = "Forsk Exterior";
     public const string RenderedName = "Rendered";
     public const string RaytracedName = "Raytraced";
 
-    /// <summary>Document string: the named views Jump inside saved, one per line.</summary>
+    /// <summary>Document string: the named views Interior render saved, one per line.</summary>
     public const string ViewsKey = "forsk:interior_views";
+    /// <summary>Document string: the named views Exterior render saved, one per line.</summary>
+    public const string ExteriorViewsKey = "forsk:exterior_views";
 
     /// <summary>A restored camera is the saved one within this distance, in mm.</summary>
     public const double SameCameraMm = 1.0;
 
     /// <summary>
-    /// The layers Jump inside gives a material when they have none, and the
+    /// The layers a render gives a material when they have none, and the
     /// preset: loose furniture is wood, fixed fittings white, stairs wood.
     /// Walls (plaster), floors (concrete), doors and windows (wood, glass)
     /// already get theirs when they are made.
@@ -38,6 +43,8 @@ public static class ForskInterior
 
     /// <summary>The ceiling drawn from the hidden roof: a warm white plaster.</summary>
     public static readonly (int R, int G, int B) Ceiling = (238, 235, 230);
+    /// <summary>The hidden roof seen from outside: A-ROOF's own dark grey.</summary>
+    public static readonly (int R, int G, int B) Roof = (70, 72, 76);
 
     /// <summary>
     /// 1: the import from a patched Rendered export, with subtle shadows
@@ -60,11 +67,14 @@ public static class ForskInterior
     public static bool NeedsReimport(int storedRevision) => storedRevision < ModeRevision;
 
     /// <summary>A Rendered export as Forsk Interior. A key the export lacks stays absent.</summary>
-    public static string Patch(string exported) => ForskWhite.PatchWith(exported, Rules);
+    public static string Patch(string exported) => ForskWhite.PatchWith(exported, Rules(ModeName));
 
-    static readonly Dictionary<string, ForskWhite.Rule> Rules = ForskWhite.RuleMap(new[]
+    /// <summary>The same look as Forsk Exterior, its own mode so a view can say which it is.</summary>
+    public static string PatchExterior(string exported) => ForskWhite.PatchWith(exported, Rules(ExteriorModeName));
+
+    static Dictionary<string, ForskWhite.Rule> Rules(string name) => ForskWhite.RuleMap(new[]
     {
-        ForskWhite.Text("", "Name", ModeName),
+        ForskWhite.Text("", "Name", name),
         ForskWhite.Bool("Objects\\Curves", "ShowCurves", false),
         ForskWhite.Bool("Objects\\Points", "ShowPoints", false),
         ForskWhite.Bool("Objects\\Annotations", "ShowText", false),
@@ -88,15 +98,20 @@ public static class ForskInterior
         ForskWhite.Int("Lighting", "TransparencyTolerance", ShadowTransparency),
     });
 
-    /// <summary>A mode that shows materials as they are: Forsk Interior, Rendered, Raytraced.</summary>
+    /// <summary>A mode that shows materials as they are: Forsk Interior, Forsk Exterior, Rendered, Raytraced.</summary>
     public static bool IsRealistic(string modeName)
     {
-        return string.Equals(modeName, ModeName, StringComparison.Ordinal)
+        return IsRenderMode(modeName)
             || string.Equals(modeName, RenderedName, StringComparison.Ordinal)
             || string.Equals(modeName, RaytracedName, StringComparison.Ordinal);
     }
 
     public static bool IsMode(string modeName) => string.Equals(modeName, ModeName, StringComparison.Ordinal);
+
+    public static bool IsExteriorMode(string modeName) => string.Equals(modeName, ExteriorModeName, StringComparison.Ordinal);
+
+    /// <summary>Forsk Interior or Forsk Exterior: a render's look, which Forsk White leaves alone.</summary>
+    public static bool IsRenderMode(string modeName) => IsMode(modeName) || IsExteriorMode(modeName);
 
     /// <summary>The stored view names, in order, without blanks or repeats (case ignored).</summary>
     public static List<string> Views(string stored)

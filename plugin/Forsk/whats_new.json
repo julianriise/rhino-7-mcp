@@ -8,19 +8,14 @@
       "icon": "activity"
     },
     {
-      "title": "View picker",
-      "how": "Tap the cube at the top left of the Forsk window for Perspective, Plan or an elevation.",
-      "icon": "box"
-    },
-    {
-      "title": "Jump inside",
-      "how": "Click a room's floor, then More actions → Jump inside. The view shows the materials and is saved after the room.",
+      "title": "Interior and exterior render",
+      "how": "Click a room's floor, then More actions → Interior render; or More actions → Exterior render. Pick north, east, south or west, then Confirm.",
       "icon": "camera"
     },
     {
-      "title": "Saved options",
-      "how": "Analyses menu → Options: save the model as option A, B, …, then compare or restore it.",
-      "icon": "git-compare"
+      "title": "Render views in the view picker",
+      "how": "Tap the cube at the top left: Interior and Exterior list your saved renders, one click shows one.",
+      "icon": "box"
     }
   ]
 }

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "exterior_render.json",
+  "title": "ExteriorRender Command",
+  "description": "Exterior render: the Perspective view stands outside and looks straight at the building from the north, east, south or west (north by default; from the north it looks south at the north facade), level at eye height (1.6 m) with a 24 mm lens, far enough back that the facade and the roof fit. Forsk Exterior look: materials, soft shadows, the roof shown. Saved as the named view Exterior north (and so on), replaced when asked again.",
+  "type": "object",
+  "properties": {
+    "direction": {
+      "type": "string",
+      "enum": [
+        "north",
+        "east",
+        "south",
+        "west"
+      ],
+      "description": "The side the camera stands on, looking at that facade. Default north."
+    },
+    "save": {
+      "type": "boolean",
+      "description": "false: show the shot without saving the named view (the window tries a direction). Default true."
+    }
+  },
+  "additionalProperties": false
+}

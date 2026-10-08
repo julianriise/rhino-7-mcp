@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using Rhino;
 using Rhino.Display;
 using Rhino.DocObjects;
@@ -9,10 +10,11 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Forsk Interior on the views Jump inside makes (ForskInterior): Rendered
-/// with subtle shadows and the lines off, a ceiling drawn from the hidden roof, and the
-/// look put back when a saved interior view is restored, since a Rhino 7
-/// named view keeps no display mode.
+/// The render looks on the views Interior render and Exterior render make
+/// (ForskInterior): Rendered with subtle shadows and the lines off, the hidden
+/// roof drawn (a ceiling inside, the roof outside), and the look put back when
+/// a saved render view is restored, since a Rhino 7 named view keeps no
+/// display mode. The view picker lists the saved views and shows one (Show).
 /// </summary>
 internal static class ForskInteriorHost
 {
@@ -20,7 +22,8 @@ internal static class ForskInteriorHost
     static readonly EventHandler<ViewEventArgs> Modified = (_, args) => OnModified(args?.View);
     static readonly EventHandler<RhinoObjectEventArgs> Changed = (_, __) => _conduit?.Drop();
     static readonly EventHandler<RhinoReplaceObjectEventArgs> Replaced = (_, __) => _conduit?.Drop();
-    static readonly HashSet<Guid> Pending = new HashSet<Guid>();
+    /// <summary>Viewports waiting for a look on the next idle, and whether it is the exterior one.</summary>
+    static readonly Dictionary<Guid, bool> Pending = new Dictionary<Guid, bool>();
 
     internal static void Start()
     {
@@ -43,43 +46,47 @@ internal static class ForskInteriorHost
         _conduit = null;
     }
 
-    const string RevisionKey = "ForskInteriorRevision";
-    static int _sessionRevision;
+    static readonly Dictionary<string, int> SessionRevision = new Dictionary<string, int>();
 
     /// <summary>
-    /// Forsk Interior, imported from a patched Rendered export (ForskInterior.Patch);
-    /// an earlier revision is replaced. Rendered itself if the import fails.
+    /// Forsk Interior (or Forsk Exterior), imported from a patched Rendered
+    /// export; an earlier revision is replaced. Rendered itself if the import fails.
     /// </summary>
-    internal static DisplayModeDescription Ensure()
+    internal static DisplayModeDescription Ensure(bool exterior = false)
     {
-        var existing = ForskWhiteHost.Find(ForskInterior.ModeName);
-        if (existing != null && !ForskInterior.NeedsReimport(StoredRevision())) return existing;
-        if (ForskWhiteHost.Import(ForskInterior.ModeName, ForskInterior.Patch, DisplayModeDescription.RenderedId))
-            StoreRevision();
-        return ForskWhiteHost.Find(ForskInterior.ModeName)
+        var name = exterior ? ForskInterior.ExteriorModeName : ForskInterior.ModeName;
+        var existing = ForskWhiteHost.Find(name);
+        if (existing != null && !ForskInterior.NeedsReimport(StoredRevision(name))) return existing;
+        Func<string, string> patch = exterior ? ForskInterior.PatchExterior : (Func<string, string>)ForskInterior.Patch;
+        if (ForskWhiteHost.Import(name, patch, DisplayModeDescription.RenderedId))
+            StoreRevision(name);
+        return ForskWhiteHost.Find(name)
             ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.RenderedId);
     }
 
-    static int StoredRevision()
+    /// <summary>"ForskInteriorRevision", "ForskExteriorRevision".</summary>
+    static string RevisionKey(string name) => name.Replace(" ", "") + "Revision";
+
+    static int StoredRevision(string name)
     {
-        if (_sessionRevision >= ForskInterior.ModeRevision) return _sessionRevision;
+        if (SessionRevision.TryGetValue(name, out var seen) && seen >= ForskInterior.ModeRevision) return seen;
         var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
         if (settings == null) return 0;
-        try { return settings.GetInteger(RevisionKey, 0); }
+        try { return settings.GetInteger(RevisionKey(name), 0); }
         catch (Exception) { return 0; }
     }
 
-    static void StoreRevision()
+    static void StoreRevision(string name)
     {
-        _sessionRevision = ForskInterior.ModeRevision;
+        SessionRevision[name] = ForskInterior.ModeRevision;
         var settings = global::RhinoMCPPlugin.RhinoMCPPlugin.Instance?.Settings;
         if (settings == null) return;
-        try { settings.SetInteger(RevisionKey, ForskInterior.ModeRevision); }
+        try { settings.SetInteger(RevisionKey(name), ForskInterior.ModeRevision); }
         catch (Exception) { }
     }
 
     /// <summary>
-    /// A perspective view whose camera is a saved interior view's takes the
+    /// A perspective view whose camera is a saved render view's takes that
     /// look on the next idle: Rhino is still restoring the view when this fires.
     /// </summary>
     static void OnModified(RhinoView view)
@@ -88,13 +95,17 @@ internal static class ForskInteriorHost
         {
             var doc = view?.Document;
             if (doc == null || view is RhinoPageView) return;
-            var stored = doc.Strings.GetValue(ForskInterior.ViewsKey);
-            if (string.IsNullOrEmpty(stored)) return;
             var vp = view.ActiveViewport;
-            if (vp == null || !vp.IsPerspectiveProjection || ForskInterior.IsMode(vp.DisplayMode?.EnglishName)) return;
-            if (!IsSavedInterior(doc, stored, vp)) return;
-            if (Pending.Count == 0) RhinoApp.Idle += ApplyPending;
-            Pending.Add(vp.Id);
+            if (vp == null || !vp.IsPerspectiveProjection) return;
+            foreach (var exterior in new[] { false, true })
+            {
+                var stored = doc.Strings.GetValue(KeyOf(exterior));
+                if (string.IsNullOrEmpty(stored)) continue;
+                if (IsLook(vp, exterior) || !IsSaved(doc, stored, vp)) continue;
+                if (Pending.Count == 0) RhinoApp.Idle += ApplyPending;
+                Pending[vp.Id] = exterior;
+                return;
+            }
         }
         catch (Exception)
         {
@@ -102,7 +113,15 @@ internal static class ForskInteriorHost
         }
     }
 
-    static bool IsSavedInterior(RhinoDoc doc, string stored, RhinoViewport vp)
+    static string KeyOf(bool exterior) => exterior ? ForskInterior.ExteriorViewsKey : ForskInterior.ViewsKey;
+
+    static bool IsLook(RhinoViewport vp, bool exterior)
+    {
+        var name = vp?.DisplayMode?.EnglishName;
+        return exterior ? ForskInterior.IsExteriorMode(name) : ForskInterior.IsMode(name);
+    }
+
+    static bool IsSaved(RhinoDoc doc, string stored, RhinoViewport vp)
     {
         var eye = Xyz(vp.CameraLocation);
         var target = Xyz(vp.CameraTarget);
@@ -120,41 +139,74 @@ internal static class ForskInteriorHost
     static void ApplyPending(object sender, EventArgs e)
     {
         RhinoApp.Idle -= ApplyPending;
-        var ids = new List<Guid>(Pending);
+        var pending = new Dictionary<Guid, bool>(Pending);
         Pending.Clear();
         var doc = RhinoDoc.ActiveDoc;
         if (doc == null) return;
-        var mode = Ensure();
-        if (mode == null) return;
         foreach (var view in doc.Views.GetViewList(true, false))
         {
             var vp = view?.ActiveViewport;
-            if (vp == null || !ids.Contains(vp.Id) || ForskInterior.IsMode(vp.DisplayMode?.EnglishName)) continue;
+            if (vp == null || !pending.TryGetValue(vp.Id, out var exterior) || IsLook(vp, exterior)) continue;
+            var mode = Ensure(exterior);
+            if (mode == null) continue;
             vp.DisplayMode = mode;
             view.Redraw();
         }
     }
 
-    /// <summary>Adds a named view Jump inside saved to the document's interior views.</summary>
-    internal static void Remember(RhinoDoc doc, string viewName)
+    /// <summary>Adds a named view a render saved to the document's interior (or exterior) views.</summary>
+    internal static void Remember(RhinoDoc doc, string viewName, bool exterior = false)
     {
         if (doc == null || string.IsNullOrWhiteSpace(viewName)) return;
-        var stored = doc.Strings.GetValue(ForskInterior.ViewsKey);
+        var stored = doc.Strings.GetValue(KeyOf(exterior));
         var next = ForskInterior.AddView(stored, viewName);
-        if (next != stored) doc.Strings.SetString(ForskInterior.ViewsKey, next);
+        if (next != stored) doc.Strings.SetString(KeyOf(exterior), next);
+    }
+
+    /// <summary>The saved interior (or exterior) render views that still exist, in the order they were made.</summary>
+    internal static List<string> Views(RhinoDoc doc, bool exterior)
+    {
+        var names = new List<string>();
+        if (doc == null) return names;
+        foreach (var name in ForskInterior.Views(doc.Strings.GetValue(KeyOf(exterior))))
+            if (doc.NamedViews.FindByName(name) >= 0) names.Add(name);
+        return names;
+    }
+
+    /// <summary>
+    /// The view picker: the active model view (else a perspective one) takes the
+    /// saved render view and its look. The reason when it cannot, else null.
+    /// </summary>
+    internal static string Show(RhinoDoc doc, string viewName, bool exterior)
+    {
+        if (doc == null) return "No file open.";
+        var index = doc.NamedViews.FindByName(viewName);
+        if (index < 0) return "There is no saved view called " + viewName + ".";
+        var view = doc.Views.ActiveView;
+        if (view == null || view is RhinoPageView)
+            view = doc.Views.GetViewList(true, false).FirstOrDefault(v => v.ActiveViewport.IsPerspectiveProjection);
+        if (view == null) return "No model view to show it in.";
+        var vp = view.ActiveViewport;
+        if (!doc.NamedViews.Restore(index, vp)) return "The view did not change.";
+        vp.DisplayMode = Ensure(exterior);
+        doc.Views.ActiveView = view;
+        view.Redraw();
+        return null;
     }
 
     static double[] Xyz(Point3d p) => new[] { p.X, p.Y, p.Z };
 
     /// <summary>
-    /// The ceiling: A-ROOF is hidden by default, so an interior view would look
-    /// up into the sky. In a Forsk Interior view, the hidden roof is drawn in
-    /// plaster white. A visible roof draws itself.
+    /// The hidden roof: A-ROOF is hidden by default, so an interior view would
+    /// look up into the sky and an exterior one at a house with no roof. In a
+    /// render view the hidden roof is drawn: plaster white as the ceiling inside,
+    /// the roof's dark grey outside. A visible roof draws itself.
     /// </summary>
     sealed class CeilingConduit : DisplayConduit
     {
         readonly List<Mesh> _meshes = new List<Mesh>();
         readonly DisplayMaterial _plaster = new DisplayMaterial(Color.FromArgb(ForskInterior.Ceiling.R, ForskInterior.Ceiling.G, ForskInterior.Ceiling.B));
+        readonly DisplayMaterial _roof = new DisplayMaterial(Color.FromArgb(ForskInterior.Roof.R, ForskInterior.Roof.G, ForskInterior.Roof.B));
         uint _serial;
         bool _ready;
 
@@ -171,16 +223,18 @@ internal static class ForskInteriorHost
             {
                 var viewport = args?.Viewport;
                 var doc = args?.RhinoDoc;
-                if (doc == null || viewport == null || !ForskInterior.IsMode(viewport.DisplayMode?.EnglishName)) return;
+                var look = viewport?.DisplayMode?.EnglishName;
+                if (doc == null || viewport == null || !ForskInterior.IsRenderMode(look)) return;
                 var roof = doc.Layers.FindName("A-ROOF");
                 if (roof == null || roof.IsDeleted || roof.IsVisible) return;
                 Ensure(doc, roof);
+                var material = ForskInterior.IsExteriorMode(look) ? _roof : _plaster;
                 foreach (var mesh in _meshes)
-                    args.Display.DrawMeshShaded(mesh, _plaster);
+                    args.Display.DrawMeshShaded(mesh, material);
             }
             catch (Exception)
             {
-                // A draw failure leaves the view without a ceiling. The next change rebuilds it.
+                // A draw failure leaves the view without the roof. The next change rebuilds it.
             }
         }
 

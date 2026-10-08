@@ -195,6 +195,9 @@ namespace RhinoMCPPlugin.Forsk
         public List<string> Options = new List<string>();
         /// <summary>The view picker's view the active viewport shows (ViewPicker.Current), or null. The window sets it on every read.</summary>
         public string View;
+        /// <summary>The saved Interior and Exterior render views, for the view picker's lists. The window sets them with View.</summary>
+        public List<string> InteriorViews = new List<string>();
+        public List<string> ExteriorViews = new List<string>();
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
         public bool GuideOff;
         /// <summary>A newer Forsk on forsk.app (Settings → Update available), or null.</summary>

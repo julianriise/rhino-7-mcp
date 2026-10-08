@@ -74,6 +74,7 @@
             "delete_furniture",
             "furnish_room",
             "jump_inside",
+            "exterior_render",
             "show_view",
             "save_option",
             "compare_option",

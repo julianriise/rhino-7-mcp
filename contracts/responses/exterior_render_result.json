@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "exterior_render_result.json",
+  "title": "ExteriorRenderResult",
+  "type": "object",
+  "properties": {
+    "view": {
+      "type": "string"
+    },
+    "eye": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "target": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "lens_mm": {
+      "type": "number"
+    },
+    "message": {
+      "type": "string"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "north",
+        "east",
+        "south",
+        "west"
+      ]
+    },
+    "saved": {
+      "type": "boolean"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "The saved named view is the viewport's current view."
+    },
+    "look": {
+      "type": "string",
+      "description": "The viewport's display mode: Forsk Exterior."
+    }
+  },
+  "required": [
+    "view",
+    "eye",
+    "target",
+    "lens_mm",
+    "direction",
+    "message"
+  ]
+}
