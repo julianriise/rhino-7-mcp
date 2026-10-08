@@ -72,6 +72,19 @@ public class ForskInteriorTests
     }
 
     [Fact]
+    public void TheImport_TakesAFreshId_EverySectionAlike_AndKeepsWhatItDerivesFrom()
+    {
+        var ini = "[DisplayMode\\0a55df40-e595-43d0-8a4b-45ce93bb771d]\nDerivedFrom=cae60bae-2d51-4299-abf7-a339fca86f3b\n"
+            + "[DisplayMode\\0a55df40-e595-43d0-8a4b-45ce93bb771d\\Lighting]\nCastShadows=y\n";
+        var id = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var fresh = ForskInterior.WithFreshId(ini, id);
+        Assert.DoesNotContain("0a55df40", fresh);
+        Assert.Equal(2, fresh.Split("11111111-2222-3333-4444-555555555555").Length - 1);
+        Assert.Contains("DerivedFrom=cae60bae-2d51-4299-abf7-a339fca86f3b", fresh);
+        Assert.Equal("no sections", ForskInterior.WithFreshId("no sections", id));
+    }
+
+    [Fact]
     public void TheFirstCut_IsReplacedByTheShadowedMode()
     {
         Assert.Equal(1, ForskInterior.ModeRevision);

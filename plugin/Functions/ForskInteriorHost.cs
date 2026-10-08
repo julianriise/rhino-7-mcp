@@ -33,33 +33,6 @@ internal static class ForskInteriorHost
         RhinoDoc.AddRhinoObject += Changed;
         RhinoDoc.DeleteRhinoObject += Changed;
         RhinoDoc.ReplaceRhinoObject += Replaced;
-        // Both looks are made as Forsk loads. A look made in a running Rhino draws lines
-        // across its surfaces and no shadows until Rhino restarts; one Rhino loads at start
-        // draws right (Julian's 1.3.0 test, 2026-10-08). So the first Rhino start after an
-        // install makes them, the next start has them, and the first render says so once.
-        try
-        {
-            Ensure(false);
-            Ensure(true);
-        }
-        catch (Exception)
-        {
-            // A render makes its look when it needs it.
-        }
-    }
-
-    static bool _madeThisSession;
-    static bool _restartNoted;
-
-    /// <summary>
-    /// True once per Rhino session when a render look was made in it: the first
-    /// render then says to restart Rhino once to see the look cleanly.
-    /// </summary>
-    internal static bool TakeRestartNote()
-    {
-        if (!_madeThisSession || _restartNoted) return false;
-        _restartNoted = true;
-        return true;
     }
 
     internal static void Stop()
@@ -84,12 +57,10 @@ internal static class ForskInteriorHost
         var name = exterior ? ForskInterior.ExteriorModeName : ForskInterior.ModeName;
         var existing = ForskWhiteHost.Find(name);
         if (existing != null && !ForskInterior.NeedsReimport(StoredRevision(name))) return existing;
-        Func<string, string> patch = exterior ? ForskInterior.PatchExterior : (Func<string, string>)ForskInterior.Patch;
+        Func<string, string> look = exterior ? ForskInterior.PatchExterior : (Func<string, string>)ForskInterior.Patch;
+        Func<string, string> patch = text => ForskInterior.WithFreshId(look(text), Guid.NewGuid());
         if (ForskWhiteHost.Import(name, patch, DisplayModeDescription.RenderedId))
-        {
             StoreRevision(name);
-            _madeThisSession = true;
-        }
         return ForskWhiteHost.Find(name)
             ?? DisplayModeDescription.GetDisplayMode(DisplayModeDescription.RenderedId);
     }

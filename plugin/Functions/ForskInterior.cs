@@ -68,6 +68,18 @@ public static class ForskInterior
     /// <summary>A stored revision below <see cref="ModeRevision"/> is an older mode.</summary>
     public static bool NeedsReimport(int storedRevision) => storedRevision < ModeRevision;
 
+    /// <summary>
+    /// The export under a new id. The export is of a copy Forsk deletes before the
+    /// import; imported under that same id, Rhino keeps drawing its cached entry
+    /// for it, plain Rendered with lines across every surface and no shadows,
+    /// until it restarts (Julian's 1.3.0 test, 2026-10-08). A fresh id draws right.
+    /// </summary>
+    public static string WithFreshId(string ini, Guid id)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(ini ?? "", @"\[DisplayMode\\([0-9A-Fa-f-]{36})");
+        return match.Success ? ini.Replace(match.Groups[1].Value, id.ToString()) : ini;
+    }
+
     /// <summary>A Rendered export as Forsk Interior. A key the export lacks stays absent.</summary>
     public static string Patch(string exported) => ForskWhite.PatchWith(exported, Rules(ModeName));
 
