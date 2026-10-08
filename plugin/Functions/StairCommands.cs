@@ -42,6 +42,7 @@ public partial class RhinoMCPFunctions
         var where = PlaceStair(doc, parameters, spec, flight, tol);
 
         var layer = EnsureLayer(doc, Stairs.LayerName, Color.FromArgb(160, 140, 120));
+        InteriorMaterials(doc);
         var solid = StairSolid(spec, flight, tol)
             ?? throw new InvalidOperationException("Could not build the stair solid.");
         var forskId = Stairs.NextId(StairObjects(doc).Select(o => o.Attributes.GetUserString("forsk:id")));

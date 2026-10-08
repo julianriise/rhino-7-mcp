@@ -66,11 +66,12 @@ public static class ForskWhite
     /// <summary>
     /// On: a model view that is not already on its target (Forsk White, or
     /// Forsk Technical for a plan or an elevation). Off: only a model view
-    /// still on a Forsk mode, so a Rendered view is left where it was.
+    /// still on a Forsk mode, so a Rendered view is left where it was. A Jump
+    /// inside view keeps Forsk Interior either way.
     /// </summary>
     public static bool NeedsAssign(bool polishOn, string currentModeName, string targetModeName, string rhinoTypeName)
     {
-        if (!AssignsDisplayMode(rhinoTypeName)) return false;
+        if (!AssignsDisplayMode(rhinoTypeName) || ForskInterior.IsMode(currentModeName)) return false;
         if (!polishOn) return IsForskMode(currentModeName);
         return !string.Equals(currentModeName, targetModeName, StringComparison.Ordinal);
     }

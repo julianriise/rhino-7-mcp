@@ -297,6 +297,7 @@ public partial class RhinoMCPFunctions
         var tol = Math.Max(doc.ModelAbsoluteTolerance, 0.01);
         var model = Furniture.Generate(piece);
         var partLayer = EnsureLayer(doc, Furniture.LayerFor(piece), FurnitureColour(piece));
+        InteriorMaterials(doc);
         var playLayer = EnsureLayer(doc, Furniture.PlayLayerName, Color.FromArgb(230, 120, 40));
         if (playLayer.IsVisible)
         {

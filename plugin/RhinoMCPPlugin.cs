@@ -28,6 +28,7 @@ namespace RhinoMCPPlugin
             Functions.ForskChromeHost.Start();
             Functions.ForskWallHatchHost.Start();
             Functions.RoomTypeColorHost.Start();
+            Functions.ForskInteriorHost.Start();
             ForskSupportHttp.RetryOnStartup();
             ForskUpdate.CheckOnStartup();
             ForskWhatsNewGate.Prepare();
@@ -36,6 +37,7 @@ namespace RhinoMCPPlugin
 
         protected override void OnShutdown()
         {
+            Functions.ForskInteriorHost.Stop();
             Functions.RoomTypeColorHost.Stop();
             Functions.ForskWallHatchHost.Stop();
             Functions.ForskChromeHost.Stop();

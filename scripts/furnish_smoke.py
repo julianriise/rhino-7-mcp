@@ -21,12 +21,36 @@ import json
 import os
 import socket
 import sys
+import time
 from pathlib import Path
 
 HOST = os.getenv("RHINO_MCP_HOST", "127.0.0.1")
 PORT = int(os.getenv("RHINO_MCP_PORT", "1999"))
 TIMEOUT = float(os.getenv("RHINO_MCP_TIMEOUT", "600"))
 PDF_PATH = Path("/tmp/forsk-f5-first-run-furnished.pdf")
+INTERIOR_PNG = Path("/tmp/forsk-smoke-first-run-interior-1000.png")
+
+# The furniture layer's material, and the active view captured as it shows.
+INTERIOR_LOOK = """
+import scriptcontext as sc, System
+layer = sc.doc.Layers.FindName("A-FURN")
+material = layer.RenderMaterial.Name if layer and layer.RenderMaterial else "none"
+listed = %r in (sc.doc.Strings.GetValue("forsk:interior_views") or "")
+view = sc.doc.Views.ActiveView
+# With the mode's own attributes: a size-only capture of a derived mode draws Forsk White on the Mac.
+view.CaptureToBitmap(System.Drawing.Size(1000, 700), view.ActiveViewport.DisplayMode.DisplayAttributes).Save(%r)
+print("furniture %%s, listed %%s" %% (material, listed))
+"""
+
+# Forsk White on the view, then Rhino's own restore of the saved interior view.
+INTERIOR_RESTORE = """
+import scriptcontext as sc, Rhino
+vp = sc.doc.Views.ActiveView.ActiveViewport
+white = Rhino.Display.DisplayModeDescription.FindByName("Forsk White")
+vp.DisplayMode = white or Rhino.Display.DisplayModeDescription.GetDisplayMode(Rhino.Display.DisplayModeDescription.ShadedId)
+sc.doc.NamedViews.Restore(sc.doc.NamedViews.FindByName(%r), vp)
+sc.doc.Views.ActiveView.Redraw()
+"""
 
 
 SHOWING = """
@@ -140,6 +164,18 @@ def run(send, pdf_path: Path = PDF_PATH) -> tuple[list[str], bool]:
     named = send("execute_rhinoscript_python_code", {"code": "import scriptcontext as sc\nprint(sc.doc.NamedViews.FindByName(%r) >= 0)" % str(inside.get("view"))})
     if not inside.get("view") or inside.get("direction") != "east" or str(named.get("output", "")).strip() != "True" or inside.get("active") is not True:
         fail(f"jump inside: {inside.get('message')}")
+    # Forsk Interior: the materials, a captured 1000 px look, and the look back when the named view is restored.
+    look = send("execute_rhinoscript_python_code", {"code": INTERIOR_LOOK % (str(inside.get("view")), str(INTERIOR_PNG))})
+    send("execute_rhinoscript_python_code", {"code": INTERIOR_RESTORE % str(inside.get("view"))})
+    time.sleep(1)
+    back = send("execute_rhinoscript_python_code", {"code": "import scriptcontext as sc\nprint(sc.doc.Views.ActiveView.ActiveViewport.DisplayMode.EnglishName)"})
+    look_out = str(look.get("output", "")).strip()
+    back_out = str(back.get("output", "")).strip()
+    lines.append(f"interior look: {inside.get('look')} · {look_out} · after restore {back_out}")
+    if inside.get("look") != "Forsk Interior" or "furniture M-WOOD" not in look_out or back_out != "Forsk Interior":
+        fail("jump inside is not in Forsk Interior with materials")
+    if INTERIOR_PNG.is_file():
+        lines.append(f"  {INTERIOR_PNG}")
     # The window's direction card tries a shot without saving it.
     count = "import scriptcontext as sc\nprint(sc.doc.NamedViews.Count)"
     before = str(send("execute_rhinoscript_python_code", {"code": count}).get("output", "")).strip()

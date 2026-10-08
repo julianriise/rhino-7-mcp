@@ -10,7 +10,8 @@ namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
 /// Flat pastel on each room plate, in the perspective view only.
-/// A plan or an elevation stays the line drawing. Off draws nothing,
+/// A plan or an elevation stays the line drawing, and a Jump inside view
+/// (Forsk Interior) shows the floor's material. Off draws nothing,
 /// so the perspective view stays Forsk White. No material and no lights:
 /// the mesh is drawn with its vertex colour.
 /// </summary>
@@ -84,7 +85,7 @@ internal static class RoomTypeColorHost
                 var display = args?.Display;
                 if (doc == null || viewport == null || display == null) return;
                 var dir = viewport.CameraDirection;
-                if (!RoomTypes.ShowInView(Enabled(), viewport.IsParallelProjection, dir.X, dir.Y, dir.Z)) return;
+                if (!RoomTypes.ShowInView(Enabled(), viewport.IsParallelProjection, dir.X, dir.Y, dir.Z, viewport.DisplayMode?.EnglishName)) return;
                 Ensure(doc);
                 foreach (var mesh in _meshes)
                     display.DrawMeshFalseColors(mesh);

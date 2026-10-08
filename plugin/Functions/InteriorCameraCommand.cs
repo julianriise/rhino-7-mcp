@@ -10,8 +10,8 @@ namespace RhinoMCPPlugin.Functions;
 /// <summary>
 /// jump_inside: the Perspective view moves into a room (InteriorCamera),
 /// looking north, east, south or west (north by default), level at 1.2 m
-/// above its floor with a 24 mm lens, and the shot is kept as a named view
-/// called after the room, replaced when asked again.
+/// above its floor with a 24 mm lens, in the Forsk Interior look, and the
+/// shot is kept as a named view called after the room, replaced when asked again.
 /// </summary>
 public partial class RhinoMCPFunctions
 {
@@ -35,6 +35,10 @@ public partial class RhinoMCPFunctions
         var z = floor + InteriorCamera.EyeMm;
         vp.SetCameraLocations(new Point3d(shot.Target.X, shot.Target.Y, z), new Point3d(shot.Eye.X, shot.Eye.Y, z));
         vp.CameraUp = Vector3d.ZAxis;
+        // The materials as they are, not Forsk White's white with black lines (Julian, 2026-10-08).
+        InteriorMaterials(doc);
+        var look = ForskInteriorHost.Ensure();
+        if (look != null) vp.DisplayMode = look;
         doc.Views.ActiveView = view;
         view.Redraw();
 
@@ -49,6 +53,7 @@ public partial class RhinoMCPFunctions
             var index = doc.NamedViews.Add(name, vp.Id);
             // The saved view is the current one too, as Rhino's own Named Views restore makes it (Julian, 2026-10-07).
             active = index >= 0 && doc.NamedViews.Restore(index, vp);
+            if (index >= 0) ForskInteriorHost.Remember(doc, name);
         }
         return new JObject
         {
@@ -60,8 +65,24 @@ public partial class RhinoMCPFunctions
             ["direction"] = shot.From.Substring("looking ".Length),
             ["saved"] = save,
             ["active"] = active,
+            ["look"] = vp.DisplayMode?.EnglishName,
             ["message"] = "Perspective is inside " + RoomWords(room) + ", " + shot.From + " at 1.2 m"
                 + (save ? ", saved as the named view " + name + ". Orbit or walk to adjust before a render." : ".")
         };
+    }
+
+    /// <summary>
+    /// Furniture, fittings and stairs get a material when their layer has
+    /// none (ForskInterior.LayerMaterials), so an interior view is not white.
+    /// A material the user set stays.
+    /// </summary>
+    internal void InteriorMaterials(RhinoDoc doc)
+    {
+        foreach (var pair in ForskInterior.LayerMaterials)
+        {
+            var layer = FindLayerCaseInsensitive(doc, pair.Key);
+            if (layer == null || layer.RenderMaterial != null) continue;
+            ApplyLayerMaterialPreset(doc, layer.Name, pair.Value, ensureObjectsFromLayer: false, createLayerIfMissing: false);
+        }
     }
 }

@@ -282,11 +282,12 @@ public static class RoomTypes
 
     /// <summary>
     /// Perspective only. A parallel plan (looking down) or elevation (looking level)
-    /// stays a line drawing. Off means no colour in any view.
+    /// stays a line drawing, and a realistic look (Forsk Interior, Rendered,
+    /// Raytraced) shows the floor's material. Off means no colour in any view.
     /// </summary>
-    public static bool ShowInView(bool enabled, bool parallel, double dx, double dy, double dz)
+    public static bool ShowInView(bool enabled, bool parallel, double dx, double dy, double dz, string modeName = null)
     {
-        if (!enabled) return false;
+        if (!enabled || ForskInterior.IsRealistic(modeName)) return false;
         return ForskTechnical.Classify(parallel, dx, dy, dz) == ForskTechnical.Look.Model;
     }
 
