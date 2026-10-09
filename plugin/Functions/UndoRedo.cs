@@ -1,7 +1,5 @@
-using System;
 using Newtonsoft.Json.Linq;
 using Rhino;
-using Rhino.Commands;
 
 namespace RhinoMCPPlugin.Functions;
 
@@ -21,7 +19,7 @@ public partial class RhinoMCPFunctions
         int undoneCount = 0;
         for (int i = 0; i < steps; i++)
         {
-            if (RunUndoCommand(redo: false))
+            if (doc.Undo())
             {
                 undoneCount++;
             }
@@ -57,7 +55,7 @@ public partial class RhinoMCPFunctions
         int redoneCount = 0;
         for (int i = 0; i < steps; i++)
         {
-            if (RunUndoCommand(redo: true))
+            if (doc.Redo())
             {
                 redoneCount++;
             }
@@ -77,29 +75,5 @@ public partial class RhinoMCPFunctions
                 ? $"Redid {redoneCount} operation(s)"
                 : "Nothing to redo"
         };
-    }
-
-    /// <summary>
-    /// Undo or redo one step with Rhino's own command, as Cmd+Z does. RhinoDoc.Undo
-    /// outside a command left an undo record open, and after it Cmd+Z undid nothing.
-    /// True when Rhino undid (or redid) a record.
-    /// </summary>
-    public static bool RunUndoCommand(bool redo)
-    {
-        var done = false;
-        EventHandler<UndoRedoEventArgs> watch = (_, e) =>
-        {
-            if (redo ? e.IsBeginRedo : e.IsBeginUndo) done = true;
-        };
-        Command.UndoRedo += watch;
-        try
-        {
-            RhinoApp.RunScript(redo ? "_Redo" : "_Undo", false);
-        }
-        finally
-        {
-            Command.UndoRedo -= watch;
-        }
-        return done;
     }
 }
