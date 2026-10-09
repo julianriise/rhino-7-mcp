@@ -223,6 +223,15 @@ public partial class RhinoMCPFunctions
             throw new InvalidOperationException(failed + ex.Message, ex);
         }
         commit.HostId = rebuiltIds.TryGetValue(named, out var renamed) ? renamed : named;
+        // A wall that now runs on from another, or into it, merges with it in the same undo.
+        var merge = MergeWallsAround(doc, rebuiltIds.Values, tol);
+        if (merge.Sentence.Length > 0)
+        {
+            commit.HostId = merge.Follow(commit.HostId);
+            var after = doc.Objects.FindId(commit.HostId)?.Attributes?.GetUserString("forsk:id");
+            if (!string.IsNullOrEmpty(after)) commit.ForskId = after;
+            commit.Followed = string.IsNullOrEmpty(commit.Followed) ? merge.Sentence : commit.Followed + " " + merge.Sentence;
+        }
         return commit;
     }
 

@@ -558,7 +558,7 @@ public static class WallJoins
         return WallEdit.Group(loops).Count == 1;
     }
 
-    static bool BoxesMeet(List<Pt> a, List<Pt> b, double tol)
+    internal static bool BoxesMeet(List<Pt> a, List<Pt> b, double tol)
     {
         var x = Extent(a);
         var y = Extent(b);

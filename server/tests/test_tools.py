@@ -3327,6 +3327,46 @@ class TestSplitWallsTool:
         assert "destructiveHint=True" in tool.read_text()
 
 
+class TestMergeWallsTool:
+    """Merge walls: the wire carries only an id; merged and cut come back."""
+
+    @patch("rhinomcp.tools.merge_walls.get_rhino_connection")
+    def test_no_id_merges_around_the_selection_or_every_wall(self, mock_get_conn):
+        from rhinomcp.tools.merge_walls import merge_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {
+            "merged": [{"forsk_id": "w04", "took_in": ["w05"]}],
+            "cut": [],
+            "openings_moved": 1,
+            "ok": True,
+            "message": "Merged w05 into w04. 1 opening went with it.",
+        }
+        mock_get_conn.return_value = mock_conn
+        result = merge_walls(ctx=None)
+        mock_conn.send_command.assert_called_once_with("merge_walls", {})
+        assert result["success"] is True
+        assert result["merged"][0]["took_in"] == ["w05"]
+        assert result["openings_moved"] == 1
+
+    @patch("rhinomcp.tools.merge_walls.get_rhino_connection")
+    def test_id_passes_through(self, mock_get_conn):
+        from rhinomcp.tools.merge_walls import merge_walls
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"merged": [], "cut": ["w07"], "openings_moved": 0, "ok": True, "message": "m"}
+        mock_get_conn.return_value = mock_conn
+        result = merge_walls(ctx=None, id="g1")
+        assert mock_conn.send_command.call_args[0] == ("merge_walls", {"id": "g1"})
+        assert result["cut"] == ["w07"]
+
+    def test_marked_destructive(self):
+        from pathlib import Path
+
+        tool = Path(__file__).parent.parent / "src" / "rhinomcp" / "tools" / "merge_walls.py"
+        assert "destructiveHint=True" in tool.read_text()
+
+
 class TestRebuildHostWallTool:
     @patch("rhinomcp.tools.rebuild_host_wall.get_rhino_connection")
     def test_selection_omits_id(self, mock_get_conn):

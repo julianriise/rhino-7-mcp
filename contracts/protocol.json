@@ -68,6 +68,7 @@
             "delete_wall",
             "add_wall",
             "split_walls",
+            "merge_walls",
             "add_stair",
             "edit_stair",
             "delete_stair",

@@ -172,6 +172,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("wall.move", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
             new ForskAction("wall.drag", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount == 1),
             new ForskAction("wall.delete", Runs.Run, "group.model", f => f.Picked == Picked.Wall),
+            // Merge walls: two or more walls picked, those on one line or going into each other are cleaned up.
+            new ForskAction("wall.merge", Runs.Run, "group.model", f => f.Picked == Picked.Wall && f.PickedCount >= 2),
             // Draw tools: click the walls or the stair in the Top view.
             new ForskAction("wall.draw", Runs.Run, "group.model", f => true),
             new ForskAction("stair.draw", Runs.Run, "group.model", f => f.HasWalls),

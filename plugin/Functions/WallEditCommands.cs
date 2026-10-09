@@ -447,6 +447,19 @@ public partial class RhinoMCPFunctions
                 + FormatMm(Math.Round(Length(added))) + " mm long and " + FormatMm(Math.Round(height)) + " mm high. "
                 + followed;
         }
+        // A wall drawn on from another wall's end, or into it, merges with it.
+        if (Guid.TryParse(result["host_id"]?.ToString(), out var drawn))
+        {
+            var merge = MergeWallsAround(doc, new[] { drawn }, tol);
+            if (merge.Sentence.Length > 0)
+            {
+                var keeper = merge.Follow(drawn);
+                result["host_id"] = keeper.ToString();
+                result["forsk_id"] = doc.Objects.FindId(keeper)?.Attributes?.GetUserString("forsk:id") ?? result["forsk_id"];
+                result["merged"] = merge.Merged;
+                result["message"] = result["message"] + " " + merge.Sentence;
+            }
+        }
         doc.Views.Redraw();
         return result;
     }

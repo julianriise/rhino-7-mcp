@@ -296,6 +296,9 @@ namespace RhinoMCPPlugin.Forsk
                 case "wall.split":
                     Job(thread, action.Id, label, sink => sink.Tool("split_walls", new JObject()));
                     return;
+                case "wall.merge":
+                    Job(thread, action.Id, label, sink => sink.Tool("merge_walls", new JObject()));
+                    return;
                 case "wall.move":
                     // WF.4: Move is a drag, never a compass question. One run drags at once;
                     // a whole record asks for a click on the side to move first.

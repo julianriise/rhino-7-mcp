@@ -20,6 +20,18 @@
     "max_frame_mm": { "type": "number" },
     "markers": { "type": "array" },
     "joins": { "type": "array", "items": { "type": "string" }, "description": "A wall standing as its own record: the forsk ids of the records it shares ends with (F2)." },
+    "merged": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": { "type": "string" },
+          "took_in": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["forsk_id", "took_in"]
+      },
+      "description": "The new wall merged with a wall on its line: the wall that took it in keeps its id, and host_id and forsk_id name it."
+    },
     "ok": { "type": "boolean" },
     "message": { "type": "string" }
   },

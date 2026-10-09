@@ -79,6 +79,7 @@ namespace RhinoMCPPlugin.Forsk
                 case "plan.show":
                 case "plan.hide":
                 case "wall.split":
+                case "wall.merge":
                 case "wall.move":
                 case "wall.drag":
                 case "wall.draw":

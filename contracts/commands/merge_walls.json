@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "merge_walls.json",
+  "title": "MergeWalls Command",
+  "description": "Merge walls: walls end to end on one line, with the same thickness, height and level, merge into one record; walls that go into each other are cut apart where they meet, so each keeps its own run and id, or merged when that cut does not stand. What the walls cover, and so the rooms, floor and roof, stays the same. Openings move to the wall that holds them. Draw wall and every wall edit do this on their own; this tool cleans up walls made before. id omitted uses the selected walls, else every wall. One undo. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID: merge around that wall only. Omit to use the selected walls, else every wall."
+    }
+  },
+  "additionalProperties": false
+}

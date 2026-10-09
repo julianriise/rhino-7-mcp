@@ -202,6 +202,10 @@ public class RegistryTests
         Assert.Null(ForskPick.OneRunWall(two.Selected));
         Assert.DoesNotContain(ForskRegistry.Card(two).Actions, a => a.Id == "wall.drag");
         Assert.DoesNotContain(ForskRegistry.Bar(two).Slots, a => a.Id == "wall.drag");
+        // Merge walls is offered once two or more walls are picked.
+        Assert.Contains(ForskRegistry.Card(two).Actions, a => a.Id == "wall.merge");
+        Assert.DoesNotContain(ForskRegistry.Card(whole).Actions, a => a.Id == "wall.merge");
+        Assert.Equal("Merge walls", ForskText.Label("wall.merge"));
     }
 
     [Theory]

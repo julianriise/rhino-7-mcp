@@ -62,6 +62,7 @@ namespace RhinoMCPPlugin.Forsk
             "delete_wall",
             "add_wall",
             "split_walls",
+            "merge_walls",
             "room_push_pull",
             "add_stair",
             "edit_stair",
@@ -572,6 +573,12 @@ namespace RhinoMCPPlugin.Forsk
                     new JObject
                     {
                         ["id"] = Str("Wall GUID: split that record only. Omit to split every whole record.")
+                    }),
+                Fn("merge_walls",
+                    "Merge walls: walls end to end on one line, with the same thickness, height and level, become one wall; walls that go into each other are cut apart where they meet, so each keeps its own run and id, or become one wall when that does not work. What the walls cover stays the same, so rooms, the floor and the roof stay. Openings move to the wall that holds them. Draw wall and every wall edit do this on their own; this cleans up walls made before. One undo. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["id"] = Str("Wall GUID: merge around that wall only. Omit to use the selected walls, else every wall.")
                     }),
                 Fn("room_push_pull",
                     "Push or pull one side of a room: the wall run whose face is that side moves out (the room grows) or in, and the walls joined to it follow, as move_wall moves it. The room is id, else the one selected room. The receipt names the room and the walls that followed. Refused as move_wall refuses. Refuses X-EXIST.",

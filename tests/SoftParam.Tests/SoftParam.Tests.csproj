@@ -79,6 +79,7 @@
     <Compile Include="..\..\plugin\Functions\WallJoins.cs" Link="WallJoins.cs" />
     <Compile Include="..\..\plugin\Functions\WallFace.cs" Link="WallFace.cs" />
     <Compile Include="..\..\plugin\Functions\WallSplit.cs" Link="WallSplit.cs" />
+    <Compile Include="..\..\plugin\Functions\WallMerge.cs" Link="WallMerge.cs" />
     <Compile Include="..\..\plugin\Functions\WallFollowPlan.cs" Link="WallFollowPlan.cs" />
     <Compile Include="..\..\plugin\Functions\ExtrudeSide.cs" Link="ExtrudeSide.cs" />
     <Compile Include="..\..\plugin\Functions\DxfText.cs" Link="DxfText.cs" />

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "merge_walls_result.json",
+  "title": "MergeWallsResult",
+  "description": "The walls merged into one, and the walls cut apart where they went into each other.",
+  "type": "object",
+  "properties": {
+    "merged": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "forsk_id": { "type": "string", "description": "The wall that took the others in; it keeps its id." },
+          "took_in": { "type": "array", "items": { "type": "string" }, "description": "The walls merged into it; they are gone." }
+        },
+        "required": ["forsk_id", "took_in"]
+      }
+    },
+    "cut": { "type": "array", "items": { "type": "string" }, "description": "Walls cut back where they went into another wall." },
+    "openings_moved": { "type": "integer" },
+    "ok": { "type": "boolean" },
+    "message": { "type": "string" }
+  },
+  "required": ["merged", "cut", "openings_moved", "ok", "message"]
+}
