@@ -568,6 +568,8 @@ namespace RhinoMCPPlugin.Forsk
             ["group.rooms"] = "Rooms",
             ["group.analyses"] = "Analyses",
             ["group.print"] = "Print and export",
+            ["group.chat"] = "Chat",
+            ["chat.clear"] = "Clear chat",
             ["options"] = "Options",
             ["analysis.menu"] = "Analyses menu",
             ["options.ask"] = "Options of this model, kept beside the saved file.",

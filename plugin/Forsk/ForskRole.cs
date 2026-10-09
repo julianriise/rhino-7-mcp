@@ -139,6 +139,8 @@ namespace RhinoMCPPlugin.Forsk
                 case "option.restore":
                 case "option.delete":
                     return ForskRole.Analyser;
+                case "chat.clear":
+                    return ForskRole.Support;
                 default:
                     return ForskRole.None;
             }

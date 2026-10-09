@@ -299,6 +299,19 @@ namespace RhinoMCPPlugin.Forsk
             return null;
         }
 
+        /// <summary>
+        /// Clear chat: no items and no chat-model memory, as a new file starts. The
+        /// file, its undo, options and the Properties panel are not touched.
+        /// </summary>
+        public void Clear()
+        {
+            Items.Clear();
+            History.Clear();
+            Prefill = null;
+            Busy = null;
+            Thinking = false;
+        }
+
         /// <summary>The page's model for this document.</summary>
         public JObject ToJson()
         {

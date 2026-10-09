@@ -150,7 +150,7 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         public static readonly IReadOnlyList<string> GroupOrder = new[]
         {
-            "group.start", "group.model", "group.rooms", "group.analyses", "group.print"
+            "group.start", "group.model", "group.rooms", "group.analyses", "group.print", "group.chat"
         };
 
         /// <summary>Groups with a home of their own, off the More actions sheet.</summary>
@@ -247,6 +247,8 @@ namespace RhinoMCPPlugin.Forsk
             new ForskAction("section.room", Runs.Run, "group.print", f => f.Picked == Picked.Room && f.PickedCount == 1),
             new ForskAction("section.remove", Runs.Card, "group.print", f => f.Sections > 0),
             new ForskAction("ink.set", Runs.Card, "group.settings", f => f.HasWalls),
+            // A clean slate (Julian, 2026-10-09): the thread and the chat model's memory go, the file stays.
+            new ForskAction("chat.clear", Runs.Run, "group.chat", f => true),
             new ForskAction("bridge.start", Runs.Card, "group.settings", f => !f.ListenerUp),
             new ForskAction("help.card", Runs.Card, null, f => true)
         };
@@ -345,6 +347,22 @@ namespace RhinoMCPPlugin.Forsk
             if (f.Kind == FileKind.Empty) yield return Find("file.sample");
             if (!f.HasWalls) yield return Find("file.draw");
             if (f.Picked == Picked.Loose) yield return Find("exist.mark");
+        }
+
+        /// <summary>"clear chat" (and "tøm chatten"): Clear chat, typed.</summary>
+        public static ForskAction ByChatPhrase(string text)
+        {
+            var typed = string.Join(" ", (text ?? "").Trim().TrimEnd('.', '!').ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+            switch (typed)
+            {
+                case "clear chat":
+                case "clear the chat":
+                case "tøm chat":
+                case "tøm chatten":
+                    return Find("chat.clear");
+                default:
+                    return null;
+            }
         }
 
         /// <summary>"draw a wall", "draw stairs": the draw tools by name, wherever they sit on the bar.</summary>

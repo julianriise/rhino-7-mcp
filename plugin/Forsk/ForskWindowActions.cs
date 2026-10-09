@@ -195,6 +195,12 @@ namespace RhinoMCPPlugin.Forsk
                 case "file.generate":
                     Job(thread, action.Id, label, sink => Bake(sink, false));
                     return;
+                case "chat.clear":
+                    _helpOpen = false;
+                    thread.Clear();
+                    Models.Persist(thread);
+                    Render();
+                    return;
                 case "file.rebuild":
                     Job(thread, action.Id, label, sink => Bake(sink, true));
                     return;
@@ -989,8 +995,8 @@ namespace RhinoMCPPlugin.Forsk
             var doc = RhinoDoc.ActiveDoc;
             if (thread == null || doc == null || string.IsNullOrWhiteSpace(text)) return;
             text = text.Trim();
-            // A slot's exact English label fires that slot; so does "draw a wall".
-            var hit = ForskRegistry.ByLabel(Drawn(doc), text) ?? ForskRegistry.ByDrawPhrase(text);
+            // A slot's exact English label fires that slot; so does "draw a wall", and "clear chat".
+            var hit = ForskRegistry.ByLabel(Drawn(doc), text) ?? ForskRegistry.ByDrawPhrase(text) ?? ForskRegistry.ByChatPhrase(text);
             if (hit != null)
             {
                 Fire(hit.Id, false);

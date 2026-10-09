@@ -16,8 +16,8 @@ public class UnifiedUiTests
     [Fact]
     public void MoreActions_IsGroupedByTheWork()
     {
-        Assert.Equal(new[] { "Model and edit", "Rooms", "Analyses", "Print and export" }, Groups(Docs.Facts("house")));
-        Assert.Equal(new[] { "Start a project", "Model and edit" }, Groups(Docs.Facts("empty")));
+        Assert.Equal(new[] { "Model and edit", "Rooms", "Analyses", "Print and export", "Chat" }, Groups(Docs.Facts("house")));
+        Assert.Equal(new[] { "Start a project", "Model and edit", "Chat" }, Groups(Docs.Facts("empty")));
     }
 
     [Theory]

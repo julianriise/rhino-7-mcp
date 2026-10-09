@@ -88,4 +88,19 @@ public class RoomTypeSetTests
         other.AddCard(new CardSpec { Kind = "whats.new", Question = "What's new" }, facts);
         Assert.NotNull(WindowView.Build(other, facts)["info"]);
     }
+
+    [Fact]
+    public void ClearChat_EmptiesTheThreadAndTheChatMemory_TypedOrFromMoreActions()
+    {
+        var thread = new DocThread { Serial = 1 };
+        thread.Add("user", "make the kitchen a bedroom");
+        thread.History.Add(new JObject { ["role"] = "user", ["content"] = "make the kitchen a bedroom" });
+        thread.Clear();
+        Assert.Empty(thread.Items);
+        Assert.Empty(thread.History);
+        Assert.Equal("chat.clear", ForskRegistry.ByChatPhrase("Clear chat.")!.Id);
+        Assert.Equal("chat.clear", ForskRegistry.ByChatPhrase("tøm chatten")!.Id);
+        Assert.Null(ForskRegistry.ByChatPhrase("clear the walls"));
+        Assert.Equal("Clear chat", ForskRegistry.Find("chat.clear").Label);
+    }
 }
