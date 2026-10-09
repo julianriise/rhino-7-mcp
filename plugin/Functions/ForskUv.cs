@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RhinoMCPPlugin.Functions;
@@ -101,6 +102,7 @@ public static class ForskUv
     /// </summary>
     public static Ran Run(string exe, string args, string dir, string what, int timeoutMs, IDictionary<string, string> env = null)
     {
+        var cancel = _cancel;
         var start = new ProcessStartInfo(exe, args)
         {
             WorkingDirectory = dir,
@@ -116,14 +118,91 @@ public static class ForskUv
             if (process == null) throw new InvalidOperationException("Could not start " + what + ".");
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(timeoutMs))
+            var clock = Stopwatch.StartNew();
+            while (!process.WaitForExit(PollMs))
             {
-                try { process.Kill(); } catch { /* already gone */ }
-                throw new TimeoutException(what + " took over " + timeoutMs / 1000 + " s.");
+                if (cancel.IsCancellationRequested)
+                {
+                    KillTree(process);
+                    throw new OperationCanceledException(what + " was cancelled.", cancel);
+                }
+                if (clock.ElapsedMilliseconds >= timeoutMs)
+                {
+                    KillTree(process);
+                    throw new TimeoutException(what + " took over " + timeoutMs / 1000 + " s.");
+                }
             }
             Task.WaitAll(stdout, stderr);
             return new Ran { Code = process.ExitCode, Stdout = stdout.Result, Stderr = stderr.Result };
         }
+    }
+
+    const int PollMs = 200;
+
+    [ThreadStatic] static CancellationToken _cancel;
+
+    /// <summary>
+    /// While the scope is open, Run on this thread stops its tool and throws
+    /// OperationCanceledException when the token is cancelled (Cancel during
+    /// the AI read). Prepare's tools run on the thread that opened it.
+    /// </summary>
+    public static IDisposable Cancellable(CancellationToken token)
+    {
+        var before = _cancel;
+        _cancel = token;
+        return new Scope(() => _cancel = before);
+    }
+
+    sealed class Scope : IDisposable
+    {
+        Action _end;
+        public Scope(Action end) { _end = end; }
+        public void Dispose()
+        {
+            _end?.Invoke();
+            _end = null;
+        }
+    }
+
+    /// <summary>uv starts Python, and Python its own workers: stop the whole tree, children first.</summary>
+    static void KillTree(Process process)
+    {
+        var tree = new List<int>();
+        var next = new Queue<int>();
+        next.Enqueue(process.Id);
+        while (next.Count > 0 && tree.Count < 256)
+        {
+            var id = next.Dequeue();
+            tree.Add(id);
+            foreach (var child in Children(id)) next.Enqueue(child);
+        }
+        for (var i = tree.Count - 1; i >= 0; i--)
+        {
+            try { Process.GetProcessById(tree[i]).Kill(); } catch { /* already gone */ }
+        }
+    }
+
+    static List<int> Children(int parent)
+    {
+        var ids = new List<int>();
+        try
+        {
+            var start = new ProcessStartInfo("/usr/bin/pgrep", "-P " + parent)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            using (var pgrep = Process.Start(start))
+            {
+                if (pgrep == null) return ids;
+                foreach (var row in pgrep.StandardOutput.ReadToEnd().Split('\n'))
+                    if (int.TryParse(row.Trim(), out var id)) ids.Add(id);
+                pgrep.WaitForExit(2000);
+            }
+        }
+        catch { /* no pgrep: the parent alone goes */ }
+        return ids;
     }
 
     public static string Quote(string path)

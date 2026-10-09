@@ -49,6 +49,12 @@ namespace RhinoMCPPlugin.Forsk
             if (!(card["pills"] as JArray ?? new JArray()).Any(p => p["id"]?.ToString() == pillId)) return;
             if (pillId == ForskImportGuide.Cancel)
             {
+                // During the read: stop it. The job ends without placing anything.
+                if (card["data"]?["at"]?.ToString() == ForskImportGuide.AtReading && _read != null)
+                {
+                    _read.Cancel();
+                    thread.Add("line", ForskText.Get("guide.read.cancelled"));
+                }
                 thread.Close(card["id"]?.ToString());
                 Models.Persist(thread);
                 Render();
@@ -143,6 +149,8 @@ namespace RhinoMCPPlugin.Forsk
             ForskImportGuide.Paint(card, doc == null ? null : Facts(doc));
             if (!dxf) source["replace"] = true;
             var file = data["file"]?.ToString();
+            var read = new CancellationTokenSource();
+            _read = read;
             Job(thread, "file.import", ForskText.Label("file.import"), sink =>
             {
                 var started = DateTime.UtcNow;
@@ -158,29 +166,40 @@ namespace RhinoMCPPlugin.Forsk
                         {
                             stage = s;
                             Show();
-                        }, Show);
+                        }, Show, read.Token);
                 }
                 catch (Exception e)
                 {
                     envelope = ForskTools.Fail(e.Message);
                 }
-                // The card always leaves Reading, whatever the read did.
-                Post(() => GuideDone(thread, card, envelope, dxf));
+                Post(() =>
+                {
+                    if (_read == read) _read = null;
+                    read.Dispose();
+                    // Cancel already closed the card and said so.
+                    if (read.IsCancellationRequested) return;
+                    // The card always leaves Reading, whatever the read did.
+                    GuideDone(thread, card, envelope, dxf);
+                });
             }, userText: file);
         }
+
+        /// <summary>The AI read in progress, or null. Cancel on the card cancels it.</summary>
+        CancellationTokenSource _read;
 
         /// <summary>
         /// A PDF or an image: read off the UI thread, the step line ticking each
         /// second, then plan_import on the UI thread places what was found.
         /// </summary>
-        static JObject ReadPlan(JObject source, Action<string> stage, Action tick)
+        static JObject ReadPlan(JObject source, Action<string> stage, Action tick, CancellationToken cancel)
         {
             using (var ticked = new ManualResetEvent(false))
             {
                 var timer = new Timer(_ => tick(), null, 1000, 1000);
                 try
                 {
-                    PlanSource.Prepare(source, PlanSource.WorkDir(), stage);
+                    using (ForskUv.Cancellable(cancel))
+                        PlanSource.Prepare(source, PlanSource.WorkDir(), stage);
                 }
                 catch (Exception e)
                 {
@@ -193,6 +212,8 @@ namespace RhinoMCPPlugin.Forsk
                     ticked.WaitOne();
                 }
             }
+            // Cancelled after the last tool finished: still place nothing.
+            if (cancel.IsCancellationRequested) return ForskTools.Fail("Cancelled");
             stage("place");
             return OnUiTool(ForskPlanImport.ImportTool, source);
         }

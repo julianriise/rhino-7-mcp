@@ -91,14 +91,14 @@ public class ImportGuideTests
     }
 
     [Fact]
-    public void WhileReading_StepOneNamesTheFile_AndNothingCanBeClicked()
+    public void WhileReading_StepOneNamesTheFile_AndOnlyCancelCanBeClicked()
     {
         var card = Card(new FileFacts());
         ForskImportGuide.Reading(Data(card), "/plans/holmen.pdf");
         ForskImportGuide.Paint(card, new FileFacts());
 
         Assert.Equal("Reading holmen.pdf…", card["steps"]![0]!["detail"]!.ToString());
-        Assert.Empty(Pills(card));
+        Assert.Equal(new[] { "cancel" }, Pills(card));
     }
 
     [Fact]

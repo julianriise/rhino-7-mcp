@@ -355,6 +355,7 @@ namespace RhinoMCPPlugin.Forsk
             ["guide.file.replaces"] = "This file already has a plan. The new one replaces it, and Undo brings the old one back.",
             ["guide.file.undone"] = "The import was undone. Choose a file to start again.",
             ["guide.file.reading"] = "Reading {file}…",
+            ["guide.read.cancelled"] = "Import cancelled. Nothing was added.",
             ["guide.file.read.pdf"] = "{file}, read from the PDF's own lines",
             ["guide.file.read.scan"] = "{file}, read as a scan by the AI detection model",
             ["guide.file.read.dxf"] = "{file}, read from the DXF's layers",

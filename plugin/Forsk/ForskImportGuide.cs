@@ -163,6 +163,8 @@ namespace RhinoMCPPlugin.Forsk
                     break;
                 case AtReading:
                     steps.Add(Step(1, "guide.step.file", "now", ForskText.Format("guide.file.reading", "file", file)));
+                    // Stops the read and closes the card; nothing is placed.
+                    pills.Add(Pill(Cancel, ForskText.Get("word.cancel")));
                     break;
                 case AtFailed:
                     question = ForskText.Format("guide.failed", "file", file);
