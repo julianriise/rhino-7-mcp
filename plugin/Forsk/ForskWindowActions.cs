@@ -361,12 +361,13 @@ namespace RhinoMCPPlugin.Forsk
                     if (spec == null) return;
                     thread.Add("user", action.Label);
                     thread.BeginReply(ForskRoles.MarkForAction(action.Id));
-                    thread.AddCard(spec, facts);
+                    var opened = thread.AddCard(spec, facts);
                     thread.EndReply();
-                    Models.Persist(thread);
                     // Interior render and Exterior render show north as their card opens (Julian, 2026-10-07).
                     if (action.Id == "room.inside") TryInside("north");
                     if (action.Id == "view.exterior") TryOutside("north");
+                    if (action.Id == "room.inside" || action.Id == "view.exterior") Restamp(opened);
+                    Models.Persist(thread);
                     Render();
                     return;
             }
@@ -1297,9 +1298,11 @@ namespace RhinoMCPPlugin.Forsk
                     return ForskText.Format("daylight.quality.now", "quality", ForskText.Get("daylight.quality." + option));
                 case "room.inside":
                     TryInside(option);
+                    Restamp(card);
                     return ForskText.Format("room.inside.held", "way", option);
                 case "view.exterior":
                     TryOutside(option);
+                    Restamp(card);
                     return ForskText.Format("view.exterior.held", "way", option);
                 case "ink.set":
                     return QuietTool("print_profile", new JObject { ["name"] = option })
@@ -1352,10 +1355,14 @@ namespace RhinoMCPPlugin.Forsk
             MarkDirty();
             var facts = Facts(doc);
             var spec = ForskCards.For(action.Id, facts);
-            if (spec != null) thread.AddCard(spec, facts);
+            var opened = spec != null ? thread.AddCard(spec, facts) : null;
             thread.EndReply();
+            if (spec != null)
+            {
+                TryInside("north");
+                Restamp(opened);
+            }
             Models.Persist(thread);
-            if (spec != null) TryInside("north");
             Render();
             TakeKeyboard();
         }
@@ -1371,6 +1378,20 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>Interior render, tried: the Perspective view takes the shot, nothing saved. Quiet unless it fails.</summary>
+        /// <summary>
+        /// A render card shows its view as it opens and on each direction, and that
+        /// shows the roof (Julian, 2026-10-07). The roof's visibility is part of the
+        /// model's key, so the card read as out of date at once and lost its ways
+        /// (Julian, 2026-10-09). It takes the file as its own view left it.
+        /// </summary>
+        void Restamp(JObject card)
+        {
+            var doc = RhinoDoc.ActiveDoc;
+            var depends = card?["depends"]?.ToString();
+            if (doc == null || string.IsNullOrEmpty(depends) || depends == "none") return;
+            card["stamp"] = ForskCards.Stamp(depends, ReadFacts(doc));
+        }
+
         void TryInside(string way)
         {
             var envelope = ForskTools.CommandOnUi("jump_inside", new JObject { ["direction"] = way, ["save"] = false });

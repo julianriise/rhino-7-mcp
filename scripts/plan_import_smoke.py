@@ -387,10 +387,11 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
     carried = sum(swings.values())
     if source == "pdf" and carried != PDF_SWINGS:
         failures.append(f"bake {carried} door swings carried, expected {PDF_SWINGS}")
-    if floor.get("count") != outlines or roof.get("count") != outlines or baked.get("count") != outlines - skipped:
+    # Since 2026-10-02 (cccae05) an outline bakes as one wall record per straight run, so at least one each.
+    if floor.get("count") != outlines or roof.get("count") != outlines or int(baked.get("count") or 0) < outlines - skipped:
         failures.append(
             f"bake floor {floor.get('count')} roof {roof.get('count')} expected {outlines}, "
-            f"walls {baked.get('count')} expected {outlines - skipped}")
+            f"walls {baked.get('count')} expected at least {outlines - skipped}")
     if cut != openings - uncut or failed != uncut:
         failures.append(f"bake cut {cut} expected {openings - uncut}, failed {failed} expected {uncut}")
     # AI detection draws no room outlines (2026-10-09): nothing on A-ROOM to turn into markers.
