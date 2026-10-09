@@ -2130,7 +2130,7 @@ namespace RhinoMCPPlugin.Forsk
             ForskCalls.Enter();
             try
             {
-                undone = doc.Undo();
+                undone = RhinoMCPFunctions.RunUndoCommand(redo: false);
             }
             finally
             {
