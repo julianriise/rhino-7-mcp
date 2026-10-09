@@ -412,6 +412,38 @@ def test_huge_grid_is_refused():
         fd.run_scene(GARAGE, cell_mm=10)
 
 
+def with_terrace() -> dict:
+    """box() with a 4 × 3 m terrace area drawn outside the window wall (Julian's 12 m² terrace)."""
+    scene = box()
+    scene["rooms"].append({"id": "terrace", "ring": [[0, -3200], [4000, -3200], [4000, -200], [0, -200]], "z": 0.0})
+    return scene
+
+
+def test_an_area_outside_the_walls_is_outdoor_and_not_scored():
+    run = fd.run_scene(with_terrace())
+    assert [run.model.rooms[r].id for r in run.rooms] == ["r01"]
+    assert any("terrace" in note and "outdoor" in note for note in run.notes)
+    # The window still lights the room: the terrace is not a room on its far side.
+    assert run.model.sky_windows()
+    assert run.summary()["df_mean"] == fd.run_scene(box()).summary()["df_mean"]
+
+
+def test_a_room_with_one_open_side_stays_indoor():
+    scene = box()
+    scene["walls"][0]["rings"] = [
+        [[-200, -200], [4200, -200], [4200, 6000], [4000, 6000], [4000, 0], [0, 0], [0, 6000], [-200, 6000]],
+    ]
+    model = fd.build_model(scene)
+    assert [room.id for room in model.rooms] == ["r01"]
+
+
+def test_selecting_only_an_outdoor_area_is_refused():
+    scene = with_terrace()
+    scene["selected_room_ids"] = ["terrace"]
+    with pytest.raises(fd.DaylightTargetError, match="outdoor"):
+        fd.run_scene(scene, target="selection")
+
+
 def test_unknown_host_is_noted_and_skipped():
     scene = copy.deepcopy(GARAGE)
     scene["openings"][0]["host_id"] = "w99"

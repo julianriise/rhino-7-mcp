@@ -100,6 +100,12 @@ SKY_STOPS: tuple[tuple[float, int, int, int], ...] = (
 NO_ROOMS = "No rooms. Run rooms_detect (Make rooms) to find them from the walls, or draw closed outlines on A-ROOM."
 NO_WINDOWS = "No windows. Daylight comes in through windows: add one with add_opening, then run daylight again."
 NO_SELECTION = "Select a room marker first (A-ROOM), or run daylight on the whole floor."
+NO_INDOOR = "The selected area is outdoor (most of it opens to the sky past the walls). Select a room inside the walls."
+
+# An area is outdoor when more than this share of plan rays from inside it
+# escape every wall face: a terrace drawn past the walls, not a room.
+OUTDOOR_RAYS = 32
+OUTDOOR_SHARE = 0.5
 
 # What a hole does to a ray that crosses it before reaching the sampled glass.
 HOLE, GLASS, FACADE = 0, 1, 2
@@ -444,6 +450,34 @@ def _place(opening: dict, host: list[int], faces: list[Face], thickness: float, 
     return placed, holes
 
 
+def _outdoor(ring, z: float, faces: list[Face]) -> bool:
+    """True when most plan rays from inside the outline clear every wall face
+    standing at its work plane."""
+    pieces = _convex_pieces(ring)
+    if not pieces:
+        return False
+    px, py = _centroid(max(pieces, key=lambda piece: abs(_area2(piece))))
+    level = z + WORK_PLANE_MM
+    standing = [f for f in faces if f.z0 <= level <= f.z1]
+    if not standing:
+        return True
+    ax = np.array([f.ax for f in standing]) - px
+    ay = np.array([f.ay for f in standing]) - py
+    ex = np.array([f.bx - f.ax for f in standing])
+    ey = np.array([f.by - f.ay for f in standing])
+    escaped = 0
+    for k in range(OUTDOOR_RAYS):
+        dx, dy = math.cos(2 * math.pi * k / OUTDOOR_RAYS), math.sin(2 * math.pi * k / OUTDOOR_RAYS)
+        den = dx * ey - dy * ex
+        ok = np.abs(den) > 1e-12
+        safe = np.where(ok, den, 1.0)
+        t = (ax * ey - ay * ex) / safe
+        s = (ax * dy - ay * dx) / safe
+        if not np.any(ok & (t > 0) & (s >= 0) & (s <= 1)):
+            escaped += 1
+    return escaped > OUTDOOR_SHARE * OUTDOOR_RAYS
+
+
 def _ceiling(z: float, roofs: list[dict], faces: list[Face]) -> float:
     """The roof underside above a floor, else the top of the walls."""
     above = [float(r["z0"]) for r in roofs if float(r["z0"]) > z + WORK_PLANE_MM]
@@ -470,16 +504,23 @@ def build_model(scene: dict) -> Model:
         thickness[wall["id"]] = float(wall.get("thickness") or 200.0)
 
     roofs = [r for r in scene.get("roofs") or [] if r.get("z0") is not None]
+    notes: list[str] = []
     rooms = []
     for r in rooms_in:
         ring = _clean_ring(_ring(r["ring"]))
         z = float(r.get("z") or 0.0)
+        # An outdoor area is no room: not scored, and no window on its edge
+        # treats it as the room on the far side.
+        if _outdoor(ring, z, faces):
+            notes.append(f"{r.get('id')}: outdoor area (open to the sky past the walls), not scored")
+            continue
         rooms.append(Room(
             id=r.get("id"), ring=ring, z=z, ceiling=_ceiling(z, roofs, faces),
             area=abs(_area2(ring)) / 2, convex=len(_convex_pieces(ring)) == 1,
         ))
+    if not rooms:
+        raise DaylightTargetError(NO_ROOMS)
 
-    notes: list[str] = []
     openings: list[Opening] = []
     holes = []
     for opening in scene.get("openings") or []:
@@ -909,7 +950,8 @@ def run_scene(scene: dict, target: str = "floor", cell_mm: float = DEFAULT_CELL_
         picked = set(scene.get("selected_room_ids") or [])
         rooms = [i for i, room in enumerate(model.rooms) if room.id in picked]
         if not rooms:
-            raise DaylightTargetError(NO_SELECTION)
+            outdoor = any(note.startswith(f"{p}: outdoor") for p in picked for note in model.notes)
+            raise DaylightTargetError(NO_INDOOR if outdoor else NO_SELECTION)
     elif target == "floor":
         rooms = list(range(len(model.rooms)))
     else:
