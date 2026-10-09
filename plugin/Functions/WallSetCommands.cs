@@ -56,7 +56,9 @@ public partial class RhinoMCPFunctions
         var before = pick.Run;
         if (thickness.HasValue)
         {
-            if (!WallFace.TrySetThickness(pick.Records, pick.Graph, index, thickness.Value, tol, out edit, out var across, out why))
+            // A front door drawn as a gap opens the outline; close it at its door before asking which face looks out.
+            var outline = WallFollowPlan.CloseDoorGaps(pick.Graph.Shape[0], DoorGapBoxes(doc), tol);
+            if (!WallFace.TrySetThickness(pick.Records, pick.Graph, index, thickness.Value, tol, out edit, out var across, out why, outline))
                 throw new InvalidOperationException(why);
             shift = new Vector3d(before.Normal.X * across, before.Normal.Y * across, 0);
         }
@@ -164,6 +166,8 @@ public partial class RhinoMCPFunctions
 
         var undos = new List<HostUndo>();
         var snaps = new List<SlabUndo>();
+        // The roof is locked, as in a wall edit's follow: unlock it for the move, then lock it again.
+        UnlockFloors(doc);
         try
         {
             foreach (var wall in walls)
@@ -191,6 +195,10 @@ public partial class RhinoMCPFunctions
             RestoreSlabs(doc, snaps);
             for (var i = undos.Count - 1; i >= 0; i--) RollbackCommittedHost(doc, undos[i]);
             throw new InvalidOperationException("Height not changed. " + ex.Message, ex);
+        }
+        finally
+        {
+            LockFloors(doc);
         }
         doc.Views.Redraw();
         var mm = FormatMm(Math.Round(height));

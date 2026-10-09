@@ -214,7 +214,7 @@ public static class WallFace
     /// centreline and each face moves half. shift is how far the run's middle
     /// moves along its normal, for the openings on it.
     /// </summary>
-    public static bool TrySetThickness(IList<List<List<Pt>>> records, WallJoins.Graph graph, int index, double thickness, double tol, out WallJoins.Moved moved, out double shift, out string why)
+    public static bool TrySetThickness(IList<List<List<Pt>>> records, WallJoins.Graph graph, int index, double thickness, double tol, out WallJoins.Moved moved, out double shift, out string why, List<Pt> outline = null)
     {
         moved = null;
         shift = 0;
@@ -224,7 +224,7 @@ public static class WallFace
             return false;
         }
         var run = graph.Runs[index];
-        var keep = OutsideSide(graph, run, tol);
+        var keep = OutsideSide(graph, run, tol, outline);
         if (keep != 0)
         {
             if (!TryThicken(records, graph, SideHit(run, index, -keep), thickness, tol, out moved, out var by, out why)) return false;
@@ -325,13 +325,16 @@ public static class WallFace
     /// its outer loop), else 0: a partition looks into rooms both ways and a
     /// wall standing alone looks out both ways.
     /// </summary>
-    public static int OutsideSide(WallJoins.Graph graph, WallEdit.Run run, double tol)
+    /// <param name="outline">The building's outline with its door gaps closed (WallFollowPlan.CloseDoorGaps); null reads the shape's own outer loop.
+    /// A front door drawn as a gap opens that loop, and then no face looked out.</param>
+    public static int OutsideSide(WallJoins.Graph graph, WallEdit.Run run, double tol, List<Pt> outline = null)
     {
         if (graph?.Shape == null || graph.Shape.Count == 0 || run == null) return 0;
+        var outer = outline ?? graph.Shape[0];
         var middle = WallJoins.Middle(run);
         var reach = run.Thickness / 2.0 + Math.Max(10.0, 2 * tol);
-        var far = !RoomDetect.Contains(graph.Shape[0], new Pt(middle.X + run.Normal.X * reach, middle.Y + run.Normal.Y * reach));
-        var near = !RoomDetect.Contains(graph.Shape[0], new Pt(middle.X - run.Normal.X * reach, middle.Y - run.Normal.Y * reach));
+        var far = !RoomDetect.Contains(outer, new Pt(middle.X + run.Normal.X * reach, middle.Y + run.Normal.Y * reach));
+        var near = !RoomDetect.Contains(outer, new Pt(middle.X - run.Normal.X * reach, middle.Y - run.Normal.Y * reach));
         if (far == near) return 0;
         return far ? 1 : -1;
     }

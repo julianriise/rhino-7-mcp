@@ -86,3 +86,30 @@ public class DoorGapOutlineTests
 
     static List<Pt> Shift(List<Pt> ring, double dx, double dy) => ring.Select(p => new Pt(p.X + dx, p.Y + dy)).ToList();
 }
+
+/// <summary>
+/// Properties panel thickness on the sample house: the north wall's outside
+/// face looks out only once the front door gap is closed at its door.
+/// </summary>
+public class DoorGapOutsideFaceTests
+{
+    const double Tol = 1.0;
+
+    [Fact]
+    public void TheNorthWall_LooksOut_OnceTheFrontDoorGapIsClosed()
+    {
+        var records = SampleHouse.Walls.Select(w => new List<List<Pt>> { SampleHouse.Ring(w) }).ToList();
+        var graph = WallJoins.Build(records, Enumerable.Range(0, records.Count).ToList(), Tol);
+        Assert.NotNull(graph);
+        var north = graph!.Runs.Single(r => System.Math.Abs(r.Normal.Y) > 0.9 && r.Length > 10000
+            && System.Math.Abs(WallJoins.Middle(r).Y - 8100) < 1);
+        Assert.Equal(0, WallFace.OutsideSide(graph, north, Tol));
+        var doors = SampleHouse.Doors.Select(d => new RoomDetect.Box(d.X0, d.Y0, d.X1, d.Y1)).ToList();
+        var outline = WallFollowPlan.CloseDoorGaps(graph.Shape[0], doors, Tol);
+        var side = WallFace.OutsideSide(graph, north, Tol, outline);
+        Assert.NotEqual(0, side);
+        // The face that looks out is the one at y 8200.
+        var middle = WallJoins.Middle(north);
+        Assert.True(middle.Y + side * north.Normal.Y * 200 > 8200);
+    }
+}
