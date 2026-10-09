@@ -73,6 +73,8 @@ public static class RoomDetect
         public List<List<Pt>> Keep = new List<List<Pt>>();
         /// <summary>Closed outlines taken out of the walls (Difference). Empty for detection.</summary>
         public List<List<Pt>> Cuts = new List<List<Pt>>();
+        /// <summary>Wall footprints (outer, then holes) taken out of the walls (InsideWalls). Empty for detection.</summary>
+        public List<List<List<Pt>>> CutWalls = new List<List<List<Pt>>>();
         public double MinArea = MinAreaMm2;
         public double Tol = 1.0;
     }
@@ -217,6 +219,34 @@ public static class RoomDetect
         var plan = Plan.Build(segs, scene.Tol);
         plan.Classify(scene);
         return plan.Boundary();
+    }
+
+    /// <summary>
+    /// A room outline on the walls' inner faces, never in the middle of a wall
+    /// (Julian 2026-10-09): what the outline covers and no wall does. An
+    /// outline clicked on the centreline or the outer face loses the wall
+    /// band; one already on the inner faces comes back as drawn. The largest
+    /// piece, counterclockwise; null when the walls cover all of it.
+    /// </summary>
+    public static List<Pt> InsideWalls(List<Pt> outline, IList<List<List<Pt>>> walls, double tol)
+    {
+        if (outline == null || outline.Count < 3) return null;
+        var scene = new Scene { Tol = tol > 0 ? tol : 1.0 };
+        var segs = new List<Seg>();
+        scene.Walls.Add(new List<List<Pt>> { outline });
+        AddPath(segs, outline, true, Kind.Wall, -1, 0);
+        foreach (var wall in walls ?? new List<List<List<Pt>>>())
+        {
+            if (wall == null || wall.Count == 0) continue;
+            scene.CutWalls.Add(wall);
+            foreach (var ring in wall) AddPath(segs, ring, true, Kind.Wall, -1, 0);
+        }
+        var plan = Plan.Build(segs, scene.Tol);
+        plan.Classify(scene);
+        List<Pt> best = null;
+        foreach (var loop in plan.Boundary())
+            if (Area(loop) > 0 && (best == null || Area(loop) > Area(best))) best = loop;
+        return best;
     }
 
     /// <summary>
@@ -1058,6 +1088,8 @@ public static class RoomDetect
         {
             foreach (var cut in scene.Cuts)
                 if (Contains(cut, p)) return false;
+            foreach (var cut in scene.CutWalls)
+                if (InRings(cut, p)) return false;
             foreach (var wall in scene.Walls)
                 if (InRings(wall, p)) return true;
             return false;

@@ -15,6 +15,7 @@ public static class RoomAreaPlan
 {
     public const string TooFew = "An area needs three corners or more.";
     public const string TooSmall = "That area is under 1 m².";
+    public const string InWall = "That area lies inside a wall. Click the corners on the walls' inner faces.";
     public const string Crossing = "The outline crosses itself. Click the corners in order around the room.";
 
     /// <summary>

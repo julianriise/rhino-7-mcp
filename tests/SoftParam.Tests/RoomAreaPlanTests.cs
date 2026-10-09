@@ -119,4 +119,47 @@ public class RoomAreaPlanTests
         }
         throw new FileNotFoundException("plugin/" + folder + "/" + file);
     }
+
+    static List<Pt> Rect(double x0, double y0, double x1, double y1) =>
+        new() { new(x0, y0), new(x1, y0), new(x1, y1), new(x0, y1) };
+
+    [Fact]
+    public void AnOutlineOnTheCentreline_GoesToTheInnerFaces()
+    {
+        // Julian 2026-10-09: a room is never drawn in the middle of a wall. Four 200 walls
+        // round a 3800 x 3800 room; the outline was clicked on their centrelines.
+        var walls = new List<List<List<Pt>>>
+        {
+            new() { Rect(0, 0, 4200, 200) }, new() { Rect(0, 4000, 4200, 4200) },
+            new() { Rect(0, 0, 200, 4200) }, new() { Rect(4000, 0, 4200, 4200) }
+        };
+        var inside = RoomDetect.InsideWalls(Rect(100, 100, 4100, 4100), walls, 1.0);
+        Assert.NotNull(inside);
+        Assert.Equal(3800.0 * 3800.0, RoomDetect.Area(inside), 0);
+        // On the outer faces too, and already on the inner faces it stays as drawn.
+        Assert.Equal(3800.0 * 3800.0, RoomDetect.Area(RoomDetect.InsideWalls(Rect(0, 0, 4200, 4200), walls, 1.0)), 0);
+        Assert.Equal(3800.0 * 3800.0, RoomDetect.Area(RoomDetect.InsideWalls(Rect(200, 200, 4000, 4000), walls, 1.0)), 0);
+    }
+
+    [Fact]
+    public void AWallOutlineWithTheRoomAsAHole_StillLeavesTheRoom()
+    {
+        // One wall record around the room: its outline has the room as a hole.
+        var walls = new List<List<List<Pt>>> { new() { Rect(0, 0, 4200, 4200), Rect(200, 4000, 4000, 200) } };
+        var inside = RoomDetect.InsideWalls(Rect(100, 100, 4100, 4100), walls, 1.0);
+        Assert.Equal(3800.0 * 3800.0, RoomDetect.Area(inside), 0);
+        // Wholly inside the wall: nothing is left.
+        Assert.Null(RoomDetect.InsideWalls(Rect(20, 20, 180, 4000), walls, 1.0));
+        // No walls: the outline as drawn.
+        Assert.Equal(16.0e6, RoomDetect.Area(RoomDetect.InsideWalls(Rect(0, 0, 4000, 4000), new List<List<List<Pt>>>(), 1.0)), 0);
+    }
+
+    [Fact]
+    public void EveryRoomOutlinePath_FollowsTheInnerFaces()
+    {
+        // Draw area, the outlines on A-ROOM (drawn, AI detection's rooms) and rooms_from_layer.
+        Assert.Contains("RoomDetect.InsideWalls(", Source("Functions", "RoomArea.cs"));
+        Assert.Contains("RoomDetect.InsideWalls(", Source("Functions", "RoomsDetect.cs"));
+        Assert.Contains("RoomDetect.InsideWalls(", Source("Functions", "RoomsFromLayer.cs"));
+    }
 }

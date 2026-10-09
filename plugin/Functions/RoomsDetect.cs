@@ -52,6 +52,8 @@ public partial class RhinoMCPFunctions
                 var detected = string.Equals(obj.Attributes.GetUserString(RoomSourceKey), DetectedRoomSource, StringComparison.Ordinal)
                     || forskId.StartsWith(DetectedRoomPrefix, StringComparison.Ordinal);
                 var marker = IsRoomMarker(obj);
+                // A drawn or imported outline (AI detection's rooms) over a wall goes to the wall's inner face.
+                if (!detected && !marker) plan = KeepInsideWalls(doc, obj, curve, plan, scene, tol);
                 inventory.Add(new RoomCurves.Curve
                 {
                     Id = obj.Id.ToString(),
@@ -297,6 +299,31 @@ public partial class RhinoMCPFunctions
         if (obj?.Attributes == null) return false;
         return !string.IsNullOrWhiteSpace(obj.Attributes.GetUserString(RoomNameKey))
             && !string.IsNullOrWhiteSpace(obj.Attributes.GetUserString(RoomAtKey));
+    }
+
+    /// <summary>
+    /// A room outline drawn or imported over a wall, moved onto the walls'
+    /// inner faces (RoomDetect.InsideWalls): the curve itself is replaced.
+    /// One wholly inside a wall is left as it is.
+    /// </summary>
+    static List<RoomDetect.Pt> KeepInsideWalls(RhinoDoc doc, RhinoObject obj, Curve curve, List<RoomDetect.Pt> plan,
+        RoomDetect.Scene scene, double tol)
+    {
+        if (scene.Walls.Count == 0) return plan;
+        var inside = RoomDetect.InsideWalls(plan, scene.Walls, Math.Max(tol, 1.0));
+        if (inside == null || Math.Abs(RoomDetect.Area(inside)) < RoomDetect.MinAreaMm2) return plan;
+        if (Math.Abs(Math.Abs(RoomDetect.Area(inside)) - Math.Abs(RoomDetect.Area(plan))) <= Math.Max(tol, 1.0) * RoomDetect.Perimeter(plan))
+            return plan;
+        var z = curve.GetBoundingBox(true).Min.Z;
+        var locked = obj.IsLocked;
+        if (locked) doc.Objects.Unlock(obj.Id, false);
+        // The record's area and tag point are worked out again for the new outline.
+        var attr = obj.Attributes.Duplicate();
+        attr.SetUserString(RoomAtKey, null);
+        attr.SetUserString("forsk:area", null);
+        var moved = doc.Objects.Replace(obj.Id, RoomOutline(inside, z)) && doc.Objects.ModifyAttributes(obj.Id, attr, true);
+        if (locked) doc.Objects.Lock(obj.Id, false);
+        return moved ? inside : plan;
     }
 
     static bool UserDrawn(List<RoomCurves.Curve> inventory, string id)

@@ -37,13 +37,16 @@ public partial class RhinoMCPFunctions
 
         var replace = parameters?["replace"]?.Type == JTokenType.Boolean && parameters["replace"].Value<bool>();
         RhinoObject old = replace ? ResolveRoom(doc, parameters) : null;
-        double z;
+        var scene = RoomScene(doc, tol, new JArray(), out var z);
         if (old != null)
         {
             var box = old.Geometry.GetBoundingBox(true);
             z = box.IsValid ? box.Min.Z : 0;
         }
-        else RoomScene(doc, tol, new JArray(), out z);
+        // A room follows the walls' inner faces, never their centreline.
+        ring = RoomDetect.InsideWalls(ring, scene.Walls, tol);
+        if (ring == null) throw new ArgumentException(RoomAreaPlan.InWall);
+        if (RoomDetect.Area(ring) < RoomDetect.MinAreaMm2) throw new ArgumentException(RoomAreaPlan.TooSmall);
 
         var layer = EnsureLayer(doc, ResolveRoomSourceLayer(doc, "A-ROOM")?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
         var attr = new ObjectAttributes { LayerIndex = layer.Index };

@@ -87,6 +87,8 @@ public partial class RhinoMCPFunctions
         var curves = new List<Curve>();
         var attrs = new List<ObjectAttributes>();
         var queuedIds = new List<string>();
+        // A room follows the walls' inner faces, never their centreline.
+        var walls = RoomScene(doc, tol, new JArray(), out _).Walls;
 
         foreach (var curve in profiles.Closed)
         {
@@ -108,6 +110,16 @@ public partial class RhinoMCPFunctions
                     MaterialSource = ObjectMaterialSource.MaterialFromLayer
                 };
                 var area = CurveArea(curve);
+                var flat = FlattenToWorldXY(curve, tol);
+                var pts = flat == null ? null : LoopPoints(flat, tol);
+                var plan = pts == null || pts.Count < 3 ? null : PlanPoints(pts);
+                var inside = plan == null || walls.Count == 0 ? null : RoomDetect.InsideWalls(plan, walls, Math.Max(tol, 1.0));
+                if (inside != null && Math.Abs(RoomDetect.Area(inside)) >= RoomDetect.MinAreaMm2)
+                {
+                    marker = RoomOutline(inside, curve.GetBoundingBox(true).Min.Z);
+                    plan = inside;
+                    area = Math.Abs(RoomDetect.Area(inside));
+                }
                 StampForskTags(attr, new ForskStamp
                 {
                     Kind = "room",
@@ -116,9 +128,6 @@ public partial class RhinoMCPFunctions
                     Area = area,
                     SourceLayer = profiles.SourceLayer.Name
                 });
-                var flat = FlattenToWorldXY(curve, tol);
-                var pts = flat == null ? null : LoopPoints(flat, tol);
-                var plan = pts == null || pts.Count < 3 ? null : PlanPoints(pts);
                 WriteRoomType(attr, plan, area, plan == null ? "" : RoomDetect.Name(labels, plan), doors, windows);
                 curves.Add(marker);
                 attrs.Add(attr);
