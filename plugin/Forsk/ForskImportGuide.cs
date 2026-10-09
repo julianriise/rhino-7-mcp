@@ -89,8 +89,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 ["walls"] = Int(result?["walls"]),
                 ["doors"] = Int(result?["doors"]),
-                ["windows"] = Int(result?["windows"]),
-                ["rooms"] = Int(result?["rooms"])
+                ["windows"] = Int(result?["windows"])
             };
             data["scale"] = result?["scale"]?["status"]?.ToString() ?? "unconfirmed";
             var ratio = result?["scale"]?["ratio"]?.ToString();
@@ -272,15 +271,14 @@ namespace RhinoMCPPlugin.Forsk
             return what + "… " + (seconds / 60).ToString(CultureInfo.InvariantCulture) + ":" + (seconds % 60).ToString("00", CultureInfo.InvariantCulture);
         }
 
-        /// <summary>The receipt row after a read: AI detection found 30 walls, 7 doors, 12 windows and 11 rooms.</summary>
+        /// <summary>The receipt row after a read: AI detection found 30 walls, 7 doors and 12 windows. Rooms come from the walls at Generate 3D.</summary>
         public static string Found(JObject found)
         {
             if (found == null) return "";
             return ForskText.Format("guide.found",
                 "walls", Count(Int(found["walls"]), "wall"),
                 "doors", Count(Int(found["doors"]), "door"),
-                "windows", Count(Int(found["windows"]), "window"),
-                "rooms", Count(Int(found["rooms"]), "room"));
+                "windows", Count(Int(found["windows"]), "window"));
         }
 
         static readonly Regex ImportWord = new Regex(@"\b(import|importer|importere|last inn|les inn|bring in|read)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

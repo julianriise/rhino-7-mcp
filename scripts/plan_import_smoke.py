@@ -393,28 +393,25 @@ def run(source: str, plan1: Path, sock: socket.socket, failures: list, lines: li
             f"walls {baked.get('count')} expected {outlines - skipped}")
     if cut != openings - uncut or failed != uncut:
         failures.append(f"bake cut {cut} expected {openings - uncut}, failed {failed} expected {uncut}")
-    if markers.get("count") != imported.get("rooms"):
-        failures.append(f"bake room markers {markers.get('count')} expected {imported.get('rooms')}")
+    # AI detection draws no room outlines (2026-10-09): nothing on A-ROOM to turn into markers.
+    if int(markers.get("count") or 0) != 0:
+        failures.append(f"bake room markers {markers.get('count')} expected 0: the import draws no room outlines")
 
-    # 6. Rooms: the imported outlines win, detection fills the rest. The scale is refused once 3D exists.
-    # Every imported room is still a room, walls closed round it or not, and
-    # has a label. kept counts the regions the walls close that an imported
-    # outline already stands for: detection found them and added nothing.
+    # 6. Rooms come from the walls; the import's names stay as labels. The scale is refused once 3D exists.
     rooms = send_command(sock, "rooms_detect", {})
     refused = send_raw(sock, "plan_scale", {**ends, "length_mm": PAGE_WIDTH_MM})
     had = int(imported.get("rooms") or 0)
-    survive = int(rooms.get("count") or 0) - int(rooms.get("detected") or 0)
+    found = int(rooms.get("count") or 0)
     labels = len(by_kind(layer_objects(sock, "label"), "label"))
     lines.append(
-        f"rooms {survive} of {had} imported are rooms after the bake, {labels} labelled "
-        f"({imported.get('unlabelled')} as Rom), walls close round {rooms.get('kept')}, "
-        f"{rooms.get('detected')} detected on top, open {len(rooms.get('open') or [])}, "
+        f"rooms {found} detected from the walls, {labels} labels for {had} names read "
+        f"({imported.get('unlabelled')} as Rom), open {len(rooms.get('open') or [])}, "
         f"scale after bake {refused.get('status')}: " + clip(rooms.get("message"), 40)
     )
-    if survive != had:
-        failures.append(f"rooms {survive} of {had} imported rooms survive the bake")
+    if had > 0 and found == 0:
+        failures.append(f"rooms none detected from the walls, {had} names read")
     if labels != had:
-        failures.append(f"rooms {labels} labels for {had} rooms")
+        failures.append(f"rooms {labels} labels for {had} names")
     # A room the walls stay open around is named in the receipt's review, so the user knows which to close.
     if int(imported.get("outside") or 0) > 0 and not any("The walls do not close around" in row for row in review):
         failures.append(f"rooms the walls are open around {imported.get('outside')} and the review does not name them")

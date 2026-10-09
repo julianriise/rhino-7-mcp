@@ -945,7 +945,7 @@ public static class PlanImport
             walls += " (" + result.Detected + " detected" + (result.Merged > 0 ? ", " + result.Merged + " merged" : "")
                 + (result.Walls.Count + result.Merged < result.Detected ? ", " + (result.Detected - result.Merged - result.Walls.Count) + " dropped" : "") + ")";
         var text = "Imported " + walls + ", " + Count(result.Doors, "door") + ", " + Count(result.Windows, "window")
-            + ", " + Count(result.Rooms.Count, "room") + ". Wall cleanup: "
+            + ", " + Count(result.Rooms.Count, "room name") + ". Wall cleanup: "
             + Count(result.Networks.Sum(network => network.Pieces), "wall piece") + " merged into " + Count(result.Outlines, "outline")
             + ", " + Count(result.Closed, "gap") + " closed, " + Count(result.Overlaps, "overlap") + " left. " + scale;
         var review = new List<string>();

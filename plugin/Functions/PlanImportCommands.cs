@@ -123,7 +123,6 @@ public partial class RhinoMCPFunctions
         var wallLayer = EnsureLayer(doc, "wall", Color.FromArgb(30, 30, 30));
         var doorLayer = EnsureLayer(doc, "door", Color.FromArgb(190, 90, 30));
         var windowLayer = EnsureLayer(doc, "window", Color.FromArgb(30, 110, 190));
-        var roomLayer = EnsureLayer(doc, ResolveRoomSourceLayer(doc, "A-ROOM")?.Name ?? "A-ROOM", Color.FromArgb(200, 180, 120));
         var labelLayer = EnsureLayer(doc, RoomLabelLayerName, Color.FromArgb(90, 90, 90));
 
         var objects = 1 + DrawWallLoops(doc, wallLayer, PlanImport.WallLoops(cleaned));
@@ -157,9 +156,8 @@ public partial class RhinoMCPFunctions
         {
             var room = cleaned.Rooms[i];
             var name = "import-room-" + (i + 1).ToString("D2", CultureInfo.InvariantCulture);
-            var attr = ImportAttributes(roomLayer, name, "room");
-            if (room.Outside) attr.SetUserString(ImportReviewKey, "the walls do not close around it");
-            if (doc.Objects.AddCurve(RoomOutline(room.Ring, 0), attr) != Guid.Empty) objects++;
+            // No room outline (Julian, 2026-10-09): AI detection drew odd areas, and Generate 3D
+            // finds the rooms from the walls. The name stays as a label, which rooms_detect reads.
             // A room the detection could not name gets the name rooms_detect would give it, as a text to edit.
             var label = room.Label ?? RoomDetect.DefaultRoomName;
             var at = Plane.WorldXY;

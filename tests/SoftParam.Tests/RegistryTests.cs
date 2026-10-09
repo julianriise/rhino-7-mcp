@@ -384,4 +384,15 @@ public class RegistryTests
         Assert.Equal("Export CSV", ForskRegistry.Find("export.csv").Label);
         Assert.Equal(ForskRole.Plotter, ForskRoles.OfAction("export.csv"));
     }
+
+    [Fact]
+    public void AfterAiDetectionAndGenerate3D_TheBarSuggestsDrawArea()
+    {
+        // An imported plan under walls: rooms come from the walls, and Draw area makes the rest.
+        var imported = new FileFacts { HasUnderlay = true, HasWalls = true, HasGenerated = true, HasPlanCurves = true, Kind = FileKind.Model };
+        Assert.Contains(ForskRegistry.Bar(imported).Context, a => a.Id == "room.draw");
+        // A model drawn by hand, with no plan under it, keeps its usual bar.
+        var drawn = new FileFacts { HasWalls = true, HasGenerated = true, HasPlanCurves = true, Kind = FileKind.Model };
+        Assert.DoesNotContain(ForskRegistry.Bar(drawn).Context, a => a.Id == "room.draw");
+    }
 }

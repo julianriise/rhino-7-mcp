@@ -313,6 +313,8 @@ namespace RhinoMCPPlugin.Forsk
             // Walls with doors and windows: Add detail is the one thing for them all.
             if (f.Picked == Picked.Other) yield return Find("detail.add");
             if (f.UndoNewest && f.Picked == Picked.None) yield return Find("edit.undo");
+            // After AI detection and Generate 3D: rooms come from the walls, and Draw area makes the ones they do not close.
+            if (f.HasUnderlay && f.HasWalls && f.Picked == Picked.None) yield return Find("room.draw");
             if (f.Picked == Picked.None && f.PlanHidden) yield return Find("plan.show");
             else if (f.Picked == Picked.None && f.PlanRecall && !f.PlanHidden) yield return Find("plan.hide");
             if (f.Picked == Picked.Opening) yield return Find("opening.move");

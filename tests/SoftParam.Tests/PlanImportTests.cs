@@ -522,7 +522,7 @@ public class PlanImportTests
         Assert.Equal(0, result.Outside);
         Assert.Contains("1 room without a label (3.7, -2.0 m)", Assert.Single(result.Review));
         Assert.Equal(
-            "Imported 5 walls, 1 door, 1 window, 2 rooms. Wall cleanup: 5 wall pieces merged into 1 outline, "
+            "Imported 5 walls, 1 door, 1 window, 2 room names. Wall cleanup: 5 wall pieces merged into 1 outline, "
             + "0 gaps closed, 0 overlaps left. Scale 1:50 read from the plan and applied: "
             + "confirm it, or override it, with Set scale (two points and a known length). Review: 1 room without a label.",
             PlanImport.Message(result, PlanImport.ScaleLine("detected", "1:50")));

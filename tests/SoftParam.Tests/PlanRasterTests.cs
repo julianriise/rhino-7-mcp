@@ -119,7 +119,7 @@ public class PlanRasterTests : IDisposable
         Assert.Equal("unconfirmed", PlanSource.Scale(resolved.Plan, null, out var ratio));
         Assert.Equal("1:100", ratio);
         var receipt = Receipt(resolved);
-        Assert.StartsWith("Imported 4 walls, 1 door, 1 window, 1 room.", receipt);
+        Assert.StartsWith("Imported 4 walls, 1 door, 1 window, 1 room name.", receipt);
         Assert.Contains("Scale not detected (assumed 1:100): set it with two points and a known length.", receipt);
         Assert.EndsWith("Plan read by the CubiCasa5k model, licensed CC BY-NC 4.0 — non-commercial use only.", receipt);
     }

@@ -364,7 +364,7 @@ namespace RhinoMCPPlugin.Forsk
             ["guide.scale.kept"] = "Kept {ratio} from the plan",
             ["guide.scale.skipped"] = "Skipped. Set scale stays in the bar",
             ["guide.scale.dxf"] = "From the DXF's units",
-            ["guide.found"] = "AI detection found {walls}, {doors}, {windows} and {rooms}.",
+            ["guide.found"] = "AI detection found {walls}, {doors} and {windows}.",
             ["guide.review.ask"] = "Compare it with the faded drawing under it. These were unsure. Fix them in Rhino or ask in chat, then click Looks right.",
             ["guide.review.none"] = "Compare it with the faded drawing under it. Nothing looked unsure.",
             ["guide.review.more"] = "and {n} more",

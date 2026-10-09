@@ -158,7 +158,7 @@ public class ImportGuideTests
 
         Assert.Equal(new[] { "done", "done", "now", "todo" }, States(card));
         Assert.Equal("Set from two points", card["steps"]![1]!["detail"]!.ToString());
-        Assert.StartsWith("AI detection found 30 walls, 7 doors, 12 windows and 1 room.", card["steps"]![2]!["detail"]!.ToString());
+        Assert.StartsWith("AI detection found 30 walls, 7 doors and 12 windows.", card["steps"]![2]!["detail"]!.ToString());
         Assert.Equal(new[] { "2 openings not on a wall", "1 room without a label" }, card["rows"]!.Select(r => r.ToString()));
         Assert.Equal(new[] { "looks", "choose" }, Pills(card));
     }
