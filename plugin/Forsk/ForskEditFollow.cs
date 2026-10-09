@@ -9,7 +9,8 @@ namespace RhinoMCPPlugin.Forsk
     /// <summary>
     /// Rhino's own edits outside a Forsk call, followed on the next idle, with or
     /// without the Forsk window open: a Delete of what the daylight map was drawn
-    /// from marks the map (DaylightMap.AfterDelete), and a door or window block
+    /// from marks the map (DaylightMap.AfterDelete), a deleted wall has the rooms
+    /// detected again (RoomFollow.AfterDelete), and a door or window block
     /// moved with Drag, Move or the gumball takes its marker along its wall
     /// (OpeningDrag, FS-Z383WAWP). No layer or object change inside the events.
     /// </summary>
@@ -17,6 +18,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         static readonly OpeningDrag Drags = new OpeningDrag();
         static MapEdit _deletedEdit;
+        static bool _wallDeleted;
         static bool _hooked;
 
         public static void Start()
@@ -47,8 +49,10 @@ namespace RhinoMCPPlugin.Forsk
             var index = obj.Attributes.LayerIndex;
             var onRoomLayer = index >= 0 && index < doc.Layers.Count
                 && string.Equals(doc.Layers[index].Name, "A-ROOM", StringComparison.OrdinalIgnoreCase);
-            var edit = DaylightMap.AfterDelete(obj.Attributes.GetUserString("forsk:kind"), onRoomLayer);
+            var kind = obj.Attributes.GetUserString("forsk:kind");
+            var edit = DaylightMap.AfterDelete(kind, onRoomLayer);
             if (edit > _deletedEdit) _deletedEdit = edit;
+            if (RoomFollow.AfterDelete(kind)) _wallDeleted = true;
         }
 
         static void OnReplaced(object sender, RhinoReplaceObjectEventArgs e)
@@ -71,8 +75,34 @@ namespace RhinoMCPPlugin.Forsk
 
         static void OnIdle(object sender, EventArgs e)
         {
+            FollowRooms();
             MarkMap();
             FollowOpenings();
+        }
+
+        /// <summary>
+        /// Rooms again after Rhino's Delete of a wall, in an undo record of their
+        /// own: the first Undo puts the rooms back, the next the wall. The map is
+        /// marked after, since detection redraws the rooms it was drawn from.
+        /// </summary>
+        static void FollowRooms()
+        {
+            if (!_wallDeleted) return;
+            _wallDeleted = false;
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc == null) return;
+            var record = doc.BeginUndoRecord("Forsk: rooms after deleted wall");
+            try
+            {
+                var envelope = ForskTools.Command("rooms_detect", new JObject());
+                if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                    RhinoApp.WriteLine("Forsk: the rooms were not detected again after the wall was deleted. " + envelope?["message"]);
+            }
+            finally
+            {
+                doc.EndUndoRecord(record);
+            }
+            doc.Views.Redraw();
         }
 
         static void MarkMap()

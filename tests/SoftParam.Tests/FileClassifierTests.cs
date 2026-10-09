@@ -155,6 +155,19 @@ public class FileClassifierTests
         Assert.Equal(edit, DaylightMap.AfterDelete(kind, onRoomLayer));
     }
 
+    [Theory]
+    [InlineData("wall", true)]
+    [InlineData("WALL", true)]
+    [InlineData("room", false)]
+    [InlineData("room_plate", false)]
+    [InlineData("opening", false)]
+    [InlineData(null, false)]
+    public void AWallDeletedOutsideForsk_DetectsRoomsAgain(string kind, bool again)
+    {
+        // Julian 2026-10-09: a deleted wall left the rooms on its old outline.
+        Assert.Equal(again, RoomFollow.AfterDelete(kind));
+    }
+
     [Fact]
     public void AnOpeningEdit_LeavesTheMapVisible_AndSetsStale()
     {

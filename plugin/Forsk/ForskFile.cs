@@ -530,6 +530,19 @@ namespace RhinoMCPPlugin.Forsk
         }
     }
 
+    /// <summary>
+    /// Rooms after an object deleted outside a Forsk call (Rhino's Delete). A wall
+    /// bounds rooms, so they are detected again: the rooms on either side become
+    /// one. A deleted room or plate stays deleted.
+    /// </summary>
+    public static class RoomFollow
+    {
+        public static bool AfterDelete(string kind)
+        {
+            return string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>The last Forsk pill or answer: what ran, on which document, in which turn.</summary>
     public sealed class LastAction
     {
