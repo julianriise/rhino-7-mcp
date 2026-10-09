@@ -28,34 +28,40 @@ public partial class RhinoMCPFunctions
                 ? "No room found."
                 : ListSelected(doc).Count == 0
                     ? "Nothing is selected. Click the room in Rhino, then say it again."
-                    : "Select one room.");
+                    : "Select a room.");
         }
-        if (rooms.Count > 1)
-            throw new InvalidOperationException("Select one room.");
+        // Every room picked (Julian, 2026-10-09). Refusing more than one made the chat
+        // try again with a room id it guessed, and confirm a room that was not picked.
+        var names = new List<string>();
+        foreach (var marker in rooms)
+        {
+            var attr = marker.Attributes.Duplicate();
+            attr.SetUserString(RoomTypes.Key, key);
+            attr.SetUserString(RoomTypes.SourceKey, RoomTypes.User);
+            // A plated room's marker is locked so the plate is the click. Attributes still have to change.
+            var locked = marker.IsLocked;
+            if (locked) doc.Objects.Unlock(marker.Id, false);
+            var wrote = doc.Objects.ModifyAttributes(marker, attr, true);
+            if (locked) doc.Objects.Lock(marker.Id, false);
+            if (!wrote) throw new InvalidOperationException("The room's type was not stored.");
+            CopyRoomTypeToPlates(doc, marker.Id, key);
+            var name = attr.GetUserString(RoomNameKey);
+            if (string.IsNullOrWhiteSpace(name)) name = marker.Name;
+            names.Add(string.IsNullOrWhiteSpace(name) ? "Room" : name.Trim());
+        }
 
-        var marker = rooms[0];
-        var attr = marker.Attributes.Duplicate();
-        attr.SetUserString(RoomTypes.Key, key);
-        attr.SetUserString(RoomTypes.SourceKey, RoomTypes.User);
-        // A plated room's marker is locked so the plate is the click. Attributes still have to change.
-        var locked = marker.IsLocked;
-        if (locked) doc.Objects.Unlock(marker.Id, false);
-        var wrote = doc.Objects.ModifyAttributes(marker, attr, true);
-        if (locked) doc.Objects.Lock(marker.Id, false);
-        if (!wrote) throw new InvalidOperationException("The room's type was not stored.");
-        CopyRoomTypeToPlates(doc, marker.Id, key);
-
-        var name = attr.GetUserString(RoomNameKey);
-        if (string.IsNullOrWhiteSpace(name)) name = marker.Name;
-        if (string.IsNullOrWhiteSpace(name)) name = "Room";
         RoomTypeColorHost.Invalidate();
         doc.Views.Redraw();
+        var ids = new JArray();
+        foreach (var marker in rooms) ids.Add(marker.Id.ToString());
         return new JObject
         {
-            ["id"] = marker.Id.ToString(),
+            ["id"] = rooms[0].Id.ToString(),
+            ["ids"] = ids,
+            ["count"] = rooms.Count,
             ["room_type"] = key,
             ["room_type_source"] = RoomTypes.User,
-            ["message"] = name.Trim() + " is " + RoomTypes.English(key) + "."
+            ["message"] = RoomTypes.SetSentence(names, key)
         };
     }
 

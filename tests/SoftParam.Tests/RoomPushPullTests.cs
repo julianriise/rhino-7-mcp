@@ -41,10 +41,10 @@ public class RoomPushPullTests
     {
         var f = Docs.Facts("house, room selected");
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "room.redraw", "furniture.add" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "room.set_type", "room.redraw" }, bar.Slots.Select(a => a.Id));
         // A Modeller pick is a small boost, and Add furniture is a Modeller action: slot 3 keeps it. Slot 1 never moves.
         var modeller = ForskRegistry.Bar(f, ForskRole.Modeller);
-        Assert.Equal(new[] { "file.print", "room.redraw", "furniture.add" }, modeller.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "room.set_type", "room.redraw" }, modeller.Slots.Select(a => a.Id));
         Assert.Contains(ForskRegistry.Card(f).Actions, a => a.Id == "room.push_pull");
         Assert.Equal(ForskRole.Modeller, ForskRoles.OfAction("room.push_pull"));
         Assert.Equal("Push or pull a side", ForskText.Label("room.push_pull"));

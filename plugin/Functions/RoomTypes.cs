@@ -243,6 +243,15 @@ public static class RoomTypes
     }
 
     /// <summary>Appended to a room line when a type is stored. Empty when the file has none.</summary>
+    /// <summary>rooms_set_type's receipt: "Kitchen is Bedroom." or "3 rooms are Bedroom: A, B, C."</summary>
+    public static string SetSentence(IList<string> names, string key)
+    {
+        var type = English(key);
+        if (names == null || names.Count == 0) return "No room changed.";
+        if (names.Count == 1) return names[0] + " is " + type + ".";
+        return names.Count + " rooms are " + type + ": " + string.Join(", ", names) + ".";
+    }
+
     public static string LineSuffix(string stored)
     {
         if (string.IsNullOrWhiteSpace(stored)) return "";

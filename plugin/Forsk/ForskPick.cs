@@ -123,6 +123,19 @@ namespace RhinoMCPPlugin.Forsk
             return wall.Runs == 1 && !string.IsNullOrEmpty(wall.RunName) ? wall : null;
         }
 
+        /// <summary>A picked room or area with no room type yet (a grey plate): Set room type is suggested.</summary>
+        public static bool UntypedRoom(IEnumerable<ChipRow> rows)
+        {
+            foreach (var row in Things(rows ?? new List<ChipRow>()))
+            {
+                if (Kind(row) != "room") continue;
+                var type = row.RoomType;
+                if (string.IsNullOrWhiteSpace(type) || string.Equals(type, global::RhinoMCPPlugin.Functions.RoomTypes.Unassigned, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>The run's name inside a sentence: "the north wall", "veggen i nord", "the wall at (4000, 2000)".</summary>
         public static string InSentence(string runName, bool nb)
         {

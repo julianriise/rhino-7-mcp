@@ -290,10 +290,26 @@ namespace RhinoMCPPlugin.Forsk
 
         static readonly string[] Order = { "wall", "door", "window", "room", "stair", "furniture" };
 
+        /// <summary>The panel Id of several rooms picked: an edit goes to the selection.</summary>
+        public const string SelectionId = "selection";
+
         static Panel Several(List<ChipRow> things)
         {
             var kinds = things.GroupBy(KindOf).OrderBy(g => Array.IndexOf(Order, g.Key)).ToList();
             var panel = new Panel { Title = kinds.Count == 1 ? Count(kinds[0].Key, things.Count) : things.Count + " things" };
+            if (kinds.Count == 1 && kinds[0].Key == "room")
+            {
+                // Several rooms: one Type for them all (Julian, 2026-10-09), set in one step.
+                panel.Id = SelectionId;
+                var types = things.Select(r => RoomTypes.Read(r.RoomType)).Distinct().ToList();
+                panel.Rows.Add(new Row
+                {
+                    Label = "Type",
+                    Value = types.Count == 1 ? types[0] : "Mixed",
+                    Field = "room_type",
+                    Options = RoomTypes.All.Select(k => new Option { Id = k, Label = RoomTypes.English(k) }).ToList()
+                });
+            }
             if (kinds.Count == 1 && (kinds[0].Key == "door" || kinds[0].Key == "window"))
             {
                 // Two doors: one line each, so they can be told apart.
@@ -351,7 +367,10 @@ namespace RhinoMCPPlugin.Forsk
                     return ("set_opening_type", new JObject { ["id"] = id, ["swing"] = value });
                 case "room_type":
                     if (!RoomTypes.All.Contains(value)) { error = "Pick a room type from the list."; return null; }
-                    return ("rooms_set_type", new JObject { ["id"] = id, ["room_type"] = value });
+                    // Several rooms picked: the tool sets every selected room.
+                    return id == SelectionId
+                        ? ("rooms_set_type", new JObject { ["room_type"] = value })
+                        : ("rooms_set_type", new JObject { ["id"] = id, ["room_type"] = value });
                 case "rise":
                     if (string.Equals(value, Stairs.Auto, StringComparison.OrdinalIgnoreCase))
                         return ("edit_stair", new JObject { ["id"] = id, ["rise"] = Stairs.Auto });

@@ -1,4 +1,4 @@
-"""Set one room's type from the chat."""
+"""Set the room type of the selected rooms, or of one named room, from the chat."""
 
 from typing import Any, Dict, Optional
 
@@ -13,14 +13,14 @@ def rooms_set_type(
     id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Set one room's type and mark the source user, so a later guess cannot replace it.
+    Set the room type of every selected room (or the named one) and mark the source user, so a later guess cannot replace it.
 
     room_type is one of: unassigned, living, kitchen, dining, bedroom, bathroom,
     wc, hall, storage, laundry, technical, office, garage, balcony, stair.
     A label word such as soverom or kjøkken is accepted and stored as the key.
 
     id is a GUID, a forsk id (rd-01), or the room name. Omit it to use the
-    selected room. The selection must be exactly one room.
+    selected room. Every selected room is set.
 
     Empty selection refuses with:
     Nothing is selected. Click the room in Rhino, then say it again.

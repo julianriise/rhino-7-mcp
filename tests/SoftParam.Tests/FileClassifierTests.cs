@@ -232,7 +232,7 @@ public class FileClassifierTests
     {
         var marker = Row.Room(name: "Stue");
         var f = FileClassifier.Read(Docs.Of(Row.Wall(), Row.Floor(), Row.Window(), marker, Row.Plate(marker, selected: true)));
-        Assert.Equal(new[] { "Print PDF", "Redraw area", "Add furniture" }, Bar(f));
+        Assert.Equal(new[] { "Print PDF", "Set room type", "Redraw area" }, Bar(f));
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class FileClassifierTests
     {
         var f = Docs.Facts("house, room selected");
         var bar = ForskRegistry.Bar(f);
-        Assert.Equal(new[] { "file.print", "room.redraw", "furniture.add" }, bar.Slots.Select(a => a.Id));
+        Assert.Equal(new[] { "file.print", "room.set_type", "room.redraw" }, bar.Slots.Select(a => a.Id));
         // Daylight for this room stays one tap away on the card (More actions).
         Assert.Contains(ForskRegistry.Card(f).Actions, a => a.Id == "daylight.room");
     }

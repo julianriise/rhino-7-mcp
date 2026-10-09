@@ -196,6 +196,7 @@ namespace RhinoMCPPlugin.Forsk
             // AI detection misses rooms: click a room's corners to draw its area, or redraw the picked room.
             new ForskAction("room.draw", Runs.Run, "group.rooms", f => f.HasWalls),
             new ForskAction("room.redraw", Runs.Run, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1),
+            new ForskAction("room.set_type", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && ForskPick.UntypedRoom(f.Selected)),
             new ForskAction("room.push_pull", Runs.Prefill, "group.rooms", f => f.Picked == Picked.Room && f.PickedCount == 1 && f.JoinGraph),
             // FU: a piece from the catalogue into a room, and furnishing by rules (the picked room, else every room) with the two previews.
             // Interior render: a first interior shot of the one room picked, at 1.2 m.
@@ -327,6 +328,8 @@ namespace RhinoMCPPlugin.Forsk
             // Two or more walls: Move, then Add detail (Add a door is a one-wall act).
             if (f.Picked == Picked.Wall && f.PickedCount >= 2) yield return Find("detail.add");
             if (f.Picked == Picked.Opening) yield return Find("opening.type");
+            // A room with no type yet: Set room type writes the start of the sentence into the chat box.
+            if (f.Picked == Picked.Room && ForskPick.UntypedRoom(f.Selected)) yield return Find("room.set_type");
             // AI detection often gets a room's outline wrong: Redraw area is the first suggestion for one room.
             if (f.Picked == Picked.Room && f.PickedCount == 1) yield return Find("room.redraw");
             // A picked room is furnished next; Daylight for this room stays on the card.
@@ -392,6 +395,7 @@ namespace RhinoMCPPlugin.Forsk
             if (print && f.SheetsStale) return ForskText.Get("file.print.stale");
             if (f.Map == MapState.Stale) return ForskText.Get("daylight.again.reason");
             if (bar.Context.Any(a => a.Id == "view.export")) return ForskText.Get("view.export.reason");
+            if (bar.Context.Any(a => a.Id == "room.set_type")) return ForskText.Get("room.set_type.reason");
             if (bar.Context.Any(a => a.Id == "wall.move"))
                 return ForskText.Get(ForskPick.OneRunWall(f.Selected) != null ? "wall.move.reason.one" : "wall.move.reason");
             if (print && f.Map == MapState.Shown) return ForskText.Get("file.print.map");

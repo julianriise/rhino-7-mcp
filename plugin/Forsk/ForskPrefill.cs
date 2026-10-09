@@ -49,6 +49,10 @@ namespace RhinoMCPPlugin.Forsk
                     return Opening("opening.move.prefill", f, nb, "500");
                 case "opening.resize":
                     return Opening("opening.resize.prefill", f, nb, f?.PickedOpeningKind == "door" ? "900" : "1200");
+                case "room.set_type":
+                    // The user finishes the sentence: the cursor waits at its end, nothing selected.
+                    var text = ForskText.Get(nb ? "room.set_type.prefill.nb" : "room.set_type.prefill");
+                    return new Prefill { Text = text, Start = text.Length, Length = 0 };
                 case "room.push_pull":
                     return Fill(ForskText.Get(nb ? "room.push_pull.prefill.nb" : "room.push_pull.prefill"), "", "500");
                 default:

@@ -456,7 +456,7 @@ namespace RhinoMCPPlugin.Forsk
                     "Area statistics: net room area per floor, per use and for the whole model, the same figures as the plan tags and the Room schedule (Romliste). A room with a type is grouped under that English name (Living, Kitchen, …). Unassigned keeps the name map. BRA and BTA per floor from the outer wall outline and its thickness, or the reason one is left out. Read only. No rooms: rooms_detect.",
                     new JObject()),
                 Fn("rooms_set_type",
-                    "Set one room's type and mark the source user, so a later guess cannot replace it. room_type is living, kitchen, dining, bedroom, bathroom, wc, hall, storage, laundry, technical, office, garage, balcony, stair, or unassigned. id is a GUID, forsk id (rd-01), or the room name. Omit id to use the selected room. One room only.",
+                    "Set the room type of every selected room, or of the room id names, and mark the source user, so a later guess cannot replace it. room_type is living, kitchen, dining, bedroom, bathroom, wc, hall, storage, laundry, technical, office, garage, balcony, stair, or unassigned. Omit id when rooms are selected: every selected room is set. id is a GUID, forsk id (rd-01), or the room name, only for a room that is not selected. The reply names each room it set.",
                     new JObject
                     {
                         ["id"] = Str("Room GUID, forsk id (rd-01), or room name. Omit to use the selection."),
