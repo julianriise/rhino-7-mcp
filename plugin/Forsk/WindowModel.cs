@@ -377,7 +377,9 @@ namespace RhinoMCPPlugin.Forsk
             // The pick line: what is selected, in words (selection S4).
             model["target"] = ForskPick.Line(facts.Selected, ForskPrefill.Language(thread.LastUserText()) == "nb");
             // The info panel (UX.5): what the picked thing is, at the top of the window.
-            var info = ForskInfo.For(facts);
+            // A card waiting for an answer comes first: the Properties panel stands back
+            // so the card keeps the room (Julian, 2026-10-09: the camera card's ways were cut off).
+            var info = HasOpenCard(thread) ? null : ForskInfo.For(facts);
             if (info != null) model["info"] = info.ToJson();
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();
@@ -389,6 +391,21 @@ namespace RhinoMCPPlugin.Forsk
             if (helpOpen) model["help"] = ForskRegistry.Card(facts).ToJson();
             if (FirstRun.Show(facts.Kind, facts.GuideOff)) model["guide"] = FirstRun.Guide(facts.KeyPresent, facts.ToolsReady);
             return model;
+        }
+
+        /// <summary>
+        /// An open card about the current pick (Interior render's ways, a delete's
+        /// side) in the thread, not a pinned form: it is waiting for the user. An old
+        /// open card about nothing in particular (What's new) does not count.
+        /// </summary>
+        static bool HasOpenCard(DocThread thread)
+        {
+            foreach (var item in thread.Items)
+                if (item["role"]?.ToString() == "card" && item["state"]?.ToString() == "open"
+                    && item["depends"]?.ToString() == "selection"
+                    && !(item["pin"]?.Type == JTokenType.Boolean && item["pin"].Value<bool>()))
+                    return true;
+            return false;
         }
 
         /// <summary>Update available first while forsk.app names a newer Forsk. Then ink, the title block, and the bridge, then Set up Forsk, the Grok key and Copy debug report. Those three are always there and are not help-card actions.</summary>

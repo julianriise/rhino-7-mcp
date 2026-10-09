@@ -74,4 +74,18 @@ public class RoomTypeSetTests
         var js = System.IO.File.ReadAllText(System.IO.Path.Combine(System.AppContext.BaseDirectory, "page", "window.js"));
         Assert.Contains("sender.send({ kind: 'action', id: action.id })", js);
     }
+
+    [Fact]
+    public void AnOpenCardAboutThePick_TakesThePlaceOfThePropertiesPanel()
+    {
+        var facts = Picked(Room("Kitchen", RoomTypes.Kitchen));
+        var thread = new DocThread { Serial = 1 };
+        Assert.NotNull(WindowView.Build(thread, facts)["info"]);
+        thread.AddCard(ForskCards.JumpInside(facts), facts);
+        Assert.Null(WindowView.Build(thread, facts)["info"]);
+        // A What's new card that was never closed does not hide the panel.
+        var other = new DocThread { Serial = 2 };
+        other.AddCard(new CardSpec { Kind = "whats.new", Question = "What's new" }, facts);
+        Assert.NotNull(WindowView.Build(other, facts)["info"]);
+    }
 }

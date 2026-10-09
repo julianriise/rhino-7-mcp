@@ -412,6 +412,8 @@
 
   var model = null;
   var sender = null;
+  /* The open card at the last render: a new one scrolls into view. */
+  var lastOpenCard = null;
   var barHovered = false;
   var barModel = null;
   var lastPrefill = 0;
@@ -1524,12 +1526,20 @@
     document.getElementById('target').textContent = model.target || '';
     document.getElementById('status').textContent = model.status || '';
     // A reader who has not moved stays with the newest line, including after a resize.
+    // The panels above the thread first: a Properties panel that appears after the
+    // thread is scrolled shrinks it, and a card at the bottom slid out of view.
+    var forms = openForms();
+    renderPin(forms);
+    renderInfo(model.info);
     var follow = followLatest || Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
+    // A card that has just opened is always shown, however far up the reader was.
+    var open = openCard();
+    if (open && open !== 'help' && open !== lastOpenCard) follow = true;
+    lastOpenCard = open;
     followLatest = follow;
     var keep = thread.scrollTop;
     var seen = keep;
     var placed = keep;
-    var forms = openForms();
     threadThumb.quiet = true;
     try {
       var skip = {};
@@ -1565,8 +1575,6 @@
       if (thread.scrollTop !== seenLate) revealThreadThumb();
     }, 0);
     else followLatest = Forsk.nearEnd(thread.scrollHeight, thread.scrollTop, thread.clientHeight);
-    renderPin(forms);
-    renderInfo(model.info);
     // The bar never reorders under the pointer: it waits until the pointer leaves.
     if (!barHovered) renderBar(model.bar);
     renderRole(model);
