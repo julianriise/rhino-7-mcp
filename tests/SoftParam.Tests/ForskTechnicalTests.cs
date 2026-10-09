@@ -66,6 +66,8 @@ public class ForskTechnicalTests
         var host = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "ForskTechnicalHost.cs"));
         Assert.Contains("GetBool(ForskTechnical.SettingKey, true)", host, StringComparison.Ordinal);
         Assert.Contains("DisplayModeDescription.WireframeId", host, StringComparison.Ordinal);
+        // Plans and elevations: no isocurves, whatever keys the Wireframe export carries.
+        Assert.Contains("attributes.ShowIsoCurves = false;", host, StringComparison.Ordinal);
         var command = File.ReadAllText(Path.Combine(PluginDir(), "Commands", "ForskTechnicalCommand.cs"));
         Assert.Contains("EnglishName => \"ForskTechnical\"", command, StringComparison.Ordinal);
         Assert.Contains("ForskWhiteHost.ApplyActive()", command, StringComparison.Ordinal);

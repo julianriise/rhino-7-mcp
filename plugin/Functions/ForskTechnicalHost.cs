@@ -120,9 +120,23 @@ internal static class ForskTechnicalHost
                 StoreSignature(signature);
             existing = ForskWhiteHost.Find(ForskTechnical.ModeName);
         }
+        HideIsocurves(existing);
         _mode = existing;
         _modeSignature = existing == null ? null : signature;
         return existing;
+    }
+
+    /// <summary>
+    /// Plans and elevations show no surface isocurves (Julian, 2026-10-09: a grid of
+    /// thin lines across the rooms). The ini patch sets ShowIsocurves only where the
+    /// Wireframe export carries the key, so the mode's own attribute is set too.
+    /// </summary>
+    static void HideIsocurves(DisplayModeDescription mode)
+    {
+        var attributes = mode?.DisplayAttributes;
+        if (attributes == null || !attributes.ShowIsoCurves) return;
+        attributes.ShowIsoCurves = false;
+        DisplayModeDescription.UpdateDisplayMode(mode);
     }
 
     static bool Fresh()
