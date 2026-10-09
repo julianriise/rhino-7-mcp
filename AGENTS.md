@@ -36,8 +36,8 @@ Full rule: forsk [`AGENTS.md`](https://github.com/julianriise/forsk/blob/main/AG
 
 - The coding agent never launches, drives, screenshots, or waits on Rhino, and never runs the live smokes. No macOS Accessibility GUI driving.
 - Gates are headless only: `dotnet build` with 0 warnings, `SoftParam.Tests`, `pytest -q`, contracts, plus any check that does not need a running Rhino.
-- A change that needs a live check is committed locally, not pushed. End the session with a smoke handoff of at most 5 lines: the forsk commands (`./scripts/smoke_office.sh`, `./scripts/smoke_garage.sh`, or a specific one), what should pass, and which 1000 px PNGs in `/tmp` to glance at. Julian runs them and pastes the output. Push `main` only after green; on red, fix from the output and the `/tmp` log.
-- At most one office smoke per slice, and only when the office path changed.
+- A change that needs a live check is committed locally, not pushed. End the session with a smoke handoff of at most 5 lines: the forsk tier 1 command (forsk `AGENTS.md` “Test tiers”, usually `./scripts/smoke_first_run.sh <check>`), what should pass, and which 1000 px PNGs in `/tmp` to glance at. Julian runs them and pastes the output. Push `main` only after green; on red, fix from the output and the `/tmp` log.
+- Run the smallest test tier that covers the change: forsk [`AGENTS.md`](https://github.com/julianriise/forsk/blob/main/AGENTS.md) “Test tiers”. All three smokes only before packaging a release.
 - Smoke scripts stay one command, no prompts, stdout at most 25 lines, exit 0/1, and list the image and 3dm paths they wrote. They may quit and reopen Rhino and create blank fixtures themselves.
 - Changes that need no live check (docs, pure Python/contracts, tests) push after green headless gates.
 
