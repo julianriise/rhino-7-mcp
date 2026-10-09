@@ -503,6 +503,31 @@ namespace RhinoMCPPlugin.Forsk
             stale = true;
             if (edit == MapEdit.Wall) visible = false;
         }
+
+        /// <summary>
+        /// An object deleted outside a Forsk call (Rhino's Delete): what that does to
+        /// the map. A room, its plate, a wall or a roof changes what the map covers,
+        /// so it hides; an opening only changes its light.
+        /// </summary>
+        public static MapEdit AfterDelete(string kind, bool onRoomLayer)
+        {
+            switch ((kind ?? "").ToLowerInvariant())
+            {
+                case "room":
+                case "room_plate":
+                case "floor":
+                case "wall":
+                case "roof":
+                    return MapEdit.Wall;
+                case "opening":
+                case "opening_marker":
+                    return MapEdit.Opening;
+                case "analysis":
+                    return MapEdit.None;
+                default:
+                    return onRoomLayer ? MapEdit.Wall : MapEdit.None;
+            }
+        }
     }
 
     /// <summary>The last Forsk pill or answer: what ran, on which document, in which turn.</summary>

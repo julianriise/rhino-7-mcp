@@ -406,7 +406,11 @@ namespace RhinoMCPPlugin.Forsk
                 Models.Forget(serial);
             };
             RhinoDoc.AddRhinoObject += (s, e) => ObjectChanged();
-            RhinoDoc.DeleteRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.DeleteRhinoObject += (s, e) =>
+            {
+                ObjectChanged();
+                Deleted(e.TheObject);
+            };
             RhinoDoc.ReplaceRhinoObject += (s, e) => ObjectChanged();
             RhinoDoc.UndeleteRhinoObject += (s, e) => ObjectChanged();
             RhinoDoc.ModifyObjectAttributes += (s, e) => ObjectChanged();
@@ -421,6 +425,7 @@ namespace RhinoMCPPlugin.Forsk
             RhinoApp.Idle += (s, e) =>
             {
                 Poll(force: false);
+                MarkMapAfterDelete();
                 var open = _open;
                 if (open == null || !_dirty || open._busy) return;
                 open.Render();
@@ -434,6 +439,30 @@ namespace RhinoMCPPlugin.Forsk
             if (inside) _jobChanges++;
             Tracker.ObjectChanged(inside);
             MarkDirty();
+        }
+
+        static MapEdit _deletedEdit;
+
+        /// <summary>Rhino's Delete took away what the daylight map was drawn from: mark it at the next idle.</summary>
+        static void Deleted(Rhino.DocObjects.RhinoObject obj)
+        {
+            if (ForskCalls.Depth > 0 || obj?.Attributes == null) return;
+            var doc = obj.Document;
+            var index = obj.Attributes.LayerIndex;
+            var onRoomLayer = doc != null && index >= 0 && index < doc.Layers.Count
+                && string.Equals(doc.Layers[index].Name, "A-ROOM", StringComparison.OrdinalIgnoreCase);
+            var edit = DaylightMap.AfterDelete(obj.Attributes.GetUserString("forsk:kind"), onRoomLayer);
+            if (edit > _deletedEdit) _deletedEdit = edit;
+        }
+
+        /// <summary>No layer or attribute change inside Rhino's delete event: the map is marked here, on idle.</summary>
+        static void MarkMapAfterDelete()
+        {
+            if (_deletedEdit == MapEdit.None) return;
+            var edit = _deletedEdit;
+            _deletedEdit = MapEdit.None;
+            var doc = RhinoDoc.ActiveDoc;
+            if (doc != null && RhinoMCPFunctions.MarkMapAfterEdit(doc, edit) > 0) doc.Views.Redraw();
         }
 
         static void Selected()

@@ -137,6 +137,24 @@ public class FileClassifierTests
         Assert.Equal("The map is out of date.", ForskRegistry.Bar(f).Reason);
     }
 
+    [Theory]
+    [InlineData("room", false, MapEdit.Wall)]
+    [InlineData(null, true, MapEdit.Wall)]
+    [InlineData("room_plate", false, MapEdit.Wall)]
+    [InlineData("floor", false, MapEdit.Wall)]
+    [InlineData("wall", false, MapEdit.Wall)]
+    [InlineData("roof", false, MapEdit.Wall)]
+    [InlineData("opening", false, MapEdit.Opening)]
+    [InlineData("opening_marker", false, MapEdit.Opening)]
+    [InlineData("analysis", false, MapEdit.None)]
+    [InlineData(null, false, MapEdit.None)]
+    [InlineData("furniture", false, MapEdit.None)]
+    public void ADeleteOutsideForsk_OfWhatTheMapWasDrawnFrom_MarksIt(string kind, bool onRoomLayer, MapEdit edit)
+    {
+        // Julian 2026-10-09: a deleted room or plate left the map shown as if current.
+        Assert.Equal(edit, DaylightMap.AfterDelete(kind, onRoomLayer));
+    }
+
     [Fact]
     public void AnOpeningEdit_LeavesTheMapVisible_AndSetsStale()
     {
