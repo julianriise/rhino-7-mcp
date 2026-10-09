@@ -271,10 +271,6 @@ public static class WallFace
     public static string Prompt(Hit hit, bool nb) =>
         Text(hit?.Kind == Kind.End ? "wall.face.prompt.end" : "wall.face.prompt.side", nb);
 
-    /// <summary>The Change thickness pill's prompt: the run's thickness now, and what to type.</summary>
-    public static string ThicknessPrompt(Hit hit, bool nb) =>
-        ForskText.Format(Key("wall.thickness.prompt", nb), "n", Mm(hit?.Run?.Thickness ?? 0));
-
     static string Key(string key, bool nb) => nb && ForskText.Has(key + ".nb") ? key + ".nb" : key;
     static string Text(string key, bool nb) => ForskText.Get(Key(key, nb));
 

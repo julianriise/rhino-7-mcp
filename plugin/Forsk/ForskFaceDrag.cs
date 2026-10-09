@@ -20,8 +20,7 @@ namespace RhinoMCPPlugin.Forsk
     /// The preview is drawn and dropped; a click, Enter or a typed number
     /// calls edit_wall_face once, for what the dimension showed. Esc changes
     /// nothing. With a wall selected the click goes straight to its face
-    /// (pick, then act); with none, the click on a wall is the face. The
-    /// Change thickness pill starts with Thickness on and offers sides only.
+    /// (pick, then act); with none, the click on a wall is the face.
     /// </summary>
     public static class ForskFaceDrag
     {
@@ -60,13 +59,9 @@ namespace RhinoMCPPlugin.Forsk
             return envelope["result"]?["message"]?.ToString() ?? "";
         }
 
-        /// <summary>
-        /// UI thread. Changes nothing: the caller commits Args with its own record.
-        /// only limits the faces offered; thickness starts with Thickness on (sides only).
-        /// </summary>
-        public static Outcome Pick(RhinoDoc doc, WallFace.Kind? only, bool thickness = false)
+        /// <summary>UI thread. Changes nothing: the caller commits Args with its own record. only limits the faces offered.</summary>
+        public static Outcome Pick(RhinoDoc doc, WallFace.Kind? only)
         {
-            if (thickness) only = WallFace.Kind.Side;
             var nb = ForskSpeech.Norwegian;
             var outcome = new Outcome { Norwegian = nb };
             if (doc == null)
@@ -75,7 +70,7 @@ namespace RhinoMCPPlugin.Forsk
                 outcome.Line = "No active document.";
                 return outcome;
             }
-            var prompt = Text(thickness ? "wall.thickness.pick" : only == WallFace.Kind.Side ? "wall.face.pick.side" : "wall.face.pick", nb);
+            var prompt = Text(only == WallFace.Kind.Side ? "wall.face.pick.side" : "wall.face.pick", nb);
             if (!TryFace(doc, prompt, out var host, out var point, out var view))
             {
                 outcome.Cancelled = true;
@@ -110,7 +105,7 @@ namespace RhinoMCPPlugin.Forsk
                 outcome.Line = WallDrag.Plain(why);
                 return outcome;
             }
-            new FacePoint(picked, hit, tol, nb, only == WallFace.Kind.Side && !thickness, thickness).Run(outcome, host.Id);
+            new FacePoint(picked, hit, tol, nb, only == WallFace.Kind.Side).Run(outcome, host.Id);
             return outcome;
         }
 
@@ -182,9 +177,8 @@ namespace RhinoMCPPlugin.Forsk
             string _why;
             List<Point3d[]> _after;
 
-            public FacePoint(RhinoMCPFunctions.SelectedDrag pick, WallFace.Hit hit, double tol, bool nb, bool moveOnly, bool thickness)
+            public FacePoint(RhinoMCPFunctions.SelectedDrag pick, WallFace.Hit hit, double tol, bool nb, bool moveOnly)
             {
-                _thickness = thickness;
                 _pick = pick;
                 _hit = hit;
                 _nb = nb;
@@ -196,7 +190,7 @@ namespace RhinoMCPPlugin.Forsk
                 AcceptNumber(true, true);
                 AcceptNothing(true);
                 AddOptions();
-                SetCommandPrompt(thickness ? WallFace.ThicknessPrompt(hit, nb) : WallFace.Prompt(hit, nb));
+                SetCommandPrompt(WallFace.Prompt(hit, nb));
             }
 
             public void Run(Outcome outcome, Guid host)
