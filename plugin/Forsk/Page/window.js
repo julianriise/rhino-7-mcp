@@ -1612,6 +1612,18 @@
       card.appendChild(line);
     });
     if (info.note) card.appendChild(el('p', 'info-note', info.note));
+    if (info.actions && info.actions.length) {
+      var actions = el('div', 'info-actions');
+      info.actions.forEach(function (action) {
+        var button = pill(action.label, false, function () {
+          pressed(button);
+          if (sender) sender.send({ kind: 'action', id: action.id });
+        }, action.icon);
+        button.setAttribute('data-action', action.id);
+        actions.appendChild(button);
+      });
+      card.appendChild(actions);
+    }
     box.appendChild(card);
   }
 

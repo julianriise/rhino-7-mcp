@@ -62,6 +62,8 @@ namespace RhinoMCPPlugin.Forsk
             public List<Row> Rows = new List<Row>();
             /// <summary>What an edit needs besides the typed value (an opening's sill, a piece's turn). Not sent to the page.</summary>
             public Dictionary<string, double> Context = new Dictionary<string, double>();
+            /// <summary>Buttons under the rows: a registry action id, its label and a Lucide icon. A click fires the action.</summary>
+            public List<(string Id, string Label, string Icon)> Actions = new List<(string Id, string Label, string Icon)>();
 
             public JObject ToJson()
             {
@@ -79,6 +81,8 @@ namespace RhinoMCPPlugin.Forsk
                 if (!string.IsNullOrEmpty(Subtitle)) json["subtitle"] = Subtitle;
                 if (!string.IsNullOrEmpty(Id)) json["id"] = Id;
                 if (!string.IsNullOrEmpty(Note)) json["note"] = Note;
+                if (Actions.Count > 0)
+                    json["actions"] = new JArray(Actions.Select(a => new JObject { ["id"] = a.Id, ["label"] = a.Label, ["icon"] = a.Icon }));
                 return json;
             }
         }
@@ -158,6 +162,8 @@ namespace RhinoMCPPlugin.Forsk
                     ? mean.ToString("0.0", CultureInfo.InvariantCulture) + " % mean"
                     : "Not run yet"
             });
+            // One room: render it from inside (Julian, 2026-10-09). The card asks which way to look.
+            panel.Actions.Add(("room.inside", ForskText.Get("room.inside"), "camera"));
             return panel;
         }
 

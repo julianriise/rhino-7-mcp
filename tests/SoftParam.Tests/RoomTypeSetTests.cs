@@ -61,4 +61,17 @@ public class RoomTypeSetTests
         Assert.Equal("Rom is Bedroom.", RoomTypes.SetSentence(new List<string> { "Rom" }, RoomTypes.Bedroom));
         Assert.Equal("2 rooms are Bedroom: Rom, Rom 2.", RoomTypes.SetSentence(new List<string> { "Rom", "Rom 2" }, RoomTypes.Bedroom));
     }
+
+    [Fact]
+    public void OneRoom_HasAnInteriorRenderButton_SeveralRoomsDoNot()
+    {
+        var one = ForskInfo.For(Picked(Room("Kitchen", RoomTypes.Kitchen)))!.ToJson();
+        var action = Assert.Single(one["actions"]!);
+        Assert.Equal("room.inside", action["id"]!.ToString());
+        Assert.Equal("Interior render", action["label"]!.ToString());
+        Assert.Equal("camera", action["icon"]!.ToString());
+        Assert.Null(ForskInfo.For(Picked(Room("A"), Room("B")))!.ToJson()["actions"]);
+        var js = System.IO.File.ReadAllText(System.IO.Path.Combine(System.AppContext.BaseDirectory, "page", "window.js"));
+        Assert.Contains("sender.send({ kind: 'action', id: action.id })", js);
+    }
 }
