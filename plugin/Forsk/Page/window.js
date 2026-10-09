@@ -1577,8 +1577,9 @@
   };
 
   /*
-   * The info panel (UX.5): what the picked thing is. A field with a value can be
-   * changed: Enter or leaving the field sends it, Esc puts it back. The field
+   * The Properties panel (UX.5, the info panel in code): what the picked thing
+   * is. Every field can be changed in place: Enter or leaving the field sends
+   * it, Esc puts it back. A note under the rows says why a property only reads. The field
    * dims the moment it is sent; the next render shows the record as it now is.
    * A field being typed in is never redrawn under the cursor.
    */
@@ -1610,6 +1611,7 @@
       }
       card.appendChild(line);
     });
+    if (info.note) card.appendChild(el('p', 'info-note', info.note));
     box.appendChild(card);
   }
 

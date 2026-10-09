@@ -216,6 +216,85 @@ public class WallFaceTests
         Assert.Equal("Only an end face changes the length.", why);
     }
 
+    static int RunAt(WallJoins.Graph g, double x, double y) => Pick(g, x, y).Index;
+
+    [Fact]
+    public void SetThickness_OuterWall_KeepsItsOutsideFace()
+    {
+        // The Properties panel: no face clicked. The garage's north wall keeps its outside face.
+        var records = new List<List<List<Pt>>> { WallJoinsTests.Garage() };
+        var g = Graph(records);
+        var north = RunAt(g, 4000, 3800);
+        Assert.Equal(1, WallFace.OutsideSide(g, g.Runs[north], Tol));
+        Assert.True(WallFace.TrySetThickness(records, g, north, 250, Tol, out var moved, out var shift, out var why), why);
+        Assert.Equal(4000, Box(moved.Shape).MaxY, 3);
+        Assert.Equal(3750, moved.Shape[1].Max(p => p.Y), 3);
+        // The openings on it keep to its middle: 25 mm south.
+        Assert.Equal(-25, shift, 6);
+    }
+
+    [Fact]
+    public void SetThickness_Partition_KeepsItsCentreline()
+    {
+        var records = new List<List<List<Pt>>> { WallJoinsTests.TwoRooms() };
+        var g = Graph(records);
+        var partition = g.Names.IndexOf("the wall at (4000, 2000)");
+        var before = g.Runs[partition];
+        Assert.Equal(0, WallFace.OutsideSide(g, before, Tol));
+        Assert.True(WallFace.TrySetThickness(records, g, partition, before.Thickness + 100, Tol, out var moved, out var shift, out var why), why);
+        Assert.Equal(0, shift, 6);
+        var after = WallJoins.Runs(moved.Shape, Tol).Single(r => Math.Abs(r.Normal.X) > 0.99 && r.Near > 1000 && r.Far < 7000);
+        Assert.Equal(before.Thickness + 100, after.Thickness, 3);
+        Assert.Equal((before.Near + before.Far) / 2.0, (after.Near + after.Far) / 2.0, 3);
+    }
+
+    [Fact]
+    public void SetThickness_WallStandingAlone_GrowsBothWays_AndRefusesNoChangeOrTooThick()
+    {
+        var records = new List<List<List<Pt>>> { Straight() };
+        var g = Graph(records);
+        Assert.True(WallFace.TrySetThickness(records, g, 0, 300, Tol, out var moved, out _, out var why), why);
+        Assert.Equal((0.0, -50.0, 4000.0, 250.0), Box(moved.Shape));
+        Assert.False(WallFace.TrySetThickness(records, g, 0, 200, Tol, out _, out _, out why));
+        Assert.Equal("Not changed: the wall is already 200 mm thick.", why);
+        Assert.False(WallFace.TrySetThickness(records, g, 0, 700, Tol, out _, out _, out why));
+        Assert.StartsWith("thickness is above 0", why);
+    }
+
+    [Fact]
+    public void SetLength_MovesTheEnd_TheStartStays()
+    {
+        var records = new List<List<List<Pt>>> { Straight() };
+        var g = Graph(records);
+        Assert.Equal(1, WallFace.FreeEndOf(g, 0, Tol));
+        Assert.True(WallFace.TrySetLength(records, g, 0, 3000, Tol, out var moved, out var hit, out var why), why);
+        Assert.Equal(1, hit.End);
+        Assert.Equal((0.0, 0.0, 3000.0, 200.0), Box(moved.Shape));
+    }
+
+    [Fact]
+    public void SetLength_EndInACorner_MovesTheFreeEnd()
+    {
+        var records = new List<List<List<Pt>>> { L() };
+        var g = Graph(records);
+        var bar = RunAt(g, 2000, 0);
+        Assert.Equal(-1, WallFace.FreeEndOf(g, bar, Tol));
+        Assert.True(WallFace.TrySetLength(records, g, bar, g.Runs[bar].Length + 500, Tol, out var moved, out _, out var why), why);
+        Assert.Equal(-500, Box(moved.Shape).MinX, 3);
+        Assert.Equal(4000, Box(moved.Shape).MaxX, 3);
+    }
+
+    [Fact]
+    public void SetLength_JoinedAtBothEnds_IsRefused()
+    {
+        var records = new List<List<List<Pt>>> { WallJoinsTests.Garage() };
+        var g = Graph(records);
+        var north = RunAt(g, 4000, 3800);
+        Assert.Equal(0, WallFace.FreeEndOf(g, north, Tol));
+        Assert.False(WallFace.TrySetLength(records, g, north, 5000, Tol, out _, out _, out var why));
+        Assert.StartsWith("Length not changed: both ends meet other walls", why);
+    }
+
     [Fact]
     public void Shortening_PastAWindow_LeavesItUnheld()
     {

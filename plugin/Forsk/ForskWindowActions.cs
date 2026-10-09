@@ -1457,13 +1457,17 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>
-        /// An edit typed or picked in the info panel: the same tool the chat runs
-        /// (ForskInfo.Edit), with no chat line. A refusal or a failed edit is one
-        /// line in the chat; the panel shows the record as it now is either way.
+        /// An edit typed or picked in the Properties panel: the same tool the chat
+        /// runs (ForskInfo.Edit), with no chat line. The panel is read again
+        /// first, so the edit goes to what is picked now. A refusal or a failed
+        /// edit is one line in the chat; the panel shows the record as it now is
+        /// either way.
         /// </summary>
         void InfoEdit(string id, string field, string value)
         {
-            var edit = ForskInfo.Edit(id, field, value, out var error);
+            var doc = RhinoDoc.ActiveDoc;
+            var panel = doc == null ? null : ForskInfo.For(ReadFacts(doc));
+            var edit = ForskInfo.Edit(panel, id, field, value, out var error);
             if (edit.HasValue) error = QuietTool(edit.Value.Tool, edit.Value.Args);
             if (error != null) Active()?.AddLine(error);
             MarkDirty();

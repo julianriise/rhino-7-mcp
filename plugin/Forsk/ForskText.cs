@@ -624,6 +624,7 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.delete_opening"] = "Opening",
             ["tool.move_wall"] = "Wall",
             ["tool.edit_wall_face"] = "Wall",
+            ["tool.set_wall"] = "Wall",
             ["tool.delete_wall"] = "Wall",
             ["tool.add_wall"] = "Wall",
             ["tool.add_room_area"] = "Area",

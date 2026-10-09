@@ -3087,6 +3087,40 @@ class TestMoveWallTool:
         assert "destructiveHint=True" in src
 
 
+class TestSetWallTool:
+    """The Properties panel's wall fields: one amount on the wire, id only for one wall."""
+
+    @patch("rhinomcp.tools.set_wall.get_rhino_connection")
+    def test_one_amount_passes_through(self, mock_get_conn):
+        from rhinomcp.tools.set_wall import set_wall
+
+        mock_conn = MagicMock()
+        mock_conn.send_command.return_value = {"host_id": "h1", "thickness": 150, "kept": "centreline", "ok": True, "message": "Made it 150 mm thick."}
+        mock_get_conn.return_value = mock_conn
+
+        result = set_wall(ctx=None, thickness_mm=150, id="g1")
+        assert mock_conn.send_command.call_args[0] == ("set_wall", {"thickness_mm": 150, "id": "g1"})
+        assert result["success"] is True
+        assert result["kept"] == "centreline"
+
+        set_wall(ctx=None, length_mm=3600)
+        assert mock_conn.send_command.call_args[0] == ("set_wall", {"length_mm": 3600})
+        # The height is every wall's: no id goes with it.
+        set_wall(ctx=None, height_mm=2700, id="g1")
+        assert mock_conn.send_command.call_args[0] == ("set_wall", {"height_mm": 2700})
+
+    @patch("rhinomcp.tools.set_wall.get_rhino_connection")
+    def test_rejects_bad_input(self, mock_get_conn):
+        from rhinomcp.tools.set_wall import set_wall
+
+        assert set_wall(ctx=None)["success"] is False
+        assert set_wall(ctx=None, thickness_mm=150, length_mm=3000)["success"] is False
+        assert set_wall(ctx=None, thickness_mm=0)["success"] is False
+        assert set_wall(ctx=None, thickness_mm=700)["success"] is False
+        assert set_wall(ctx=None, height_mm=True)["success"] is False
+        mock_get_conn.assert_not_called()
+
+
 class TestEditWallFaceTool:
     """WF: an end changes the length, a side the place or thickness; the wire carries at and one amount."""
 

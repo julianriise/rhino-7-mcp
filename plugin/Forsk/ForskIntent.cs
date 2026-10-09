@@ -822,6 +822,9 @@ namespace RhinoMCPPlugin.Forsk
         public string RunName;
         /// <summary>The way that run moves first: its compass side, else north for an east–west run and east for a north–south one.</summary>
         public string RunToward;
+        /// <summary>That run's length in the join graph, mm, and whether one of its ends stands free (the Properties panel can change its length).</summary>
+        public double? RunLength;
+        public bool RunFreeEnd;
         /// <summary>forsk:part on an opening: frame, leaf, glass, sash, sill, threshold, track.</summary>
         public string Part;
         /// <summary>Rhino group indexes, sorted and comma-separated. Empty when the object is in none.</summary>

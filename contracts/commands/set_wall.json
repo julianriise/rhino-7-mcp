@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "set_wall.json",
+  "title": "SetWall Command",
+  "description": "The Properties panel's wall fields. Give one of thickness_mm, length_mm or height_mm. thickness_mm makes one straight wall run that thick with no face clicked: a wall with one face to the outside keeps that face, any other wall keeps its centreline and each face moves half. length_mm makes the run that long by its free end at its far end (else its other free end), so the start stays; a wall joined at both ends is refused. Walls meeting a moved face slide along their own lines, the openings stay (on a thicker wall they keep to its middle), and the floor slab, flat roof and rooms follow, as edit_wall_face. A record of more than one run is refused: split walls first. height_mm makes every generated wall that high from the walls' foot (one storey), rebuilt with its openings cut again, and moves each flat roof by the change in the walls' top; an opening whose head would reach the top refuses it. A refused or failed edit leaves the document unchanged. Id omitted uses the selected wall. Refuses X-EXIST.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "$ref": "../common/definitions.json#/$defs/guid",
+      "description": "Wall GUID for thickness_mm or length_mm. Omit to use the selected wall."
+    },
+    "thickness_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 600,
+      "description": "The run's new thickness."
+    },
+    "length_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The run's new length."
+    },
+    "height_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 10000,
+      "description": "Every wall's new height: the storey."
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "thickness_mm"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "length_mm"
+            ]
+          },
+          {
+            "required": [
+              "height_mm"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "required": [
+        "length_mm"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "thickness_mm"
+            ]
+          },
+          {
+            "required": [
+              "height_mm"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "required": [
+        "height_mm"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "thickness_mm"
+            ]
+          },
+          {
+            "required": [
+              "length_mm"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

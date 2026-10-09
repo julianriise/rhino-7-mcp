@@ -58,6 +58,7 @@ namespace RhinoMCPPlugin.Forsk
             "delete_opening",
             "move_wall",
             "edit_wall_face",
+            "set_wall",
             "delete_wall",
             "add_wall",
             "split_walls",
@@ -549,6 +550,15 @@ namespace RhinoMCPPlugin.Forsk
                         ["id"] = Str("Wall GUID. Omit to use the selected wall, or the wall nearest at.")
                     },
                     "at"),
+                Fn("set_wall",
+                    "Set a wall's size with no face clicked, as the Properties panel does. Give one of thickness_mm, length_mm or height_mm. thickness_mm makes one straight wall that thick: an outer wall keeps its outside face, any other wall keeps its centreline. length_mm moves its free end and the start stays; a wall joined at both ends is refused. Walls meeting a moved face follow; floor, roof and rooms follow. height_mm makes every wall that high (one storey) and moves the flat roof onto them; an opening reaching the top is refused. A record of more than one run is refused: split walls first. Refuses X-EXIST.",
+                    new JObject
+                    {
+                        ["thickness_mm"] = Num("The new thickness, above 0 and at most 600 mm."),
+                        ["length_mm"] = Num("The new length in mm."),
+                        ["height_mm"] = Num("Every wall's new height in mm."),
+                        ["id"] = Str("Wall GUID for thickness_mm or length_mm. Omit to use the selected wall.")
+                    }),
                 Fn("delete_wall",
                     "Delete one straight wall run and the openings in it, then rebuild that host from its path. Name the run as for move_wall: side for an outer wall, or at for the face nearest a point; omit both when the selected wall is one run. A partition out joins its two rooms; an outer wall out opens the ring; a wall standing on its own goes whole, and so does a record of its own that the run covers. Refused when a wall record left would stand in two pieces. The floor slab and flat roof under those walls are rebuilt, and rooms are detected again. A shown daylight map is hidden as out of date. Refuses X-EXIST.",
                     new JObject

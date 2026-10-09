@@ -28,6 +28,7 @@ public partial class RhinoMCPFunctions
         }
         if (wanted.Count == 0) return;
         double? wallTop = null;
+        var wallFoot = 0.0;
         foreach (var row in rows)
         {
             if (string.IsNullOrEmpty(row.Id) || !wanted.Contains(row.Id) || !Guid.TryParse(row.Id, out var id)) continue;
@@ -49,10 +50,16 @@ public partial class RhinoMCPFunctions
             }
             if (kind == "room" && box.HasValue && box.Value.IsValid)
             {
-                wallTop = wallTop ?? WallTop(doc, rows);
+                wallTop = wallTop ?? WallTop(doc, rows, out wallFoot);
                 if (wallTop.HasValue && wallTop.Value > box.Value.Min.Z)
+                {
                     info[ForskInfo.CeilingKey] = InfoMm(wallTop.Value - box.Value.Min.Z);
+                    // A ceiling typed in the panel is the walls' height less this.
+                    info[ForskInfo.CeilingLiftKey] = InfoMm(box.Value.Min.Z - wallFoot);
+                }
             }
+            if (kind == "furniture" && TryFurniture(obj, out _, out var frame, out _))
+                info[ForskInfo.RotationKey] = frame.Degrees.ToString("0.###", CultureInfo.InvariantCulture);
             row.Info = info;
         }
         // The thing a part stands for is its marker: the marker's record is the one the panel reads.
@@ -64,16 +71,24 @@ public partial class RhinoMCPFunctions
         }
     }
 
-    /// <summary>The highest wall top in the file: one storey, so the ceiling every room has. Null with no walls.</summary>
-    private static double? WallTop(RhinoDoc doc, List<ChipRow> rows)
+    /// <summary>
+    /// The highest wall top in the file: one storey, so the ceiling every room
+    /// has. foot is the lowest wall foot (set_wall height_mm measures from it).
+    /// Null with no walls.
+    /// </summary>
+    private static double? WallTop(RhinoDoc doc, List<ChipRow> rows, out double foot)
     {
         double? top = null;
+        double? low = null;
         foreach (var row in rows.Where(r => r.Generated && string.Equals(r.Kind, "wall", StringComparison.OrdinalIgnoreCase)))
         {
             if (!Guid.TryParse(row.Id, out var id)) continue;
             var box = doc.Objects.FindId(id)?.Geometry?.GetBoundingBox(true);
-            if (box.HasValue && box.Value.IsValid && (!top.HasValue || box.Value.Max.Z > top.Value)) top = box.Value.Max.Z;
+            if (!box.HasValue || !box.Value.IsValid) continue;
+            if (!top.HasValue || box.Value.Max.Z > top.Value) top = box.Value.Max.Z;
+            if (!low.HasValue || box.Value.Min.Z < low.Value) low = box.Value.Min.Z;
         }
+        foot = low ?? 0;
         return top;
     }
 

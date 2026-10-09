@@ -8,14 +8,16 @@ using RhinoMCPPlugin.Functions;
 namespace RhinoMCPPlugin.Forsk
 {
     /// <summary>
-    /// The info panel (2.0 UX.5): pick anything Forsk made and the top of the
-    /// window says what it is, without asking in chat. A room: type, net area,
-    /// ceiling height, floor, daylight. A door or window: type, width, height,
-    /// sill, head, hand and swing, host wall, mark. A wall: thickness, height,
-    /// length. A stair: steps, riser, going, total rise. A piece of furniture:
-    /// what it is and its size. Several things: how many of each kind, the walls'
-    /// total length and the rooms' total area. A field that can change runs the
-    /// same tool as the chat would: set_opening, set_opening_type, rooms_set_type.
+    /// The Properties panel (2.0 UX.5, called the info panel in code): pick
+    /// anything Forsk made and the top of the window says what it is, without
+    /// asking in chat. A room: type, net area, ceiling height, floor, daylight.
+    /// A door or window: type, width, height, sill, head, hand, swing, host
+    /// wall, mark. A wall: thickness, height, length. A stair: steps, riser,
+    /// going, width, total rise. A piece of furniture: what it is, its size and
+    /// its turn. Several things: how many of each kind, the walls' total length
+    /// and the rooms' total area. Every property a tool can set is a field, and
+    /// a change runs the same tool as the chat would: set_opening,
+    /// set_opening_type, rooms_set_type, set_wall, edit_stair, move_furniture.
     /// Built from the picked rows' records (ChipRow.Info). No RhinoCommon.
     /// </summary>
     public static class ForskInfo
@@ -24,6 +26,12 @@ namespace RhinoMCPPlugin.Forsk
         public const string CeilingKey = "info:ceiling";
         public const string HeightKey = "info:height";
         public const string HostKey = "info:host";
+        /// <summary>The room's floor above the walls' foot, mm: a ceiling typed in is the walls' height less this.</summary>
+        public const string CeilingLiftKey = "info:ceiling_lift";
+        /// <summary>A piece of furniture's turn, degrees counter-clockwise from world x.</summary>
+        public const string RotationKey = "info:rotation";
+        /// <summary>The thickness and length rows of a wall that is more than one run.</summary>
+        public const string SplitNote = "Split walls for picking to change one wall's thickness or length.";
 
         public sealed class Option
         {
@@ -35,9 +43,9 @@ namespace RhinoMCPPlugin.Forsk
         {
             public string Label;
             public string Value;
-            /// <summary>The field an edit sends (width, sill, head, type, room_type), or null when the row only reads.</summary>
+            /// <summary>The field an edit sends (width, thickness, rotation, room_type…), or null when the row only reads.</summary>
             public string Field;
-            /// <summary>"mm" for a number typed in millimetres.</summary>
+            /// <summary>"mm" for a number typed in millimetres, "°" for degrees.</summary>
             public string Unit;
             /// <summary>A choice instead of a typed value; Value is then the chosen id.</summary>
             public List<Option> Options;
@@ -47,9 +55,13 @@ namespace RhinoMCPPlugin.Forsk
         {
             public string Title;
             public string Subtitle;
-            /// <summary>The object an edit goes to: the opening's marker or the room's marker.</summary>
+            /// <summary>The object an edit goes to: the opening's marker, the room's marker, the wall, stair or piece.</summary>
             public string Id;
+            /// <summary>A line under the rows, in the meta colour: why a property only reads.</summary>
+            public string Note;
             public List<Row> Rows = new List<Row>();
+            /// <summary>What an edit needs besides the typed value (an opening's sill, a piece's turn). Not sent to the page.</summary>
+            public Dictionary<string, double> Context = new Dictionary<string, double>();
 
             public JObject ToJson()
             {
@@ -66,6 +78,7 @@ namespace RhinoMCPPlugin.Forsk
                 var json = new JObject { ["title"] = Title, ["rows"] = rows };
                 if (!string.IsNullOrEmpty(Subtitle)) json["subtitle"] = Subtitle;
                 if (!string.IsNullOrEmpty(Id)) json["id"] = Id;
+                if (!string.IsNullOrEmpty(Note)) json["note"] = Note;
                 return json;
             }
         }
@@ -129,7 +142,14 @@ namespace RhinoMCPPlugin.Forsk
             });
             panel.Rows.Add(new Row { Label = "Net area", Value = SquareMetres(Mm(row.Area)) });
             var ceiling = Mm(Get(row, CeilingKey));
-            if (ceiling.HasValue) panel.Rows.Add(new Row { Label = "Ceiling height", Value = Millimetres(ceiling) });
+            var lift = Mm(Get(row, CeilingLiftKey));
+            if (ceiling.HasValue && lift.HasValue)
+            {
+                // Every room shares the storey's walls: a new ceiling is a new wall height.
+                panel.Context["ceiling_lift"] = lift.Value;
+                panel.Rows.Add(new Row { Label = "Ceiling height", Value = Number(ceiling), Field = "ceiling", Unit = "mm" });
+            }
+            else if (ceiling.HasValue) panel.Rows.Add(new Row { Label = "Ceiling height", Value = Millimetres(ceiling) });
             panel.Rows.Add(new Row { Label = "Floor", Value = Floor(Get(row, "forsk:level")) });
             panel.Rows.Add(new Row
             {
@@ -165,36 +185,79 @@ namespace RhinoMCPPlugin.Forsk
             var sill = Mm(row.Sill);
             var head = Mm(row.Head);
             panel.Rows.Add(new Row { Label = "Width", Value = Number(Mm(row.Width)), Field = "width", Unit = "mm" });
-            panel.Rows.Add(new Row { Label = "Height", Value = sill.HasValue && head.HasValue ? Millimetres(head - sill) : "–" });
+            if (sill.HasValue && head.HasValue)
+            {
+                // The height keeps the sill: a new height is a new head.
+                panel.Context["sill"] = sill.Value;
+                panel.Rows.Add(new Row { Label = "Height", Value = Number(head - sill), Field = "height", Unit = "mm" });
+            }
+            else panel.Rows.Add(new Row { Label = "Height", Value = "–" });
             panel.Rows.Add(new Row { Label = "Sill", Value = Number(sill), Field = "sill", Unit = "mm" });
             panel.Rows.Add(new Row { Label = "Head", Value = Number(head), Field = "head", Unit = "mm" });
-            var hang = Hang(def, Get(row, OpeningTypes.HandKey), Get(row, OpeningTypes.SwingKey));
-            if (hang != null) panel.Rows.Add(new Row { Label = "Hand and swing", Value = hang });
+            if (def != null && def.HasHand)
+                panel.Rows.Add(new Row
+                {
+                    Label = "Hand",
+                    Value = Hand(Get(row, OpeningTypes.HandKey)),
+                    Field = "hand",
+                    Options = new List<Option> { new Option { Id = "L", Label = "Left" }, new Option { Id = "R", Label = "Right" } }
+                });
+            if (def != null && def.HasSwing)
+                panel.Rows.Add(new Row
+                {
+                    Label = "Opens",
+                    Value = Swing(Get(row, OpeningTypes.SwingKey)),
+                    Field = "swing",
+                    Options = new List<Option> { new Option { Id = "in", Label = "In" }, new Option { Id = "out", Label = "Out" } }
+                });
             var host = Get(row, HostKey);
             if (!string.IsNullOrEmpty(host)) panel.Rows.Add(new Row { Label = "In wall", Value = host });
             return panel;
         }
 
+        /// <summary>
+        /// A wall of one run (ForskPick.OneRunWall) changes its thickness and,
+        /// with an end standing free, its length. Its height is the storey's:
+        /// every wall follows, and the roof sits on them again. A whole record
+        /// of several runs reads its thickness and length only.
+        /// </summary>
         static Panel Wall(ChipRow row)
         {
+            var oneRun = row.Runs == 1 && !string.IsNullOrEmpty(row.RunName);
             var panel = new Panel
             {
                 Title = string.IsNullOrEmpty(row.ForskId) ? "Wall" : "Wall " + row.ForskId,
-                Subtitle = string.IsNullOrEmpty(row.RunName) ? null : Capital(row.RunName)
+                Subtitle = string.IsNullOrEmpty(row.RunName) ? null : Capital(row.RunName),
+                Id = row.Id
             };
-            panel.Rows.Add(new Row { Label = "Thickness", Value = Millimetres(Mm(row.Thickness)) });
-            panel.Rows.Add(new Row { Label = "Height", Value = Millimetres(Mm(Get(row, "forsk:height") ?? Get(row, HeightKey))) });
-            panel.Rows.Add(new Row { Label = "Length", Value = Metres(WallLength(row)) });
+            var thickness = Mm(row.Thickness);
+            panel.Rows.Add(oneRun && thickness.HasValue
+                ? new Row { Label = "Thickness", Value = Number(thickness), Field = "thickness", Unit = "mm" }
+                : new Row { Label = "Thickness", Value = Millimetres(thickness) });
+            var height = Mm(Get(row, "forsk:height") ?? Get(row, HeightKey));
+            panel.Rows.Add(height.HasValue
+                ? new Row { Label = "Height", Value = Number(height), Field = "wall_height", Unit = "mm" }
+                : new Row { Label = "Height", Value = "–" });
+            if (oneRun && row.RunFreeEnd && row.RunLength.HasValue)
+                panel.Rows.Add(new Row { Label = "Length", Value = Number(row.RunLength), Field = "length", Unit = "mm" });
+            else
+                panel.Rows.Add(new Row { Label = "Length", Value = Metres(oneRun && row.RunLength.HasValue ? row.RunLength : WallLength(row)) });
+            if (row.Runs > 1) panel.Note = SplitNote;
             return panel;
         }
 
         static Panel Stair(ChipRow row)
         {
-            var panel = new Panel { Title = string.IsNullOrEmpty(row.ForskId) ? "Stair" : "Stair " + row.ForskId };
+            var panel = new Panel { Title = string.IsNullOrEmpty(row.ForskId) ? "Stair" : "Stair " + row.ForskId, Id = row.Id };
             panel.Rows.Add(new Row { Label = "Steps", Value = string.IsNullOrEmpty(row.Risers) ? "–" : row.Risers });
-            panel.Rows.Add(new Row { Label = "Riser", Value = Millimetres(Mm(Get(row, Stairs.RiserKey))) });
-            panel.Rows.Add(new Row { Label = "Going", Value = Millimetres(Mm(row.Going)) });
-            panel.Rows.Add(new Row { Label = "Total rise", Value = Millimetres(Mm(Get(row, Stairs.RiseKey))) });
+            // The riser typed is the most a step may rise; the steps re-plan, all equal, and may come out lower.
+            panel.Rows.Add(Size("Riser", Mm(Get(row, Stairs.RiserKey)), "riser_max"));
+            panel.Rows.Add(Size("Going", Mm(row.Going), "going"));
+            panel.Rows.Add(Size("Width", Mm(Get(row, Stairs.WidthKey)), "stair_width"));
+            var rise = Get(row, Stairs.RiseKey);
+            if (string.Equals(rise, Stairs.Auto, StringComparison.OrdinalIgnoreCase))
+                panel.Rows.Add(new Row { Label = "Total rise", Value = Stairs.Auto, Field = "rise" });
+            else panel.Rows.Add(Size("Total rise", Mm(rise), "rise"));
             return panel;
         }
 
@@ -204,7 +267,8 @@ namespace RhinoMCPPlugin.Forsk
             var panel = new Panel
             {
                 Title = piece?.Name ?? "Furniture",
-                Subtitle = piece == null ? null : (piece.Fixed ? "Fixed fitting" : "Furniture")
+                Subtitle = piece == null ? null : (piece.Fixed ? "Fixed fitting" : "Furniture"),
+                Id = row.Id
             };
             if (piece != null)
                 panel.Rows.Add(new Row
@@ -212,6 +276,12 @@ namespace RhinoMCPPlugin.Forsk
                     Label = "Size",
                     Value = Number(piece.W) + " × " + Number(piece.D) + " × " + Number(piece.H) + " mm"
                 });
+            var turn = Mm(Get(row, RotationKey));
+            if (turn.HasValue)
+            {
+                panel.Context["rotation"] = turn.Value;
+                panel.Rows.Add(new Row { Label = "Rotation", Value = Degrees(turn.Value), Field = "rotation", Unit = "°" });
+            }
             var room = Get(row, Furniture.RoomKey);
             if (!string.IsNullOrEmpty(room)) panel.Rows.Add(new Row { Label = "Room", Value = room });
             panel.Rows.Add(new Row { Label = "Catalogue", Value = Get(row, Furniture.CatalogKey) ?? "–" });
@@ -254,36 +324,116 @@ namespace RhinoMCPPlugin.Forsk
 
         /// <summary>
         /// The tool and arguments a panel edit runs, the same as asking in chat,
-        /// or null with the reason. Width, sill and head are millimetres.
+        /// or null with the reason. panel is the Properties panel as it stands
+        /// now: an edit for something no longer picked is refused. Sizes are
+        /// millimetres, a turn is degrees.
         /// </summary>
-        public static (string Tool, JObject Args)? Edit(string id, string field, string value, out string error)
+        public static (string Tool, JObject Args)? Edit(Panel panel, string id, string field, string value, out string error)
         {
             error = null;
-            if (string.IsNullOrWhiteSpace(id)) { error = "Pick it again, then change it."; return null; }
+            if (string.IsNullOrWhiteSpace(id) || panel == null || !string.Equals(panel.Id, id, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "Pick it again, then change it.";
+                return null;
+            }
             value = (value ?? "").Trim();
+            double? number = null;
+            switch (field)
+            {
+                case "type":
+                    if (!OpeningTypes.TryGet(value, out _)) { error = "Pick a type from the list."; return null; }
+                    return ("set_opening_type", new JObject { ["id"] = id, ["type"] = value });
+                case "hand":
+                    if (value != "L" && value != "R") { error = "Pick left or right."; return null; }
+                    return ("set_opening_type", new JObject { ["id"] = id, ["hand"] = value });
+                case "swing":
+                    if (value != "in" && value != "out") { error = "Pick in or out."; return null; }
+                    return ("set_opening_type", new JObject { ["id"] = id, ["swing"] = value });
+                case "room_type":
+                    if (!RoomTypes.All.Contains(value)) { error = "Pick a room type from the list."; return null; }
+                    return ("rooms_set_type", new JObject { ["id"] = id, ["room_type"] = value });
+                case "rise":
+                    if (string.Equals(value, Stairs.Auto, StringComparison.OrdinalIgnoreCase))
+                        return ("edit_stair", new JObject { ["id"] = id, ["rise"] = Stairs.Auto });
+                    break;
+                case "rotation":
+                    number = Mm(value.Replace("°", "").Trim());
+                    if (!number.HasValue) { error = "Type a turn in degrees, like 90."; return null; }
+                    panel.Context.TryGetValue("rotation", out var was);
+                    var turn = Turn(number.Value - was);
+                    if (Math.Abs(turn) < 0.01) { error = "That is how it stands already."; return null; }
+                    return ("move_furniture", new JObject { ["id"] = id, ["rotate"] = turn });
+            }
+            number = number ?? Mm(value.Replace("mm", "").Trim());
+            if (!number.HasValue || number.Value < 0)
+            {
+                error = "Type a size in millimetres, like 900.";
+                return null;
+            }
+            var mm = number.Value;
             switch (field)
             {
                 case "width":
                 case "sill":
                 case "head":
-                    var number = Mm(value.Replace("mm", "").Trim());
-                    if (!number.HasValue || number.Value < 0 || (field == "width" && number.Value <= 0))
+                    if (field == "width" && mm <= 0) { error = "Type a size in millimetres, like 900."; return null; }
+                    return ("set_opening", new JObject { ["id"] = id, [field] = mm });
+                case "height":
+                    if (mm <= 0 || !panel.Context.TryGetValue("sill", out var sill)) { error = "Type a size in millimetres, like 2100."; return null; }
+                    return ("set_opening", new JObject { ["id"] = id, ["head"] = sill + mm });
+                case "thickness":
+                    if (mm <= 0 || mm > WallEdit.MaxThickMm)
                     {
-                        error = "Type a size in millimetres, like 900.";
+                        error = "A wall is above 0 and at most " + Number(WallEdit.MaxThickMm) + " mm thick.";
                         return null;
                     }
-                    return ("set_opening", new JObject { ["id"] = id, [field] = number.Value });
-                case "type":
-                    if (!OpeningTypes.TryGet(value, out _)) { error = "Pick a type from the list."; return null; }
-                    return ("set_opening_type", new JObject { ["id"] = id, ["type"] = value });
-                case "room_type":
-                    if (!RoomTypes.All.Contains(value)) { error = "Pick a room type from the list."; return null; }
-                    return ("rooms_set_type", new JObject { ["id"] = id, ["room_type"] = value });
+                    return ("set_wall", new JObject { ["id"] = id, ["thickness_mm"] = mm });
+                case "length":
+                    if (mm <= 0) { error = "Type a length in millimetres, like 3600."; return null; }
+                    return ("set_wall", new JObject { ["id"] = id, ["length_mm"] = mm });
+                case "wall_height":
+                    if (mm <= 0) { error = "Type a height in millimetres, like 2700."; return null; }
+                    return ("set_wall", new JObject { ["height_mm"] = mm });
+                case "ceiling":
+                    if (mm <= 0 || !panel.Context.TryGetValue("ceiling_lift", out var lift)) { error = "Type a height in millimetres, like 2500."; return null; }
+                    return ("set_wall", new JObject { ["height_mm"] = mm + lift });
+                case "riser_max":
+                    return ("edit_stair", new JObject { ["id"] = id, ["riser_max"] = mm });
+                case "going":
+                    return ("edit_stair", new JObject { ["id"] = id, ["going"] = mm });
+                case "stair_width":
+                    return ("edit_stair", new JObject { ["id"] = id, ["width"] = mm });
+                case "rise":
+                    if (mm <= 0) { error = "Type a rise in millimetres, or auto."; return null; }
+                    return ("edit_stair", new JObject { ["id"] = id, ["rise"] = mm });
                 default:
                     error = "That cannot be changed here.";
                     return null;
             }
         }
+
+        /// <summary>A turn the short way round: above -180 and at most 180 degrees.</summary>
+        static double Turn(double degrees)
+        {
+            var t = degrees % 360.0;
+            if (t > 180) t -= 360;
+            if (t <= -180) t += 360;
+            return Math.Round(t, 3);
+        }
+
+        /// <summary>A size in millimetres that changes, or a dash when the record has none.</summary>
+        static Row Size(string label, double? mm, string field) =>
+            mm.HasValue
+                ? new Row { Label = label, Value = Math.Round(mm.Value, 1).ToString("0.#", CultureInfo.InvariantCulture), Field = field, Unit = "mm" }
+                : new Row { Label = label, Value = Millimetres(mm) };
+
+        static string Degrees(double degrees) => Math.Round(degrees, 1).ToString("0.#", CultureInfo.InvariantCulture);
+
+        static string Hand(string hand) =>
+            string.IsNullOrEmpty(hand) ? "L" : char.ToUpperInvariant(hand[0]) == 'R' ? "R" : "L";
+
+        static string Swing(string swing) =>
+            string.Equals(swing, "out", StringComparison.OrdinalIgnoreCase) ? "out" : "in";
 
         /// <summary>The wall's length along its run: its footprint area over its thickness.</summary>
         public static double? WallLength(ChipRow row)
@@ -294,15 +444,6 @@ namespace RhinoMCPPlugin.Forsk
             var area = Math.Abs(RoomDetect.Area(rings[0]));
             for (var i = 1; i < rings.Count; i++) area -= Math.Abs(RoomDetect.Area(rings[i]));
             return area / thickness.Value;
-        }
-
-        static string Hang(OpeningTypes.TypeDef def, string hand, string swing)
-        {
-            if (def == null || (!def.HasHand && !def.HasSwing)) return null;
-            var parts = new List<string>();
-            if (def.HasHand && !string.IsNullOrEmpty(hand)) parts.Add(Capital(hand) + " hand");
-            if (def.HasSwing && !string.IsNullOrEmpty(swing)) parts.Add("opens " + swing);
-            return parts.Count == 0 ? null : Capital(string.Join(", ", parts));
         }
 
         static string Floor(string level)

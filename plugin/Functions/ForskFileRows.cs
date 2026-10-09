@@ -140,6 +140,8 @@ public partial class RhinoMCPFunctions
             if (run < 0) continue;
             row.RunName = graph.Names[run];
             row.RunToward = WallJoins.Toward(graph, run);
+            row.RunLength = graph.Runs[run].Length;
+            row.RunFreeEnd = WallFace.FreeEndOf(graph, run, tol) != 0;
         }
     }
 

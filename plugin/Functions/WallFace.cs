@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using RhinoMCPPlugin.Forsk;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
 
@@ -205,6 +206,138 @@ public static class WallFace
         }
         return true;
     }
+
+    /// <summary>
+    /// The Properties panel's Thickness: the run made thickness thick with no
+    /// face clicked. A wall with exactly one face to the outside keeps that
+    /// face, so the house keeps its footprint; any other wall keeps its
+    /// centreline and each face moves half. shift is how far the run's middle
+    /// moves along its normal, for the openings on it.
+    /// </summary>
+    public static bool TrySetThickness(IList<List<List<Pt>>> records, WallJoins.Graph graph, int index, double thickness, double tol, out WallJoins.Moved moved, out double shift, out string why)
+    {
+        moved = null;
+        shift = 0;
+        if (graph?.Runs == null || index < 0 || index >= graph.Runs.Count)
+        {
+            why = "No straight wall to edit.";
+            return false;
+        }
+        var run = graph.Runs[index];
+        var keep = OutsideSide(graph, run, tol);
+        if (keep != 0)
+        {
+            if (!TryThicken(records, graph, SideHit(run, index, -keep), thickness, tol, out moved, out var by, out why)) return false;
+            shift = by / 2.0;
+            return true;
+        }
+        // Centred: the far face takes half the change, then the near face makes it whole.
+        var half = run.Thickness + (thickness - run.Thickness) / 2.0;
+        if (thickness <= 0 || thickness > WallEdit.MaxThickMm)
+        {
+            why = "thickness is above 0 and at most " + Mm(WallEdit.MaxThickMm) + " mm.";
+            return false;
+        }
+        if (Math.Abs(thickness - run.Thickness) < tol)
+        {
+            why = "Not changed: the wall is already " + Mm(run.Thickness) + " mm thick.";
+            return false;
+        }
+        if (!TryThicken(records, graph, SideHit(run, index, 1), half, tol, out var first, out var firstBy, out why)) return false;
+        var after = new List<List<List<Pt>>>(records);
+        foreach (var record in first.Records) after[record.Key] = record.Value;
+        var regraph = WallJoins.Build(after, graph.Records, tol);
+        var grown = new WallEdit.Run { Dir = run.Dir, Normal = run.Normal, Near = run.Near, Far = run.Far + firstBy, Lo = run.Lo, Hi = run.Hi };
+        var again = regraph == null ? -1 : regraph.Find(grown, tol);
+        if (again < 0)
+        {
+            why = "Thickness not changed: the wall did not read as one run after its first face moved.";
+            return false;
+        }
+        if (!TryThicken(after, regraph, SideHit(regraph.Runs[again], again, -1), thickness, tol, out var second, out _, out why)) return false;
+        moved = new WallJoins.Moved { Shape = second.Shape };
+        foreach (var record in first.Records) moved.Records[record.Key] = record.Value;
+        foreach (var record in second.Records) moved.Records[record.Key] = record.Value;
+        var named = new HashSet<string>();
+        foreach (var f in first.Followed.Concat(second.Followed))
+            if (named.Add(f.Wall)) moved.Followed.Add(f);
+        return true;
+    }
+
+    /// <summary>
+    /// The Properties panel's Length: the run made length long by its end at
+    /// Hi, so the start stays; the end at Lo when only that end stands free.
+    /// A wall joined at both ends follows the walls it meets and is refused.
+    /// </summary>
+    public static bool TrySetLength(IList<List<List<Pt>>> records, WallJoins.Graph graph, int index, double length, double tol, out WallJoins.Moved moved, out Hit hit, out string why)
+    {
+        moved = null;
+        hit = null;
+        if (graph?.Runs == null || index < 0 || index >= graph.Runs.Count)
+        {
+            why = "No straight wall to edit.";
+            return false;
+        }
+        var run = graph.Runs[index];
+        var end = FreeEndOf(graph, index, tol);
+        if (end == 0)
+        {
+            why = "Length not changed: both ends meet other walls, so its length follows them. Move one of those walls instead.";
+            return false;
+        }
+        if (length <= 0)
+        {
+            why = "length is above 0.";
+            return false;
+        }
+        hit = new Hit { Kind = Kind.End, Index = index, Run = run, End = end, Out = Scale(run.Dir, end) };
+        return TryStretch(records, graph, hit, length - run.Length, tol, out moved, out why);
+    }
+
+    /// <summary>
+    /// +1 when the end at Hi stands free, else -1 when the end at Lo does,
+    /// else 0. An end is free when the shape closes it square and no other
+    /// run joins there: at a corner the shape's edge is the other wall's side.
+    /// </summary>
+    public static int FreeEndOf(WallJoins.Graph graph, int index, double tol)
+    {
+        if (graph?.Shape == null || index < 0 || index >= graph.Runs.Count) return 0;
+        foreach (var end in new[] { 1, -1 })
+            if (FreeEnd(graph.Shape, graph.Runs[index], end, tol, out _, out _) && !JoinedAt(graph, index, end, tol)) return end;
+        return 0;
+    }
+
+    static bool JoinedAt(WallJoins.Graph graph, int index, int end, double tol)
+    {
+        var run = graph.Runs[index];
+        var line = end > 0 ? run.Hi : run.Lo;
+        foreach (var join in graph.Joins)
+        {
+            if (join.A != index && join.B != index) continue;
+            var other = graph.Runs[join.A == index ? join.B : join.A];
+            if (Math.Abs(Dot(join.At, run.Dir) - line) <= other.Thickness + tol) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// +1 or -1 when only the face at Far or Near looks out of the shape (past
+    /// its outer loop), else 0: a partition looks into rooms both ways and a
+    /// wall standing alone looks out both ways.
+    /// </summary>
+    public static int OutsideSide(WallJoins.Graph graph, WallEdit.Run run, double tol)
+    {
+        if (graph?.Shape == null || graph.Shape.Count == 0 || run == null) return 0;
+        var middle = WallJoins.Middle(run);
+        var reach = run.Thickness / 2.0 + Math.Max(10.0, 2 * tol);
+        var far = !RoomDetect.Contains(graph.Shape[0], new Pt(middle.X + run.Normal.X * reach, middle.Y + run.Normal.Y * reach));
+        var near = !RoomDetect.Contains(graph.Shape[0], new Pt(middle.X - run.Normal.X * reach, middle.Y - run.Normal.Y * reach));
+        if (far == near) return 0;
+        return far ? 1 : -1;
+    }
+
+    static Hit SideHit(WallEdit.Run run, int index, int side) =>
+        new Hit { Kind = Kind.Side, Index = index, Run = run, Side = side, Out = Scale(run.Normal, side) };
 
     /// <summary>The signed move along the run's normal for a side face dragged out by distance (below 0: in).</summary>
     public static double Across(Hit hit, double distance) => hit == null ? 0 : hit.Side * distance;

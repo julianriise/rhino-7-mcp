@@ -75,34 +75,68 @@ public class ForskInfoTests
     {
         var panel = ForskInfo.For(Facts(Door()))!;
         Assert.Equal(("Door D02", "Hinged door"), (panel.Title, panel.Subtitle));
-        Assert.Equal("2100 mm", Value(panel, "Height"));
-        Assert.Equal("Left hand, opens in", Value(panel, "Hand and swing"));
+        Assert.Equal("2100", Value(panel, "Height"));
         Assert.Equal("w03", Value(panel, "In wall"));
-        Assert.Equal(new[] { "type", "width", "sill", "head" }, panel.Rows.Where(r => r.Field != null).Select(r => r.Field));
+        Assert.Equal(new[] { "type", "width", "height", "sill", "head", "hand", "swing" }, panel.Rows.Where(r => r.Field != null).Select(r => r.Field));
         Assert.Equal("900", panel.Rows.Single(r => r.Field == "width").Value);
+        Assert.Equal(("L", "in"), (Value(panel, "Hand"), Value(panel, "Opens")));
         Assert.All(panel.Rows.Single(r => r.Field == "type").Options!, o => Assert.StartsWith("door.", o.Id));
     }
 
-    [Fact]
-    public void AWall_ShowsThicknessHeightAndLength()
+    static ChipRow OneRunWall()
     {
         var wall = Picked("wall", ("forsk:path", "{\"outer\":[[0,0],[4200,0],[4200,200],[0,200]]}"), ("forsk:height", "2700"));
         wall.ForskId = "w01";
         wall.Thickness = "200";
+        wall.Runs = 1;
         wall.RunName = "the north wall";
+        wall.RunLength = 4200;
+        wall.RunFreeEnd = true;
+        return wall;
+    }
+
+    [Fact]
+    public void AWallOfOneRun_ChangesItsThicknessHeightAndLength()
+    {
+        var wall = OneRunWall();
         var panel = ForskInfo.For(Facts(wall))!;
-        Assert.Equal(("Wall w01", "The north wall"), (panel.Title, panel.Subtitle));
-        Assert.Equal("200 mm", Value(panel, "Thickness"));
-        Assert.Equal("2700 mm", Value(panel, "Height"));
+        Assert.Equal(("Wall w01", "The north wall", wall.Id), (panel.Title, panel.Subtitle, panel.Id));
+        Assert.Equal(new[] { "thickness", "wall_height", "length" }, panel.Rows.Select(r => r.Field));
+        Assert.Equal(("200", "2700", "4200"), (Value(panel, "Thickness"), Value(panel, "Height"), Value(panel, "Length")));
+        Assert.All(panel.Rows, r => Assert.Equal("mm", r.Unit));
+        Assert.Null(panel.Note);
+    }
+
+    [Fact]
+    public void AWallJoinedAtBothEnds_ReadsItsLength()
+    {
+        var wall = OneRunWall();
+        wall.RunFreeEnd = false;
+        var panel = ForskInfo.For(Facts(wall))!;
         Assert.Equal("4.20 m", Value(panel, "Length"));
-        Assert.DoesNotContain(panel.Rows, r => r.Field != null);
+        Assert.Null(panel.Rows.Single(r => r.Label == "Length").Field);
+        Assert.Equal("thickness", panel.Rows.Single(r => r.Label == "Thickness").Field);
+    }
+
+    [Fact]
+    public void AWholeWallRecord_ReadsItsThicknessAndLength_AndSaysToSplit()
+    {
+        var wall = OneRunWall();
+        wall.Runs = 4;
+        wall.RunName = null;
+        wall.RunLength = null;
+        var panel = ForskInfo.For(Facts(wall))!;
+        Assert.Equal(("200 mm", "4.20 m"), (Value(panel, "Thickness"), Value(panel, "Length")));
+        Assert.Equal(new[] { "wall_height" }, panel.Rows.Where(r => r.Field != null).Select(r => r.Field));
+        Assert.Equal(ForskInfo.SplitNote, panel.Note);
+        Assert.Equal(ForskInfo.SplitNote, panel.ToJson()["note"]!.ToString());
     }
 
     [Fact]
     public void AWallWithoutAStoredHeight_UsesItsMeasuredOne()
     {
         var wall = Picked("wall", (ForskInfo.HeightKey, "3000"));
-        Assert.Equal("3000 mm", Value(ForskInfo.For(Facts(wall))!, "Height"));
+        Assert.Equal("3000", Value(ForskInfo.For(Facts(wall))!, "Height"));
     }
 
     [Fact]
@@ -114,13 +148,29 @@ public class ForskInfoTests
         stair.Going = "250";
         var panel = ForskInfo.For(Facts(stair))!;
         Assert.Equal("Stair S01", panel.Title);
-        Assert.Equal(("16", "178.5 mm", "250 mm", "2856 mm"), (Value(panel, "Steps"), Value(panel, "Riser"), Value(panel, "Going"), Value(panel, "Total rise")));
+        Assert.Equal(("16", "178.5", "250", "2856"), (Value(panel, "Steps"), Value(panel, "Riser"), Value(panel, "Going"), Value(panel, "Total rise")));
+        Assert.Equal(stair.Id, panel.Id);
+        Assert.Equal(new[] { "riser_max", "going", "rise" }, panel.Rows.Where(r => r.Field != null).Select(r => r.Field));
+        Assert.Equal("–", Value(panel, "Width"));
 
-        var sofa = Picked("furniture", (Furniture.CatalogKey, "sofa.3seat"), (Furniture.RoomKey, "R04"));
+        var sofa = Picked("furniture", (Furniture.CatalogKey, "sofa.3seat"), (Furniture.RoomKey, "R04"), (ForskInfo.RotationKey, "90"));
         var piece = ForskInfo.For(Facts(sofa))!;
         Assert.Equal("3-seat sofa", piece.Title);
         Assert.Equal("2200 × 900 × 800 mm", Value(piece, "Size"));
         Assert.Equal("R04", Value(piece, "Room"));
+        var turn = piece.Rows.Single(r => r.Label == "Rotation");
+        Assert.Equal(("90", "rotation", "°"), (turn.Value, turn.Field, turn.Unit));
+    }
+
+    [Fact]
+    public void AStairThatFollowsTheWalls_ShowsAuto_AndItsWidthChanges()
+    {
+        var stair = Picked("stair", (Stairs.RiserKey, "175"), (Stairs.RiseKey, "auto"), (Stairs.WidthKey, "900"));
+        var panel = ForskInfo.For(Facts(stair))!;
+        var rise = panel.Rows.Single(r => r.Label == "Total rise");
+        Assert.Equal(("auto", "rise", null), (rise.Value, rise.Field, rise.Unit));
+        Assert.Equal("900", Value(panel, "Width"));
+        Assert.Equal("stair_width", panel.Rows.Single(r => r.Label == "Width").Field);
     }
 
     [Fact]
@@ -152,31 +202,123 @@ public class ForskInfoTests
         Assert.Equal("12.0 m²", Value(panel, "Net area"));
     }
 
+    static ForskInfo.Panel PanelOf(ChipRow row) => ForskInfo.For(Facts(row))!;
+
+    static (string Tool, JObject Args) Edit(ChipRow row, string field, string typed)
+    {
+        var panel = PanelOf(row);
+        var edit = ForskInfo.Edit(panel, panel.Id, field, typed, out var error);
+        Assert.Null(error);
+        return edit!.Value;
+    }
+
     [Theory]
     [InlineData("width", "1000", "set_opening", "width", 1000.0)]
     [InlineData("sill", "900 mm", "set_opening", "sill", 900.0)]
     [InlineData("head", "2200", "set_opening", "head", 2200.0)]
-    public void ATypedSize_IsTheSameEditAsTheChat(string field, string typed, string tool, string key, double mm)
+    // A new height keeps the sill: 0 + 2300.
+    [InlineData("height", "2300", "set_opening", "head", 2300.0)]
+    public void ATypedOpeningSize_IsTheSameEditAsTheChat(string field, string typed, string tool, string key, double mm)
     {
-        var edit = ForskInfo.Edit("marker-guid", field, typed, out var error)!.Value;
-        Assert.Null(error);
+        var door = Door();
+        var edit = Edit(door, field, typed);
         Assert.Equal(tool, edit.Tool);
-        Assert.Equal("marker-guid", edit.Args["id"]!.ToString());
+        Assert.Equal(door.Id, edit.Args["id"]!.ToString());
         Assert.Equal(mm, edit.Args[key]!.Value<double>());
     }
 
     [Fact]
-    public void AChosenTypeOrRoomType_RunsItsTool_AndNonsenseIsRefused()
+    public void AWindowsHeight_KeepsItsSill()
     {
-        Assert.Equal("set_opening_type", ForskInfo.Edit("m", "type", "door.sliding", out _)!.Value.Tool);
-        Assert.Equal("rooms_set_type", ForskInfo.Edit("m", "room_type", RoomTypes.Bathroom, out _)!.Value.Tool);
-        Assert.Null(ForskInfo.Edit("m", "width", "wide", out var error));
+        var window = Picked("opening_marker", (OpeningTypes.TypeKey, "window.side_hung"));
+        window.OpeningKind = "window";
+        window.Sill = "900";
+        window.Head = "2100";
+        window.Width = "1200";
+        Assert.Equal(2400.0, Edit(window, "height", "1500").Args["head"]!.Value<double>());
+    }
+
+    [Fact]
+    public void AChosenTypeHandSwingOrRoomType_RunsItsTool()
+    {
+        var door = Door();
+        Assert.Equal("set_opening_type", Edit(door, "type", "door.sliding").Tool);
+        Assert.Equal("R", Edit(door, "hand", "R").Args["hand"]!.ToString());
+        Assert.Equal("out", Edit(door, "swing", "out").Args["swing"]!.ToString());
+        var room = Picked("room", ("forsk:room_id", "R01"));
+        room.Marker = "marker-guid";
+        var edit = Edit(room, "room_type", RoomTypes.Bathroom);
+        Assert.Equal(("rooms_set_type", "marker-guid"), (edit.Tool, edit.Args["id"]!.ToString()));
+    }
+
+    [Fact]
+    public void AWallEdit_IsSetWall()
+    {
+        var wall = OneRunWall();
+        var thick = Edit(wall, "thickness", "150");
+        Assert.Equal(("set_wall", wall.Id, 150.0), (thick.Tool, thick.Args["id"]!.ToString(), thick.Args["thickness_mm"]!.Value<double>()));
+        Assert.Equal(3600.0, Edit(wall, "length", "3600").Args["length_mm"]!.Value<double>());
+        // The height is the storey's: no id, every wall follows.
+        var height = Edit(wall, "wall_height", "2500");
+        Assert.Equal(("set_wall", null, 2500.0), (height.Tool, height.Args["id"], height.Args["height_mm"]!.Value<double>()));
+        Assert.Null(ForskInfo.Edit(PanelOf(wall), wall.Id, "thickness", "700", out var error));
+        Assert.Equal("A wall is above 0 and at most 600 mm thick.", error);
+        Assert.Null(ForskInfo.Edit(PanelOf(wall), wall.Id, "thickness", "0", out _));
+    }
+
+    [Fact]
+    public void ARoomsCeiling_IsTheWallsHeightAboveTheWallsFoot()
+    {
+        var room = Picked("room", ("forsk:room_id", "R01"), (ForskInfo.CeilingKey, "2500"), (ForskInfo.CeilingLiftKey, "200"));
+        room.Marker = "marker-guid";
+        var row = PanelOf(room).Rows.Single(r => r.Label == "Ceiling height");
+        Assert.Equal(("2500", "ceiling", "mm"), (row.Value, row.Field, row.Unit));
+        var edit = Edit(room, "ceiling", "2600");
+        Assert.Equal(("set_wall", 2800.0), (edit.Tool, edit.Args["height_mm"]!.Value<double>()));
+    }
+
+    [Fact]
+    public void AStairEdit_IsEditStair_AndRiseTakesAuto()
+    {
+        var stair = Picked("stair", (Stairs.RiserKey, "175"), (Stairs.RiseKey, "2800"), (Stairs.WidthKey, "900"));
+        stair.Going = "250";
+        Assert.Equal(170.0, Edit(stair, "riser_max", "170").Args["riser_max"]!.Value<double>());
+        Assert.Equal(280.0, Edit(stair, "going", "280").Args["going"]!.Value<double>());
+        Assert.Equal(1000.0, Edit(stair, "stair_width", "1000").Args["width"]!.Value<double>());
+        Assert.Equal(2900.0, Edit(stair, "rise", "2900").Args["rise"]!.Value<double>());
+        var auto = Edit(stair, "rise", "Auto");
+        Assert.Equal(("edit_stair", "auto"), (auto.Tool, auto.Args["rise"]!.ToString()));
+    }
+
+    [Theory]
+    [InlineData("180", 90.0)]
+    [InlineData("0", -90.0)]
+    [InlineData("315°", -135.0)]
+    public void AFurnitureTurn_RotatesTheShortWayRound(string typed, double rotate)
+    {
+        var bed = Picked("furniture", (Furniture.CatalogKey, "sofa.3seat"), (ForskInfo.RotationKey, "90"));
+        var edit = Edit(bed, "rotation", typed);
+        Assert.Equal(("move_furniture", rotate), (edit.Tool, edit.Args["rotate"]!.Value<double>()));
+        Assert.Null(ForskInfo.Edit(PanelOf(bed), bed.Id, "rotation", "90", out var error));
+        Assert.Equal("That is how it stands already.", error);
+    }
+
+    [Fact]
+    public void NonsenseOrSomethingNoLongerPicked_IsRefused()
+    {
+        var door = Door();
+        var panel = PanelOf(door);
+        Assert.Null(ForskInfo.Edit(panel, door.Id, "width", "wide", out var error));
         Assert.Equal("Type a size in millimetres, like 900.", error);
-        Assert.Null(ForskInfo.Edit("m", "width", "0", out _));
-        Assert.Null(ForskInfo.Edit("m", "type", "door.revolving", out _));
-        Assert.Null(ForskInfo.Edit("m", "thickness", "300", out error));
+        Assert.Null(ForskInfo.Edit(panel, door.Id, "width", "0", out _));
+        Assert.Null(ForskInfo.Edit(panel, door.Id, "type", "door.revolving", out _));
+        Assert.Null(ForskInfo.Edit(panel, door.Id, "hand", "up", out _));
+        Assert.Null(ForskInfo.Edit(panel, door.Id, "colour", "300", out error));
         Assert.Equal("That cannot be changed here.", error);
-        Assert.Null(ForskInfo.Edit("", "width", "900", out _));
+        Assert.Null(ForskInfo.Edit(panel, "another-guid", "width", "900", out error));
+        Assert.Equal("Pick it again, then change it.", error);
+        Assert.Null(ForskInfo.Edit(null, door.Id, "width", "900", out _));
+        Assert.Null(ForskInfo.Edit(panel, "", "width", "900", out _));
     }
 
     [Fact]
