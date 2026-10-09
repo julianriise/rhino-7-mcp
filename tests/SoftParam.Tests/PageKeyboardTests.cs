@@ -13,7 +13,7 @@ static class PageScript
         engine.Execute(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "page", "window.js")));
         engine.Execute(@"
             var sent = [];
-            function press(k, mods, card, text, composer, cancel) {
+            function press(k, mods, card, text, composer, pill, typing) {
               var m = {};
               (mods || '').split('+').forEach(function (x) { if (x) m[x] = true; });
               var e = { key: k, keyCode: m.ime ? 229 : 0, isComposing: !!m.composing,
@@ -21,7 +21,7 @@ static class PageScript
               e.preventDefault = function () { e.prevented = true; };
               e.stopPropagation = function () {};
               var before = sent.length;
-              var state = { composer: composer !== false, card: card || null, text: text == null ? 'hello' : text, cancel: !!cancel };
+              var state = { composer: composer !== false, card: card || null, text: text == null ? 'hello' : text, pill: pill || null, typing: typing == null ? composer !== false : typing };
               var a = Forsk.handleKey(e, state, function (x) { sent.push(x); });
               return JSON.stringify({ kind: a ? a.kind : null, prevented: e.prevented, sent: sent.length - before,
                                       last: sent.length > before ? sent[sent.length - 1] : null });
@@ -29,10 +29,11 @@ static class PageScript
         return engine;
     }
 
-    public static JObject Press(Engine engine, string key, string mods = "", string card = null, string text = null, bool composer = true, bool cancel = false)
+    public static JObject Press(Engine engine, string key, string mods = "", string card = null, string text = null, bool composer = true, string pill = null, bool? typing = null)
     {
         var js = "press(" + Quote(key) + "," + Quote(mods) + "," + (card == null ? "null" : Quote(card)) + ","
-            + (text == null ? "null" : Quote(text)) + "," + (composer ? "true" : "false") + "," + (cancel ? "true" : "false") + ")";
+            + (text == null ? "null" : Quote(text)) + "," + (composer ? "true" : "false") + "," + (pill == null ? "null" : Quote(pill)) + ","
+            + (typing == null ? "null" : typing.Value ? "true" : "false") + ")";
         return JObject.Parse(engine.Evaluate(js).AsString());
     }
 
@@ -44,7 +45,7 @@ static class PageScript
 
 /// <summary>
 /// D0: the keyboard contract, headless. Enter sends, Shift+Enter breaks the
-/// line, Cmd+1..4 and Cmd+/ are wired, Esc closes a card. A mapped key is
+/// line, Cmd+1..4 and Cmd+/ are wired, Esc closes a card, Space repeats. A mapped key is
 /// eaten in the page and becomes one Forsk action, so it never reaches Rhino.
 /// Every other key, æ ø å and a dead key included, is left to the field.
 /// </summary>
@@ -132,23 +133,74 @@ public class PageKeyboardTests
         Assert.Equal(0, r["sent"]!.Value<int>());
     }
 
-    /// <summary>A card without Cancel (What's new, a review) stays open on Esc: only its own pill closes it (Julian, 2026-10-07).</summary>
-    [Fact]
-    public void Escape_LeavesACardWithoutCancelOpen()
+    /// <summary>Esc exits any card (Julian, 2026-10-09): its Cancel, else its Done, else the card just closes.</summary>
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("done")]
+    public void Escape_OnACard_PressesItsEscPill(string pill)
     {
-        var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "m4");
-        Assert.True(r["kind"]!.Type == JTokenType.Null, "Esc was taken: " + r);
-        Assert.Equal(0, r["sent"]!.Value<int>());
-    }
-
-    [Fact]
-    public void Escape_OnAForm_SendsCancel()
-    {
-        var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "m4", cancel: true);
+        var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "m4", pill: pill);
         Assert.Equal("card", r["kind"]!.ToString());
         Assert.True(r["prevented"]!.Value<bool>());
         Assert.Equal("m4", r["last"]!["card"]!.ToString());
-        Assert.Equal("cancel", r["last"]!["pill"]!.ToString());
+        Assert.Equal(pill, r["last"]!["pill"]!.ToString());
+    }
+
+    [Fact]
+    public void Escape_OnACardWithNeitherCancelNorDone_ClosesIt()
+    {
+        var r = PageScript.Press(PageScript.Load(), "Escape", "", card: "help");
+        Assert.Equal("card.close", r["kind"]!.ToString());
+        Assert.True(r["prevented"]!.Value<bool>());
+        Assert.Equal("help", r["last"]!["card"]!.ToString());
+    }
+
+    [Fact]
+    public void TheEscPill_IsCancelElseDoneElseNone()
+    {
+        var engine = PageScript.Load();
+        string Eval(string js) => engine.Evaluate(js).ToString();
+        Assert.Equal("cancel", Eval("String(Forsk.escPill({thread:[{id:'m4', pills:[{id:'save'},{id:'done'},{id:'cancel'}]}]}, 'm4'))"));
+        Assert.Equal("done", Eval("String(Forsk.escPill({thread:[{id:'m4', pills:[{id:'north'},{id:'done'}]}]}, 'm4'))"));
+        Assert.Equal("null", Eval("String(Forsk.escPill({thread:[{id:'m4', pills:[{id:'later'}]}]}, 'm4'))"));
+        Assert.Equal("null", Eval("String(Forsk.escPill({thread:[]}, 'help'))"));
+    }
+
+    /// <summary>Space runs the last Forsk action again (Julian, 2026-10-09), never while a field takes the space.</summary>
+    [Fact]
+    public void Space_OutsideAField_RunsTheLastActionAgain()
+    {
+        var r = PageScript.Press(PageScript.Load(), " ", "", composer: false, typing: false);
+        Assert.Equal("again", r["kind"]!.ToString());
+        Assert.True(r["prevented"]!.Value<bool>());
+        Assert.Equal(1, r["sent"]!.Value<int>());
+    }
+
+    [Theory]
+    [InlineData("", true)]      // The composer, a card field, a tick box.
+    [InlineData("shift", false)]
+    [InlineData("meta", false)]
+    [InlineData("composing", false)]
+    public void Space_InAFieldOrWithAModifier_IsLeftToTheField(string mods, bool typing)
+    {
+        var r = PageScript.Press(PageScript.Load(), " ", mods, composer: false, typing: typing);
+        Assert.True(r["kind"]!.Type == JTokenType.Null, "Space was taken: " + r);
+        Assert.False(r["prevented"]!.Value<bool>());
+    }
+
+    [Fact]
+    public void AFieldKeepsSpace_AButtonOnlyWhenReachedWithTab()
+    {
+        var engine = PageScript.Load();
+        string Eval(string js) => engine.Evaluate(js).ToString();
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'TEXTAREA'}, false))"));
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'INPUT'}, false))"));
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'SELECT'}, false))"));
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'DIV', isContentEditable:true}, false))"));
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'DIV', role:'switch'}, false))"));
+        Assert.Equal("false", Eval("String(Forsk.keepsSpace({tagName:'BUTTON'}, false))"));
+        Assert.Equal("true", Eval("String(Forsk.keepsSpace({tagName:'BUTTON'}, true))"));
+        Assert.Equal("false", Eval("String(Forsk.keepsSpace({tagName:'BODY'}, true))"));
     }
 
     [Fact]
@@ -170,8 +222,6 @@ public class PageKeyboardTests
             Eval("Forsk.cardLine({state:'stale', question:'Stair sizes. The steps stay equal: their count follows the height.', answer:'Save'})"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'card', state:'open', pills:[{id:'save'},{id:'cancel'}]}))"));
         Assert.Equal("false", Eval("String(Forsk.isForm({role:'receipt', ok:true, text:'Printed'}))"));
-        Assert.Equal("true", Eval("String(Forsk.cardCancels({thread:[{id:'m4', pills:[{id:'save'},{id:'cancel'}]}]}, 'm4'))"));
-        Assert.Equal("false", Eval("String(Forsk.cardCancels({thread:[{id:'m4', pills:[{id:'save'}]}]}, 'm4'))"));
     }
 
     [Fact]
@@ -193,7 +243,7 @@ public class PageKeyboardTests
         var kinds = engine.Evaluate("JSON.stringify(sent.map(function (a) { return a.kind; }))").AsString();
         var sent = JArray.Parse(kinds).Select(k => k.ToString()).ToList();
         Assert.NotEmpty(sent);
-        Assert.All(sent, kind => Assert.Contains(kind, new[] { "send", "slot", "help", "card" }));
+        Assert.All(sent, kind => Assert.Contains(kind, new[] { "send", "slot", "help", "card", "card.close" }));
     }
 
     [Fact]

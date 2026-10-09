@@ -87,6 +87,19 @@ namespace RhinoMCPPlugin.Commands
         }
     }
 
+    /// <summary>The last Forsk action again. Rhino's Space and Enter repeat it as the last command.</summary>
+    public class ForskAgainCommand : Command
+    {
+        public override string EnglishName => ForskAgain.CommandName;
+
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        {
+            if (ForskWindow.RunAgain()) return Result.Success;
+            RhinoApp.WriteLine("No Forsk action to repeat yet.");
+            return Result.Nothing;
+        }
+    }
+
     /// <summary>Draw a straight stair in Top: the foot, then where it ends. One add_stair, one undo record.</summary>
     public class ForskDrawStairCommand : Command
     {

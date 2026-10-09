@@ -36,8 +36,24 @@ public class UnifiedUiTests
     {
         var facts = Docs.Facts("saved, two options");
         var analyses = ForskRegistry.Card(facts).Groups.Single(g => g.Title == "Analyses").Actions.Select(a => a.Id).ToArray();
-        Assert.Equal(new[] { "analysis.menu", "daylight.run", "area.stats", "analysis.print", "options" }, analyses);
+        // Save as option and Compare options sit beside Options too (Julian, 2026-10-09).
+        Assert.Equal(new[] { "analysis.menu", "daylight.run", "area.stats", "analysis.print", "options", "option.save", "option.compare" }, analyses);
         Assert.DoesNotContain("area.stats", ForskRegistry.Card(facts).Groups.Single(g => g.Title == "Rooms").Actions.Select(a => a.Id));
+    }
+
+    /// <summary>Space keeps a pill or a card, never an ask, a prefill, Clear chat or the help card. The view picks run inside ForskAgain.</summary>
+    [Fact]
+    public void Again_KeepsPillsAndCards_AndRunsThePicksAsACommand()
+    {
+        Assert.True(ForskAgain.Keeps(ForskRegistry.Find("wall.draw")));
+        Assert.True(ForskAgain.Keeps(ForskRegistry.Find("wall.merge")));
+        Assert.True(ForskAgain.Keeps(ForskRegistry.Find("print.pages")));
+        Assert.False(ForskAgain.Keeps(ForskRegistry.Find("opening.add_door")));
+        Assert.False(ForskAgain.Keeps(ForskRegistry.Find("opening.move")));
+        Assert.False(ForskAgain.Keeps(ForskRegistry.Find("chat.clear")));
+        Assert.False(ForskAgain.Keeps(ForskRegistry.Find("help.card")));
+        Assert.All(ForskAgain.Picks, id => Assert.Equal(Runs.Run, ForskRegistry.Find(id)!.Runs));
+        Assert.Contains("wall.draw", ForskAgain.Picks);
     }
 
     [Fact]

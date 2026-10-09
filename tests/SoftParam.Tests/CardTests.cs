@@ -101,7 +101,7 @@ public class CardTests
         var facts = Docs.Facts(fixture);
         var view = WindowView.Build(new DocThread { Serial = 1 }, facts, helpOpen: true);
         var shown = view["help"]!["groups"]!.SelectMany(g => g["actions"]!).Select(a => a["id"]!.ToString());
-        var registry = ForskRegistry.All.Where(a => a.Group != null && !ForskRegistry.OffSheet.Contains(a.Group) && a.Shows(facts)).Select(a => a.Id);
+        var registry = ForskRegistry.All.Where(a => a.Group != null && (!ForskRegistry.OffSheet.Contains(a.Group) || ForskRegistry.AnalysesAlso.Contains(a.Id)) && a.Shows(facts)).Select(a => a.Id);
         Assert.Equal(registry.OrderBy(i => i), shown.OrderBy(i => i));
     }
 

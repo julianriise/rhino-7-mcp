@@ -156,6 +156,9 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>Groups with a home of their own, off the More actions sheet.</summary>
         public static readonly IReadOnlyList<string> OffSheet = new[] { "group.settings", "group.options" };
 
+        /// <summary>Options actions the sheet's Analyses row shows too.</summary>
+        public static readonly IReadOnlyList<string> AnalysesAlso = new[] { "option.save", "option.compare" };
+
         public static readonly IReadOnlyList<ForskAction> All = new List<ForskAction>
         {
             new ForskAction("file.sample", Runs.Run, "group.start", f => f.Kind == FileKind.Empty),
@@ -429,6 +432,8 @@ namespace RhinoMCPPlugin.Forsk
             foreach (var key in GroupOrder)
             {
                 var actions = All.Where(a => a.Group == key && a.Shows(f)).ToList();
+                // Save as option and Compare options are also on the Analyses row, beside Options (Julian, 2026-10-09).
+                if (key == "group.analyses") actions.AddRange(AnalysesAlso.Select(Find).Where(a => a.Shows(f)));
                 if (actions.Count > 0) help.Groups.Add(new CardGroup { Title = ForskText.Get(key), Actions = actions });
             }
             if (!f.Millimetres) help.Hints.Add("hint.units");
@@ -470,6 +475,29 @@ namespace RhinoMCPPlugin.Forsk
             if (!string.IsNullOrWhiteSpace(f.RenderJob)) parts.Add(f.RenderJob);
             if (!string.IsNullOrWhiteSpace(f.Grade)) parts.Add(f.Grade);
             return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>
+    /// Space runs the last Forsk action again, as Rhino repeats its last
+    /// command (Julian, 2026-10-09). A pill or a card is kept; an ask, a
+    /// prefill, Clear chat and "What can I do here?" are not.
+    /// </summary>
+    public static class ForskAgain
+    {
+        public const string CommandName = "ForskAgain";
+
+        /// <summary>The view picks. They run inside ForskAgain, so Rhino's own repeat in the view runs them again.</summary>
+        public static readonly IReadOnlyCollection<string> Picks = new HashSet<string>
+        {
+            "wall.draw", "stair.draw", "room.draw", "room.redraw", "section.add"
+        };
+
+        public static bool Keeps(ForskAction action)
+        {
+            if (action == null) return false;
+            if (action.Runs != Runs.Run && action.Runs != Runs.Card) return false;
+            return action.Id != "chat.clear" && action.Id != "help.card";
         }
     }
 }

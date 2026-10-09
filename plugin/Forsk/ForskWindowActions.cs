@@ -141,6 +141,14 @@ namespace RhinoMCPPlugin.Forsk
                 return;
             }
             if (fromCard) _helpOpen = false;
+            if (ForskAgain.Keeps(action)) _again = id;
+            // A pick runs inside ForskAgain, so Rhino's own Space and Enter in the view repeat it.
+            if (!_inAgain && ForskAgain.Picks.Contains(id))
+            {
+                if (Refuse(thread)) return;
+                if (RhinoApp.RunScript("_" + ForskAgain.CommandName, false)) return;
+                Log("again: " + ForskAgain.CommandName + " did not start, the pick runs here");
+            }
             switch (action.Runs)
             {
                 case Runs.Prefill:
@@ -158,6 +166,44 @@ namespace RhinoMCPPlugin.Forsk
                     Run(thread, action, facts, doc);
                     return;
             }
+        }
+
+        /// <summary>The action Space runs again, and true while ForskAgain runs it.</summary>
+        static string _again;
+        static bool _inAgain;
+
+        /// <summary>Space in the window: the last action again, as its pill would run it.</summary>
+        void Again()
+        {
+            if (string.IsNullOrEmpty(_again)) return;
+            Fire(_again, false);
+        }
+
+        /// <summary>
+        /// ForskAgain, from Rhino's repeat or typed. A pick runs inside the
+        /// command; any other action runs once the command has ended, so its
+        /// job keeps its own undo record. False when there is nothing to repeat.
+        /// </summary>
+        public static bool RunAgain()
+        {
+            var window = _open;
+            var id = _again;
+            if (window == null || string.IsNullOrEmpty(id)) return false;
+            if (!ForskAgain.Picks.Contains(id))
+            {
+                Post(() => window.Fire(id, false));
+                return true;
+            }
+            _inAgain = true;
+            try
+            {
+                window.Fire(id, false);
+            }
+            finally
+            {
+                _inAgain = false;
+            }
+            return true;
         }
 
         bool Refuse(DocThread thread)

@@ -13,8 +13,10 @@
    * state.card: the id of the open card, if any. Returns the action, or null
    * to leave the key to the field, so letters, æ ø å, a dead key and an IME
    * composition always type. Enter sends, Shift+Enter breaks the line,
-   * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?", Esc cancels a
-   * form; any other card stays until its own pill.
+   * Cmd+1..4 fire the slots, Cmd+/ opens "What can I do here?". Esc closes
+   * the open card: its Cancel, else its Done, else it just closes.
+   * state.pill: that card's Esc pill. Space runs the last Forsk action again,
+   * as Rhino repeats its last command, unless state.typing (Julian, 2026-10-09).
    */
   Forsk.keyAction = function (e, state) {
     if (!e) return null;
@@ -25,9 +27,14 @@
       return { kind: 'send' };
     }
     if (e.key === 'Escape') {
-      // Esc cancels a form. A card without Cancel (What's new, a review) stays until its own pill (Julian, 2026-10-07).
-      if (!state.card || !state.cancel) return null;
-      return { kind: 'card', card: state.card, pill: 'cancel' };
+      // Esc exits any card (Julian, 2026-10-09).
+      if (!state.card) return null;
+      if (state.pill) return { kind: 'card', card: state.card, pill: state.pill };
+      return { kind: 'card.close', card: state.card };
+    }
+    if (e.key === ' ') {
+      if (state.typing || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return null;
+      return { kind: 'again' };
     }
     if (e.metaKey && !e.ctrlKey && !e.altKey) {
       if (!e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) return { kind: 'slot', slot: Number(e.key) };
@@ -265,16 +272,39 @@
     return item.question || '';
   };
 
-  /* True when that card has a Cancel pill. Esc uses it. No DOM. */
-  Forsk.cardCancels = function (model, id) {
-    if (!id || !model || !model.thread) return false;
+  /*
+   * The pill Esc presses on that card: Cancel, else Done (a choice card keeps
+   * the option it applied), else null and the card just closes. No DOM.
+   */
+  Forsk.escPill = function (model, id) {
+    if (!id || !model || !model.thread) return null;
     var thread = model.thread;
     for (var i = 0; i < thread.length; i++) {
       if (thread[i].id !== id) continue;
       var pills = thread[i].pills || [];
-      for (var p = 0; p < pills.length; p++) if (pills[p].id === 'cancel') return true;
+      var done = false;
+      for (var p = 0; p < pills.length; p++) {
+        if (pills[p].id === 'cancel') return 'cancel';
+        if (pills[p].id === 'done') done = true;
+      }
+      return done ? 'done' : null;
     }
-    return false;
+    return null;
+  };
+
+  /*
+   * True when Space belongs to the focused element, not to "again": any text
+   * field, a list or a tick box, and a button reached with Tab. node is
+   * { tagName, type, isContentEditable, role }. No DOM.
+   */
+  Forsk.keepsSpace = function (node, kbd) {
+    if (!node) return false;
+    if (node.isContentEditable) return true;
+    var tag = String(node.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    var role = String(node.role || '');
+    if (role === 'textbox' || role === 'checkbox' || role === 'switch' || role === 'radio' || role === 'menuitemradio') return true;
+    return !!kbd && (tag === 'button' || role === 'button');
   };
 
   /* A bullet's lead, up to the colon or the period, else its first four words. */
@@ -1793,7 +1823,13 @@
         return;
       }
       var cardId = openCard();
-      Forsk.handleKey(e, { composer: e.target === q, card: cardId, cancel: Forsk.cardCancels(model, cardId), text: q.value }, send);
+      var target = e.target || {};
+      var typing = !!menu || Forsk.keepsSpace({
+        tagName: target.tagName,
+        isContentEditable: target.isContentEditable,
+        role: target.getAttribute ? target.getAttribute('role') : null
+      }, document.documentElement.hasAttribute('data-kbd'));
+      Forsk.handleKey(e, { composer: e.target === q, card: cardId, pill: Forsk.escPill(model, cardId), typing: typing, text: q.value }, send);
     }, true);
     document.getElementById('composer').addEventListener('submit', function (e) {
       e.preventDefault();

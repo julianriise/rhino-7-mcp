@@ -162,6 +162,9 @@ namespace RhinoMCPPlugin.Forsk
                     case "card":
                         Answer(message["card"]?.ToString(), message["pill"]?.ToString(), message["values"] as JObject, message["order"] as JArray);
                         return;
+                    case "again":
+                        Again();
+                        return;
                     case "card.close":
                         CloseCard(message["card"]?.ToString());
                         return;
