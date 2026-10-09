@@ -43,6 +43,10 @@
         "null"
       ]
     },
+    "joined_wall": {
+      "type": "boolean",
+      "description": "True when a lengthened end ran into another wall, stopped on its face and joined it; length_mm is where it stopped."
+    },
     "openings_moved": {
       "type": "array",
       "items": {

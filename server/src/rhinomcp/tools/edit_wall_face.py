@@ -25,7 +25,8 @@ def edit_wall_face(
 
     distance_mm on an end lengthens the wall (below 0 shortens); the other
     end and the openings keep their place, and a wall left too short for an
-    opening is refused. distance_mm on a side moves the run out through that
+    opening is refused. An end that runs into another wall stops on its face
+    and joins it (joined_wall true, length_mm where it stopped). distance_mm on a side moves the run out through that
     face (below 0: in), as move_wall. thickness_mm on a side makes the run
     that thick by moving that face alone; the face across stays, and the
     walls that meet the moved face follow. Floor, roof and rooms follow.
