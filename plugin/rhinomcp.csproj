@@ -16,7 +16,7 @@
     <!-- Forsk v3, the first public release (Food4Rhino, Rhino 7 for Mac). The assembly
          keeps the file name rhinomcp.rhp and its plug-in GUID, so the dev install,
          the smokes and existing installs carry on. -->
-    <Version>1.3.2</Version>
+    <Version>1.3.3</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Title>Forsk</Title>
     <Product>Forsk</Product>

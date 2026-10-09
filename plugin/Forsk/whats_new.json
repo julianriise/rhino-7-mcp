@@ -2,6 +2,26 @@
   "_edit": "One entry per release, newest first; add the new release at the top and keep the older ones (a Mac that skipped releases steps back through them on the card). version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
   "releases": [
     {
+      "version": "1.3.3",
+      "items": [
+        {
+          "title": "Draw a wall on its face",
+          "how": "In Draw wall, pick Anchor Left or Right and click along a room's inside corner: the wall's face lands on your line. The Properties panel shows the thickness, height and anchor while you draw. Add stair has the same option.",
+          "icon": "git-compare"
+        },
+        {
+          "title": "Dragged doors stay right in plan",
+          "how": "Drag a door or window with Rhino's gumball or Drag: its plan symbol and wall cut now follow it along the wall.",
+          "icon": "box"
+        },
+        {
+          "title": "Daylight leaves terraces out",
+          "how": "An area drawn outside the walls counts as outdoor and no longer darkens the map. Delete a room and the map says it is out of date.",
+          "icon": "activity"
+        }
+      ]
+    },
+    {
       "version": "1.3.2",
       "items": [
         {
