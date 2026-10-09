@@ -34,10 +34,23 @@ namespace RhinoMCPPlugin.Forsk
             {
                 ForskSection.ActivateTop(doc);
                 var context = new RhinoMCPFunctions().ReadDrawContext(doc);
-                var thickness = WallDraw.DefaultThickness(context.Thicknesses, RhinoMCPFunctions.LastDrawnThickness(doc));
-                var sketch = Pick(WallDraw.TargetsFrom(context.Records), thickness);
-                if (sketch == null) return ForskTools.Fail("Wall cancelled.");
-                return Store(doc, sketch, context.Solid, ownUndo);
+                var drawing = new ForskInfo.Drawing
+                {
+                    Kind = "wall",
+                    Thickness = WallDraw.DefaultThickness(context.Thicknesses, RhinoMCPFunctions.LastDrawnThickness(doc))
+                };
+                // The Properties panel shows the wall being drawn; an edit there is read back at the next mouse move.
+                ForskWindow.ShowDrawing(drawing);
+                try
+                {
+                    var sketch = Pick(WallDraw.TargetsFrom(context.Records), drawing);
+                    if (sketch == null) return ForskTools.Fail("Wall cancelled.");
+                    return Store(doc, sketch, context.Solid, ownUndo, drawing.Height);
+                }
+                finally
+                {
+                    ForskWindow.ShowDrawing(null);
+                }
             }
             catch (Exception e)
             {
@@ -45,14 +58,23 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The finished sketch, or null when the user cancelled or drew nothing.</summary>
-        static WallSketch Pick(WallDraw.Targets targets, double thickness)
+        /// <summary>The panel's thickness and anchor onto the sketch.</summary>
+        static void Sync(WallSketch sketch, ForskInfo.Drawing drawing)
         {
-            var sketch = new WallSketch(targets, thickness);
+            sketch.Thickness = drawing.Thickness;
+            sketch.Anchor = drawing.Anchor;
+        }
+
+        /// <summary>The finished sketch, or null when the user cancelled or drew nothing.</summary>
+        static WallSketch Pick(WallDraw.Targets targets, ForskInfo.Drawing drawing)
+        {
+            var sketch = new WallSketch(targets, drawing.Thickness);
             while (true)
             {
-                var getter = new DrawPoint(sketch);
+                Sync(sketch, drawing);
+                var getter = new DrawPoint(sketch, drawing);
                 var result = getter.Get();
+                Sync(sketch, drawing);
                 switch (result)
                 {
                     case GetResult.Point:
@@ -64,9 +86,15 @@ namespace RhinoMCPPlugin.Forsk
                         break;
                     case GetResult.Option:
                         if (getter.TypeIndex(out var type))
-                            sketch = new WallSketch(targets, type) { Anchor = sketch.Anchor };
+                        {
+                            drawing.Thickness = type;
+                            ForskWindow.ShowDrawing(drawing);
+                        }
                         else if (getter.AnchorIndex(out var anchor))
-                            sketch.Anchor = anchor;
+                        {
+                            drawing.Anchor = anchor;
+                            ForskWindow.ShowDrawing(drawing);
+                        }
                         else if (!sketch.Close(out why))
                             RhinoApp.WriteLine(why);
                         else
@@ -81,11 +109,11 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        static JObject Store(RhinoDoc doc, WallSketch sketch, bool solid, bool ownUndo)
+        static JObject Store(RhinoDoc doc, WallSketch sketch, bool solid, bool ownUndo, double height)
         {
             var segments = sketch.Segments();
             if (segments.Count == 0) return ForskTools.Fail("Wall cancelled.");
-            var outcome = WallDraw.Commit(new DocWalls(doc, solid), segments, sketch.Thickness, ownUndo);
+            var outcome = WallDraw.Commit(new DocWalls(doc, solid, height), segments, sketch.Thickness, ownUndo);
             if (outcome.Drawn == 0)
                 return ForskTools.Fail(string.IsNullOrWhiteSpace(outcome.Stopped) ? "No walls drawn." : outcome.Stopped);
             RhinoMCPFunctions.RememberDrawnThickness(doc, sketch.Thickness);
@@ -106,12 +134,14 @@ namespace RhinoMCPPlugin.Forsk
         {
             readonly RhinoDoc _doc;
             readonly RhinoMCPFunctions _functions = new RhinoMCPFunctions();
+            readonly double _height;
             uint _record;
 
-            public DocWalls(RhinoDoc doc, bool solid)
+            public DocWalls(RhinoDoc doc, bool solid, double height)
             {
                 _doc = doc;
                 Solid = solid;
+                _height = height;
             }
 
             public bool Solid { get; }
@@ -127,7 +157,7 @@ namespace RhinoMCPPlugin.Forsk
 
             public WallDraw.Placed Place(WallDraw.Segment segment, double thickness)
             {
-                var args = WallDraw.ToolCalls(new[] { segment }, thickness)[0];
+                var args = WallDraw.ToolCalls(new[] { segment }, thickness, _height)[0];
                 if (segment.Ring != null && segment.Ring.Count >= 3)
                 {
                     var ring = new JArray();
@@ -160,13 +190,15 @@ namespace RhinoMCPPlugin.Forsk
             static readonly System.Drawing.Color Grey = System.Drawing.Color.FromArgb(120, 120, 120);
 
             readonly WallSketch _sketch;
+            readonly ForskInfo.Drawing _drawing;
             readonly List<double> _types;
             int _typeOption = -1;
             readonly int _anchorOption;
 
-            public DrawPoint(WallSketch sketch)
+            public DrawPoint(WallSketch sketch, ForskInfo.Drawing drawing)
             {
                 _sketch = sketch;
+                _drawing = drawing;
                 AcceptNothing(true);
                 AcceptNumber(true, false);
                 Constrain(Plane.WorldXY, false);
@@ -210,6 +242,7 @@ namespace RhinoMCPPlugin.Forsk
 
             protected override void OnDynamicDraw(GetPointDrawEventArgs e)
             {
+                Sync(_sketch, _drawing);
                 var scale = PixelsPerMm(e.Viewport, e.CurrentPoint);
                 if (scale > 0) _sketch.Reach = Math.Max(20, Math.Min(800, 14.0 / scale));
                 var preview = _sketch.Hover(ToPt(e.CurrentPoint), Shift());

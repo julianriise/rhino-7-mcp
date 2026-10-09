@@ -279,7 +279,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 var facts = Facts(doc);
                 factsMs = clock.ElapsedMilliseconds;
-                model = WindowView.Build(thread, facts, _helpOpen);
+                model = WindowView.Build(thread, facts, _helpOpen, Drawing);
             }
             var count = model["thread"] is JArray items ? items.Count : 0;
             // Where a click's time goes: reading the file's facts, then building the page's model.
@@ -330,6 +330,17 @@ namespace RhinoMCPPlugin.Forsk
         static void MarkDirty()
         {
             _dirty = true;
+        }
+
+        /// <summary>What Draw wall or Add stair is laying down, or null. The Properties panel shows it while the command runs.</summary>
+        internal static ForskInfo.Drawing Drawing { get; private set; }
+
+        /// <summary>Draw wall or Add stair starts (drawing) or ends (null). UI thread.</summary>
+        internal static void ShowDrawing(ForskInfo.Drawing drawing)
+        {
+            Drawing = drawing;
+            MarkDirty();
+            _open?.Render();
         }
 
         /// <summary>The listener, the chat key and uv have no events. Look again every couple of seconds on idle.</summary>

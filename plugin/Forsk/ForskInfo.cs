@@ -109,6 +109,85 @@ namespace RhinoMCPPlugin.Forsk
             return Several(things);
         }
 
+        /// <summary>The panel id while Draw wall or Add stair runs: an edit goes to the thing being drawn.</summary>
+        public const string DrawingId = "drawing";
+
+        /// <summary>What Draw wall or Add stair is laying down. The command reads it back at every mouse move.</summary>
+        public sealed class Drawing
+        {
+            /// <summary>wall or stair.</summary>
+            public string Kind;
+            public double Thickness;
+            /// <summary>A free wall's height, mm. 0: like the walls it joins, else the nearest wall.</summary>
+            public double Height;
+            public double Width;
+            public double Rise;
+            public WallDraw.Anchor Anchor = WallDraw.Anchor.Centre;
+        }
+
+        /// <summary>The Properties panel for the wall or stair being drawn (Julian, 2026-10-09).</summary>
+        public static Panel ForDrawing(Drawing drawing)
+        {
+            var wall = drawing.Kind == "wall";
+            var panel = new Panel { Title = wall ? "Drawing a wall" : "Adding a stair", Id = DrawingId };
+            if (wall)
+            {
+                panel.Rows.Add(new Row { Label = "Thickness", Value = Number(drawing.Thickness), Field = "thickness", Unit = "mm" });
+                panel.Rows.Add(new Row { Label = "Height", Value = drawing.Height > 0 ? Number(drawing.Height) : "", Field = "height", Unit = "mm" });
+                panel.Note = "Empty: the nearest wall's height. A wall that joins another takes its height.";
+            }
+            else
+            {
+                panel.Rows.Add(new Row { Label = "Width", Value = Number(drawing.Width), Field = "width", Unit = "mm" });
+                panel.Rows.Add(new Row { Label = "Total rise", Value = Millimetres(drawing.Rise) });
+            }
+            panel.Rows.Add(new Row
+            {
+                Label = "Anchor",
+                Value = WallDraw.AnchorNames[(int)drawing.Anchor],
+                Field = "anchor",
+                Options = WallDraw.AnchorNames.Select(n => new Option { Id = n, Label = n }).ToList()
+            });
+            return panel;
+        }
+
+        /// <summary>A Properties panel edit while drawing: it changes what is being drawn, nothing in the model.</summary>
+        public static bool EditDrawing(Drawing drawing, string field, string value, out string error)
+        {
+            error = null;
+            value = (value ?? "").Trim();
+            if (field == "anchor")
+            {
+                var index = Array.FindIndex(WallDraw.AnchorNames, n => string.Equals(n, value, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) { error = "Pick Left, Centre or Right."; return false; }
+                drawing.Anchor = (WallDraw.Anchor)index;
+                return true;
+            }
+            if (field == "height" && value.Length == 0)
+            {
+                drawing.Height = 0;
+                return true;
+            }
+            var mm = Mm(value.Replace("mm", "").Trim());
+            switch (field)
+            {
+                case "thickness":
+                    if (!mm.HasValue || mm <= 0 || mm > WallEdit.MaxThickMm) { error = "A wall is above 0 and at most " + Number(WallEdit.MaxThickMm) + " mm thick."; return false; }
+                    drawing.Thickness = mm.Value;
+                    return true;
+                case "height":
+                    if (!mm.HasValue || mm <= 0) { error = "Type a height in millimetres, like 2700, or leave it empty."; return false; }
+                    drawing.Height = mm.Value;
+                    return true;
+                case "width":
+                    if (!mm.HasValue || mm < Stairs.WidthLo || mm > Stairs.SizeHi) { error = "A stair is " + Number(Stairs.WidthLo) + " to " + Number(Stairs.SizeHi) + " mm wide."; return false; }
+                    drawing.Width = mm.Value;
+                    return true;
+            }
+            error = "That does not change while drawing.";
+            return false;
+        }
+
         /// <summary>room, door, window, wall, stair, furniture, or null for anything else.</summary>
         public static string KindOf(ChipRow row)
         {

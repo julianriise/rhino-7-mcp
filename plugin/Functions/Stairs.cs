@@ -30,6 +30,8 @@ public static class Stairs
     public const double RuleLo = 600;
     public const double RuleHi = 640;
     public const double WidthMin = 800;
+    /// <summary>The narrowest flight Add stair and the Properties panel take.</summary>
+    public const double WidthLo = 500;
     /// <summary>Sizes outside these are refused, not warned about.</summary>
     public const double SizeLo = 100;
     public const double SizeHi = 5000;

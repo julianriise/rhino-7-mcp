@@ -382,7 +382,8 @@ namespace RhinoMCPPlugin.Forsk
     /// </summary>
     public static class WindowView
     {
-        public static JObject Build(DocThread thread, FileFacts facts, bool helpOpen = false)
+        /// <param name="drawing">What Draw wall or Add stair is laying down, or null: its panel stands in for the pick's.</param>
+        public static JObject Build(DocThread thread, FileFacts facts, bool helpOpen = false, ForskInfo.Drawing drawing = null)
         {
             var model = thread.ToJson();
             if (thread.Items.Count == 0)
@@ -392,7 +393,7 @@ namespace RhinoMCPPlugin.Forsk
             // The info panel (UX.5): what the picked thing is, at the top of the window.
             // A card waiting for an answer comes first: the Properties panel stands back
             // so the card keeps the room (Julian, 2026-10-09: the camera card's ways were cut off).
-            var info = HasOpenCard(thread) ? null : ForskInfo.For(facts);
+            var info = HasOpenCard(thread) ? null : drawing != null ? ForskInfo.ForDrawing(drawing) : ForskInfo.For(facts);
             if (info != null) model["info"] = info.ToJson();
             model["status"] = ForskRegistry.Status(facts);
             model["bar"] = ForskRegistry.Bar(facts, thread.Override).ToJson();

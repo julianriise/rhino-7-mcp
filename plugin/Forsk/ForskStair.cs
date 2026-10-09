@@ -25,8 +25,6 @@ namespace RhinoMCPPlugin.Forsk
     public static class ForskStair
     {
         public const string CommandName = "ForskDrawStair";
-        /// <summary>add_stair refuses a width under 500.</summary>
-        const double WidthLo = 500;
 
         static readonly System.Drawing.Color Blue = System.Drawing.Color.FromArgb(ForskWallHatch.Red, ForskWallHatch.Green, ForskWallHatch.Blue);
         static readonly System.Drawing.Color Red = System.Drawing.Color.FromArgb(196, 40, 40);
@@ -42,10 +40,19 @@ namespace RhinoMCPPlugin.Forsk
                 var context = new RhinoMCPFunctions().ReadDrawContext(doc);
                 var faces = StairDraw.Faces(context.Records);
                 var setup = new StairDraw.Setup { Rise = context.Rise };
-                var width = new OptionDouble(Stairs.WidthDefault, WidthLo, Stairs.SizeHi);
-                var draft = Pick(faces, setup, width);
-                if (draft == null) return ForskTools.Fail("Stair cancelled.");
-                return Store(doc, draft, ownUndo);
+                var drawing = new ForskInfo.Drawing { Kind = "stair", Width = Stairs.WidthDefault, Rise = context.Rise };
+                // The Properties panel shows the stair being added; an edit there is read back at the next mouse move.
+                ForskWindow.ShowDrawing(drawing);
+                try
+                {
+                    var draft = Pick(faces, setup, drawing);
+                    if (draft == null) return ForskTools.Fail("Stair cancelled.");
+                    return Store(doc, draft, ownUndo);
+                }
+                finally
+                {
+                    ForskWindow.ShowDrawing(null);
+                }
             }
             catch (Exception e)
             {
@@ -54,12 +61,13 @@ namespace RhinoMCPPlugin.Forsk
         }
 
         /// <summary>The finished stair, or null when the user cancelled.</summary>
-        static StairDraw.Draft Pick(List<StairDraw.Face> faces, StairDraw.Setup setup, OptionDouble width)
+        static StairDraw.Draft Pick(List<StairDraw.Face> faces, StairDraw.Setup setup, ForskInfo.Drawing drawing)
         {
+            var width = new OptionDouble(drawing.Width, Stairs.WidthLo, Stairs.SizeHi);
             StairDraw.FootHit foot = null;
             while (foot == null)
             {
-                setup.Width = width.CurrentValue;
+                Sync(setup, drawing, width);
                 var first = new FootPoint(faces, setup, width);
                 switch (first.Get())
                 {
@@ -67,7 +75,7 @@ namespace RhinoMCPPlugin.Forsk
                         foot = StairDraw.SnapFoot(faces, ToPt(first.Point()), first.Reach, Shift());
                         break;
                     case GetResult.Option:
-                        TakeAnchor(first, setup);
+                        TakeOption(first, drawing, width);
                         break;
                     default:
                         return null;
@@ -75,14 +83,15 @@ namespace RhinoMCPPlugin.Forsk
             }
             while (true)
             {
-                setup.Width = width.CurrentValue;
+                Sync(setup, drawing, width);
                 // The foot stays on the face. Plan shifts it by half the current width when the climb runs along the face.
-                var way = new WayUp(foot, setup, width);
+                var way = new WayUp(foot, setup, drawing, width);
                 var result = way.Get();
+                Sync(setup, drawing, width);
                 double? typed = null;
                 if (result == GetResult.Option)
                 {
-                    TakeAnchor(way, setup);
+                    TakeOption(way, drawing, width);
                     continue;
                 }
                 if (result == GetResult.Number) typed = way.Number();
@@ -108,13 +117,25 @@ namespace RhinoMCPPlugin.Forsk
             }
         }
 
-        /// <summary>The Anchor option, when it was the one picked: where the clicked line sits on the flight.</summary>
-        static void TakeAnchor(GetPoint getter, StairDraw.Setup setup)
+        /// <summary>The panel's width and anchor onto the setup and the Width option.</summary>
+        static void Sync(StairDraw.Setup setup, ForskInfo.Drawing drawing, OptionDouble width)
+        {
+            setup.Width = drawing.Width;
+            setup.Anchor = drawing.Anchor;
+            width.CurrentValue = drawing.Width;
+        }
+
+        /// <summary>A command-line option: the width, or where the clicked line sits on the flight. The panel shows it.</summary>
+        static void TakeOption(GetPoint getter, ForskInfo.Drawing drawing, OptionDouble width)
         {
             var option = getter.Option();
-            if (option == null || option.EnglishName != "Anchor") return;
-            var index = option.CurrentListOptionIndex;
-            if (index >= 0 && index < WallDraw.AnchorNames.Length) setup.Anchor = (WallDraw.Anchor)index;
+            drawing.Width = width.CurrentValue;
+            if (option != null && option.EnglishName == "Anchor")
+            {
+                var index = option.CurrentListOptionIndex;
+                if (index >= 0 && index < WallDraw.AnchorNames.Length) drawing.Anchor = (WallDraw.Anchor)index;
+            }
+            ForskWindow.ShowDrawing(drawing);
         }
 
         static bool Shift()
@@ -172,11 +193,13 @@ namespace RhinoMCPPlugin.Forsk
         {
             readonly StairDraw.FootHit _foot;
             readonly StairDraw.Setup _setup;
+            readonly ForskInfo.Drawing _drawing;
 
-            public WayUp(StairDraw.FootHit foot, StairDraw.Setup setup, OptionDouble width)
+            public WayUp(StairDraw.FootHit foot, StairDraw.Setup setup, ForskInfo.Drawing drawing, OptionDouble width)
             {
                 _foot = foot;
                 _setup = setup;
+                _drawing = drawing;
                 SetBasePoint(ToPoint(foot.Foot), true);
                 Constrain(Plane.WorldXY, false);
                 AcceptNumber(true, false);
@@ -187,6 +210,8 @@ namespace RhinoMCPPlugin.Forsk
 
             protected override void OnDynamicDraw(GetPointDrawEventArgs e)
             {
+                _setup.Width = _drawing.Width;
+                _setup.Anchor = _drawing.Anchor;
                 var draft = StairDraw.Plan(_setup, _foot, ToPt(e.CurrentPoint), Shift());
                 if (draft.Flight == null)
                 {

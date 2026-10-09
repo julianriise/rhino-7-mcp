@@ -175,13 +175,19 @@ public static class WallDraw
     }
 
     /// <summary>The add_wall calls for the segments, one wall each.</summary>
-    public static List<JObject> ToolCalls(IEnumerable<Segment> segments, double thickness)
+    /// <param name="height">A free wall's height, mm; 0 leaves it to add_wall (the walls it joins, else the nearest).</param>
+    public static List<JObject> ToolCalls(IEnumerable<Segment> segments, double thickness, double height = 0)
     {
-        return (segments ?? Enumerable.Empty<Segment>()).Select(s => new JObject
+        return (segments ?? Enumerable.Empty<Segment>()).Select(s =>
         {
-            ["from"] = new JArray(s.From.X, s.From.Y),
-            ["to"] = new JArray(s.To.X, s.To.Y),
-            ["thickness"] = thickness
+            var call = new JObject
+            {
+                ["from"] = new JArray(s.From.X, s.From.Y),
+                ["to"] = new JArray(s.To.X, s.To.Y),
+                ["thickness"] = thickness
+            };
+            if (height > 0) call["height"] = height;
+            return call;
         }).ToList();
     }
 

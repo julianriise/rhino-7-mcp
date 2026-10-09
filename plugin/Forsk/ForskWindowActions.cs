@@ -1492,6 +1492,14 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         void InfoEdit(string id, string field, string value)
         {
+            if (id == ForskInfo.DrawingId && Drawing != null)
+            {
+                // Draw wall or Add stair is running: the edit is for the next point, not the model.
+                if (!ForskInfo.EditDrawing(Drawing, field, value, out var refused)) Active()?.AddLine(refused);
+                MarkDirty();
+                Render();
+                return;
+            }
             var doc = RhinoDoc.ActiveDoc;
             var panel = doc == null ? null : ForskInfo.For(ReadFacts(doc));
             var edit = ForskInfo.Edit(panel, id, field, value, out var error);

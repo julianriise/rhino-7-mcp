@@ -331,4 +331,62 @@ public class ForskInfoTests
         Assert.Equal("width", model["info"]!["rows"]![1]!["field"]!.ToString());
         Assert.Equal("mm", model["info"]!["rows"]![1]!["unit"]!.ToString());
     }
+
+    // ---- while Draw wall or Add stair runs: the thing being drawn ----
+
+    [Fact]
+    public void DrawingAWall_ShowsItsThicknessHeightAndAnchor()
+    {
+        var drawing = new ForskInfo.Drawing { Kind = "wall", Thickness = 200, Anchor = WallDraw.Anchor.Centre };
+        var panel = ForskInfo.ForDrawing(drawing);
+        Assert.Equal("Drawing a wall", panel.Title);
+        Assert.Equal(ForskInfo.DrawingId, panel.Id);
+        Assert.Equal("200", Value(panel, "Thickness"));
+        Assert.Equal("thickness", panel.Rows.Single(r => r.Label == "Thickness").Field);
+        Assert.Equal("", Value(panel, "Height"));
+        var anchor = panel.Rows.Single(r => r.Label == "Anchor");
+        Assert.Equal("Centre", anchor.Value);
+        Assert.Equal(new[] { "Left", "Centre", "Right" }, anchor.Options.Select(o => o.Id));
+    }
+
+    [Fact]
+    public void DrawingAStair_ShowsItsWidthRiseAndAnchor()
+    {
+        var drawing = new ForskInfo.Drawing { Kind = "stair", Width = 900, Rise = 3000, Anchor = WallDraw.Anchor.Left };
+        var panel = ForskInfo.ForDrawing(drawing);
+        Assert.Equal("Adding a stair", panel.Title);
+        Assert.Equal("900", Value(panel, "Width"));
+        Assert.Equal("3000 mm", Value(panel, "Total rise"));
+        Assert.Equal("Left", Value(panel, "Anchor"));
+    }
+
+    [Fact]
+    public void AnEditWhileDrawing_ChangesWhatIsBeingDrawn_NotTheModel()
+    {
+        var drawing = new ForskInfo.Drawing { Kind = "wall", Thickness = 200 };
+        Assert.True(ForskInfo.EditDrawing(drawing, "thickness", "150", out var error), error);
+        Assert.Equal(150, drawing.Thickness);
+        Assert.True(ForskInfo.EditDrawing(drawing, "anchor", "Left", out error), error);
+        Assert.Equal(WallDraw.Anchor.Left, drawing.Anchor);
+        Assert.True(ForskInfo.EditDrawing(drawing, "height", "2700", out error), error);
+        Assert.Equal(2700, drawing.Height);
+        Assert.True(ForskInfo.EditDrawing(drawing, "height", "", out error), error);
+        Assert.Equal(0, drawing.Height);
+        Assert.False(ForskInfo.EditDrawing(drawing, "thickness", "0", out error));
+        Assert.False(ForskInfo.EditDrawing(drawing, "anchor", "Middle", out error));
+        var stair = new ForskInfo.Drawing { Kind = "stair", Width = 900 };
+        Assert.False(ForskInfo.EditDrawing(stair, "width", "400", out error));
+        Assert.True(ForskInfo.EditDrawing(stair, "width", "1000", out error), error);
+        Assert.Equal(1000, stair.Width);
+    }
+
+    [Fact]
+    public void WhileDrawing_TheWindowShowsTheDrawingPanel_OverWhatIsPicked()
+    {
+        var facts = Facts(Door());
+        var drawing = new ForskInfo.Drawing { Kind = "wall", Thickness = 200 };
+        var model = WindowView.Build(new DocThread { Serial = 1 }, facts, drawing: drawing);
+        Assert.Equal("Drawing a wall", model["info"]?["title"]?.ToString());
+        Assert.Equal("Door D02", WindowView.Build(new DocThread { Serial = 1 }, facts)["info"]?["title"]?.ToString());
+    }
 }

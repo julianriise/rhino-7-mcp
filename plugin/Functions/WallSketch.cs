@@ -23,7 +23,8 @@ public sealed class WallSketch
         Reach = reach;
     }
 
-    public double Thickness { get; }
+    /// <summary>The whole run's thickness. The Properties panel can change it between clicks.</summary>
+    public double Thickness { get; set; }
     /// <summary>Where the clicked points sit on the wall. Snaps and lengths stay on the clicked line.</summary>
     public WallDraw.Anchor Anchor { get; set; } = WallDraw.Anchor.Centre;
     public double Reach { get; set; }
