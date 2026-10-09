@@ -518,4 +518,41 @@ public static class WallFollowPlan
         if (string.IsNullOrEmpty(word) || !char.IsLetter(word[0])) return word;
         return char.ToUpperInvariant(word[0]) + word.Substring(1);
     }
+    /// <summary>A cluster a deleted wall record stood in: its shape before and after.</summary>
+    public sealed class DeletedCluster
+    {
+        public List<List<RoomDetect.Pt>> Before;
+        /// <summary>Null when every record of the cluster went: its floor and roof go too.</summary>
+        public List<List<RoomDetect.Pt>> After;
+        /// <summary>A record of the cluster, one left if any: whose source layer the slabs share.</summary>
+        public int Record;
+    }
+
+    /// <summary>
+    /// Wall records deleted outside Forsk (Rhino's Delete), as Delete wall reads
+    /// them: each cluster a gone record stood in, read as one shape with it and
+    /// without it. When the records left no longer read as one piece the shape
+    /// stays as it was, so the floor and roof stay. <paramref name="records"/>
+    /// holds the gone records too, by the indexes in <paramref name="gone"/>.
+    /// </summary>
+    public static List<DeletedCluster> AfterDelete(IList<List<List<RoomDetect.Pt>>> records, ICollection<int> gone, double tol)
+    {
+        var clusters = new List<DeletedCluster>();
+        var done = new HashSet<int>();
+        foreach (var index in gone.OrderBy(i => i))
+        {
+            if (!done.Add(index)) continue;
+            var cluster = WallJoins.ClusterOf(records, index, tol);
+            foreach (var i in cluster) done.Add(i);
+            var before = WallJoins.Shape(records, cluster, tol);
+            var kept = cluster.Where(i => !gone.Contains(i)).ToList();
+            clusters.Add(new DeletedCluster
+            {
+                Before = before,
+                After = kept.Count == 0 ? null : WallJoins.Shape(records, kept, tol) ?? before,
+                Record = kept.Count == 0 ? index : kept[0]
+            });
+        }
+        return clusters;
+    }
 }

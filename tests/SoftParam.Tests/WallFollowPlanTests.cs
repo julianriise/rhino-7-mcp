@@ -97,6 +97,35 @@ public class WallFollowPlanTests
     }
 
     [Fact]
+    public void AfterDelete_APartitionGone_LeavesTheBoxOutline_TheBoxGoneTakesItsSlabs()
+    {
+        // Julian 2026-10-09: a wall deleted with Rhino's Delete left its doors, floor and roof as they were.
+        var records = new List<List<List<Pt>>> { WallJoinsTests.Garage(), new() { Rect(3900, 200, 4100, 3800) } };
+        var partition = Assert.Single(WallFollowPlan.AfterDelete(records, new[] { 1 }, 1));
+        Assert.NotNull(partition.After);
+        Assert.Equal(0, partition.Record);
+        Assert.Equal(3, partition.Before.Count);
+        Assert.Equal(2, partition.After.Count);
+        Assert.True(WallFollowPlan.SameOutline(partition.Before[0], partition.After[0], 1));
+
+        var both = Assert.Single(WallFollowPlan.AfterDelete(records, new[] { 0, 1 }, 1));
+        Assert.Null(both.After);
+        Assert.NotNull(both.Before);
+    }
+
+    [Fact]
+    public void AfterDelete_AnOuterWallGone_ShrinksTheOutline()
+    {
+        // An L of two records: the east leg deleted leaves the west one's outline.
+        var west = new List<List<Pt>> { Rect(0, 0, 200, 4000) };
+        var south = new List<List<Pt>> { Rect(200, 0, 6000, 200) };
+        var records = new List<List<List<Pt>>> { west, south };
+        var cluster = Assert.Single(WallFollowPlan.AfterDelete(records, new[] { 1 }, 1));
+        Assert.True(WallFollowPlan.SameOutline(west[0], cluster.After[0], 1));
+        Assert.False(WallFollowPlan.SameOutline(cluster.Before[0], cluster.After[0], 1));
+    }
+
+    [Fact]
     public void Sentence_Norwegian_NamesTheSamePieces()
     {
         Assert.Equal("Gulv, tak og 2 rom oppdatert.", WallFollowPlan.Sentence(true, true, 2, false, true));

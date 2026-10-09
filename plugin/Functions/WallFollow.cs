@@ -86,6 +86,75 @@ public partial class RhinoMCPFunctions
         }
     }
 
+    /// <summary>A wall record Rhino's Delete took, read in the delete event.</summary>
+    internal sealed class DeletedWall
+    {
+        public Guid Id;
+        public string ForskId;
+        public string SourceLayer;
+        public string Path;
+    }
+
+    /// <summary>
+    /// What Delete wall does after the cut, for walls Rhino's Delete took: the
+    /// doors and windows they held go, the floor slab and flat roof follow
+    /// each cluster's outline (WallFollowPlan.AfterDelete), and rooms are
+    /// detected again. Runs in a Forsk call, so the deletes here are not
+    /// followed again. A failure puts the openings and slabs back.
+    /// </summary>
+    internal JObject FollowDeletedWalls(RhinoDoc doc, IList<DeletedWall> gone)
+    {
+        var tol = Math.Max(doc.ModelAbsoluteTolerance, 1.0);
+        var doorsBefore = DoorGapBoxes(doc);
+        var records = new List<List<List<RoomDetect.Pt>>>();
+        var layers = new List<string>();
+        foreach (var obj in EnumerateDocObjects(doc))
+        {
+            if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase) || IsExistingUnderlay(doc, obj)) continue;
+            var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            if (rings == null) continue;
+            records.Add(rings);
+            layers.Add(obj.Attributes.GetUserString("forsk:source_layer"));
+        }
+        var indexes = new List<int>();
+        foreach (var wall in gone)
+        {
+            var rings = WallEdit.Rings(wall.Path);
+            if (rings == null) continue;
+            indexes.Add(records.Count);
+            records.Add(rings);
+            layers.Add(wall.SourceLayer);
+        }
+
+        var removed = new List<RemovedPiece>();
+        var deleted = new JArray();
+        try
+        {
+            foreach (var wall in gone)
+                foreach (var marker in MarkersOnHost(doc, wall.Id, wall.ForskId))
+                {
+                    if (doc.Objects.FindId(marker.Id) == null) continue;
+                    RemoveOpeningPieces(doc, marker.Id, removed);
+                    deleted.Add(marker.Id.ToString());
+                }
+            var followed = new List<string>();
+            foreach (var cluster in WallFollowPlan.AfterDelete(records, indexes, tol))
+                followed.Add(FollowNeighbours(doc, layers[cluster.Record], cluster.Before, cluster.After, doorsBefore));
+            if (indexes.Count == 0) RoomsDetect(new JObject());
+            return new JObject
+            {
+                ["walls"] = gone.Count,
+                ["openings_deleted"] = deleted,
+                ["rebuilt"] = string.Join(" ", followed)
+            };
+        }
+        catch
+        {
+            UndeletePieces(doc, removed);
+            throw;
+        }
+    }
+
     private static bool DaylightShown(RhinoDoc doc)
     {
         foreach (var mesh in AnalysisOverlays(doc))

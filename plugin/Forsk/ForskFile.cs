@@ -531,8 +531,9 @@ namespace RhinoMCPPlugin.Forsk
     }
 
     /// <summary>
-    /// Rooms after an object deleted outside a Forsk call (Rhino's Delete). A wall
-    /// bounds rooms, so they are detected again: the rooms on either side become
+    /// An object deleted outside a Forsk call (Rhino's Delete) that Forsk follows
+    /// as Delete wall does: a wall takes its doors and windows, floor and roof
+    /// follow, and rooms are detected again, so the rooms on either side become
     /// one. A deleted room or plate stays deleted.
     /// </summary>
     public static class RoomFollow

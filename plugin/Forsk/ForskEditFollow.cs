@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using Rhino;
 using Rhino.DocObjects;
@@ -9,8 +10,9 @@ namespace RhinoMCPPlugin.Forsk
     /// <summary>
     /// Rhino's own edits outside a Forsk call, followed on the next idle, with or
     /// without the Forsk window open: a Delete of what the daylight map was drawn
-    /// from marks the map (DaylightMap.AfterDelete), a deleted wall has the rooms
-    /// detected again (RoomFollow.AfterDelete), and a door or window block
+    /// from marks the map (DaylightMap.AfterDelete), a deleted wall takes its
+    /// doors and windows and has floor, roof and rooms follow (RoomFollow.AfterDelete),
+    /// and a door or window block
     /// moved with Drag, Move or the gumball takes its marker along its wall
     /// (OpeningDrag, FS-Z383WAWP). No layer or object change inside the events.
     /// </summary>
@@ -18,7 +20,7 @@ namespace RhinoMCPPlugin.Forsk
     {
         static readonly OpeningDrag Drags = new OpeningDrag();
         static MapEdit _deletedEdit;
-        static bool _wallDeleted;
+        static readonly List<RhinoMCPFunctions.DeletedWall> _deletedWalls = new List<RhinoMCPFunctions.DeletedWall>();
         static bool _hooked;
 
         public static void Start()
@@ -52,7 +54,14 @@ namespace RhinoMCPPlugin.Forsk
             var kind = obj.Attributes.GetUserString("forsk:kind");
             var edit = DaylightMap.AfterDelete(kind, onRoomLayer);
             if (edit > _deletedEdit) _deletedEdit = edit;
-            if (RoomFollow.AfterDelete(kind)) _wallDeleted = true;
+            if (RoomFollow.AfterDelete(kind))
+                _deletedWalls.Add(new RhinoMCPFunctions.DeletedWall
+                {
+                    Id = obj.Id,
+                    ForskId = obj.Attributes.GetUserString("forsk:id"),
+                    SourceLayer = obj.Attributes.GetUserString("forsk:source_layer"),
+                    Path = obj.Attributes.GetUserString("forsk:path")
+                });
         }
 
         static void OnReplaced(object sender, RhinoReplaceObjectEventArgs e)
@@ -75,33 +84,27 @@ namespace RhinoMCPPlugin.Forsk
 
         static void OnIdle(object sender, EventArgs e)
         {
-            FollowRooms();
+            FollowWalls();
             MarkMap();
             FollowOpenings();
         }
 
         /// <summary>
-        /// Rooms again after Rhino's Delete of a wall, in an undo record of their
-        /// own: the first Undo puts the rooms back, the next the wall. The map is
-        /// marked after, since detection redraws the rooms it was drawn from.
+        /// After Rhino's Delete of a wall, what Delete wall does: its doors and
+        /// windows go, floor and roof follow, rooms are detected again
+        /// (FollowDeletedWalls). Its own undo record: the first Undo puts those
+        /// back, the next the wall.
         /// </summary>
-        static void FollowRooms()
+        static void FollowWalls()
         {
-            if (!_wallDeleted) return;
-            _wallDeleted = false;
+            if (_deletedWalls.Count == 0) return;
+            var gone = new List<RhinoMCPFunctions.DeletedWall>(_deletedWalls);
+            _deletedWalls.Clear();
             var doc = RhinoDoc.ActiveDoc;
             if (doc == null) return;
-            var record = doc.BeginUndoRecord("Forsk: rooms after deleted wall");
-            try
-            {
-                var envelope = ForskTools.Command("rooms_detect", new JObject());
-                if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
-                    RhinoApp.WriteLine("Forsk: the rooms were not detected again after the wall was deleted. " + envelope?["message"]);
-            }
-            finally
-            {
-                doc.EndUndoRecord(record);
-            }
+            var envelope = ForskTools.Write("follow deleted wall", () => new RhinoMCPFunctions().FollowDeletedWalls(doc, gone));
+            if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                RhinoApp.WriteLine("Forsk: the wall's doors, floor, roof and rooms did not follow the delete. " + envelope?["message"]);
             doc.Views.Redraw();
         }
 
