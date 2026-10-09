@@ -2,6 +2,26 @@
   "_edit": "One entry per release, newest first; add the new release at the top and keep the older ones (a Mac that skipped releases steps back through them on the card). version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
   "releases": [
     {
+      "version": "1.3.1",
+      "items": [
+        {
+          "title": "Change thickness in one click",
+          "how": "Pick one wall, open More actions and choose Change thickness: click the side that moves and type the new thickness.",
+          "icon": "box"
+        },
+        {
+          "title": "Cancel while AI detection reads",
+          "how": "While the import card reads a PDF or scan, Cancel stops it at once and adds nothing.",
+          "icon": "file-up"
+        },
+        {
+          "title": "Floors under the whole house",
+          "how": "A front door drawn as a gap now gives a floor under the whole plan, and the floor and roof follow when you move a wall.",
+          "icon": "rocket"
+        }
+      ]
+    },
+    {
       "version": "1.3.0",
       "items": [
         {
