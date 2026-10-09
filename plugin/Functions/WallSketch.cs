@@ -24,6 +24,8 @@ public sealed class WallSketch
     }
 
     public double Thickness { get; }
+    /// <summary>Where the clicked points sit on the wall. Snaps and lengths stay on the clicked line.</summary>
+    public WallDraw.Anchor Anchor { get; set; } = WallDraw.Anchor.Centre;
     public double Reach { get; set; }
     public bool Closed { get; private set; }
     public IReadOnlyList<Pt> Points => _points;
@@ -63,12 +65,15 @@ public sealed class WallSketch
         preview.Label = WallDraw.Dimension(length, _dir);
         preview.Valid = length > Thickness;
         if (!preview.Valid) preview.Why = WallDraw.TooShort;
-        Pt? back = _points.Count >= 2 ? _points[_points.Count - 2] : (Pt?)null;
-        Pt? earlier = _points.Count >= 3 ? _points[_points.Count - 3] : (Pt?)null;
-        preview.Join = back.HasValue ? WallDraw.CornerExtension(back.Value, last, snapped.Point, Thickness) : 0;
+        var line = new List<Pt>(_points) { snapped.Point };
+        var centre = WallDraw.Centreline(line, false, Thickness, Anchor);
+        var n = centre.Count;
+        Pt? back = n >= 3 ? centre[n - 3] : (Pt?)null;
+        Pt? earlier = n >= 4 ? centre[n - 4] : (Pt?)null;
+        preview.Join = back.HasValue ? WallDraw.CornerExtension(back.Value, centre[n - 2], centre[n - 1], Thickness) : 0;
         if (back.HasValue)
-            preview.Previous = WallDraw.SegmentRing(earlier, back.Value, last, snapped.Point, Thickness);
-        preview.Band = WallDraw.SegmentRing(back, last, snapped.Point, null, Thickness);
+            preview.Previous = WallDraw.SegmentRing(earlier, back.Value, centre[n - 2], centre[n - 1], Thickness);
+        preview.Band = WallDraw.SegmentRing(back, centre[n - 2], centre[n - 1], null, Thickness);
         return preview;
     }
 
@@ -129,7 +134,7 @@ public sealed class WallSketch
         return _points.Count > 0;
     }
 
-    public List<WallDraw.Segment> Segments() => WallDraw.Plan(_points, Closed, Thickness);
+    public List<WallDraw.Segment> Segments() => WallDraw.Plan(WallDraw.Centreline(_points, Closed, Thickness, Anchor), Closed, Thickness);
 
     bool Place(Pt point, bool closes, out string why)
     {

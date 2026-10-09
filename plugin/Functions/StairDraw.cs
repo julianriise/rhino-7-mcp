@@ -44,6 +44,8 @@ public static class StairDraw
         public double Width = Stairs.WidthDefault;
         public double RiserMax = Stairs.RiserMaxDefault;
         public double Going = Stairs.GoingDefault;
+        /// <summary>Where the clicked line sits on the flight: its left edge, its centre or its right edge, seen climbing.</summary>
+        public WallDraw.Anchor Anchor = WallDraw.Anchor.Centre;
     }
 
     public sealed class FootHit
@@ -163,7 +165,15 @@ public static class StairDraw
         // Along the face, the long edge is the one being placed: one half-width
         // onto the free side puts that edge on the face. Leaving the face, the
         // start edge is the one being placed, and the foot is already on it.
-        if (along && foot.Face != null)
+        if (setup.Anchor != WallDraw.Anchor.Centre)
+        {
+            // Left: the clicked line is the left edge, so the flight lies to its right.
+            var side = setup.Anchor == WallDraw.Anchor.Left ? setup.Width / 2.0 : -setup.Width / 2.0;
+            origin = new Pt(
+                WallDraw.Round(origin.X + dir.Y * side),
+                WallDraw.Round(origin.Y - dir.X * side));
+        }
+        else if (along && foot.Face != null)
         {
             var half = setup.Width / 2.0;
             origin = new Pt(

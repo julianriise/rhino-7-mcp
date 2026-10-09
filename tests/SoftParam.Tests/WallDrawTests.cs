@@ -496,4 +496,53 @@ public class WallDrawTests
         // The old corner stopped at the 90 degree extension, half the thickness.
         Assert.True(join > T / 2 + 1);
     }
+
+    // ---- anchor: the clicked line as the wall's left face, centre or right face ----
+
+    [Fact]
+    public void AnchorLeft_PutsTheWallsLeftFaceOnTheClickedLine()
+    {
+        // A room's inside corner, clicked along the x axis then up: the wall lies right of the way drawn.
+        var clicked = new List<Pt> { new Pt(0, 0), new Pt(4000, 0), new Pt(4000, 3000) };
+        var centre = WallDraw.Centreline(clicked, false, T, WallDraw.Anchor.Left);
+        Assert.Equal(new[] { new Pt(0, -100), new Pt(4100, -100), new Pt(4100, 3000) }, centre);
+        var rings = WallDraw.Plan(centre, false, T).Select(s => s.Ring).ToList();
+        // The left face of each wall runs through the clicked corner.
+        Assert.Contains(new Pt(4000, 0), rings[0]);
+        Assert.Contains(new Pt(4000, 0), rings[1]);
+        Assert.Contains(new Pt(0, 0), rings[0]);
+    }
+
+    [Fact]
+    public void AnchorRight_AndCentre()
+    {
+        var clicked = new List<Pt> { new Pt(0, 0), new Pt(4000, 0) };
+        Assert.Equal(new[] { new Pt(0, 100), new Pt(4000, 100) }, WallDraw.Centreline(clicked, false, T, WallDraw.Anchor.Right));
+        Assert.Equal(clicked, WallDraw.Centreline(clicked, false, T, WallDraw.Anchor.Centre));
+    }
+
+    [Fact]
+    public void AnchorLeft_OnAClosedLoop_DrawnAnticlockwise_PutsTheWallsOutside()
+    {
+        var room = Rect(0, 0, 4000, 3000);
+        var centre = WallDraw.Centreline(room, true, T, WallDraw.Anchor.Left);
+        Assert.Equal(Rect(-100, -100, 4100, 3100), centre);
+    }
+
+    [Fact]
+    public void TheSketch_DrawsAndPreviewsOnTheAnchoredLine()
+    {
+        var sketch = Sketch();
+        sketch.Anchor = WallDraw.Anchor.Left;
+        Click(sketch, 0, 0);
+        var hover = sketch.Hover(new Pt(4000, 0), false);
+        Assert.Contains(new Pt(4000, 0), hover.Band);
+        Assert.Contains(new Pt(4000, -200), hover.Band);
+        Click(sketch, 4000, 0);
+        var segment = Assert.Single(sketch.Segments());
+        Assert.Equal(new Pt(0, -100), segment.From);
+        Assert.Equal(new Pt(4000, -100), segment.To);
+        // The dimension is the clicked length.
+        Assert.Equal(4000, hover.Length, 6);
+    }
 }

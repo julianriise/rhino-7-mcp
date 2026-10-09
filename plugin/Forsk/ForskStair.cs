@@ -19,7 +19,8 @@ namespace RhinoMCPPlugin.Forsk
     /// the plan symbol from the floor to floor height; the click, or a typed
     /// run, adds the stair with add_stair in one undo record. The sizes and
     /// the snapping are StairDraw; this only feeds it mouse points. W sets
-    /// the width. Esc adds nothing.
+    /// the width; Anchor puts the clicked line on the flight's left edge,
+    /// centre or right edge. Esc adds nothing.
     /// </summary>
     public static class ForskStair
     {
@@ -66,6 +67,7 @@ namespace RhinoMCPPlugin.Forsk
                         foot = StairDraw.SnapFoot(faces, ToPt(first.Point()), first.Reach, Shift());
                         break;
                     case GetResult.Option:
+                        TakeAnchor(first, setup);
                         break;
                     default:
                         return null;
@@ -78,7 +80,11 @@ namespace RhinoMCPPlugin.Forsk
                 var way = new WayUp(foot, setup, width);
                 var result = way.Get();
                 double? typed = null;
-                if (result == GetResult.Option) continue;
+                if (result == GetResult.Option)
+                {
+                    TakeAnchor(way, setup);
+                    continue;
+                }
                 if (result == GetResult.Number) typed = way.Number();
                 else if (result != GetResult.Point) return null;
                 var draft = StairDraw.Plan(setup, foot, ToPt(way.Point()), Shift(), typed);
@@ -100,6 +106,15 @@ namespace RhinoMCPPlugin.Forsk
             {
                 if (ownUndo) doc.EndUndoRecord(record);
             }
+        }
+
+        /// <summary>The Anchor option, when it was the one picked: where the clicked line sits on the flight.</summary>
+        static void TakeAnchor(GetPoint getter, StairDraw.Setup setup)
+        {
+            var option = getter.Option();
+            if (option == null || option.EnglishName != "Anchor") return;
+            var index = option.CurrentListOptionIndex;
+            if (index >= 0 && index < WallDraw.AnchorNames.Length) setup.Anchor = (WallDraw.Anchor)index;
         }
 
         static bool Shift()
@@ -137,6 +152,7 @@ namespace RhinoMCPPlugin.Forsk
                 _setup = setup;
                 Constrain(Plane.WorldXY, false);
                 AddOptionDouble("Width", ref width);
+                AddOptionList("Anchor", WallDraw.AnchorNames, (int)setup.Anchor);
                 SetCommandPrompt("Foot of the stair, " + Stairs.Mm(setup.Width) + " wide");
             }
 
@@ -165,6 +181,7 @@ namespace RhinoMCPPlugin.Forsk
                 Constrain(Plane.WorldXY, false);
                 AcceptNumber(true, false);
                 AddOptionDouble("Width", ref width);
+                AddOptionList("Anchor", WallDraw.AnchorNames, (int)setup.Anchor);
                 SetCommandPrompt("The way up: click where the stair ends, or type its length");
             }
 

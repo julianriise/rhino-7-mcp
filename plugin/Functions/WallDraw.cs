@@ -145,6 +145,35 @@ public static class WallDraw
         return list;
     }
 
+    /// <summary>Where the clicked line sits on the wall, seen along the way it is drawn (Revit's location line).</summary>
+    public enum Anchor { Left, Centre, Right }
+
+    public static readonly string[] AnchorNames = { "Left", "Centre", "Right" };
+
+    /// <summary>
+    /// The wall centreline for a clicked line. Centre is the line itself. Left
+    /// puts the wall's left face on it, so the wall lies right of the way drawn;
+    /// Right the other way. Corners are mitred, so each face meets the clicked corner.
+    /// </summary>
+    public static List<Pt> Centreline(IList<Pt> points, bool closed, double thickness, Anchor anchor)
+    {
+        var n = points?.Count ?? 0;
+        var line = new List<Pt>(points ?? new List<Pt>());
+        if (anchor == Anchor.Centre || n < 2) return line;
+        var loop = closed && n >= 3;
+        var h = anchor == Anchor.Left ? -thickness / 2.0 : thickness / 2.0;
+        for (var i = 0; i < n; i++)
+        {
+            Pt? prev = i > 0 || loop ? points[(i - 1 + n) % n] : (Pt?)null;
+            Pt? next = i < n - 1 || loop ? points[(i + 1) % n] : (Pt?)null;
+            var p = points[i];
+            line[i] = prev.HasValue && next.HasValue
+                ? Meet(prev.Value, p, next.Value, h)
+                : next.HasValue ? Cap(p, LeftNormal(p, next.Value), h) : Cap(p, LeftNormal(prev.Value, p), h);
+        }
+        return line;
+    }
+
     /// <summary>The add_wall calls for the segments, one wall each.</summary>
     public static List<JObject> ToolCalls(IEnumerable<Segment> segments, double thickness)
     {

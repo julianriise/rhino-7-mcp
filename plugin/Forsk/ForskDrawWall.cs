@@ -19,6 +19,7 @@ namespace RhinoMCPPlugin.Forsk
     /// WallSketch; this only turns mouse points into sketch calls and draws
     /// what the sketch returns. Enter or a right-click finishes, Esc steps back
     /// one point (the last Esc cancels), C closes, a typed number is a length.
+    /// Anchor puts the clicked line on the wall's left face, centre or right face.
     /// </summary>
     public static class ForskDrawWall
     {
@@ -63,7 +64,9 @@ namespace RhinoMCPPlugin.Forsk
                         break;
                     case GetResult.Option:
                         if (getter.TypeIndex(out var type))
-                            sketch = new WallSketch(targets, type);
+                            sketch = new WallSketch(targets, type) { Anchor = sketch.Anchor };
+                        else if (getter.AnchorIndex(out var anchor))
+                            sketch.Anchor = anchor;
                         else if (!sketch.Close(out why))
                             RhinoApp.WriteLine(why);
                         else
@@ -159,6 +162,7 @@ namespace RhinoMCPPlugin.Forsk
             readonly WallSketch _sketch;
             readonly List<double> _types;
             int _typeOption = -1;
+            readonly int _anchorOption;
 
             public DrawPoint(WallSketch sketch)
             {
@@ -166,6 +170,7 @@ namespace RhinoMCPPlugin.Forsk
                 AcceptNothing(true);
                 AcceptNumber(true, false);
                 Constrain(Plane.WorldXY, false);
+                _anchorOption = AddOptionList("Anchor", WallDraw.AnchorNames, (int)sketch.Anchor);
                 if (sketch.Points.Count == 0)
                 {
                     _types = WallDraw.Types(sketch.Thickness);
@@ -188,6 +193,18 @@ namespace RhinoMCPPlugin.Forsk
                 var index = option.CurrentListOptionIndex;
                 if (index < 0 || index >= _types.Count) return false;
                 type = _types[index];
+                return true;
+            }
+
+            /// <summary>True when the option was the anchor: where the clicked line sits on the wall.</summary>
+            public bool AnchorIndex(out WallDraw.Anchor anchor)
+            {
+                anchor = _sketch.Anchor;
+                var option = Option();
+                if (option == null || option.Index != _anchorOption) return false;
+                var index = option.CurrentListOptionIndex;
+                if (index < 0 || index >= WallDraw.AnchorNames.Length) return false;
+                anchor = (WallDraw.Anchor)index;
                 return true;
             }
 

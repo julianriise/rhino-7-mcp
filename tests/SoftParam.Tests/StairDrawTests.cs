@@ -106,6 +106,31 @@ public class StairDrawTests
         Assert.Equal(1000, draft.Footprint.Max(p => p.Y), 3);
     }
 
+    [Theory]
+    [InlineData(WallDraw.Anchor.Centre, -450, 450)]
+    [InlineData(WallDraw.Anchor.Left, -900, 0)]
+    [InlineData(WallDraw.Anchor.Right, 0, 900)]
+    public void TheAnchor_PutsTheClickedLineOnTheLeftEdge_TheCentre_OrTheRightEdge(WallDraw.Anchor anchor, double lo, double hi)
+    {
+        var setup = Setup();
+        setup.Anchor = anchor;
+        var draft = StairDraw.Plan(setup, Free(0, 0), new Pt(4000, 0), true);
+        Assert.Equal(lo, draft.Footprint.Min(p => p.Y), 3);
+        Assert.Equal(hi, draft.Footprint.Max(p => p.Y), 3);
+    }
+
+    [Fact]
+    public void AnAnchor_AlongAFace_ReplacesTheFlushSnap()
+    {
+        var hit = StairDraw.SnapFoot(Faces(), new Pt(1500, 140), Reach, false);
+        var setup = Setup();
+        setup.Anchor = WallDraw.Anchor.Right;
+        // Climbing east along the south face: Right puts the stair north of the clicked line, on the room side.
+        var draft = StairDraw.Plan(setup, hit, new Pt(4000, 120), false);
+        Assert.Equal(100, draft.Footprint.Min(p => p.Y), 3);
+        Assert.Equal(1000, draft.Footprint.Max(p => p.Y), 3);
+    }
+
     [Fact]
     public void LeavingTheFace_TheStartEdgeLiesOnIt()
     {
