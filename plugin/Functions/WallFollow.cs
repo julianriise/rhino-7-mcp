@@ -108,14 +108,25 @@ public partial class RhinoMCPFunctions
         var doorsBefore = DoorGapBoxes(doc);
         var records = new List<List<List<RoomDetect.Pt>>>();
         var layers = new List<string>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var paths = new HashSet<string>(StringComparer.Ordinal);
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (!string.Equals(GetForskKind(obj), "wall", StringComparison.OrdinalIgnoreCase) || IsExistingUnderlay(doc, obj)) continue;
-            var rings = WallEdit.Rings(obj.Attributes.GetUserString("forsk:path"));
+            var path = obj.Attributes.GetUserString("forsk:path");
+            var rings = WallEdit.Rings(path);
             if (rings == null) continue;
             records.Add(rings);
             layers.Add(obj.Attributes.GetUserString("forsk:source_layer"));
+            ids.Add(obj.Attributes.GetUserString("forsk:id") ?? "");
+            paths.Add(path);
         }
+        // Rhino's Replace (Move, the gumball) and a host rebuild also delete the old
+        // object: the wall is still there, by its id, its forsk:id or its path.
+        gone = gone.Where(w => doc.Objects.FindId(w.Id) == null
+            && (string.IsNullOrEmpty(w.ForskId) || !ids.Contains(w.ForskId))
+            && !paths.Contains(w.Path ?? "")).ToList();
+        if (gone.Count == 0) return new JObject { ["walls"] = 0 };
         var indexes = new List<int>();
         foreach (var wall in gone)
         {
