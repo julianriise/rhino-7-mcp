@@ -54,7 +54,10 @@ namespace RhinoMCPPlugin.Forsk
                 else
                 {
                     doc.Objects.UnselectAll();
-                    corners = Pick(doc, z, tol, out source);
+                    // The conduit only stops drawing them: hidden too, a door, window or piece of furniture takes no snap.
+                    var hidden = HideForPick(doc);
+                    try { corners = Pick(doc, z, tol, out source); }
+                    finally { ShowAfterPick(doc, hidden); }
                 }
                 if (corners == null) return ForskTools.Fail("Area cancelled.");
                 var points = new JArray();
@@ -82,6 +85,50 @@ namespace RhinoMCPPlugin.Forsk
                 focus.Enabled = false;
                 WallsOnly = false;
                 doc.Views.Redraw();
+            }
+        }
+
+        /// <summary>
+        /// The objects the conduit leaves out of the view, hidden for the clicks so
+        /// object snaps cannot catch them (the conduit stops the drawing, not the
+        /// snaps). Only ones in the normal mode: a locked slab keeps its lock. No
+        /// layer changes, and no undo record: ShowAfterPick puts them back.
+        /// </summary>
+        static List<Guid> HideForPick(RhinoDoc doc)
+        {
+            var ids = new List<Guid>();
+            var settings = new ObjectEnumeratorSettings { NormalObjects = true, LockedObjects = false, HiddenObjects = false, IncludeLights = false, IncludeGrips = false };
+            foreach (var obj in doc.Objects.GetObjectList(settings))
+            {
+                var attr = obj?.Attributes;
+                if (attr == null || attr.Mode != ObjectMode.Normal) continue;
+                if (RoomAreaPlan.HiddenWhileDrawing(attr.GetUserString("forsk:generated"), attr.GetUserString("forsk:kind")))
+                    ids.Add(obj.Id);
+            }
+            WithoutUndo(doc, () => { foreach (var id in ids) doc.Objects.Hide(id, true); });
+            return ids;
+        }
+
+        static void ShowAfterPick(RhinoDoc doc, List<Guid> ids)
+        {
+            if (ids == null || ids.Count == 0) return;
+            WithoutUndo(doc, () => { foreach (var id in ids) doc.Objects.Show(id, true); });
+        }
+
+        /// <summary>A view-only change: no undo record, and not the user's own change to the file (ForskCalls).</summary>
+        static void WithoutUndo(RhinoDoc doc, Action act)
+        {
+            var was = doc.UndoRecordingEnabled;
+            ForskCalls.Enter();
+            try
+            {
+                doc.UndoRecordingEnabled = false;
+                act();
+            }
+            finally
+            {
+                doc.UndoRecordingEnabled = was;
+                ForskCalls.Exit();
             }
         }
 
