@@ -250,6 +250,27 @@ public static class SoftParamPlan
     }
 
     /// <summary>
+    /// Slide one opening to a point projected onto its wall: segment toIndex at
+    /// toT, which may be another segment than the one it sits on (index at t).
+    /// </summary>
+    public static bool TrySlideTo(
+        IList<Seg> segs,
+        int index,
+        double t,
+        int toIndex,
+        double toT,
+        double width,
+        double edgeMargin,
+        double tol,
+        out Slide slide)
+    {
+        if (!TrySlide(segs, toIndex, toIndex == index ? t : double.NaN, width, null, toT, edgeMargin, tol, out slide))
+            return false;
+        if (toIndex != index) slide = new Slide(slide.Index, slide.T, true);
+        return true;
+    }
+
+    /// <summary>
     /// Merge a size edit onto the stored width, sill, and head. Omitted fields
     /// stay. Nothing named, a non-positive width, or head at or below sill
     /// returns false and must not rebuild.

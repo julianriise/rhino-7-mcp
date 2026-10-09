@@ -23,6 +23,7 @@
   <ItemGroup>
     <Compile Include="..\..\plugin\Functions\BakePhases.cs" Link="BakePhases.cs" />
     <Compile Include="..\..\plugin\Functions\SoftParamPlan.cs" Link="SoftParamPlan.cs" />
+    <Compile Include="..\..\plugin\Functions\OpeningDrag.cs" Link="OpeningDrag.cs" />
     <Compile Include="..\..\plugin\Functions\SelectPlan.cs" Link="SelectPlan.cs" />
     <Compile Include="..\..\plugin\Functions\OpeningTypes.cs" Link="OpeningTypes.cs" />
     <Compile Include="..\..\plugin\Functions\TypeCatalog.cs" Link="TypeCatalog.cs" />

@@ -199,13 +199,26 @@ public partial class RhinoMCPFunctions
         RefuseExistingUnderlay(doc, markerObj);
         var rec = ReadOpeningRecord(markerObj);
         var host = ReadHostWall(doc, rec.HostId, requireVertical: true);
-        ParseMove(parameters, out var deltaMm, out var tAbs);
+        var to = parameters?["to"] as JArray;
+        double? deltaMm = null, tAbs = null;
+        if (to == null) ParseMove(parameters, out deltaMm, out tAbs);
+        else if (to.Count < 2 || parameters["delta_mm"] != null || parameters["t"] != null)
+            throw new ArgumentException("Specify to as [x, y], without delta_mm or t.");
 
         var pathSegs = HostPathSegments(host, tol);
         if (!TryOpeningOnPath(pathSegs, rec.MarkerBbox.Center, out var index, out var tNow))
             throw new InvalidOperationException("Could not place an opening on the host path.");
 
-        if (!SoftParamPlan.TrySlide(
+        SoftParamPlan.Slide slide;
+        if (to != null)
+        {
+            // A point, such as where Rhino's Drag left the block: the nearest place on this wall.
+            var point = new Point3d(to[0].Value<double>(), to[1].Value<double>(), 0);
+            if (!TryOpeningOnPath(pathSegs, point, out var toIndex, out var toT)
+                || !SoftParamPlan.TrySlideTo(PlanSegs(pathSegs), index, tNow, toIndex, toT, rec.Width, FacadeConst.EdgeMargin, tol, out slide))
+                throw new InvalidOperationException("Wall is too short for this opening.");
+        }
+        else if (!SoftParamPlan.TrySlide(
                 PlanSegs(pathSegs),
                 index,
                 tNow,
@@ -214,7 +227,7 @@ public partial class RhinoMCPFunctions
                 tAbs,
                 FacadeConst.EdgeMargin,
                 tol,
-                out var slide))
+                out slide))
             throw new InvalidOperationException("Wall is too short for this opening.");
 
         if (!slide.Moved)

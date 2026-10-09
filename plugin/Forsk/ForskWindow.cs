@@ -411,7 +411,11 @@ namespace RhinoMCPPlugin.Forsk
                 ObjectChanged();
                 Deleted(e.TheObject);
             };
-            RhinoDoc.ReplaceRhinoObject += (s, e) => ObjectChanged();
+            RhinoDoc.ReplaceRhinoObject += (s, e) =>
+            {
+                ObjectChanged();
+                Replaced(e.OldRhinoObject, e.NewRhinoObject);
+            };
             RhinoDoc.UndeleteRhinoObject += (s, e) => ObjectChanged();
             RhinoDoc.ModifyObjectAttributes += (s, e) => ObjectChanged();
             Rhino.Commands.Command.UndoRedo += (s, e) =>
@@ -426,6 +430,7 @@ namespace RhinoMCPPlugin.Forsk
             {
                 Poll(force: false);
                 MarkMapAfterDelete();
+                FollowDraggedOpenings();
                 var open = _open;
                 if (open == null || !_dirty || open._busy) return;
                 open.Render();
@@ -463,6 +468,57 @@ namespace RhinoMCPPlugin.Forsk
             _deletedEdit = MapEdit.None;
             var doc = RhinoDoc.ActiveDoc;
             if (doc != null && RhinoMCPFunctions.MarkMapAfterEdit(doc, edit) > 0) doc.Views.Redraw();
+        }
+
+        static readonly OpeningDrag Drags = new OpeningDrag();
+
+        /// <summary>Rhino's Drag, Move or gumball moved an opening block (or its marker) outside a Forsk call.</summary>
+        static void Replaced(Rhino.DocObjects.RhinoObject before, Rhino.DocObjects.RhinoObject after)
+        {
+            var doc = after?.Document;
+            if (ForskCalls.Depth > 0 || doc == null || doc.UndoActive || doc.RedoActive || after.Attributes == null) return;
+            var kind = after.Attributes.GetUserString("forsk:kind");
+            if (string.Equals(kind, "opening_marker", StringComparison.OrdinalIgnoreCase))
+            {
+                Drags.MarkerMoved(after.Id.ToString());
+                return;
+            }
+            if (!string.Equals(kind, "opening", StringComparison.OrdinalIgnoreCase) || before?.Geometry == null || after.Geometry == null) return;
+            var a = before.Geometry.GetBoundingBox(true).Center;
+            var b = after.Geometry.GetBoundingBox(true).Center;
+            Drags.Moved(after.Attributes.GetUserString("forsk:marker_id"), a.X, a.Y, b.X, b.Y);
+        }
+
+        /// <summary>FS-Z383WAWP: each dragged door or window takes its marker along its wall, so the plan symbol, the wall cut and the schedules follow it.</summary>
+        static void FollowDraggedOpenings()
+        {
+            if (!Drags.Pending) return;
+            var moves = Drags.Take();
+            var doc = RhinoDoc.ActiveDoc;
+            if (moves.Count == 0 || doc == null) return;
+            var record = doc.BeginUndoRecord("Forsk: follow dragged opening");
+            try
+            {
+                foreach (var move in moves)
+                {
+                    if (!Guid.TryParse(move.Marker, out var id)) continue;
+                    var marker = doc.Objects.FindId(id);
+                    if (marker?.Geometry == null) continue;
+                    var at = marker.Geometry.GetBoundingBox(true).Center;
+                    var envelope = ForskTools.Command("move_opening", new JObject
+                    {
+                        ["id"] = move.Marker,
+                        ["to"] = new JArray(at.X + move.Dx, at.Y + move.Dy)
+                    });
+                    if (!string.Equals(envelope?["status"]?.ToString(), "success", StringComparison.OrdinalIgnoreCase))
+                        RhinoApp.WriteLine("Forsk: the dragged opening stayed where it was on the plan. " + envelope?["message"]);
+                }
+            }
+            finally
+            {
+                doc.EndUndoRecord(record);
+            }
+            doc.Views.Redraw();
         }
 
         static void Selected()
