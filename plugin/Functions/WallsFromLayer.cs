@@ -61,7 +61,8 @@ public partial class RhinoMCPFunctions
         var skipped = profiles.Skipped;
         var warnings = profiles.Warnings;
         var targetLayer = EnsureLayer(doc, targetLayerName, Color.FromArgb(180, 180, 180));
-        var bakes = BuildWallBakes(profiles.Closed, height, profiles.Tol, warnings);
+        var closed = MergeAcrossOpenings(doc, profiles.Closed, profiles.Tol, out var mergedOpenings);
+        var bakes = BuildWallBakes(closed, height, profiles.Tol, warnings);
         var ids = new JArray();
         var forskIds = new JArray();
         var index = 1;
@@ -520,5 +521,38 @@ public partial class RhinoMCPFunctions
         // The sides' area over the height is the length of the outline's edge.
         var amp = AreaMassProperties.Compute(brep);
         return amp == null || !RoomDetect.IsWallRun(footprint, (amp.Area - 2.0 * footprint) / tall);
+    }
+
+    /// <summary>
+    /// No door or window stands without its wall. Wall outlines drawn as two
+    /// pieces either side of an opening (AI detection draws them so) become one
+    /// outline through it (WallFollowPlan.MergeAcrossOpenings). Only outlines
+    /// that read as polylines take part; the rest stay as drawn.
+    /// </summary>
+    private static List<Curve> MergeAcrossOpenings(RhinoDoc doc, List<Curve> closed, double tol, out int merged)
+    {
+        merged = 0;
+        var openings = GapOpeningBoxes(doc, windows: true);
+        if (openings.Count == 0 || closed == null || closed.Count < 2) return closed;
+        var rings = new List<List<RoomDetect.Pt>>();
+        var kept = new List<Curve>();
+        var z = 0.0;
+        foreach (var curve in closed)
+        {
+            if (curve != null && curve.TryGetPolyline(out Polyline poly) && poly != null && poly.Count >= 4)
+            {
+                var ring = new List<RoomDetect.Pt>();
+                var last = poly.Count - 1;
+                if (poly[0].DistanceTo(poly[last]) < 0.1) last--;
+                for (var i = 0; i <= last; i++) ring.Add(new RoomDetect.Pt(poly[i].X, poly[i].Y));
+                rings.Add(ring);
+                z = poly[0].Z;
+            }
+            else kept.Add(curve);
+        }
+        var joined = WallFollowPlan.MergeAcrossOpenings(rings, openings, Math.Max(tol, 1.0), out merged);
+        if (merged == 0) return closed;
+        foreach (var ring in joined) kept.Add(RingCurve(ring, z));
+        return kept;
     }
 }

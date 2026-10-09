@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
@@ -224,18 +225,24 @@ public partial class RhinoMCPFunctions
     /// Plan boxes of the doors: each door marker, and each curve on the 2D door
     /// layer (Generate 3D builds the floor before the doors are cut).
     /// </summary>
-    private static List<RoomDetect.Box> DoorGapBoxes(RhinoDoc doc)
+    private static List<RoomDetect.Box> DoorGapBoxes(RhinoDoc doc) => GapOpeningBoxes(doc, windows: false);
+
+    /// <summary>The same for doors and windows: what a wall is merged across (WallFollowPlan.MergeAcrossOpenings).</summary>
+    private static List<RoomDetect.Box> GapOpeningBoxes(RhinoDoc doc, bool windows)
     {
         var boxes = new List<RoomDetect.Box>();
         if (doc == null) return boxes;
+        var kinds = windows ? new[] { "door", "window" } : new[] { "door" };
         foreach (var obj in EnumerateDocObjects(doc))
         {
             if (!string.Equals(GetForskKind(obj), "opening_marker", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!string.Equals(obj.Attributes?.GetUserString("forsk:opening_kind"), "door", StringComparison.OrdinalIgnoreCase)) continue;
+            var kind = obj.Attributes?.GetUserString("forsk:opening_kind");
+            if (!kinds.Any(k => string.Equals(kind, k, StringComparison.OrdinalIgnoreCase))) continue;
             AddPlanBox(boxes, obj);
         }
-        foreach (var obj in ObjectsOnLayer(doc, "door"))
-            if (obj?.Geometry is Curve) AddPlanBox(boxes, obj);
+        foreach (var layer in kinds)
+            foreach (var obj in ObjectsOnLayer(doc, layer))
+                if (obj?.Geometry is Curve) AddPlanBox(boxes, obj);
         return boxes;
     }
 

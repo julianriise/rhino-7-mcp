@@ -335,47 +335,134 @@ public static class WallFollowPlan
     static bool TryBridge(List<RoomDetect.Pt> ring, IList<RoomDetect.Box> doors, double tol, out int a, out int b)
     {
         a = b = -1;
-        var n = ring.Count;
-        var sign = Math.Sign(RoomDetect.Area(ring));
-        if (sign == 0) return false;
-        var ends = new List<int>();
-        for (var i = 0; i < n; i++)
+        var gap = Gaps(new[] { ring }, doors, tol, MaxGapMm, acrossRings: false).FirstOrDefault();
+        if (gap == null) return false;
+        a = gap.EdgeA;
+        b = gap.EdgeB;
+        return true;
+    }
+
+    /// <summary>
+    /// Two wall ends facing each other across a gap with a door or window box
+    /// in it: ring RingA's end edge EdgeA (ring[i] to ring[i+1]) and ring
+    /// RingB's EdgeB. Width is the gap across.
+    /// </summary>
+    public sealed class Gap
+    {
+        public int RingA, EdgeA, RingB, EdgeB;
+        public double Width;
+        /// <summary>The gap itself, jamb to jamb: the piece that fills it.</summary>
+        public List<RoomDetect.Pt> Fill;
+    }
+
+    /// <summary>
+    /// The gaps a door or window closes, narrowest first. acrossRings: only
+    /// between two rings (wall pieces drawn apart); else only within one ring.
+    /// An end is a short edge (at most MaxEndMm) with both corners convex.
+    /// </summary>
+    public static List<Gap> Gaps(IList<List<RoomDetect.Pt>> rings, IList<RoomDetect.Box> openings, double tol, double maxGap, bool acrossRings)
+    {
+        var gaps = new List<Gap>();
+        if (rings == null || openings == null || openings.Count == 0) return gaps;
+        var ends = new List<(int Ring, int Edge)>();
+        for (var r = 0; r < rings.Count; r++)
         {
-            var p = ring[i];
-            var q = ring[(i + 1) % n];
-            var len = Dist(p, q);
-            if (len <= tol || len > MaxEndMm) continue;
-            if (Turn(ring[(i - 1 + n) % n], p, q) * sign <= tol * len) continue;
-            if (Turn(p, q, ring[(i + 2) % n]) * sign <= tol * len) continue;
-            ends.Add(i);
-        }
-        var best = double.MaxValue;
-        foreach (var i in ends)
-            foreach (var j in ends)
+            var ring = rings[r];
+            if (ring == null || ring.Count < 3) continue;
+            var n = ring.Count;
+            var sign = Math.Sign(RoomDetect.Area(ring));
+            if (sign == 0) continue;
+            for (var i = 0; i < n; i++)
             {
-                if (i == j) continue;
-                var pa = ring[i];
-                var qa = ring[(i + 1) % n];
-                var pb = ring[j];
-                var qb = ring[(j + 1) % n];
+                var p = ring[i];
+                var q = ring[(i + 1) % n];
+                var len = Dist(p, q);
+                if (len <= tol || len > MaxEndMm) continue;
+                if (Turn(ring[(i - 1 + n) % n], p, q) * sign <= tol * len) continue;
+                if (Turn(p, q, ring[(i + 2) % n]) * sign <= tol * len) continue;
+                ends.Add((r, i));
+            }
+        }
+        foreach (var ea in ends)
+            foreach (var eb in ends)
+            {
+                if (ea == eb || (ea.Ring == eb.Ring) == acrossRings) continue;
+                var ra = rings[ea.Ring];
+                var rb = rings[eb.Ring];
+                var pa = ra[ea.Edge];
+                var qa = ra[(ea.Edge + 1) % ra.Count];
+                var pb = rb[eb.Edge];
+                var qb = rb[(eb.Edge + 1) % rb.Count];
                 var l1 = Dist(pa, qb);
                 var l2 = Dist(qa, pb);
-                if (l1 <= tol || l2 <= tol || l1 > MaxGapMm || l2 > MaxGapMm) continue;
+                if (l1 <= tol || l2 <= tol || l1 > maxGap || l2 > maxGap) continue;
                 if (Math.Abs(l1 - l2) > Math.Max(50.0, 0.05 * l1)) continue;
                 var ux = (qb.X - pa.X) / l1;
                 var uy = (qb.Y - pa.Y) / l1;
                 if (ux * (pb.X - qa.X) / l2 + uy * (pb.Y - qa.Y) / l2 < 0.99) continue;
                 var jamb = Dist(pa, qa);
                 if (Math.Abs(ux * (qa.X - pa.X) / jamb + uy * (qa.Y - pa.Y) / jamb) > 0.2) continue;
-                if (!DoorBetween(doors, pa, qa, pb, qb)) continue;
-                if (l1 < best)
+                // Both ends are the same wall's: about the same thickness.
+                if (Math.Abs(jamb - Dist(pb, qb)) > Math.Max(20.0, 0.1 * jamb)) continue;
+                if (!DoorBetween(openings, pa, qa, pb, qb)) continue;
+                gaps.Add(new Gap
                 {
-                    best = l1;
-                    a = i;
-                    b = j;
-                }
+                    RingA = ea.Ring, EdgeA = ea.Edge, RingB = eb.Ring, EdgeB = eb.Edge, Width = l1,
+                    Fill = new List<RoomDetect.Pt> { pa, qb, pb, qa }
+                });
             }
-        return a >= 0;
+        gaps.Sort((x, y) => x.Width.CompareTo(y.Width));
+        return gaps;
+    }
+
+    /// <summary>Widest opening a wall is merged across (a garage door).</summary>
+    public const double MaxOpeningMm = 6000;
+
+    /// <summary>
+    /// No door or window stands without its wall: AI detection often draws the
+    /// wall in two pieces, one each side of a door or window, and Generate 3D
+    /// then built two walls with the opening alone between them. Two pieces
+    /// whose ends face across an opening become one wall through it, the
+    /// opening's gap filled; the opening is cut into it as into any wall.
+    /// Rings that merge nothing come back as they were. merged counts the joins.
+    /// </summary>
+    public static List<List<RoomDetect.Pt>> MergeAcrossOpenings(IList<List<RoomDetect.Pt>> rings, IList<RoomDetect.Box> openings, double tol, out int merged)
+    {
+        merged = 0;
+        var work = rings == null ? new List<List<RoomDetect.Pt>>() : rings.Select(r => new List<RoomDetect.Pt>(r)).ToList();
+        // Each opening joins one pair: once its gap is filled it is spent.
+        var open = openings == null ? new List<RoomDetect.Box>() : new List<RoomDetect.Box>(openings);
+        var refused = new HashSet<string>();
+        for (var guard = 0; guard < 500; guard++)
+        {
+            var next = Gaps(work, open, tol, MaxOpeningMm, acrossRings: true)
+                .FirstOrDefault(g => !refused.Contains(Key(work, g)));
+            if (next == null) break;
+            var union = RoomDetect.Union(new List<List<RoomDetect.Pt>> { work[next.RingA], next.Fill, work[next.RingB] }, tol)
+                .Select(l => RoomDetect.Simplify(l, tol)).Where(l => l.Count >= 3).ToList();
+            // One wall with no hole, or leave the pieces as drawn.
+            if (union.Count != 1)
+            {
+                refused.Add(Key(work, next));
+                continue;
+            }
+            var a = Math.Max(next.RingA, next.RingB);
+            var b = Math.Min(next.RingA, next.RingB);
+            work.RemoveAt(a);
+            work.RemoveAt(b);
+            work.Insert(b, union[0]);
+            var f = next.Fill;
+            open.RemoveAll(box => DoorBetween(new[] { box }, f[0], f[3], f[2], f[1]));
+            merged++;
+        }
+        return work;
+    }
+
+    static string Key(IList<List<RoomDetect.Pt>> rings, Gap g)
+    {
+        var a = rings[g.RingA][g.EdgeA];
+        var b = rings[g.RingB][g.EdgeB];
+        return Math.Round(a.X) + "," + Math.Round(a.Y) + "|" + Math.Round(b.X) + "," + Math.Round(b.Y);
     }
 
     static bool DoorBetween(IList<RoomDetect.Box> doors, RoomDetect.Pt a, RoomDetect.Pt b, RoomDetect.Pt c, RoomDetect.Pt d)
