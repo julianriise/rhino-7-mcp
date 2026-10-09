@@ -66,4 +66,26 @@ public class MergeAcrossOpeningsTests
         foreach (var d in SampleHouse.Doors)
             Assert.Single(merged, w => RoomDetect.Contains(w, new Pt((d.X0 + d.X1) / 2, (d.Y0 + d.Y1) / 2)));
     }
+
+    [Fact]
+    public void TheSampleHouseAsOneOutline_ClosesRoundItsRooms_EveryDoorInTheWall()
+    {
+        // walls_from_layer reads the house's overlapping wall rectangles as one outline.
+        var outline = RoomDetect.Union(SampleHouse.Walls.Select(SampleHouse.Ring).ToList(), Tol)
+            .Select(l => RoomDetect.Simplify(l, Tol)).ToList();
+        Assert.Single(outline);
+        var doors = SampleHouse.Doors.Select(d => Box(d.X0, d.Y0, d.X1, d.Y1)).ToList();
+        var loops = WallFollowPlan.MergeAcrossOpenings(outline, doors, Tol, out var joins);
+        Assert.Equal(SampleHouse.Doors.Length, joins);
+        var outer = loops.OrderByDescending(l => System.Math.Abs(RoomDetect.Area(l))).First();
+        Assert.Equal(SampleHouse.WidthMm * SampleHouse.DepthMm, System.Math.Abs(RoomDetect.Area(outer)), 0);
+        // Eight rooms are the holes; each door sits in the wall, inside the outline and in no room.
+        Assert.Equal(1 + SampleHouse.Rooms.Length, loops.Count);
+        foreach (var d in SampleHouse.Doors)
+        {
+            var c = new Pt((d.X0 + d.X1) / 2, (d.Y0 + d.Y1) / 2);
+            Assert.True(RoomDetect.Contains(outer, c));
+            Assert.DoesNotContain(loops.Where(l => l != outer), l => RoomDetect.Contains(l, c));
+        }
+    }
 }

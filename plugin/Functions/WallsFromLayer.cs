@@ -533,7 +533,7 @@ public partial class RhinoMCPFunctions
     {
         merged = 0;
         var openings = GapOpeningBoxes(doc, windows: true);
-        if (openings.Count == 0 || closed == null || closed.Count < 2) return closed;
+        if (openings.Count == 0 || closed == null || closed.Count == 0) return closed;
         var rings = new List<List<RoomDetect.Pt>>();
         var kept = new List<Curve>();
         var z = 0.0;

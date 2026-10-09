@@ -451,12 +451,42 @@ public static class WallFollowPlan
             work.RemoveAt(a);
             work.RemoveAt(b);
             work.Insert(b, union[0]);
-            var f = next.Fill;
-            open.RemoveAll(box => DoorBetween(new[] { box }, f[0], f[3], f[2], f[1]));
+            Spend(open, next.Fill);
             merged++;
         }
-        return work;
+        // Walls drawn as one outline (overlapping pieces unite): a gap inside it is filled the same way.
+        // The outline then closes round its rooms, which come back as holes.
+        var result = new List<List<RoomDetect.Pt>>();
+        foreach (var ring in work)
+        {
+            var fills = new List<List<RoomDetect.Pt>>();
+            foreach (var gap in Gaps(new[] { ring }, open, tol, MaxOpeningMm, acrossRings: false))
+            {
+                if (!open.Any(box => DoorBetween(new[] { box }, gap.Fill[0], gap.Fill[3], gap.Fill[2], gap.Fill[1]))) continue;
+                fills.Add(gap.Fill);
+                Spend(open, gap.Fill);
+            }
+            if (fills.Count == 0)
+            {
+                result.Add(ring);
+                continue;
+            }
+            fills.Insert(0, ring);
+            var loops = RoomDetect.Union(fills, tol).Select(l => RoomDetect.Simplify(l, tol)).Where(l => l.Count >= 3).ToList();
+            if (loops.Count == 0)
+            {
+                result.Add(ring);
+                continue;
+            }
+            result.AddRange(loops);
+            merged += fills.Count - 1;
+        }
+        return result;
     }
+
+    /// <summary>An opening whose gap is filled is spent: it joins nothing else.</summary>
+    static void Spend(List<RoomDetect.Box> open, List<RoomDetect.Pt> fill) =>
+        open.RemoveAll(box => DoorBetween(new[] { box }, fill[0], fill[3], fill[2], fill[1]));
 
     static string Key(IList<List<RoomDetect.Pt>> rings, Gap g)
     {
