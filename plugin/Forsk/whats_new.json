@@ -2,8 +2,13 @@
   "_edit": "One entry per release, newest first; add the new release at the top and keep the older ones (a Mac that skipped releases steps back through them on the card). version is the release number (csproj <Version>), 2 to 4 items. title says what it is, how says where to click to try it now. icon is one of sparkles, armchair, activity, link, book-open, rocket, box, camera, git-compare, info (Lucide).",
   "releases": [
     {
-      "version": "1.3.1",
+      "version": "1.3.2",
       "items": [
+        {
+          "title": "Edit right in the Properties panel",
+          "how": "Click a wall, door, window, room, stair or piece of furniture and change its sizes at the top of the window: type and press Enter.",
+          "icon": "info"
+        },
         {
           "title": "Cancel while AI detection reads",
           "how": "While the import card reads a PDF or scan, Cancel stops it at once and adds nothing.",
