@@ -243,10 +243,38 @@ public static class RoomDetect
         }
         var plan = Plan.Build(segs, scene.Tol);
         plan.Classify(scene);
+        // Only a piece of the outline: an outline lying on the faces within the
+        // tolerance once came back as the wall's own outer loop.
+        var slack = Math.Max(scene.Tol * 2, 2.0);
+        var limit = Math.Abs(Area(outline)) + scene.Tol * Perimeter(outline);
         List<Pt> best = null;
         foreach (var loop in plan.Boundary())
-            if (Area(loop) > 0 && (best == null || Area(loop) > Area(best))) best = loop;
+        {
+            if (Area(loop) <= 0 || Area(loop) > limit) continue;
+            var outside = false;
+            foreach (var p in loop)
+                if (!Contains(outline, p) && WallFollowPlan.DistanceToRing(p, outline) > slack) { outside = true; break; }
+            if (outside) continue;
+            if (best == null || Area(loop) > Area(best)) best = loop;
+        }
         return best;
+    }
+
+    /// <summary>Corners closer than this to the inner-face outline are already on it (rounding).</summary>
+    public const double OnFaceMm = 5.0;
+
+    /// <summary>
+    /// Whether an outline must move onto the inner faces: some corner of it lies
+    /// farther than OnFaceMm from the clipped outline. An area test let a corner
+    /// 14 to 33 mm into a wall stay (AI detection's rooms on plan1, 2026-10-09):
+    /// a short overlap is a small area against a long perimeter.
+    /// </summary>
+    public static bool MovesOntoFaces(IList<Pt> outline, IList<Pt> inside)
+    {
+        if (outline == null || inside == null || inside.Count < 3) return false;
+        foreach (var p in outline)
+            if (WallFollowPlan.DistanceToRing(p, inside) > OnFaceMm) return true;
+        return false;
     }
 
     /// <summary>

@@ -312,8 +312,7 @@ public partial class RhinoMCPFunctions
         if (scene.Walls.Count == 0) return plan;
         var inside = RoomDetect.InsideWalls(plan, scene.Walls, Math.Max(tol, 1.0));
         if (inside == null || Math.Abs(RoomDetect.Area(inside)) < RoomDetect.MinAreaMm2) return plan;
-        if (Math.Abs(Math.Abs(RoomDetect.Area(inside)) - Math.Abs(RoomDetect.Area(plan))) <= Math.Max(tol, 1.0) * RoomDetect.Perimeter(plan))
-            return plan;
+        if (!RoomDetect.MovesOntoFaces(plan, inside)) return plan;
         var z = curve.GetBoundingBox(true).Min.Z;
         var locked = obj.IsLocked;
         if (locked) doc.Objects.Unlock(obj.Id, false);

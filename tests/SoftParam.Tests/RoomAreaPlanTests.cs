@@ -84,10 +84,13 @@ public class RoomAreaPlanTests
     public void DrawArea_HidesByCulling_AndAlwaysShowsEverythingAgain()
     {
         var tool = Source("Forsk", "ForskDrawArea.cs");
-        // One display pass: no layer, hidden flag or undo record changes.
+        // One display pass, and no layer change. The culled objects are also hidden
+        // for the clicks only (object snaps would catch them), with no undo record,
+        // and shown again however the clicks end.
         Assert.Contains("override void ObjectCulling(", tool);
         Assert.DoesNotContain("Layers.Modify", tool);
-        Assert.DoesNotContain("Objects.Hide", tool);
+        Assert.Contains("doc.UndoRecordingEnabled = false;", tool);
+        Assert.Contains("finally { ShowAfterPick(doc, hidden); }", tool);
         // Esc, an error or a finished area all switch it off again.
         var end = tool.IndexOf("finally", StringComparison.Ordinal);
         Assert.True(end > 0);
