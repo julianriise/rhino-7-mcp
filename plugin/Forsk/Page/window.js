@@ -1186,6 +1186,19 @@
       });
       menu.appendChild(item);
     });
+    // Saved views (Julian, 2026-10-09): the file's named views, one click each, under the built-in ones.
+    ((view && view.saved) || []).forEach(function (option, i) {
+      var item = el('button', i === 0 ? 'split' : null);
+      item.type = 'button';
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', view && option.id === view.value ? 'true' : 'false');
+      item.appendChild(document.createTextNode(option.label));
+      item.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'view', view: option.id });
+      });
+      menu.appendChild(item);
+    });
     // Interior and Exterior: each opens its list of saved render views; one click shows one (Julian, 2026-10-08).
     ((view && view.groups) || []).forEach(function (group, i) {
       var head = el('button', 'group' + (i === 0 ? ' split' : ''));
@@ -1214,6 +1227,21 @@
       });
       menu.appendChild(head);
       menu.appendChild(list);
+    });
+    // Save current view, then Rename or delete once there is a saved view.
+    [view && view.save, view && view.edit].forEach(function (row, i) {
+      if (!row) return;
+      var item = el('button', i === 0 ? 'split' : null);
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      var drawn = iconNode(i === 0 ? 'bookmark-plus' : 'pencil');
+      if (drawn) item.appendChild(drawn);
+      item.appendChild(document.createTextNode(row.label));
+      item.addEventListener('click', function () {
+        closeMenus(false);
+        sender.send({ kind: 'view', view: row.id });
+      });
+      menu.appendChild(item);
     });
   }
 

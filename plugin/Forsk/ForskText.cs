@@ -651,6 +651,11 @@ namespace RhinoMCPPlugin.Forsk
             ["tool.save_option"] = "Option",
             ["tool.compare_option"] = "Option",
             ["view.show"] = "Show view",
+            ["saved_views.ask"] = "Rename or delete your saved views.",
+            ["saved_views.note"] = "Empty a name to delete that view.",
+            ["saved_views.name"] = "Name",
+            ["saved_views.unchanged"] = "No saved view changed.",
+            ["saved_views.open"] = "Rename or delete saved views",
             // FU.7: the two furnish layouts as ghosts, picked on a card.
             ["furnish.pick.ask"] = "Two layouts for {room}. Which one goes in?",
             ["furnish.pick.one"] = "One layout for {room}, shown in blue.",

@@ -426,6 +426,29 @@ namespace RhinoMCPPlugin.Forsk
             return card;
         }
 
+        /// <summary>
+        /// The view picker's Rename or delete (Julian, 2026-10-09): one name
+        /// field per saved view, in the picker's order. Save renames the changed
+        /// ones and deletes the emptied ones. Null when there are none.
+        /// </summary>
+        public static CardSpec SavedViews(IList<string> names)
+        {
+            if (names == null || names.Count == 0) return null;
+            var card = new CardSpec
+            {
+                Kind = Functions.SavedViews.CardKind,
+                Question = ForskText.Get("saved_views.ask"),
+                Note = ForskText.Get("saved_views.note"),
+                Fields = new List<CardField>(),
+                Data = new JObject { ["names"] = new JArray(names) }
+            };
+            for (var i = 0; i < names.Count; i++)
+                card.Fields.Add(new CardField { Key = Functions.SavedViews.FieldStem + i, Label = ForskText.Get("saved_views.name"), Value = names[i] });
+            card.Pills.Add(new CardPill("save", ForskText.Get("word.save")));
+            card.Pills.Add(new CardPill("cancel", ForskText.Get("word.cancel")));
+            return card;
+        }
+
         /// <summary>The compare card from compare_option's result. Null when it failed.</summary>
         public static CardSpec OptionCompareFrom(JObject envelope)
         {

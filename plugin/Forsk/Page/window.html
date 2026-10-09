@@ -160,6 +160,9 @@ html[data-kbd] .menu button:focus-visible { background: var(--page); }
 .menu button.group[aria-expanded="true"]::after { transform: rotate(90deg); }
 .menu button.group .count { margin-left: auto; color: var(--faint); font-size: 12px; }
 .menu button.sub { padding-left: 22px; }
+/* Saved views (Julian, 2026-10-09): Save current view and Rename or delete carry a small icon. A long list scrolls. */
+.menu button .icon { width: 16px; height: 16px; flex: none; color: var(--meta); }
+#view-menu { max-height: calc(100vh - 64px); overflow-y: auto; }
 .mini { width: 20px; height: 20px; flex: none; display: block; }
 #pin {
   flex: 0 1 auto; min-height: 0; max-height: calc(100% - 248px);
@@ -467,7 +470,7 @@ textarea::placeholder { color: var(--faint); }
 </head>
 <body>
 <header class="top">
-  <!-- The view picker (Julian, 2026-10-07): the active viewport shows Perspective, Plan or an elevation. Multiple storeys (3.0) add the floor choice to it. -->
+  <!-- The view picker (Julian, 2026-10-07): the active viewport shows Perspective, Plan, an elevation, a render view or a saved view (2026-10-09). Multiple storeys (3.0) add the floor choice to it. -->
   <button id="view" class="round" type="button" tabindex="0" aria-label="View" title="View" aria-haspopup="menu" aria-expanded="false" aria-controls="view-menu">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
   </button>
@@ -520,6 +523,8 @@ textarea::placeholder { color: var(--faint); }
     <div id="icon-chevron-left"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></div>
     <div id="icon-chevron-right"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></div>
     <div id="icon-ellipsis"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></div>
+    <div id="icon-bookmark-plus"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/><line x1="12" x2="12" y1="7" y2="13"/><line x1="15" x2="9" y1="10" y2="10"/></svg></div>
+    <div id="icon-pencil"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></div>
     <div id="icon-door.hinged_single"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V4M6 4A12 12 0 0 1 18 16"/></svg></div>
     <div id="icon-door.hinged_double"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 16V10M6 10A6 6 0 0 1 12 16M18 16V10M18 10A6 6 0 0 0 12 16"/></svg></div>
     <div id="icon-door.sliding"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 16h4M18 16h4M6 14h7M11 18h7"/></svg></div>

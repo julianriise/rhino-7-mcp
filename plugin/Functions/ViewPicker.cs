@@ -58,20 +58,29 @@ public static class ViewPicker
 
     /// <summary>
     /// The window's picker: the view shown now (null: none of them), its label,
-    /// every view, and the saved Interior and Exterior render views, one list
-    /// each when there are any (Julian, 2026-10-08).
+    /// every view, the saved Interior and Exterior render views, one list
+    /// each when there are any (Julian, 2026-10-08), and the file's saved
+    /// views with Save current view, and Rename or delete once there is one
+    /// (Julian, 2026-10-09). A saved view the viewport shows is the value.
     /// </summary>
-    public static JObject Control(string current, IList<string> interior = null, IList<string> exterior = null)
+    public static JObject Control(string current, IList<string> interior = null, IList<string> exterior = null, IList<string> saved = null)
     {
         var options = new JArray();
         foreach (var id in Ids)
             options.Add(new JObject { ["id"] = id, ["label"] = Label(id) });
+        var savedName = SavedViews.TryName(current, out var name) && saved != null && saved.Contains(name) ? name : null;
         var control = new JObject
         {
-            ["value"] = Known(current) ? current : "",
-            ["label"] = Label(current),
+            ["value"] = savedName != null || Known(current) ? current : "",
+            ["label"] = savedName ?? Label(current),
             ["options"] = options
         };
+        var savedItems = new JArray();
+        foreach (var each in saved ?? new List<string>())
+            savedItems.Add(new JObject { ["id"] = SavedViews.Id(each), ["label"] = each });
+        control["saved"] = savedItems;
+        control["save"] = new JObject { ["id"] = SavedViews.SaveId, ["label"] = "Save current view" };
+        if (savedItems.Count > 0) control["edit"] = new JObject { ["id"] = SavedViews.EditId, ["label"] = "Rename or delete…" };
         var groups = new JArray();
         AddGroup(groups, "Interior", InteriorPrefix, interior);
         AddGroup(groups, "Exterior", ExteriorPrefix, exterior);

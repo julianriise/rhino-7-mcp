@@ -241,9 +241,12 @@ namespace RhinoMCPPlugin.Forsk
                 if (stale > 0) Log("cards: " + stale + " went stale");
             }
             // The view picker follows the viewport, which moves without a document event.
-            _facts.View = CurrentView(doc);
             _facts.InteriorViews = Functions.ForskInteriorHost.Views(doc, false);
             _facts.ExteriorViews = Functions.ForskInteriorHost.Views(doc, true);
+            _facts.SavedViews = Functions.SavedViewsHost.Names(doc);
+            // A saved view the viewport still shows is named in the picker, not read as Plan or an elevation.
+            var shown = Functions.SavedViewsHost.Shown(doc, _facts.SavedViews);
+            _facts.View = shown != null ? Functions.SavedViews.Id(shown) : CurrentView(doc);
             _facts.RenderView = RenderView(doc);
             return _facts;
         }

@@ -437,6 +437,22 @@ namespace RhinoMCPPlugin.Forsk
             Render();
         }
 
+        /// <summary>The view picker's Rename or delete: the saved views card, as a card action opens one.</summary>
+        void SavedViewsCard(RhinoDoc doc)
+        {
+            var thread = Active();
+            if (doc == null || thread == null) return;
+            var facts = Facts(doc);
+            var spec = ForskCards.SavedViews(facts.SavedViews);
+            if (spec == null) return;
+            thread.Add("user", ForskText.Get("saved_views.open"));
+            thread.BeginReply(null);
+            thread.AddCard(spec, facts);
+            thread.EndReply();
+            Models.Persist(thread);
+            Render();
+        }
+
         void CloseCard(string id)
         {
             if (id == "help")
@@ -660,6 +676,15 @@ namespace RhinoMCPPlugin.Forsk
                     var picked = pill.Id;
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool(kind == "option.restore" ? "restore_option" : "delete_option", new JObject { ["name"] = picked }), userText: pill.Label);
                     break;
+                case Functions.SavedViews.CardKind:
+                    // Rename or delete: the names the card opened with, against what was typed.
+                    var savedNames = (card["data"]?["names"] as JArray ?? new JArray()).Select(n => n.ToString()).ToList();
+                    var typedNames = savedNames.Select((n, i) => values?[Functions.SavedViews.FieldStem + i]?.ToString() ?? n).ToList();
+                    thread.AddLine(Functions.SavedViewsHost.Apply(doc, savedNames, typedNames) ?? ForskText.Get("saved_views.unchanged"));
+                    Models.Persist(thread);
+                    MarkDirty();
+                    Render();
+                    return;
                 case "option.compare":
                     var optionName = pill.Id;
                     Job(thread, kind, ForskText.Label(kind), sink => sink.Tool("compare_option", new JObject { ["name"] = optionName }), userText: pill.Label);
@@ -1516,6 +1541,28 @@ namespace RhinoMCPPlugin.Forsk
         /// </summary>
         void PickView(string id)
         {
+            var doc = RhinoDoc.ActiveDoc;
+            if (id == Functions.SavedViews.SaveId)
+            {
+                Active()?.AddLine(Functions.SavedViewsHost.Save(doc, out _));
+                Models.Persist(Active());
+                MarkDirty();
+                Render();
+                return;
+            }
+            if (id == Functions.SavedViews.EditId)
+            {
+                SavedViewsCard(doc);
+                return;
+            }
+            if (Functions.SavedViews.TryName(id, out var savedName))
+            {
+                var whyNot = Functions.SavedViewsHost.Show(doc, savedName);
+                if (whyNot != null) Active()?.AddLine(whyNot);
+                MarkDirty();
+                Render();
+                return;
+            }
             if (Functions.ViewPicker.TryRender(id, out var renderName, out var exterior))
             {
                 var why = Functions.ForskInteriorHost.Show(RhinoDoc.ActiveDoc, renderName, exterior);

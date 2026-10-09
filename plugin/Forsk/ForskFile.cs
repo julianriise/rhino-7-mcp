@@ -200,6 +200,8 @@ namespace RhinoMCPPlugin.Forsk
         /// <summary>The saved Interior and Exterior render views, for the view picker's lists. The window sets them with View.</summary>
         public List<string> InteriorViews = new List<string>();
         public List<string> ExteriorViews = new List<string>();
+        /// <summary>The view picker's saved views (SavedViews.Listed). The window sets them on every read.</summary>
+        public List<string> SavedViews = new List<string>();
         /// <summary>The active view's name when it shows a render look (Forsk Interior or Exterior), else null. The bar offers Export viewport.</summary>
         public string RenderView;
         /// <summary>The first-run hint is off: dismissed, or a sheet has been printed.</summary>
