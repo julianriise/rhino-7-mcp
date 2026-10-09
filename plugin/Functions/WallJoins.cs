@@ -107,6 +107,8 @@ public static class WallJoins
     {
         /// <summary>The cluster's shape after the move.</summary>
         public List<List<Pt>> Shape;
+        /// <summary>A wall end that stopped on the first wall in its way: how far it went, mm. Null when it went all the way.</summary>
+        public double? Reached;
         /// <summary>Each record that changed, by its index in the records given, and its rings after.</summary>
         public Dictionary<int, List<List<Pt>>> Records = new Dictionary<int, List<List<Pt>>>();
         public List<Followed> Followed = new List<Followed>();
@@ -118,11 +120,13 @@ public static class WallJoins
     /// closed. Each record in a cluster of more than one moves by the same
     /// rule, and together they must make the moved shape again. A cluster of
     /// one is its record, so a lone record moves exactly as WallEdit moves it.
+    /// join: the run is a wall end that stops on another wall's face, so it
+    /// may touch that wall, and a room it closes there is no refusal.
     /// </summary>
-    public static bool TryMove(IList<List<List<Pt>>> records, Graph graph, WallEdit.Run run, double by, double tol, out Moved moved, out string why)
+    public static bool TryMove(IList<List<List<Pt>>> records, Graph graph, WallEdit.Run run, double by, double tol, out Moved moved, out string why, bool join = false)
     {
         moved = null;
-        if (!WallEdit.TryMove(graph.Shape, run, by, tol, out var shape, out why)) return false;
+        if (!WallEdit.TryMove(graph.Shape, run, by, tol, out var shape, out why, join)) return false;
         if (!SameRooms(graph.Shape, shape, tol))
         {
             why = "Not moved: a room would not stay closed.";
@@ -139,7 +143,7 @@ public static class WallJoins
                 var slides = WallEdit.Slides(records[i], run, by, tol, out why);
                 if (slides == null) return false;
                 if (slides.Count == 0) continue;
-                if (!WallEdit.TryMove(records[i], run, by, tol, out var rings, out why))
+                if (!WallEdit.TryMove(records[i], run, by, tol, out var rings, out why, join))
                 {
                     why = NotCleanly;
                     return false;
@@ -148,7 +152,7 @@ public static class WallJoins
                 after[i] = rings;
             }
             var union = Shape(after, graph.Records, tol);
-            if (union == null || union.Count != shape.Count || Math.Abs(Area(union) - Area(shape)) > tol * Perimeter(shape))
+            if (union == null || (!join && union.Count != shape.Count) || Math.Abs(Area(union) - Area(shape)) > tol * Perimeter(shape))
             {
                 why = NotCleanly;
                 return false;

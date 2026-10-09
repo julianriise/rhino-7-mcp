@@ -173,9 +173,11 @@ public static class WallEdit
     /// the run's face lines, within its length, moves (Slides), so a wall that
     /// meets the run stretches or shortens with it and keeps its direction.
     /// One that would close up (the room or wall beyond run out of depth) or
-    /// cross another wall refuses the move.
+    /// cross another wall refuses the move. touch lets a moved edge end on
+    /// another wall's face (a wall end that stops there and joins it); only
+    /// a crossing refuses then.
     /// </summary>
-    public static bool TryMove(List<List<Pt>> rings, Run run, double by, double tol, out List<List<Pt>> moved, out string why)
+    public static bool TryMove(List<List<Pt>> rings, Run run, double by, double tol, out List<List<Pt>> moved, out string why, bool touch = false)
     {
         moved = null;
         var slides = Slides(rings, run, by, tol, out why);
@@ -223,7 +225,7 @@ public static class WallEdit
                     if (k == c.Loop && Near(i, c.Edge, next[k].Count)) continue;
                     var p = next[k][i];
                     var q = next[k][(i + 1) % next[k].Count];
-                    if (SegsMeet(a, b, p, q, tol))
+                    if (touch ? SegsCross(a, b, p, q, tol) : SegsMeet(a, b, p, q, tol))
                     {
                         why = "Not moved: the wall would cross another wall near " + At(Mid(a, b)) + ".";
                         return false;
@@ -618,6 +620,22 @@ public static class WallEdit
             return true;
         return DistToSeg(a, p, q) < tol || DistToSeg(b, p, q) < tol
             || DistToSeg(p, a, b) < tol || DistToSeg(q, a, b) < tol;
+    }
+
+    /// <summary>
+    /// Two segments that cross, each passing more than tol through the other's
+    /// line. Ends that touch or lie on the other segment do not cross.
+    /// </summary>
+    static bool SegsCross(Pt a, Pt b, Pt p, Pt q, double tol)
+    {
+        var ab = Len(Sub(b, a));
+        var pq = Len(Sub(q, p));
+        if (ab <= tol || pq <= tol) return false;
+        var d1 = Cross(Sub(b, a), Sub(p, a)) / ab;
+        var d2 = Cross(Sub(b, a), Sub(q, a)) / ab;
+        var d3 = Cross(Sub(q, p), Sub(a, p)) / pq;
+        var d4 = Cross(Sub(q, p), Sub(b, p)) / pq;
+        return ((d1 > tol && d2 < -tol) || (d1 < -tol && d2 > tol)) && ((d3 > tol && d4 < -tol) || (d3 < -tol && d4 > tol));
     }
 
     static List<Pt> Loop(JToken token)

@@ -86,6 +86,8 @@ public partial class RhinoMCPFunctions
             change = distance.Value;
             if (!WallFace.TryStretch(pick.Records, pick.Graph, hit, change, tol, out edit, out why))
                 throw new InvalidOperationException(why);
+            // An end that met another wall stopped on its face.
+            if (edit.Reached.HasValue) change = edit.Reached.Value;
         }
         else
         {
@@ -128,6 +130,7 @@ public partial class RhinoMCPFunctions
                 : "Made " + pick.Label + " of " + idWord + " " + mm + " mm thick; the face across stays";
         }
         if (clause.Length > 0) sentence += "; " + clause;
+        if (edit.Reached.HasValue) sentence += nb ? "; den stopper mot veggen den møtte" : "; it stops on the wall it met";
         var result = new JObject
         {
             ["host_id"] = commit.HostId.ToString(),
@@ -140,6 +143,7 @@ public partial class RhinoMCPFunctions
             ["thickness"] = hit.Kind == WallFace.Kind.End ? hit.Run.Thickness : thickness.Value,
             ["path_points"] = commit.Rebuilt?["path_points"],
             ["openings_moved"] = commit.Carried,
+            ["joined_wall"] = edit.Reached.HasValue,
             ["followed"] = FollowedJson(doc, pick, edit.Followed),
             ["records"] = RecordIds(pick, edit.Records.Keys),
             ["rebuilt"] = commit.Followed,

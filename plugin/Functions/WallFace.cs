@@ -119,7 +119,8 @@ public static class WallFace
     /// The end face moved out by by (below 0 shortens). Only the two corners
     /// of the end move, along the wall's faces, so the other end and every
     /// opening keep their place. A wall left no longer than it is thick is
-    /// refused, and so is one that would cross another wall.
+    /// refused. An end that would run into another wall, of any record, stops
+    /// on that wall's face and joins it there (moved.Reached says how far).
     /// </summary>
     public static bool TryStretch(IList<List<List<Pt>>> records, WallJoins.Graph graph, Hit hit, double by, double tol, out WallJoins.Moved moved, out string why)
     {
@@ -153,12 +154,57 @@ public static class WallFace
             Lo = run.Near,
             Hi = run.Far
         };
-        if (!WallJoins.TryMove(records, graph, face, hit.End * by, tol, out moved, out why))
+        var stop = by > 0 ? InTheWay(records, run, hit.End, line, tol) : null;
+        var join = stop.HasValue && stop.Value < by - tol;
+        var reach = join ? stop.Value : by;
+        if (!WallJoins.TryMove(records, graph, face, hit.End * reach, tol, out moved, out why, join))
         {
             why = Reword(why, by > 0 ? "Not lengthened:" : "Not shortened:");
             return false;
         }
+        if (join) moved.Reached = reach;
         return true;
+    }
+
+    /// <summary>
+    /// How far the end at line can run on, out along the wall, before its
+    /// band meets wall material: the nearest face of any record that lies
+    /// across the band ahead of the end. Null when nothing lies ahead.
+    /// </summary>
+    internal static double? InTheWay(IList<List<List<Pt>>> records, WallEdit.Run run, int end, double line, double tol)
+    {
+        double? best = null;
+        foreach (var rings in records)
+            foreach (var e in WallEdit.Edges(rings, tol))
+            {
+                var p = rings[e.Loop][e.Edge];
+                var q = rings[e.Loop][(e.Edge + 1) % rings[e.Loop].Count];
+                // The part of the edge strictly between the wall's two faces.
+                var cp = Dot(p, run.Normal);
+                var cq = Dot(q, run.Normal);
+                double t0 = 0, t1 = 1;
+                var lo = run.Near + tol;
+                var hi = run.Far - tol;
+                if (Math.Abs(cq - cp) < 1e-9)
+                {
+                    if (cp < lo || cp > hi) continue;
+                }
+                else
+                {
+                    var ta = (lo - cp) / (cq - cp);
+                    var tb = (hi - cp) / (cq - cp);
+                    t0 = Math.Max(0, Math.Min(ta, tb));
+                    t1 = Math.Min(1, Math.Max(ta, tb));
+                    if (t0 > t1) continue;
+                }
+                var d0 = end * (Dot(Lerp(p, q, t0), run.Dir) - line);
+                var d1 = end * (Dot(Lerp(p, q, t1), run.Dir) - line);
+                var d = Math.Min(d0, d1);
+                // An edge that reaches back to the end itself is the wall's own.
+                if (d <= tol) continue;
+                if (!best.HasValue || d < best.Value) best = d;
+            }
+        return best;
     }
 
     /// <summary>
@@ -427,6 +473,7 @@ public static class WallFace
     static double Dot(Pt a, Pt b) => a.X * b.X + a.Y * b.Y;
     static Pt Scale(Pt a, double s) => new Pt(a.X * s, a.Y * s);
     static Pt Mid(Pt a, Pt b) => new Pt((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
+    static Pt Lerp(Pt a, Pt b, double t) => new Pt(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
 
     static double DistToSeg(Pt p, Pt a, Pt b)
     {

@@ -125,15 +125,44 @@ public class WallFaceTests
     }
 
     [Fact]
-    public void Stretch_IntoAnotherWall_IsRefused()
+    public void Stretch_IntoAnotherWall_StopsOnItsFaceAndJoins()
     {
-        // A free wall pointing at a second wall 500 mm off its east end.
+        // w27: a free wall pointing at a second wall, its own record, 500 mm off its east end.
+        var records = new List<List<List<Pt>>> { Straight(), new() { WallJoinsTests.Rect(4500, -1000, 4700, 1000) } };
+        var g = WallJoins.Build(records, new List<int> { 0 }, Tol);
+        var east = Pick(g, 4000, 100);
+        Assert.True(WallFace.TryStretch(records, g, east, 800, Tol, out var moved, out var why), why);
+        Assert.Equal(500, moved.Reached.Value, 3);
+        Assert.Equal((0.0, 0.0, 4500.0, 200.0), Box(moved.Records[0]));
+        var after = new List<List<List<Pt>>> { moved.Records[0], records[1] };
+        Assert.Single(WallJoins.Clusters(after, Tol));
+
+        // Short of the wall it goes all the way.
+        Assert.True(WallFace.TryStretch(records, g, east, 300, Tol, out var shorter, out why), why);
+        Assert.Null(shorter.Reached);
+        Assert.Equal(4300, Box(shorter.Shape).MaxX, 3);
+    }
+
+    [Fact]
+    public void Stretch_IntoAWallOfTheSameRecord_StopsOnItsFace()
+    {
+        // A record from before Draw wall gave each wall its own: both walls in one record.
         var records = new List<List<List<Pt>>> { new() { new() { new(0, 0), new(4000, 0), new(4000, 200), new(0, 200) },
                                                           new() { new(4500, -1000), new(4700, -1000), new(4700, 1000), new(4500, 1000) } } };
         var g = WallJoins.Build(records, new List<int> { 0 }, Tol);
-        var east = Pick(g, 4000, 100);
-        Assert.False(WallFace.TryStretch(records, g, east, 800, Tol, out _, out var why));
-        Assert.StartsWith("Not lengthened:", why);
+        Assert.True(WallFace.TryStretch(records, g, Pick(g, 4000, 100), 800, Tol, out var moved, out var why), why);
+        Assert.Equal(500, moved.Reached.Value, 3);
+    }
+
+    [Fact]
+    public void Stretch_PastAWallBesideTheBand_GoesAllTheWay()
+    {
+        // The second wall stands north of the wall's line, clear of its band.
+        var records = new List<List<List<Pt>>> { Straight(), new() { WallJoinsTests.Rect(4500, 300, 4700, 2000) } };
+        var g = WallJoins.Build(records, new List<int> { 0 }, Tol);
+        Assert.True(WallFace.TryStretch(records, g, Pick(g, 4000, 100), 800, Tol, out var moved, out var why), why);
+        Assert.Null(moved.Reached);
+        Assert.Equal(4800, Box(moved.Shape).MaxX, 3);
     }
 
     [Fact]

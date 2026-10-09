@@ -174,6 +174,8 @@ namespace RhinoMCPPlugin.Forsk
             int _shownStep = -1;
             bool _shownThickness;
             bool _refused;
+            /// <summary>How far an end that met another wall went, mm, when it stopped short of the drag.</summary>
+            double? _reached;
             string _why;
             List<Point3d[]> _after;
 
@@ -302,7 +304,7 @@ namespace RhinoMCPPlugin.Forsk
                 if (_after != null)
                     foreach (var loop in _after) e.Display.DrawPolyline(loop, blue, 2);
                 // The prompt is set once: setting it from here swallows the click.
-                var label = _refused ? _why : WallFace.Dimension(_hit, snapped, _thickness, _nb);
+                var label = _refused ? _why : WallFace.Dimension(_hit, _reached ?? snapped, _thickness, _nb);
                 var ink = _refused ? red : blue;
                 var a = new Point3d(_origin.X, _origin.Y, 0);
                 var b = new Point3d(_origin.X + _hit.Out.X * snapped, _origin.Y + _hit.Out.Y * snapped, 0);
@@ -321,8 +323,13 @@ namespace RhinoMCPPlugin.Forsk
                 _refused = false;
                 _why = null;
                 _after = null;
+                _reached = null;
                 if (Math.Abs(by) < _step) return;
-                if (Try(by, out var moved, out var why)) _after = Loops(moved.Shape);
+                if (Try(by, out var moved, out var why))
+                {
+                    _after = Loops(moved.Shape);
+                    _reached = moved.Reached;
+                }
                 else
                 {
                     _refused = true;
