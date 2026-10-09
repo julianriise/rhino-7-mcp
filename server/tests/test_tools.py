@@ -4322,7 +4322,7 @@ class TestPrintGuards:
         fill_at = bake_fn.index("SectionFillLoops")
         assert "clip.HasValue" in bake_fn[max(0, fill_at - 180):fill_at]
         assert "PackDelta" in bake_fn
-        assert "CreateContourCurves" in bake
+        assert "ContourCall.Brep" in bake
         assert "Hatch.Create" in bake
         assert 'FindName("Solid")' in bake
         assert "section_fill" in bake
