@@ -923,7 +923,7 @@ public partial class RhinoMCPFunctions
         Curve[] curves = null;
         try
         {
-            curves = Brep.CreateContourCurves(brep, plane);
+            curves = ContourCall.Brep(brep, plane, "facade opening outline");
         }
         catch
         {

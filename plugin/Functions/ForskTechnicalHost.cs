@@ -315,8 +315,7 @@ internal static class ForskTechnicalHost
             var brep = AsBrep(obj.Geometry);
             if (brep == null) continue;
             Curve[] curves;
-            try { curves = Brep.CreateContourCurves(brep, plane); }
-            catch (Exception) { continue; }
+            curves = ContourCall.Brep(brep, plane, "plan cut (Forsk Technical)");
             if (curves == null) continue;
             foreach (var curve in curves) AddCurve(strokes, curve, z, tol);
         }

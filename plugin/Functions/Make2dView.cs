@@ -690,8 +690,7 @@ public partial class RhinoMCPFunctions
             // wall section. Do not put the uncut solid back in: that draws
             // the floor outline and the roof.
             Curve[] contours = null;
-            try { contours = Brep.CreateContourCurves(brep, hldPlane); }
-            catch (Exception) { contours = null; }
+            contours = ContourCall.Brep(brep, hldPlane, "Make2D wall section");
             if (contours == null) return kept;
             foreach (var curve in contours)
             {
@@ -953,8 +952,7 @@ public partial class RhinoMCPFunctions
             {
                 if (SectionSide(mesh.GetBoundingBox(true), cutPlane, tolerance) != 0) return;
                 Curve[] raw = null;
-                try { raw = Mesh.CreateContourCurves(mesh, cutPlane, tolerance); }
-                catch (Exception) { raw = null; }
+                raw = ContourCall.Mesh(mesh, cutPlane, tolerance, "Make2D section (mesh)");
                 AbsorbContours(raw, tolerance, group);
                 return;
             }
@@ -963,8 +961,7 @@ public partial class RhinoMCPFunctions
             if (brep == null) return;
             if (SectionSide(brep.GetBoundingBox(true), cutPlane, tolerance) != 0) return;
             Curve[] contours = null;
-            try { contours = Brep.CreateContourCurves(brep, cutPlane); }
-            catch (Exception) { contours = null; }
+            contours = ContourCall.Brep(brep, cutPlane, "Make2D section");
             AbsorbContours(contours, tolerance, group);
         }
         finally

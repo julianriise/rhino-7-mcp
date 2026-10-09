@@ -318,13 +318,14 @@ public class ForskTechnicalTests
         var host = File.ReadAllText(Path.Combine(PluginDir(), "Functions", "ForskTechnicalHost.cs"));
         Assert.DoesNotContain("PreDrawObject", host, StringComparison.Ordinal);
         Assert.Contains("GeometryFilter = ObjectType.None", host, StringComparison.Ordinal);
-        Assert.Contains("Brep.CreateContourCurves", host, StringComparison.Ordinal);
+        Assert.Contains("ContourCall.Brep", host, StringComparison.Ordinal);
         Assert.Contains("ForskTechnical.AddContour", host, StringComparison.Ordinal);
         Assert.Contains("ForskTechnical.GroundEnds", host, StringComparison.Ordinal);
         var start = host.IndexOf("internal static void DrawPlan", StringComparison.Ordinal);
         var end = host.IndexOf("static string StoredSignature", StringComparison.Ordinal);
         var draw = host.Substring(start, end - start);
         Assert.DoesNotContain("CreateContourCurves", draw, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContourCall", draw, StringComparison.Ordinal);
         Assert.DoesNotContain("new List", draw, StringComparison.Ordinal);
     }
 
