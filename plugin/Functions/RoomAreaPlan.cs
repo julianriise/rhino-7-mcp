@@ -86,6 +86,20 @@ public static class RoomAreaPlan
         return pieces.Count >= 2 ? pieces : null;
     }
 
+    /// <summary>
+    /// Draw area shows the walls only (Julian 2026-10-09): the user follows
+    /// the walls' inner faces and should not think about doors, windows,
+    /// furniture, roof or floor. Every Forsk object but a wall (or an existing
+    /// wall underlay) is left out of the view while the tool runs. The user's
+    /// own curves and the imported plan are not Forsk's and stay.
+    /// </summary>
+    public static bool HiddenWhileDrawing(string generated, string kind)
+    {
+        if (generated != "1") return false;
+        return !string.Equals(kind, "wall", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(kind, "existing", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string SplitClause(int rooms)
     {
         if (rooms <= 0) return "";

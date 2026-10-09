@@ -386,6 +386,8 @@ public partial class RhinoMCPFunctions
         tag.RoomType = decision.Type;
         tag.RoomTypeSource = decision.Source;
         // The user's curve keeps its name and tag point. It does not become generated, so clear_generated leaves it.
+        // Its area is its own outline's, for schedules, plates and the area summary.
+        if (userDrawn) attr.SetUserString("forsk:area", FormatMm(Math.Abs(RoomDetect.Area(outline))));
         if (tag.Detected && !userDrawn)
         {
             StampForskTags(attr, new ForskStamp { Kind = "room", Level = "0", Id = tag.Id, Area = tag.Area });

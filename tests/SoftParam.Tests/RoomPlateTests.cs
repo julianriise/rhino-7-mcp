@@ -50,10 +50,41 @@ public class RoomPlateTests
         scene.Walls.Add(new() { Rect(4000, 0, 4200, 4200) });
         scene.Walls.Add(new() { Rect(0, 4000, 4200, 4200) });
         var walls = RoomDetect.Detect(scene);
-        // An outline drawn on A-ROOM over it is a marker, but no plate.
+        // A detected or imported marker over it gets no plate.
         Assert.Equal("gap 0.9 m without a door", RoomPlate.Open(Rect(200, 200, 4000, 4000), walls));
         // A marker with no walls around it at all.
         Assert.Equal("its walls do not close", RoomPlate.Open(Rect(10000, 0, 12000, 2000), walls));
+    }
+
+    [Fact]
+    public void AnAreaDrawnByHand_OnTheInnerFaces_HasAPlate_EvenAcrossAGap()
+    {
+        // Julian 2026-10-09: the outline follows the walls' inner faces and
+        // crosses a 900 gap with no door. Drawn by hand, it is the user's word.
+        var scene = new RoomDetect.Scene();
+        scene.Walls.Add(new() { Rect(0, 0, 1500, 200) });
+        scene.Walls.Add(new() { Rect(2400, 0, 4200, 200) });
+        scene.Walls.Add(new() { Rect(0, 0, 200, 4200) });
+        scene.Walls.Add(new() { Rect(4000, 0, 4200, 4200) });
+        scene.Walls.Add(new() { Rect(0, 4000, 4200, 4200) });
+        var walls = RoomDetect.Detect(scene);
+        Assert.Null(RoomPlate.Open(Rect(200, 200, 4000, 4000), walls, drawn: true));
+        // Drawn where no walls stand at all: still the user's area.
+        Assert.Null(RoomPlate.Open(Rect(10000, 0, 12000, 2000), walls, drawn: true));
+        Assert.Equal("it has no outline", RoomPlate.Open(null, walls, drawn: true));
+        // The plate writer knows which markers were drawn by hand.
+        Assert.Contains("RoomPlate.Open(", Source("RoomPlates.cs"));
+        Assert.Contains("drawn: !IsRoomMarker(live)", Source("RoomPlates.cs"));
+    }
+
+    [Fact]
+    public void AnAreaDrawnByHand_ReportsItsOwnArea()
+    {
+        // add_room_area writes no forsk:area: the record works it out from the outline.
+        var tag = RoomDetect.Report(Rect(200, 200, 4000, 4000), "drawn-1", 0,
+            new List<RoomDetect.Room>(), new string[0], new string[0], new List<RoomDetect.Label>());
+        Assert.False(tag.Detected);
+        Assert.Equal(3800.0 * 3800.0, tag.Area, 3);
     }
 
     [Fact]

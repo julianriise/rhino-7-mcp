@@ -227,6 +227,8 @@ internal static class ForskInteriorHost
                 var doc = args?.RhinoDoc;
                 var look = viewport?.DisplayMode?.EnglishName;
                 if (doc == null || viewport == null || !ForskInterior.IsRenderMode(look)) return;
+                // Draw area shows the walls only.
+                if (global::RhinoMCPPlugin.Forsk.ForskDrawArea.WallsOnly) return;
                 var roof = doc.Layers.FindName("A-ROOF");
                 if (roof == null || roof.IsDeleted || roof.IsVisible) return;
                 Ensure(doc, roof);

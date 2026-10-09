@@ -475,7 +475,7 @@ namespace RhinoMCPPlugin.Forsk
             ["prompt.scale.set"] = "Set scale",
             ["prompt.section"] = "Pick the start of the section in the viewport, then its end. Esc cancels.",
             ["prompt.stair"] = "Click the foot of the stair in the plan, then where it ends. Type a length, or W for the width. Esc cancels.",
-            ["prompt.area"] = "Click the room's corners in the plan, one by one. Enter or C closes the area, Esc steps back.",
+            ["prompt.area"] = "Click the room's corners along the walls' inner faces, or pick a closed curve you drew. Enter or C closes the area, Esc steps back.",
             ["prompt.wall"] = "Click the corners of the walls in the plan. Type a length and Enter, C closes, Enter finishes, Esc steps back. Shift turns the angle snap off.",
             ["prompt.draw"] = "Trace the walls in the viewport, on the wall layer. Enter finishes, Esc cancels.",
 

@@ -9,7 +9,7 @@ using Rhino.Geometry;
 namespace RhinoMCPPlugin.Functions;
 
 /// <summary>
-/// Selection S3: one floor plate per room the walls close, so a click inside
+/// Selection S3: one floor plate per room the walls close (and per area drawn by hand), so a click inside
 /// a room picks it. The one writer: every plate is rebuilt from the room
 /// markers whenever they are (rooms_from_layer, rooms_detect, and through
 /// them Generate and the wall edits), in the same undo record. A plate is
@@ -47,7 +47,7 @@ public partial class RhinoMCPFunctions
             if (string.IsNullOrWhiteSpace(name)) name = live.Name ?? "a room";
             var outline = RoomMarkerOutline(live);
             var points = outline == null ? null : LoopPoints(outline, tol);
-            var why = RoomPlate.Open(points == null ? null : PlanPoints(points), walls);
+            var why = RoomPlate.Open(points == null ? null : PlanPoints(points), walls, drawn: !IsRoomMarker(live));
             Brep plate = null;
             if (why == null)
             {

@@ -84,6 +84,8 @@ internal static class RoomTypeColorHost
                 var viewport = args?.Viewport;
                 var display = args?.Display;
                 if (doc == null || viewport == null || display == null) return;
+                // Draw area shows the walls only: no floor colours.
+                if (global::RhinoMCPPlugin.Forsk.ForskDrawArea.WallsOnly) return;
                 var dir = viewport.CameraDirection;
                 if (!RoomTypes.ShowInView(Enabled(), viewport.IsParallelProjection, dir.X, dir.Y, dir.Z, viewport.DisplayMode?.EnglishName)) return;
                 Ensure(doc);

@@ -19,12 +19,15 @@ public static class RoomPlate
     /// <summary>
     /// Why the room under this marker gets no plate, or null when the walls
     /// close it: a room found from the walls lies under it. An open region
-    /// under it gives its reason (gap 0.9 m without a door).
+    /// under it gives its reason (gap 0.9 m without a door). An area drawn by
+    /// hand is the user's word and always gets its plate, wherever its
+    /// outline runs (usually along the walls' inner faces, Julian 2026-10-09).
     /// </summary>
-    public static string Open(List<Pt> marker, RoomDetect.Result walls)
+    public static string Open(List<Pt> marker, RoomDetect.Result walls, bool drawn = false)
     {
         if (marker == null || !RoomDetect.TryInside(new List<List<Pt>> { marker }, out var at))
             return "it has no outline";
+        if (drawn) return null;
         foreach (var room in walls.Rooms)
             if (RoomDetect.Contains(room.Ring, at) || RoomDetect.Contains(marker, room.Inside)) return null;
         foreach (var open in walls.Open)

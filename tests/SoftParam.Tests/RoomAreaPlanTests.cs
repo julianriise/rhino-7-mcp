@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using RhinoMCPPlugin.Functions;
 using Xunit;
 using Pt = RhinoMCPPlugin.Functions.RoomDetect.Pt;
@@ -63,5 +65,58 @@ public class RoomAreaPlanTests
         Assert.Null(RoomAreaPlan.Split(room, new Pt(6000, 0), new Pt(6000, 3000), 100, 1.0));
         Assert.Equal(" Split 1 room in two.", RoomAreaPlan.SplitClause(1));
         Assert.Equal("", RoomAreaPlan.SplitClause(0));
+    }
+
+    [Fact]
+    public void DrawArea_ShowsTheWallsOnly()
+    {
+        // Julian 2026-10-09: doors, windows, furniture, roof and floor leave the view while the user draws.
+        foreach (var kind in new[] { "door", "window", "opening", "opening_marker", "furniture", "roof", "floor", "room", "room_plate", "stair" })
+            Assert.True(RoomAreaPlan.HiddenWhileDrawing("1", kind), kind);
+        Assert.False(RoomAreaPlan.HiddenWhileDrawing("1", "wall"));
+        Assert.False(RoomAreaPlan.HiddenWhileDrawing("1", "Existing"));
+        // The user's own curves and the imported plan are not Forsk's.
+        Assert.False(RoomAreaPlan.HiddenWhileDrawing(null, null));
+        Assert.False(RoomAreaPlan.HiddenWhileDrawing(null, "door"));
+    }
+
+    [Fact]
+    public void DrawArea_HidesByCulling_AndAlwaysShowsEverythingAgain()
+    {
+        var tool = Source("Forsk", "ForskDrawArea.cs");
+        // One display pass: no layer, hidden flag or undo record changes.
+        Assert.Contains("override void ObjectCulling(", tool);
+        Assert.DoesNotContain("Layers.Modify", tool);
+        Assert.DoesNotContain("Objects.Hide", tool);
+        // Esc, an error or a finished area all switch it off again.
+        var end = tool.IndexOf("finally", StringComparison.Ordinal);
+        Assert.True(end > 0);
+        Assert.Contains("focus.Enabled = false;", tool.Substring(end));
+        // Forsk's own overlays (the hidden roof, the room colours) stay off while it runs.
+        Assert.Contains("ForskDrawArea.WallsOnly", Source("Functions", "ForskInteriorHost.cs"));
+        Assert.Contains("ForskDrawArea.WallsOnly", Source("Functions", "RoomTypeColorHost.cs"));
+    }
+
+    [Fact]
+    public void DrawArea_TakesAClosedCurveTheUserDrew()
+    {
+        var tool = Source("Forsk", "ForskDrawArea.cs");
+        // Picked first (pick-then-act), or with the Curve option at the first corner.
+        Assert.Contains("PickedCurve(doc)", tool);
+        Assert.Contains("AddOption(\"Curve\")", tool);
+        // Only the user's own closed curves, and the curve becomes the area in the same record.
+        Assert.Contains("curve.IsClosed", tool);
+        Assert.Contains("\"forsk:generated\") != \"1\"", tool);
+        Assert.Contains("doc.Objects.Delete(sourceId, true)", tool);
+    }
+
+    static string Source(string folder, string file)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "plugin", folder, file);
+            if (File.Exists(path)) return File.ReadAllText(path);
+        }
+        throw new FileNotFoundException("plugin/" + folder + "/" + file);
     }
 }

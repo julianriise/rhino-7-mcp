@@ -431,7 +431,9 @@ public static class RoomDetect
             if (!Contains(rooms[i].Ring, at)) continue;
             return new Tag { Id = ids[i], Name = names[i], Area = rooms[i].Area, At = rooms[i].Inside, Detected = true };
         }
-        return new Tag { Id = drawnId, Name = Name(labels, outline), Area = drawnAreaMm2, At = at };
+        // add_room_area writes no forsk:area: a drawn outline's own area is its area.
+        var area = drawnAreaMm2 > 0 ? drawnAreaMm2 : Math.Abs(Area(outline));
+        return new Tag { Id = drawnId, Name = Name(labels, outline), Area = area, At = at };
     }
 
     /// <summary>
